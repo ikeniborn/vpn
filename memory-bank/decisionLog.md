@@ -89,5 +89,8 @@ This file records architectural and implementation decisions using a list format
 * Added the current user to the Docker group with `sudo usermod -aG docker $USER`
 * Activated the new group membership in the current session with `newgrp docker` without requiring logout
 * Updated setup.sh to automatically add the user to the Docker group during installation
+* Discovered additional fix was needed: explicitly setting the Docker group ID in volume mounts
+* Modified docker-compose.yml to use `group:988` option in Docker socket mounts for Traefik and backup containers
+* This approach provides a more reliable solution by ensuring the correct group permissions inside containers
 * Restarted affected containers to apply the permission changes
 * This change ensures that the containers can access the Docker socket while maintaining security

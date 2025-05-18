@@ -56,7 +56,7 @@ services:
       - frontend
       - management
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket for auto-discovery
+      - /var/run/docker.sock:/var/run/docker.sock:ro,group:988  # Docker socket for auto-discovery with explicit group ID
       - traefik_data:/etc/traefik
       - ./traefik/config:/config
       - ./traefik/acme:/acme
@@ -351,7 +351,7 @@ services:
       - management_data:/backup/management_data:ro
       - monitoring_data:/backup/monitoring_data:ro
       - backup_data:/archive
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro,group:988  # Docker socket with explicit group ID
     environment:
       - TZ=UTC
       - BACKUP_CRON_EXPRESSION=${BACKUP_CRON:-0 2 * * *}  # Default: Every day at 2 AM
