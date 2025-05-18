@@ -1,13 +1,14 @@
 #!/bin/bash
 
 # ===================================================================
-# VPN Server Security Hardening Script - Security Checks
+# Outline VPN with v2ray VLESS - Security Checks
 # ===================================================================
 # This script:
 # - Performs comprehensive security audits on the system
 # - Checks for common misconfigurations
 # - Verifies Docker security settings
-# - Validates file permissions
+# - Validates Outline VPN and v2ray configurations
+# - Checks for proper TLS implementation
 # - Generates a security report
 # ===================================================================
 
@@ -23,8 +24,12 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Output file for report
-REPORT_FILE="/tmp/security-report-$(date +%Y%m%d-%H%M%S).txt"
+REPORT_FILE="/tmp/outline-v2ray-security-report-$(date +%Y%m%d-%H%M%S).txt"
 VERBOSE=false  # Set to true for verbose output
+
+# Default paths for Outline and v2ray
+OUTLINE_DIR="${OUTLINE_DIR:-/opt/outline}"
+V2RAY_DIR="${V2RAY_DIR:-/opt/v2ray}"
 
 # Function to display status messages
 info() {
@@ -71,7 +76,7 @@ check_root() {
 check_root
 
 # Initialize report file
-echo "VPN SERVER SECURITY AUDIT REPORT" > "$REPORT_FILE"
+echo "OUTLINE VPN WITH V2RAY VLESS SECURITY AUDIT REPORT" > "$REPORT_FILE"
 echo "Generated on: $(date)" >> "$REPORT_FILE"
 echo "Hostname: $(hostname)" >> "$REPORT_FILE"
 echo "=======================================" >> "$REPORT_FILE"
@@ -403,9 +408,9 @@ else
 fi
 
 # ===================================================================
-# 7. VPN-specific Security Checks
+# 7. Outline VPN with v2ray-specific Security Checks
 # ===================================================================
-section "VPN Security Checks"
+section "Outline VPN with v2ray Security Checks"
 
 # Check IP forwarding (required for VPN)
 info "Checking IP forwarding for VPN..."
@@ -422,21 +427,160 @@ else
     fail "UFW may block forwarded packets, VPN will not work properly"
 fi
 
-# Check Docker volume directories
-info "Checking Docker volume directories..."
-VOLUME_BASE_DIR="/opt/vpn"
-if [ -d "$VOLUME_BASE_DIR" ]; then
-    success "VPN volume base directory exists"
+# Check Outline directory
+info "Checking Outline VPN directories..."
+if [ -d "$OUTLINE_DIR" ]; then
+    success "Outline VPN directory exists at $OUTLINE_DIR"
     
     # Check directory permissions
-    INSECURE_DIRS=$(find "$VOLUME_BASE_DIR" -type d -perm -o=w | wc -l)
-    if [ "$INSECURE_DIRS" -gt 0 ]; then
-        fail "Found $INSECURE_DIRS world-writable directories in VPN data"
+    OUTLINE_PERMS=$(stat -c "%a" "$OUTLINE_DIR")
+    if [[ "$OUTLINE_PERMS" == "770" || "$OUTLINE_PERMS" == "700" ]]; then
+        success "Outline directory has secure permissions: $OUTLINE_PERMS"
     else
-        success "VPN data directories have secure permissions"
+        warn "Outline directory has potentially insecure permissions: $OUTLINE_PERMS (should be 770 or 700)"
+    fi
+    
+    # Check for state directory
+    if [ -d "$OUTLINE_DIR/persisted-state" ]; then
+        success "Outline persisted-state directory exists"
+        
+        # Check for self-signed certificate
+        if [ -f "$OUTLINE_DIR/persisted-state/shadowbox-selfsigned.crt" ] && [ -f "$OUTLINE_DIR/persisted-state/shadowbox-selfsigned.key" ]; then
+            success "Outline TLS certificates found"
+            
+            # Check certificate expiration
+            CERT_EXPIRY=$(openssl x509 -enddate -noout -in "$OUTLINE_DIR/persisted-state/shadowbox-selfsigned.crt" | cut -d= -f2)
+            CURRENT_DATE=$(date +%s)
+            EXPIRY_DATE=$(date -d "$CERT_EXPIRY" +%s)
+            DAYS_REMAINING=$(( (EXPIRY_DATE - CURRENT_DATE) / 86400 ))
+            
+            if [ $DAYS_REMAINING -lt 30 ]; then
+                warn "TLS certificate will expire in $DAYS_REMAINING days"
+            else
+                success "TLS certificate is valid for another $DAYS_REMAINING days"
+            fi
+        else
+            fail "Outline TLS certificates not found"
+        fi
+    else
+        warn "Outline persisted-state directory not found"
     fi
 else
-    warn "VPN volume base directory not found at $VOLUME_BASE_DIR"
+    fail "Outline VPN directory not found at $OUTLINE_DIR"
+fi
+
+# Check v2ray directory
+info "Checking v2ray directories..."
+if [ -d "$V2RAY_DIR" ]; then
+    success "v2ray directory exists at $V2RAY_DIR"
+    
+    # Check directory permissions
+    V2RAY_PERMS=$(stat -c "%a" "$V2RAY_DIR")
+    if [[ "$V2RAY_PERMS" == "770" || "$V2RAY_PERMS" == "700" ]]; then
+        success "v2ray directory has secure permissions: $V2RAY_PERMS"
+    else
+        warn "v2ray directory has potentially insecure permissions: $V2RAY_PERMS (should be 770 or 700)"
+    fi
+    
+    # Check for v2ray config
+    if [ -f "$V2RAY_DIR/config.json" ]; then
+        success "v2ray configuration file found"
+        
+        # Check if config file is readable only by owner and group
+        CONFIG_PERMS=$(stat -c "%a" "$V2RAY_DIR/config.json")
+        if [[ "$CONFIG_PERMS" == "640" || "$CONFIG_PERMS" == "600" || "$CONFIG_PERMS" == "440" || "$CONFIG_PERMS" == "400" ]]; then
+            success "v2ray configuration file has secure permissions: $CONFIG_PERMS"
+        else
+            warn "v2ray configuration file has potentially insecure permissions: $CONFIG_PERMS (should be 600 or 640)"
+        fi
+        
+        # Check if VLESS protocol is being used
+        if grep -q "\"protocol\": \"vless\"" "$V2RAY_DIR/config.json"; then
+            success "v2ray is correctly configured with VLESS protocol"
+        else
+            fail "v2ray is not configured with VLESS protocol"
+        fi
+        
+        # Check if TLS is enabled
+        if grep -q "\"security\": \"tls\"" "$V2RAY_DIR/config.json"; then
+            success "v2ray TLS encryption is enabled"
+        else
+            fail "v2ray TLS encryption is not enabled"
+        fi
+        
+        # Check if WebSocket is being used
+        if grep -q "\"network\": \"ws\"" "$V2RAY_DIR/config.json"; then
+            success "v2ray is correctly configured with WebSocket transport"
+        else
+            fail "v2ray is not configured with WebSocket transport"
+        fi
+    else
+        fail "v2ray configuration file not found"
+    fi
+    
+    # Check for logs directory
+    if [ -d "$V2RAY_DIR/logs" ]; then
+        success "v2ray logs directory exists"
+    else
+        warn "v2ray logs directory not found"
+    fi
+else
+    fail "v2ray directory not found at $V2RAY_DIR"
+fi
+
+# Check Docker containers
+info "Checking Outline and v2ray containers..."
+if command -v docker >/dev/null; then
+    # Check if outline container is running
+    if docker ps --format "{{.Names}}" | grep -q "^shadowbox$"; then
+        success "Outline VPN container (shadowbox) is running"
+    else
+        fail "Outline VPN container (shadowbox) is not running"
+    fi
+    
+    # Check if v2ray container is running
+    if docker ps --format "{{.Names}}" | grep -q "^v2ray$"; then
+        success "v2ray container is running"
+    else
+        fail "v2ray container is not running"
+    fi
+    
+    # Check Docker network
+    if docker network ls | grep -q "outline-network"; then
+        success "Docker outline-network exists"
+    else
+        warn "Docker outline-network not found"
+    fi
+else
+    fail "Docker is not installed, cannot check containers"
+fi
+
+# Check v2ray port (default 443)
+info "Checking if v2ray port is accessible..."
+DEFAULT_V2RAY_PORT=443
+if [ -f "$V2RAY_DIR/config.json" ]; then
+    # Extract actual port from config if possible
+    CONFIGURED_PORT=$(grep -o "\"port\": [0-9]*" "$V2RAY_DIR/config.json" | awk '{print $2}')
+    if [ -n "$CONFIGURED_PORT" ]; then
+        DEFAULT_V2RAY_PORT=$CONFIGURED_PORT
+    fi
+fi
+
+# Check if port is open
+if command -v ss >/dev/null; then
+    if ss -tuln | grep -q ":$DEFAULT_V2RAY_PORT "; then
+        success "v2ray port $DEFAULT_V2RAY_PORT is open"
+    else
+        fail "v2ray port $DEFAULT_V2RAY_PORT is not open"
+    fi
+elif command -v netstat >/dev/null; then
+    if netstat -tuln | grep -q ":$DEFAULT_V2RAY_PORT "; then
+        success "v2ray port $DEFAULT_V2RAY_PORT is open"
+    else
+        fail "v2ray port $DEFAULT_V2RAY_PORT is not open"
+    fi
+else
+    warn "Cannot check if v2ray port is open (no ss or netstat found)"
 fi
 
 # ===================================================================
@@ -462,6 +606,32 @@ if ! grep -q "userns-remap" /etc/docker/daemon.json 2>/dev/null; then
     echo "" >> "$REPORT_FILE"
 fi
 
+# Add v2ray-specific recommendations
+if [ -f "$V2RAY_DIR/config.json" ]; then
+    if ! grep -q "\"security\": \"tls\"" "$V2RAY_DIR/config.json"; then
+        echo "3. Enable TLS encryption for v2ray" >> "$REPORT_FILE"
+        echo "   - Edit $V2RAY_DIR/config.json to add proper TLS configuration" >> "$REPORT_FILE"
+        echo "" >> "$REPORT_FILE"
+    fi
+    
+    # Check for weak TLS ciphers
+    if grep -q "minVersion" "$V2RAY_DIR/config.json" && ! grep -q "\"minVersion\": \"1.2\"" "$V2RAY_DIR/config.json" && ! grep -q "\"minVersion\": \"1.3\"" "$V2RAY_DIR/config.json"; then
+        echo "4. Upgrade minimum TLS version to 1.2 or 1.3" >> "$REPORT_FILE"
+        echo "   - Edit $V2RAY_DIR/config.json to set minVersion to \"1.2\" or \"1.3\"" >> "$REPORT_FILE"
+        echo "" >> "$REPORT_FILE"
+    fi
+fi
+
+# Check for proper firewall rules
+if command -v ufw >/dev/null; then
+    if ! ufw status | grep -q "$DEFAULT_V2RAY_PORT/tcp"; then
+        echo "5. Ensure firewall allows v2ray port $DEFAULT_V2RAY_PORT" >> "$REPORT_FILE"
+        echo "   - Run: ufw allow $DEFAULT_V2RAY_PORT/tcp" >> "$REPORT_FILE"
+        echo "   - Run: ufw allow $DEFAULT_V2RAY_PORT/udp" >> "$REPORT_FILE"
+        echo "" >> "$REPORT_FILE"
+    fi
+fi
+
 # Display final summary
 echo "============================================================"
 info "Security check completed. Report saved to: $REPORT_FILE"
@@ -473,7 +643,7 @@ echo "  - Firewall and network security analyzed"
 echo "  - File system permissions verified"
 echo "  - Docker security configuration checked"
 echo "  - System security settings evaluated"
-echo "  - VPN-specific security checks performed"
+echo "  - Outline VPN and v2ray configuration verified"
 echo ""
 echo "Review the report at $REPORT_FILE for detailed information and recommendations."
 echo "============================================================"

@@ -111,6 +111,67 @@ The containers communicate through a dedicated Docker network called `outline-ne
 - Ports other than v2ray port (default 443) are not exposed externally
 - Compatible with systems that have Docker user namespaces enabled
 
+## Security Hardening
+
+This package includes two security hardening scripts to help secure your VPN server:
+
+### Firewall Configuration (firewall.sh)
+
+The `firewall.sh` script configures a secure firewall with specific rules for Outline VPN with v2ray:
+
+```bash
+# Basic usage
+sudo ./firewall.sh
+
+# Advanced usage with options
+sudo ./firewall.sh --v2ray-port 8443 --disable-port-knocking --iface eth0
+```
+
+Options:
+- `--v2ray-port PORT`: Set v2ray port (default: 443)
+- `--disable-port-knocking`: Disable port knocking for SSH access
+- `--disable-ssh-config`: Don't configure SSH in firewall
+- `--iface INTERFACE`: Specify internet-facing interface
+
+This script:
+- Configures UFW with secure defaults
+- Sets up port knocking for SSH (optional)
+- Opens required ports for v2ray VLESS and Outline VPN
+- Configures IP forwarding for VPN traffic
+- Prevents common network attacks
+- Ensures Docker compatibility
+
+### Security Auditing (security-checks.sh)
+
+The `security-checks.sh` script performs comprehensive security audits:
+
+```bash
+# Run security checks
+sudo ./security-checks.sh
+
+# Run with custom paths (if you installed to non-default locations)
+sudo OUTLINE_DIR=/custom/path/outline V2RAY_DIR=/custom/path/v2ray ./security-checks.sh
+```
+
+This script:
+- Performs comprehensive security audits on the system
+- Checks for common misconfigurations
+- Verifies Docker security settings
+- Validates Outline VPN and v2ray configurations
+- Checks for proper TLS implementation
+- Generates a detailed security report
+
+The report will be saved to a file (path shown at the end of the script execution) and includes recommendations for fixing any identified issues.
+
+### Recommended Security Practices
+
+For maximum security:
+1. Run the firewall script immediately after installation
+2. Run the security audit tool regularly to check for vulnerabilities
+3. Fix any issues identified in the security report
+4. Consider setting up automatic security updates
+5. Regularly check and rotate TLS certificates
+
 ## Troubleshooting
 
 If you encounter issues:
@@ -137,3 +198,4 @@ This installation differs from the standard Outline VPN in several ways:
 - No management API or web interface
 - Added v2ray with VLESS protocol as front-facing service
 - Configured for maximum privacy and censorship resistance
+- Includes dedicated security hardening scripts (firewall.sh and security-checks.sh)
