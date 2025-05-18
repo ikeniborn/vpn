@@ -112,8 +112,9 @@ services:
     user: nginx
     read_only: true
     tmpfs:
-      - /var/cache/nginx
-      - /tmp
+      - /var/cache/nginx:exec,mode=1777
+      - /tmp:exec,mode=1777
+      - /run:exec,mode=1777
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.web.rule=Host(`${WEB_HOST:-www.example.com}`)"
