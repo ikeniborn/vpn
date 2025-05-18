@@ -95,6 +95,35 @@ Path:     /ws
 TLS Host: your-server-ip
 ```
 
+### Adding New Clients
+
+The package includes a dedicated script to generate new client configurations and QR codes.
+
+First, ensure all dependencies are installed with the setup script:
+
+```bash
+./setup-vless-tools.sh
+```
+
+Then generate a new client:
+
+```bash
+./generate-vless-client.sh --name "my-device"
+```
+
+This script will:
+1. Generate a new UUID for the client
+2. Add the client to the v2ray configuration
+3. Restart the v2ray container to apply changes
+4. Display connection details and a scannable QR code
+
+For more options and detailed instructions, see:
+```bash
+./generate-vless-client.sh --help
+```
+
+Or refer to the [VLESS Client Generator Guide](VLESS-CLIENT-GUIDE.md) document.
+
 ### Compatible Clients
 
 You can use these connection details with clients like:
