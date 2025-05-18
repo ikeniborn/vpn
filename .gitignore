@@ -1,0 +1,30 @@
+# OS specific files
+.DS_Store
+Thumbs.db
+*.swp
+*~
+._*
+
+# Environment variables
+.env
+
+# Traefik certificates
+traefik/acme/acme.json
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+
+# Docker volumes data
+# These should be explicitly created in setup scripts, not version controlled
+**/data/
+
+# IDE specific files
+.idea/
+.vscode/
+*.sublime-*
