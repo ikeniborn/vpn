@@ -45,6 +45,21 @@ Parameters:
 - `--hostname`: Server hostname or IP address
 - `--v2ray-port`: Port for v2ray VLESS protocol (default: 443)
 - `--keys-port`: Port for Shadowsocks (random if not specified)
+- `--fix-permissions`: Only fix permissions for existing installation
+- `--help`: Display usage help
+
+### Fixing Permission Issues
+
+If you encounter container startup issues related to permission denied errors, you can fix them with:
+
+```bash
+sudo ./outline-v2ray-install.sh --fix-permissions
+```
+
+This will:
+1. Set correct permissions on the configuration files
+2. Set correct permissions on TLS certificate files
+3. Restart the containers to apply changes
 
 ### Environment Variables
 
@@ -181,6 +196,18 @@ If you encounter issues:
 4. Ensure the ports are correctly configured and opened
 5. Verify Docker network with `docker network inspect outline-network`
 6. On systems with user namespaces enabled, the script uses explicit port mapping instead of host networking
+
+### Permission Issues
+
+If you see errors like:
+```
+Failed to start: main/commands: failed to load config: [/etc/v2ray/config.json] > fail to load /etc/v2ray/config.json: open /etc/v2ray/config.json: permission denied
+```
+
+This is usually caused by file permission issues. Run the permission fix command:
+```bash
+sudo ./outline-v2ray-install.sh --fix-permissions
+```
 
 ## Uninstallation
 

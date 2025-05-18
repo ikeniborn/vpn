@@ -36,11 +36,13 @@ set -euo pipefail
 
 function display_usage() {
   cat <<EOF
-Usage: install_server.sh [--hostname <hostname>] [--v2ray-port <port>] [--keys-port <port>]
+Usage: install_server.sh [--hostname <hostname>] [--v2ray-port <port>] [--keys-port <port>] [--fix-permissions]
 
-  --hostname   The hostname to be used for accessing the VPN
-  --v2ray-port The port number for v2ray VLESS protocol (default: 443)
-  --keys-port  The port number for the access keys
+  --hostname        The hostname to be used for accessing the VPN
+  --v2ray-port      The port number for v2ray VLESS protocol (default: 443)
+  --keys-port       The port number for the access keys
+  --fix-permissions Only fix permissions for existing installation
+  --help            Display this help message
 EOF
 }
 
@@ -713,7 +715,7 @@ function escape_json_string() {
 
 function parse_flags() {
   local params
-  params="$(getopt --longoptions hostname:,v2ray-port:,keys-port: -n "$0" -- "$0" "$@")"
+  params="$(getopt --longoptions hostname:,v2ray-port:,keys-port:,fix-permissions,help -n "$0" -- "$0" "$@")"
   eval set -- "${params}"
 
   while (( $# > 0 )); do
@@ -740,6 +742,13 @@ function parse_flags() {
           exit 1
         fi
         ;;
+      --fix-permissions)
+        FLAGS_FIX_PERMISSIONS=true
+        ;;
+      --help)
+        display_usage
+        exit 0
+        ;;
       --)
         break
         ;;
@@ -757,13 +766,70 @@ function parse_flags() {
   return 0
 }
 
+# Function to fix permissions for V2Ray and Outline VPN files
+function fix_permissions() {
+  # Default paths if not set
+  local OUTLINE_DIR=${SHADOWBOX_DIR:-/opt/outline}
+  local V2RAY_DIR=${V2RAY_DIR:-/opt/v2ray}
+  
+  echo "Fixing permissions for V2Ray and Outline VPN files..."
+  
+  # Set correct permissions for V2Ray config
+  if [[ -f "${V2RAY_DIR}/config.json" ]]; then
+    chmod 644 "${V2RAY_DIR}/config.json"
+    echo "Permission fixed: ${V2RAY_DIR}/config.json"
+  else
+    log_error "V2Ray config file not found at ${V2RAY_DIR}/config.json"
+  fi
+  
+  # Set correct permissions for TLS certificate files
+  if [[ -f "${OUTLINE_DIR}/persisted-state/shadowbox-selfsigned.key" ]]; then
+    chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox-selfsigned.key"
+    echo "Permission fixed: ${OUTLINE_DIR}/persisted-state/shadowbox-selfsigned.key"
+  else
+    log_error "TLS key file not found at ${OUTLINE_DIR}/persisted-state/shadowbox-selfsigned.key"
+  fi
+  
+  if [[ -f "${OUTLINE_DIR}/persisted-state/shadowbox-selfsigned.crt" ]]; then
+    chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox-selfsigned.crt"
+    echo "Permission fixed: ${OUTLINE_DIR}/persisted-state/shadowbox-selfsigned.crt"
+  else
+    log_error "TLS certificate file not found at ${OUTLINE_DIR}/persisted-state/shadowbox-selfsigned.crt"
+  fi
+  
+  echo "Restarting containers..."
+  
+  # Try to restart the containers
+  if docker_container_exists "v2ray"; then
+    docker restart v2ray >/dev/null 2>&1 && echo "v2ray container restarted successfully"
+  else
+    log_error "v2ray container not found, skipping restart"
+  fi
+  
+  if docker_container_exists "shadowbox"; then
+    docker restart shadowbox >/dev/null 2>&1 && echo "shadowbox container restarted successfully"
+  else
+    log_error "shadowbox container not found, skipping restart"
+  fi
+  
+  echo "Permission fix completed!"
+}
+
 function main() {
   trap finish EXIT
   declare FLAGS_HOSTNAME=""
   declare -i FLAGS_V2RAY_PORT=0
   declare -i FLAGS_KEYS_PORT=0
+  declare FLAGS_FIX_PERMISSIONS=false
+  
   parse_flags "$@"
-  install_vpn
+  
+  # Run only permission fix if requested
+  if [[ "${FLAGS_FIX_PERMISSIONS}" == true ]]; then
+    fix_permissions
+  else
+    install_vpn
+  fi
 }
 
 main "$@"
