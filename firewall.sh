@@ -50,6 +50,13 @@ check_root
 # ===================================================================
 info "Configuring UFW (Uncomplicated Firewall)..."
 
+# Check if UFW is installed
+if ! command -v ufw &> /dev/null; then
+    info "UFW not found. Installing UFW..."
+    apt-get update || error "Failed to update package lists"
+    DEBIAN_FRONTEND=noninteractive apt-get install -y ufw || error "Failed to install UFW"
+fi
+
 # Reset UFW to default state
 info "Resetting UFW to default state..."
 ufw --force reset
@@ -85,8 +92,14 @@ fi
 # ===================================================================
 info "Setting up port knocking for SSH..."
 
-# Install knockd (port knocking daemon)
-apt-get install -y knockd || error "Failed to install knockd"
+# Check if knockd is installed
+if ! command -v knockd &> /dev/null; then
+    info "knockd not found. Installing knockd..."
+    apt-get update || error "Failed to update package lists"
+    DEBIAN_FRONTEND=noninteractive apt-get install -y knockd || error "Failed to install knockd"
+else
+    info "knockd is already installed"
+fi
 
 # Configure knockd
 cat > /etc/knockd.conf << EOF
@@ -258,6 +271,15 @@ ufw status verbose
 # 7. Configure iptables for Docker compatibility
 # ===================================================================
 info "Configuring iptables for Docker compatibility..."
+
+# Check if iptables is installed
+if ! command -v iptables &> /dev/null; then
+    info "iptables not found. Installing iptables..."
+    apt-get update || error "Failed to update package lists"
+    DEBIAN_FRONTEND=noninteractive apt-get install -y iptables || error "Failed to install iptables"
+else
+    info "iptables is already installed"
+fi
 
 # Add Docker subnet to trusted networks (assuming 172.17.0.0/16 is your Docker subnet)
 ufw allow from 172.17.0.0/16 to any

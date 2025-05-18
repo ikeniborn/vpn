@@ -15,9 +15,9 @@ This file tracks the project's progress using a task list format.
 
 ## Current Tasks
 
-* Understanding the current state of the VPN solution
-* Evaluating the system architecture and security measures
-* Analyzing configuration files and system components
+* Fixed firewall.sh script to check for required packages and install them if missing
+* Enhanced script resilience by adding package dependency checks for UFW, knockd, and iptables
+* Ensuring setup works correctly even if run out of the intended sequence
 
 ## Next Steps
 

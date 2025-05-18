@@ -32,3 +32,15 @@ This file records architectural and implementation decisions using a list format
 * Four isolated Docker networks (frontend, vpn_services, management, backup)
 * Prometheus, Alertmanager with Telegram notifications, and Grafana dashboards
 * Encrypted backups with retention policy and failure notifications
+
+## Script Resilience Enhancement - 2025-05-18 21:46:42
+
+**Decision**: Added automatic installation checks for required packages (UFW, knockd, iptables) in the firewall.sh script.
+
+**Rationale**: The script was failing with "ufw: command not found" error when run without first executing setup.sh. By adding dependency checks, the script now verifies if required tools are installed and installs them if missing, making the script more self-contained and resilient.
+
+**Implementation Details**:
+* Added check for UFW installation before attempting to use it
+* Added check for knockd installation before configuration
+* Added check for iptables installation before Docker compatibility setup
+* Used apt-get with DEBIAN_FRONTEND=noninteractive to prevent prompts

@@ -5,10 +5,10 @@ This file tracks the project's current status, including recent changes, current
 
 ## Current Focus
 
-* Memory Bank created and initialized
-* Understanding the overall architecture and components of the VPN solution
-* Getting familiar with the project structure and configuration files
-* Switching back to Code mode for development work
+* Fixed firewall.sh script to handle missing dependencies automatically
+* Added package installation checks for UFW, knockd, and iptables
+* Improved script resilience to ensure it works correctly even when run out of intended sequence
+* Making the setup process more robust against user errors
 
 ## Recent Changes
 
