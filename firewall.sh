@@ -189,25 +189,25 @@ info "Configuring essential service rules..."
 
 # Allow v2ray VLESS port (both TCP and UDP)
 info "Opening v2ray VLESS port: $V2RAY_PORT (TCP/UDP)..."
-ufw allow "$V2RAY_PORT"/tcp comment 'v2ray VLESS TCP'
-ufw allow "$V2RAY_PORT"/udp comment 'v2ray VLESS UDP'
+ufw allow "$V2RAY_PORT"/tcp # v2ray VLESS TCP
+ufw allow "$V2RAY_PORT"/udp # v2ray VLESS UDP
 
 # If v2ray port is not 443, optionally allow regular HTTPS too
 if [ "$V2RAY_PORT" != "443" ]; then
     info "Opening HTTPS port (443) for regular web traffic..."
-    ufw allow 443/tcp comment 'HTTPS'
+    ufw allow 443/tcp # HTTPS
 fi
 
 # Optionally open HTTP for redirect to HTTPS
 info "Opening HTTP port (80) for Let's Encrypt and redirects..."
-ufw allow 80/tcp comment 'HTTP for Let\'s Encrypt'
+ufw allow 80/tcp # HTTP for Let's Encrypt
 
 # Configure SSH access
 if [ "$CONFIGURE_SSH" = "yes" ]; then
     if [ "$ENABLE_PORT_KNOCKING" = "no" ]; then
         # If not using port knocking, use rate limiting for SSH
         info "Configuring SSH access with rate limiting..."
-        ufw limit 22/tcp comment 'SSH with rate limiting'
+        ufw limit 22/tcp # SSH with rate limiting
     else
         # If using port knocking, no need to open SSH port by default
         info "SSH will be controlled via port knocking..."
@@ -333,9 +333,9 @@ EOF
 
     # Allow internal communication between Docker containers
     info "Allowing Docker internal network communication..."
-    ufw allow from 172.17.0.0/16 to any comment 'Docker default network'
-    ufw allow from 172.18.0.0/16 to any comment 'Docker custom networks'
-    ufw allow from 10.0.0.0/8 to any comment 'Docker custom networks'
+    ufw allow from 172.17.0.0/16 to any # Docker default network
+    ufw allow from 172.18.0.0/16 to any # Docker custom networks
+    ufw allow from 10.0.0.0/8 to any # Docker custom networks
     
     # Create script to reapply iptables rules after Docker restart
     info "Creating Docker compatibility service..."
