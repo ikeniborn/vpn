@@ -90,7 +90,7 @@ services:
       - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
       - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
       - "traefik.http.routers.traefik-dashboard.middlewares=traefik-auth"
-      - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_ADMIN_AUTH:-admin:$2y$05$H1xGEQ4exd23CfGrq4Zk.eT.EpchH457Lr2ZafTyJjqM1CqhOJPNi}"
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_ADMIN_AUTH:-admin:$$2y$$05$$H1xGEQ4exd23CfGrq4Zk.eT.EpchH457Lr2ZafTyJjqM1CqhOJPNi}"
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 30s
@@ -225,7 +225,7 @@ services:
       - "traefik.http.routers.management.tls.certresolver=letsencrypt"
       - "traefik.http.services.management.loadbalancer.server.port=80"
       - "traefik.http.routers.management.middlewares=management-auth"
-      - "traefik.http.middlewares.management-auth.basicauth.users=${MANAGEMENT_ADMIN_AUTH:-admin:$2y$05$H1xGEQ4exd23CfGrq4Zk.eT.EpchH457Lr2ZafTyJjqM1CqhOJPNi}"
+      - "traefik.http.middlewares.management-auth.basicauth.users=${MANAGEMENT_ADMIN_AUTH:-admin:$$2y$$05$$H1xGEQ4exd23CfGrq4Zk.eT.EpchH457Lr2ZafTyJjqM1CqhOJPNi}"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80"]
       interval: 30s
@@ -263,7 +263,7 @@ services:
       - "traefik.http.routers.monitoring.tls.certresolver=letsencrypt"
       - "traefik.http.services.monitoring.loadbalancer.server.port=9090"
       - "traefik.http.routers.monitoring.middlewares=monitoring-auth"
-      - "traefik.http.middlewares.monitoring-auth.basicauth.users=${MONITORING_ADMIN_AUTH:-admin:$2y$05$H1xGEQ4exd23CfGrq4Zk.eT.EpchH457Lr2ZafTyJjqM1CqhOJPNi}"
+      - "traefik.http.middlewares.monitoring-auth.basicauth.users=${MONITORING_ADMIN_AUTH:-admin:$$2y$$05$$H1xGEQ4exd23CfGrq4Zk.eT.EpchH457Lr2ZafTyJjqM1CqhOJPNi}"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
       interval: 30s
@@ -299,7 +299,7 @@ services:
       - "traefik.http.routers.alertmanager.tls.certresolver=letsencrypt"
       - "traefik.http.services.alertmanager.loadbalancer.server.port=9093"
       - "traefik.http.routers.alertmanager.middlewares=alertmanager-auth"
-      - "traefik.http.middlewares.alertmanager-auth.basicauth.users=${ALERTMANAGER_ADMIN_AUTH:-admin:$2y$05$H1xGEQ4exd23CfGrq4Zk.eT.EpchH457Lr2ZafTyJjqM1CqhOJPNi}"
+      - "traefik.http.middlewares.alertmanager-auth.basicauth.users=${ALERTMANAGER_ADMIN_AUTH:-admin:$$2y$$05$$H1xGEQ4exd23CfGrq4Zk.eT.EpchH457Lr2ZafTyJjqM1CqhOJPNi}"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:9093/-/healthy"]
       interval: 30s
