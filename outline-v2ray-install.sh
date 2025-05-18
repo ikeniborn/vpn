@@ -509,6 +509,9 @@ docker_command=(
 
   # The v2ray image to run - v2fly/v2fly-core supports multi-arch including ARM64
   "${V2RAY_IMAGE:-v2fly/v2fly-core:latest}"
+  
+  # The command to run in the container - v2ray needs "run" command with config path
+  v2ray run -c /etc/v2ray/config.json
 )
 "\${docker_command[@]}"
 EOF
