@@ -120,7 +120,7 @@ Before installation, configure DNS records for your domains:
 
 2. **Clone the repository**:
    ```bash
-   git clone https://your-repository-url.git .
+   git clone https://github.com/ikeniborn/vpn.git .
    ```
    
    Or download and extract the archive:
