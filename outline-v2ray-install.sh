@@ -267,6 +267,9 @@ function generate_certificate() {
     -keyout "${SB_PRIVATE_KEY_FILE}" -out "${SB_CERTIFICATE_FILE}"
   )
   openssl req "${openssl_req_flags[@]}" >&2
+  
+  # Ensure certificates have proper permissions for the container to read
+  chmod 644 "${SB_CERTIFICATE_FILE}" "${SB_PRIVATE_KEY_FILE}"
 }
 
 function generate_certificate_fingerprint() {
@@ -409,6 +412,8 @@ function write_v2ray_config() {
   }
 }
 EOF
+  # Ensure the config file has proper permissions for the container to read
+  chmod 644 "${V2RAY_DIR}/config.json"
 }
 
 function create_docker_network() {
