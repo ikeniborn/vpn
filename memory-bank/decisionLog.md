@@ -94,3 +94,15 @@ This file records architectural and implementation decisions using a list format
 * This approach provides a more reliable solution by ensuring the correct group permissions inside containers
 * Restarted affected containers to apply the permission changes
 * This change ensures that the containers can access the Docker socket while maintaining security
+## Enhanced Docker Socket Permission Fix - 2025-05-18 23:00:49
+
+**Decision**: Modified Docker socket mounts in docker-compose.yml to use volume mount options for explicitly setting group permissions.
+
+**Rationale**: Despite adding the user to the Docker group, Traefik was still encountering permission errors accessing the Docker socket. The root cause was that inside the container, the socket was owned by nobody:nobody instead of preserving the host's ownership.
+
+**Implementation Details**:
+* Changed the Docker socket mount in docker-compose.yml to use `:ro,group=988` option for both Traefik and backup containers
+* Removed the now-redundant `group_add` sections since the mount options handle permissions directly
+* This explicitly sets the correct Docker group ID for the socket inside the container
+* This approach is more reliable as it directly addresses the permission issue at the mount level
+* Restarted the affected containers to apply the permission changes

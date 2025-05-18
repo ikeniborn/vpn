@@ -56,10 +56,13 @@ services:
       - frontend
       - management
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro,group=988  # Docker socket with explicit group
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik_data:/etc/traefik
       - ./traefik/config:/config
       - ./traefik/acme:/acme
+    user: root
+    group_add:
+      - "988"  # Docker group ID
     environment:
       - TZ=UTC
     command:
@@ -351,7 +354,10 @@ services:
       - management_data:/backup/management_data:ro
       - monitoring_data:/backup/monitoring_data:ro
       - backup_data:/archive
-      - /var/run/docker.sock:/var/run/docker.sock:ro,group=988  # Docker socket with explicit group
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    user: root
+    group_add:
+      - "988"  # Docker group ID
     environment:
       - TZ=UTC
       - BACKUP_CRON_EXPRESSION=${BACKUP_CRON:-0 2 * * *}  # Default: Every day at 2 AM
@@ -360,7 +366,6 @@ services:
       - BACKUP_COMPRESSION_LEVEL=9
       - BACKUP_ENCRYPTION_PASSWORD=${BACKUP_ENCRYPTION_PASSWORD:-changeThisPassword}
       - NOTIFICATION_URLS=${BACKUP_NOTIFICATION_URL:-}  # Optional webhook URL for backup notifications
-    user: "1000:1000"  # Use a non-root user
     healthcheck:
       test: ["CMD", "ls", "/archive"]
       interval: 60s
