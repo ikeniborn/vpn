@@ -26,6 +26,7 @@ This file tracks the project's progress using a task list format.
 * Ensuring all containerized services start and operate correctly
 * Implemented a permanent solution for Docker socket permissions using a systemd drop-in configuration to set 666 permissions on /var/run/docker.sock
 * Fixed Docker socket permission issues in Traefik and backup containers by using explicit volume mount options (`:ro,group=988`) instead of group_add directives
+* Fixed Docker networking issue by replacing host networking (`--net host`) with port mapping and a custom Docker network to address the error "cannot share the host's network namespace when user namespaces are enabled"
 
 ## Next Steps
 

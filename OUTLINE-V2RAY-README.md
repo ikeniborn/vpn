@@ -12,9 +12,10 @@ This package provides an enhanced installation of Outline VPN that uses v2ray wi
 
 ## Prerequisites
 
-- A server running Linux (x86_64 architecture)
+- A server running Linux (x86_64 or aarch64 architecture)
 - Root access or sudo privileges
 - Open ports (default 443 for v2ray)
+- Docker (installed automatically if missing)
 
 ## Installation
 
@@ -96,15 +97,19 @@ Client ←→ v2ray VLESS/TLS/WebSocket ←→ Shadowsocks ←→ Internet
 
 The traffic flow is:
 1. Client connects to v2ray using VLESS protocol with TLS and WebSocket
-2. v2ray forwards traffic to local Shadowsocks service
+2. v2ray forwards traffic to Shadowsocks service via Docker network
 3. Shadowsocks handles the actual VPN functionality
+
+The containers communicate through a dedicated Docker network called `outline-network`. This approach is compatible with systems that have user namespaces enabled.
 
 ## Security Considerations
 
 - TLS certificates are self-signed by default
 - All components run in Docker containers
+- Components communicate via a secure Docker network
 - No management API is exposed
 - Ports other than v2ray port (default 443) are not exposed externally
+- Compatible with systems that have Docker user namespaces enabled
 
 ## Troubleshooting
 
@@ -113,6 +118,8 @@ If you encounter issues:
 2. Verify Docker is running properly
 3. Check the logs with `docker logs v2ray` or `docker logs shadowbox`
 4. Ensure the ports are correctly configured and opened
+5. Verify Docker network with `docker network inspect outline-network`
+6. On systems with user namespaces enabled, the script uses explicit port mapping instead of host networking
 
 ## Uninstallation
 

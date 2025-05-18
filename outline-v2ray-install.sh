@@ -353,7 +353,7 @@ function write_v2ray_config() {
       "settings": {
         "servers": [
           {
-            "address": "127.0.0.1",
+            "address": "${CONTAINER_NAME}",
             "port": ${OUTLINE_PORT},
             "method": "${SS_METHOD}",
             "password": "${SS_PASSWORD}"
@@ -394,6 +394,11 @@ function write_v2ray_config() {
 EOF
 }
 
+function create_docker_network() {
+  # Create a Docker network for the containers to communicate with each other
+  docker network inspect outline-network >/dev/null 2>&1 || docker network create outline-network
+}
+
 function start_shadowbox() {
   # Start the shadowbox container
   local -r START_SCRIPT="${STATE_DIR}/start_container.sh"
@@ -408,11 +413,19 @@ set -eu
 docker stop "${CONTAINER_NAME}" 2> /dev/null || true
 docker rm -f "${CONTAINER_NAME}" 2> /dev/null || true
 
+# Ensure the Docker network exists
+docker network inspect outline-network >/dev/null 2>&1 || docker network create outline-network
+
 docker_command=(
   docker
   run
   -d
-  --name "${CONTAINER_NAME}" --restart always --net host
+  --name "${CONTAINER_NAME}" --restart always
+  --network outline-network
+  
+  # Port mapping instead of host networking
+  -p ${OUTLINE_PORT}:${OUTLINE_PORT}/tcp
+  -p ${OUTLINE_PORT}:${OUTLINE_PORT}/udp
 
   # Use log rotation. See https://docs.docker.com/config/containers/logging/configure/.
   --log-driver local
@@ -467,11 +480,19 @@ set -eu
 docker stop "${V2RAY_CONTAINER_NAME}" 2> /dev/null || true
 docker rm -f "${V2RAY_CONTAINER_NAME}" 2> /dev/null || true
 
+# Ensure the Docker network exists
+docker network inspect outline-network >/dev/null 2>&1 || docker network create outline-network
+
 docker_command=(
   docker
   run
   -d
-  --name "${V2RAY_CONTAINER_NAME}" --restart always --net host
+  --name "${V2RAY_CONTAINER_NAME}" --restart always
+  --network outline-network
+  
+  # Port mapping instead of host networking
+  -p ${V2RAY_PORT}:${V2RAY_PORT}/tcp
+  -p ${V2RAY_PORT}:${V2RAY_PORT}/udp
 
   # Use log rotation
   --log-driver local
@@ -634,7 +655,8 @@ function install_vpn() {
   run_step "Generating SHA-256 certificate fingerprint" generate_certificate_fingerprint
   run_step "Writing Outline config" write_outline_config
   run_step "Writing v2ray config" write_v2ray_config
-
+  
+  run_step "Creating Docker network" create_docker_network
   run_step "Starting Outline VPN" start_shadowbox
   run_step "Starting v2ray with VLESS" start_v2ray
 

@@ -29,6 +29,7 @@ This file tracks the project's current status, including recent changes, current
 * 2025-05-18 23:33:31 - Created the actual installation script (outline-v2ray-install.sh) that implements Outline VPN with v2ray VLESS masking
 * 2025-05-18 23:34:17 - Added comprehensive documentation (OUTLINE-V2RAY-README.md) explaining the solution and its usage
 * 2025-05-18 23:34:37 - Validated the script's syntax to ensure it works correctly
+* 2025-05-18 23:45:16 - Fixed Docker networking issue by replacing `--net host` with explicit port mapping and creating a custom Docker network for inter-container communication to resolve "cannot share the host's network namespace when user namespaces are enabled" error
 
 ## Open Questions/Issues
 
