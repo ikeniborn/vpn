@@ -467,66 +467,41 @@ EOF
 }
 
 function start_v2ray() {
-  # Start the v2ray container
-  local -r START_SCRIPT="${V2RAY_DIR}/start_container.sh"
-  cat <<-EOF > "${START_SCRIPT}"
-# This script starts the v2ray container.
-# If you need to customize how the server is run, you can edit this script, then restart with:
-#
-#     "${START_SCRIPT}"
-
-set -eu
-
-docker stop "${V2RAY_CONTAINER_NAME}" 2> /dev/null || true
-docker rm -f "${V2RAY_CONTAINER_NAME}" 2> /dev/null || true
-
-# Ensure the Docker network exists
-docker network inspect outline-network >/dev/null 2>&1 || docker network create outline-network
-
-docker_command=(
-  docker
-  run
-  -d
-  --name "${V2RAY_CONTAINER_NAME}" --restart always
-  --network outline-network
-  
-  # Port mapping instead of host networking
-  -p ${V2RAY_PORT}:${V2RAY_PORT}/tcp
-  -p ${V2RAY_PORT}:${V2RAY_PORT}/udp
-
-  # Use log rotation
-  --log-driver local
-
-  # v2ray configuration
-  -v "${V2RAY_DIR}/config.json:/etc/v2ray/config.json:ro"
-  
-  # Certificate access
-  -v "${SB_CERTIFICATE_FILE}:${SB_CERTIFICATE_FILE}:ro"
-  -v "${SB_PRIVATE_KEY_FILE}:${SB_PRIVATE_KEY_FILE}:ro"
-
-  # Create log directory
-  -v "${V2RAY_DIR}/logs:/var/log/v2ray"
-
-  # The v2ray image to run - v2fly/v2fly-core supports multi-arch including ARM64
-  "${V2RAY_IMAGE:-v2fly/v2fly-core:latest}"
-  
-  # The command to run in the container - v2ray needs "run" command with config path
-  v2ray run -c /etc/v2ray/config.json
-)
-"\${docker_command[@]}"
-EOF
-  chmod +x "${START_SCRIPT}"
-  
-  # Execute the start script
-  local STDERR_OUTPUT
-  STDERR_OUTPUT="$({ "${START_SCRIPT}" >/dev/null; } 2>&1)" && return
-  readonly STDERR_OUTPUT
-  log_error "FAILED"
+  # Check if the v2ray container already exists
   if docker_container_exists "${V2RAY_CONTAINER_NAME}"; then
-    handle_docker_container_conflict "${V2RAY_CONTAINER_NAME}" true
-    return
+    if ! run_step "Removing existing ${V2RAY_CONTAINER_NAME}" remove_v2ray_container; then
+      log_error "Failed to remove existing ${V2RAY_CONTAINER_NAME} container"
+      return 1
+    fi
+  fi
+
+  # Create the logs directory
+  mkdir -p "${V2RAY_DIR}/logs"
+  
+  # Start v2ray directly with the proper command
+  log_start_step "Starting v2ray container with direct command"
+  
+  # Execute the docker run command directly
+  if docker run -d \
+    --name "${V2RAY_CONTAINER_NAME}" \
+    --restart always \
+    --network outline-network \
+    -p "${V2RAY_PORT}:${V2RAY_PORT}/tcp" \
+    -p "${V2RAY_PORT}:${V2RAY_PORT}/udp" \
+    --log-driver local \
+    -v "${V2RAY_DIR}/config.json:/etc/v2ray/config.json:ro" \
+    -v "${SB_CERTIFICATE_FILE}:${SB_CERTIFICATE_FILE}:ro" \
+    -v "${SB_PRIVATE_KEY_FILE}:${SB_PRIVATE_KEY_FILE}:ro" \
+    -v "${V2RAY_DIR}/logs:/var/log/v2ray" \
+    "${V2RAY_IMAGE:-v2fly/v2fly-core:latest}" \
+    run \
+    -c \
+    /etc/v2ray/config.json >/dev/null 2>&1; then
+    
+    echo "OK"
+    return 0
   else
-    log_error "${STDERR_OUTPUT}"
+    log_error "FAILED"
     return 1
   fi
 }
