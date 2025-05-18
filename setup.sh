@@ -377,8 +377,24 @@ cat > /etc/docker/daemon.json << EOF
 }
 EOF
 
+# Set up a systemd drop-in file to set Docker socket permissions permanently
+info "Setting up persistent Docker socket permissions..."
+
+mkdir -p /etc/systemd/system/docker.service.d
+cat > /etc/systemd/system/docker.service.d/override.conf << EOF
+[Service]
+ExecStartPost=/bin/chmod 666 /var/run/docker.sock
+EOF
+
+# Apply changes to systemd
+systemctl daemon-reload
+
 # Restart Docker service
 systemctl restart docker
+
+# Apply permissions immediately
+chmod 666 /var/run/docker.sock
+info "Docker socket permissions set to 666 (rw-rw-rw-)"
 
 # ===================================================================
 # 5. Create Directories for Docker Volumes

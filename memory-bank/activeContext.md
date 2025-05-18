@@ -20,6 +20,7 @@ This file tracks the project's current status, including recent changes, current
 * 2025-05-18 22:29:44 - Fixed Docker socket permission issues by adding user to docker group, allowing Traefik and backup containers to access the Docker socket
 * 2025-05-18 22:40:42 - Enhanced Docker socket permission fix by adding explicit group ID (988) in docker-compose.yml volume mounts
 
+* 2025-05-18 23:06:46 - Implemented a more reliable Docker socket permission fix by setting up a systemd drop-in configuration to ensure 666 permissions on /var/run/docker.sock
 * 2025-05-18 23:01:00 - Enhanced Docker socket permission fix by modifying the volume mount options to explicitly set group permissions with `:ro,group=988` syntax instead of using group_add
 ## Open Questions/Issues
 

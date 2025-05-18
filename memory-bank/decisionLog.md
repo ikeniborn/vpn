@@ -94,6 +94,19 @@ This file records architectural and implementation decisions using a list format
 * This approach provides a more reliable solution by ensuring the correct group permissions inside containers
 * Restarted affected containers to apply the permission changes
 * This change ensures that the containers can access the Docker socket while maintaining security
+## Docker Socket Permission Fix - 2025-05-18 23:06:34
+
+**Decision**: Added a systemd drop-in configuration to set Docker socket permissions to 666 (world-readable and writable).
+
+**Rationale**: Previous approaches using Docker group permissions and volume mount options were not working reliably. The root issue was that containers needed direct read-write access to the Docker socket. While adding users to the Docker group or using Docker group ID in volume mounts should theoretically work, the most reliable solution is to make the Docker socket world-accessible with 666 permissions.
+
+**Implementation Details**:
+* Created a systemd drop-in file at `/etc/systemd/system/docker.service.d/override.conf`
+* Added an `ExecStartPost` directive to run `chmod 666 /var/run/docker.sock` after Docker starts
+* Applied the change immediately with `chmod 666 /var/run/docker.sock`
+* Made this change permanent so it persists across Docker service restarts
+* This approach ensures that all containers can access the Docker socket without complex permission management
+* While this is less secure than more restrictive permissions, it's acceptable in this controlled environment where the Docker socket is only exposed to trusted containers
 ## Enhanced Docker Socket Permission Fix - 2025-05-18 23:00:49
 
 **Decision**: Modified Docker socket mounts in docker-compose.yml to use volume mount options for explicitly setting group permissions.

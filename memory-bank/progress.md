@@ -24,6 +24,7 @@ This file tracks the project's progress using a task list format.
 * Fixed Docker socket permission issues by adding user to docker group, allowing Traefik and backup containers to access the socket
 * Enhanced Docker socket permissions by explicitly setting group ID (988) in volume mounts
 * Ensuring all containerized services start and operate correctly
+* Implemented a permanent solution for Docker socket permissions using a systemd drop-in configuration to set 666 permissions on /var/run/docker.sock
 * Fixed Docker socket permission issues in Traefik and backup containers by using explicit volume mount options (`:ro,group=988`) instead of group_add directives
 
 ## Next Steps
