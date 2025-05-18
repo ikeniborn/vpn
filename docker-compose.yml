@@ -174,6 +174,10 @@ services:
     environment:
       - TZ=UTC
       - V2RAY_DOMAIN=${V2RAY_DOMAIN:-v2ray.example.com}
+    command:
+      - run
+      - -c
+      - /etc/v2ray/config.json
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.v2ray.rule=Host(`${V2RAY_HOST:-v2ray.example.com}`)"
@@ -208,7 +212,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-      - /var/cache/nginx
+      - /var/cache/nginx:exec,mode=1777
+      - /run:exec,mode=1777
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.management.rule=Host(`${MANAGEMENT_HOST:-management.example.com}`)"

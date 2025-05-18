@@ -152,8 +152,8 @@ receivers:
   # Critical alerts - more visible formatting
   - name: 'telegram-critical'
     telegram_configs:
-      - bot_token: '${TELEGRAM_BOT_TOKEN}'
-        chat_id: ${TELEGRAM_CHAT_ID}
+      - bot_token: '7982416575:AAG2dy1tcojZA_iJNEXnZaXll6Rl-UFSb-k'
+        chat_id: 740775802
         parse_mode: 'HTML'
         message: |-
           🚨 <b>CRITICAL ALERT</b> 🚨
@@ -173,8 +173,8 @@ receivers:
   # Security alerts - unique formatting with security-specific details
   - name: 'telegram-critical-security'
     telegram_configs:
-      - bot_token: '${TELEGRAM_BOT_TOKEN}'
-        chat_id: ${TELEGRAM_CHAT_ID}
+      - bot_token: '7982416575:AAG2dy1tcojZA_iJNEXnZaXll6Rl-UFSb-k'
+        chat_id: 740775802
         parse_mode: 'HTML'
         message: |-
           ⚠️ <b>SECURITY ALERT</b> ⚠️
@@ -194,8 +194,8 @@ receivers:
   # Maintenance alerts - less urgent formatting
   - name: 'telegram-maintenance'
     telegram_configs:
-      - bot_token: '${TELEGRAM_BOT_TOKEN}'
-        chat_id: ${TELEGRAM_CHAT_ID}
+      - bot_token: '7982416575:AAG2dy1tcojZA_iJNEXnZaXll6Rl-UFSb-k'
+        chat_id: 740775802
         parse_mode: 'HTML'
         message: |-
           🔧 <b>Maintenance Alert</b>
@@ -211,8 +211,8 @@ receivers:
   # VPN-specific alerts
   - name: 'telegram-vpn'
     telegram_configs:
-      - bot_token: '${TELEGRAM_BOT_TOKEN}'
-        chat_id: ${TELEGRAM_CHAT_ID}
+      - bot_token: '7982416575:AAG2dy1tcojZA_iJNEXnZaXll6Rl-UFSb-k'
+        chat_id: 740775802
         parse_mode: 'HTML'
         message: |-
           🔐 <b>VPN Service Alert</b>

@@ -44,3 +44,37 @@ This file records architectural and implementation decisions using a list format
 * Added check for knockd installation before configuration
 * Added check for iptables installation before Docker compatibility setup
 * Used apt-get with DEBIAN_FRONTEND=noninteractive to prevent prompts
+
+## Nginx Container Permissions Fix - 2025-05-18 22:06:30
+
+**Decision**: Modified tmpfs mounts in the management container to resolve permission issues.
+
+**Rationale**: The nginx container was failing with "Permission denied" errors when trying to create cache directories and write PID file. These errors were preventing the management interface from starting properly.
+
+**Implementation Details**:
+* Added `exec,mode=1777` to `/var/cache/nginx` tmpfs mount to allow cache directory creation
+* Added a new tmpfs mount for `/run` with `exec,mode=1777` to allow PID file writing
+* Maintained the read-only filesystem for the rest of the container to preserve security
+
+## V2Ray Service Command Fix - 2025-05-18 22:13:50
+
+**Decision**: Added explicit command directive to the v2ray service in docker-compose.yml to properly run the service with its configuration file.
+
+**Rationale**: The v2ray container was only showing its help menu instead of running the actual service. This indicated that no proper command was being passed to the container to tell it to run with the config file.
+
+**Implementation Details**:
+* Added command directive to docker-compose.yml for the v2ray service: `run -c /etc/v2ray/config.json`
+* This explicitly tells v2ray to use the 'run' command with the correct configuration file path
+* The v2ray container now properly initializes and runs the VPN service instead of just displaying help text
+
+## V2Ray Configuration Update - 2025-05-18 22:16:11
+
+**Decision**: Updated V2Ray configuration to fix deprecated "root fakedns settings" warning.
+
+**Rationale**: V2Ray 5.30.0 was showing a warning about deprecated configuration format for the fakeDns settings. The warning message indicated that the root-level fakeDns settings are no longer the recommended approach in the latest V2Ray versions.
+
+**Implementation Details**:
+* Moved the fakeDns settings from the root level of the configuration into the dns section
+* Changed the property name from "fakeDns" to "fakedns" (lowercase 'd') to match the new configuration format
+* Updated the structure to use an array format for the fakedns configuration
+* These changes align with V2Ray's latest configuration format while preserving the original functionality

@@ -216,11 +216,13 @@
       "https+local://dns.google/dns-query",
       "localhost"
     ],
-    "tag": "dns-server"
-  },
-  "fakeDns": {
-    "ipPool": "198.18.0.0/16",
-    "poolSize": 65535
+    "tag": "dns-server",
+    "fakedns": [
+      {
+        "ipPool": "198.18.0.0/16",
+        "poolSize": 65535
+      }
+    ]
   },
   "stats": {},
   "api": {
