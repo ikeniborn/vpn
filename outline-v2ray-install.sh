@@ -297,6 +297,12 @@ function write_outline_config() {
 function write_v2ray_config() {
   # Create v2ray config with VLESS protocol
   mkdir -p "${V2RAY_DIR}"
+  
+  # Check if a directory exists at the config.json location and remove it
+  if [[ -d "${V2RAY_DIR}/config.json" ]]; then
+    rm -rf "${V2RAY_DIR}/config.json"
+  fi
+  
   cat > "${V2RAY_DIR}/config.json" << EOF
 {
   "log": {
