@@ -25,6 +25,7 @@
 # SHADOWBOX_DIR: Directory for persistent Outline Server state.
 # V2RAY_CONTAINER_NAME: Docker instance name for v2ray (default v2ray).
 # V2RAY_DIR: Directory for persistent v2ray state.
+# V2RAY_IMAGE: The Docker image to use for v2ray (default v2fly/v2fly-core:latest).
 # V2RAY_UUID: UUID for VLESS protocol authentication (auto-generated if not provided).
 # V2RAY_WS_PATH: WebSocket path for VLESS protocol (default /ws).
 # V2RAY_PORT: Port for v2ray to listen on (default 443).
@@ -485,8 +486,8 @@ docker_command=(
   # Create log directory
   -v "${V2RAY_DIR}/logs:/var/log/v2ray"
 
-  # The v2ray image to run
-  "v2fly/v2fly-core:latest"
+  # The v2ray image to run - v2fly/v2fly-core supports multi-arch including ARM64
+  "${V2RAY_IMAGE:-v2fly/v2fly-core:latest}"
 )
 "\${docker_command[@]}"
 EOF
@@ -548,8 +549,8 @@ function set_hostname() {
 function install_vpn() {
   local MACHINE_TYPE
   MACHINE_TYPE="$(uname -m)"
-  if [[ "${MACHINE_TYPE}" != "x86_64" ]]; then
-    log_error "Unsupported machine type: ${MACHINE_TYPE}. Please run this script on a x86_64 machine"
+  if [[ "${MACHINE_TYPE}" != "x86_64" && "${MACHINE_TYPE}" != "aarch64" ]]; then
+    log_error "Unsupported machine type: ${MACHINE_TYPE}. This script supports x86_64 and aarch64 architectures"
     exit 1
   fi
 
@@ -558,6 +559,12 @@ function install_vpn() {
 
   export CONTAINER_NAME="${CONTAINER_NAME:-shadowbox}"
   export V2RAY_CONTAINER_NAME="${V2RAY_CONTAINER_NAME:-v2ray}"
+  
+  # Set appropriate V2Ray image based on architecture if not specified
+  if [[ -z "${V2RAY_IMAGE:-}" ]]; then
+    V2RAY_IMAGE="v2fly/v2fly-core:latest"  # This image supports both x86_64 and aarch64
+  fi
+  export V2RAY_IMAGE
 
   run_step "Verifying that Docker is installed" verify_docker_installed
   run_step "Verifying that Docker daemon is running" verify_docker_running
@@ -598,7 +605,15 @@ function install_vpn() {
   readonly SS_METHOD SS_PASSWORD
 
   readonly ACCESS_CONFIG="${ACCESS_CONFIG:-${SHADOWBOX_DIR}/access.txt}"
-  readonly SB_IMAGE="${SB_IMAGE:-shadowsocks/shadowsocks-libev:latest}"
+  # Select appropriate Docker image based on architecture
+  if [[ -z "${SB_IMAGE:-}" ]]; then
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+      SB_IMAGE="shadowsocks/shadowsocks-libev:latest"  # multi-arch image with ARM64 support
+    else
+      SB_IMAGE="shadowsocks/shadowsocks-libev:latest"  # default for x86_64
+    fi
+  fi
+  readonly SB_IMAGE
 
   PUBLIC_HOSTNAME="${FLAGS_HOSTNAME:-${SB_PUBLIC_IP:-}}"
   if [[ -z "${PUBLIC_HOSTNAME}" ]]; then
@@ -629,7 +644,7 @@ function install_vpn() {
   # Output the connection information
   cat <<END_OF_SERVER_OUTPUT
 
-CONGRATULATIONS! Your Outline VPN with v2ray VLESS masking is up and running.
+CONGRATULATIONS! Your Outline VPN with v2ray VLESS masking is up and running on ${MACHINE_TYPE} architecture.
 
 To connect using v2ray with VLESS protocol:
 
