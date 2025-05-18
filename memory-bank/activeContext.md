@@ -17,6 +17,7 @@ This file tracks the project's current status, including recent changes, current
 * 2025-05-18 22:07:19 - Fixed Nginx permission issues in management container by adding proper tmpfs mounts
 * 2025-05-18 22:13:50 - Fixed v2ray container by adding proper command directive in docker-compose.yml to run the service with its config file
 * 2025-05-18 22:16:11 - Updated V2Ray config.json to fix the deprecated "root fakedns settings" warning by moving fakeDns configuration into the dns section
+* 2025-05-18 22:29:44 - Fixed Docker socket permission issues by adding user to docker group, allowing Traefik and backup containers to access the Docker socket
 
 ## Open Questions/Issues
 

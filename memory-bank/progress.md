@@ -21,6 +21,7 @@ This file tracks the project's progress using a task list format.
 * Resolved read-only filesystem limitations in Docker containers while maintaining security
 * Fixed V2Ray service by adding proper command directive in docker-compose.yml
 * Updated V2Ray configuration to fix deprecated "root fakedns settings" warning
+* Fixed Docker socket permission issues by adding user to docker group, allowing Traefik and backup containers to access the socket
 * Ensuring all containerized services start and operate correctly
 
 ## Next Steps

@@ -152,6 +152,15 @@ else
     error "Docker installation failed"
 fi
 
+# Add current non-root user to the docker group
+if [ -n "$SUDO_USER" ]; then
+    info "Adding user '$SUDO_USER' to the docker group..."
+    usermod -aG docker "$SUDO_USER"
+    info "User added to docker group. To activate, run: 'newgrp docker' or log out and log back in"
+else
+    warn "No SUDO_USER environment variable found. You may need to manually add your user to the docker group with: sudo usermod -aG docker YOUR_USERNAME"
+fi
+
 # ===================================================================
 # 3. Host Security Hardening
 # ===================================================================
@@ -427,6 +436,7 @@ echo "  - Docker and Docker Compose installed"
 echo "  - Host firewall configured (basic setup)"
 echo "  - System security settings applied"
 echo "  - Docker volume directories created with secure permissions"
+echo "  - Added user to docker group for Docker socket access"
 echo ""
 echo "Next steps:"
 echo "  1. Run './firewall.sh' to configure the firewall"
