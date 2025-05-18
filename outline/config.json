@@ -1,0 +1,97 @@
+{
+  "server": "0.0.0.0",
+  "server_port": 8388,
+  "password": "${SS_PASSWORD}",
+  "method": "chacha20-ietf-poly1305",
+  "timeout": 300,
+  "fast_open": true,
+  "nameserver": "1.1.1.1",
+  "mode": "tcp_and_udp",
+  "plugin": "obfs-server",
+  "plugin_opts": "obfs=http;obfs-host=www.example.com;failover=example.com:443",
+  "reuse_port": true,
+  "no_delay": true,
+  "ipv6_first": false,
+  
+  "advanced": {
+    "tcp_keepalive": 300,
+    "tcp_nodelay": true,
+    "buffer_size": 16384,
+    "udp_timeout": 180,
+    "udp_buffer_size": 4096,
+
+    "traffic_obfuscation": {
+      "enabled": true,
+      "randomize_packet_size": true,
+      "min_packet_size": 128,
+      "max_packet_size": 1024,
+      "jitter_delay_ms": {
+        "enabled": true,
+        "min": 5,
+        "max": 50
+      },
+      "padding": {
+        "enabled": true,
+        "min_bytes": 16,
+        "max_bytes": 64
+      }
+    },
+
+    "rate_limiting": {
+      "enabled": true,
+      "download_limit": 5242880,
+      "upload_limit": 1048576,
+      "concurrent_connections": 200,
+      "per_ip_connections": 15,
+      "burst_size": 60
+    },
+
+    "anti_probing": {
+      "enabled": true,
+      "reject_invalid_packets": true,
+      "blacklist_threshold": 5,
+      "blacklist_duration_seconds": 3600
+    }
+  },
+
+  "users": {
+    "user1": {
+      "password": "STRONG_PASSWORD_1",
+      "method": "chacha20-ietf-poly1305",
+      "enable": true,
+      "traffic_limit": 107374182400
+    },
+    "user2": {
+      "password": "STRONG_PASSWORD_2",
+      "method": "chacha20-ietf-poly1305",
+      "enable": true,
+      "traffic_limit": 107374182400
+    },
+    "user3": {
+      "password": "STRONG_PASSWORD_3",
+      "method": "chacha20-ietf-poly1305",
+      "enable": true,
+      "traffic_limit": 107374182400
+    }
+  },
+
+  "acl": {
+    "enabled": true,
+    "local_networks": ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+    "blocked_domains": [
+      "malicious-site.com", 
+      "tracking.example.org", 
+      "ads.service.com"
+    ],
+    "blocked_ips": [
+      "1.2.3.4",
+      "2.3.4.5"
+    ]
+  },
+  
+  "log": {
+    "level": "info",
+    "output": "/var/log/shadowsocks.log",
+    "verbose": false
+  }
+}

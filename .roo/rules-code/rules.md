@@ -115,3 +115,10 @@ umb:
     - "Next assistant will have complete context"
   override_file_restrictions: true
   override_mode_restrictions: true
+
+coding_managment_protocols: 
+  code_structure_and_modularity: 
+    - Never create a file longer than 500 lines of code. If a file approaches this limit, refactor by splitting it into modules or helper files. - Organize code into clearly separated modules, grouped by feature or responsibility. 
+    - Use clear, consistent imports (prefer relative imports within packages). testing_and_reliability: 
+    - After updating any logic, check whether existing unit tests need to be updated. If so, do it. 
+    - Tests should live in a /tests folder mirroring the main app structure

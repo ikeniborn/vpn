@@ -1,0 +1,88 @@
+# Management Dashboard Configuration
+
+# Server configuration
+server:
+  host: 0.0.0.0
+  port: 3000
+  # Enable HTTPS if not behind a reverse proxy
+  tls:
+    enabled: false
+    # These are used only if not behind a reverse proxy
+    cert_file: /path/to/cert.pem
+    key_file: /path/to/key.pem
+
+# Authentication settings
+auth:
+  # Authentication method (basic, oauth, etc)
+  method: basic
+  # Session timeout in minutes
+  session_timeout: 60
+  # Maximum failed login attempts before lockout
+  max_failed_attempts: 5
+  # Lockout time in minutes
+  lockout_time: 15
+
+# VPN service configuration
+vpn_services:
+  # OutlineVPN configuration
+  outline:
+    api_url: http://outline:8388/api
+    # Key for API access
+    api_key: ${SS_PASSWORD}
+    # Enable metrics collection
+    metrics_enabled: true
+  
+  # V2Ray configuration
+  v2ray:
+    api_url: http://v2ray:10085/api
+    # Connection settings
+    connection:
+      timeout: 5
+      retry_count: 3
+    # Enable metrics collection
+    metrics_enabled: true
+
+# User management
+users:
+  # Default user settings
+  default:
+    bandwidth_limit_gb: 50
+    connection_limit: 2
+    # Account validity in days
+    validity_days: 30
+  
+  # Admin override settings
+  admin:
+    # Allow admin to override limits
+    can_override_limits: true
+    # Require 2FA for admin actions
+    require_2fa: true
+
+# Monitoring integration
+monitoring:
+  # Prometheus endpoint for metrics
+  prometheus_url: http://prometheus:9090
+  # Grafana dashboard integration
+  grafana_url: http://grafana:3000
+  # Alert configuration
+  alerts:
+    # Enable alerts in dashboard
+    enabled: true
+    # Telegram notification settings
+    telegram:
+      enabled: true
+      bot_token: ${TELEGRAM_BOT_TOKEN}
+      chat_id: ${TELEGRAM_CHAT_ID}
+
+# Logging configuration
+logging:
+  # Log level (debug, info, warn, error)
+  level: info
+  # Log file location
+  file: /data/logs/management.log
+  # Max log file size in MB before rotation
+  max_size: 100
+  # Number of log files to keep
+  max_files: 10
+  # Enable sending logs to monitoring system
+  send_to_monitoring: true

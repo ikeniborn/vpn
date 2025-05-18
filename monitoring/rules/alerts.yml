@@ -1,0 +1,267 @@
+groups:
+- name: vpn_availability
+  rules:
+  # Critical service availability alerts
+  - alert: ServiceDown
+    expr: up == 0
+    for: 1m
+    labels:
+      severity: critical
+      category: availability
+    annotations:
+      summary: "Service {{ $labels.job }} is down"
+      description: "Service {{ $labels.job }} on {{ $labels.instance }} has been down for more than 1 minute."
+      message: "Service {{ $labels.job }} is not responding."
+      runbook_url: "https://vpn-docs.example.com/runbooks/service-down"
+
+  - alert: EndpointDown
+    expr: probe_success == 0
+    for: 2m
+    labels:
+      severity: critical
+      category: availability
+    annotations:
+      summary: "Endpoint {{ $labels.instance }} is down"
+      description: "Public endpoint {{ $labels.instance }} has been down for more than 2 minutes."
+      message: "Endpoint is not responding to HTTP requests."
+      runbook_url: "https://vpn-docs.example.com/runbooks/endpoint-down"
+
+  - alert: TraefikHighErrorRate
+    expr: sum(rate(traefik_service_requests_total{code=~"5.."}[5m])) by (service) / sum(rate(traefik_service_requests_total[5m])) by (service) > 0.05
+    for: 2m
+    labels:
+      severity: critical
+      category: availability
+    annotations:
+      summary: "Traefik high error rate for {{ $labels.service }}"
+      description: "Service {{ $labels.service }} has a 5xx error rate above 5% for more than 2 minutes."
+      message: "High number of HTTP errors detected."
+      runbook_url: "https://vpn-docs.example.com/runbooks/traefik-errors"
+
+- name: vpn_security
+  rules:
+  # Security-related alerts
+  - alert: UnusualLoginAttempts
+    expr: rate(vpn_login_attempts{status="failed"}[5m]) > 5
+    for: 3m
+    labels:
+      severity: critical
+      category: security
+    annotations:
+      summary: "Unusual login attempts detected"
+      description: "High rate of failed login attempts detected (> 5 per minute for 3 minutes)."
+      message: "Possible brute force attack in progress."
+      runbook_url: "https://vpn-docs.example.com/runbooks/brute-force"
+
+  - alert: UnauthorizedAccessAttempt
+    expr: vpn_unauthorized_access_attempts > 10
+    for: 5m
+    labels:
+      severity: critical
+      category: security
+    annotations:
+      summary: "Unauthorized access attempts detected"
+      description: "Multiple unauthorized access attempts detected in the last 5 minutes."
+      message: "Security breach attempt detected."
+      runbook_url: "https://vpn-docs.example.com/runbooks/unauthorized-access"
+
+  - alert: AbnormalTrafficPattern
+    expr: rate(vpn_traffic_bytes_total[5m]) > 3 * avg_over_time(rate(vpn_traffic_bytes_total[1h])[1d:1h])
+    for: 10m
+    labels:
+      severity: warning
+      category: security
+    annotations:
+      summary: "Abnormal traffic pattern detected"
+      description: "Traffic volume is 3x higher than the normal pattern for this time of day."
+      message: "Unusual traffic pattern may indicate unauthorized usage or attack."
+      runbook_url: "https://vpn-docs.example.com/runbooks/abnormal-traffic"
+
+  - alert: UnexpectedCountryAccess
+    expr: sum by(country) (increase(vpn_connections_total{country!~"RU|DE|US"}[1h])) > 10
+    for: 10m
+    labels:
+      severity: warning
+      category: security
+    annotations:
+      summary: "Unexpected country access: {{ $labels.country }}"
+      description: "Multiple connections from unexpected country {{ $labels.country }} detected."
+      message: "Potential security issue with connections from unusual location."
+      runbook_url: "https://vpn-docs.example.com/runbooks/geographic-anomaly"
+
+- name: vpn_resources
+  rules:
+  # Resource utilization alerts
+  - alert: HighCPULoad
+    expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+    for: 5m
+    labels:
+      severity: warning
+      category: resources
+    annotations:
+      summary: "High CPU load on {{ $labels.instance }}"
+      description: "CPU load is above 80% for more than 5 minutes."
+      message: "High CPU usage detected."
+      runbook_url: "https://vpn-docs.example.com/runbooks/high-cpu"
+
+  - alert: CriticalCPULoad
+    expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 95
+    for: 2m
+    labels:
+      severity: critical
+      category: resources
+    annotations:
+      summary: "Critical CPU load on {{ $labels.instance }}"
+      description: "CPU load is above 95% for more than 2 minutes."
+      message: "System is experiencing extreme CPU pressure."
+      runbook_url: "https://vpn-docs.example.com/runbooks/critical-cpu"
+
+  - alert: HighMemoryUsage
+    expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 85
+    for: 5m
+    labels:
+      severity: warning
+      category: resources
+    annotations:
+      summary: "High memory usage on {{ $labels.instance }}"
+      description: "Memory usage is above 85% for more than 5 minutes."
+      message: "High memory usage detected."
+      runbook_url: "https://vpn-docs.example.com/runbooks/high-memory"
+
+  - alert: CriticalMemoryUsage
+    expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 95
+    for: 2m
+    labels:
+      severity: critical
+      category: resources
+    annotations:
+      summary: "Critical memory usage on {{ $labels.instance }}"
+      description: "Memory usage is above 95% for more than 2 minutes."
+      message: "System is running out of memory."
+      runbook_url: "https://vpn-docs.example.com/runbooks/critical-memory"
+
+  - alert: LowDiskSpace
+    expr: (node_filesystem_size_bytes{mountpoint!~"^/boot.*"} - node_filesystem_free_bytes{mountpoint!~"^/boot.*"}) / node_filesystem_size_bytes{mountpoint!~"^/boot.*"} * 100 > 85
+    for: 5m
+    labels:
+      severity: warning
+      category: resources
+    annotations:
+      summary: "Low disk space on {{ $labels.instance }}:{{ $labels.mountpoint }}"
+      description: "Disk usage is above 85% for more than 5 minutes on {{ $labels.mountpoint }}."
+      message: "Low disk space detected."
+      runbook_url: "https://vpn-docs.example.com/runbooks/low-disk"
+
+  - alert: CriticalDiskSpace
+    expr: (node_filesystem_size_bytes{mountpoint!~"^/boot.*"} - node_filesystem_free_bytes{mountpoint!~"^/boot.*"}) / node_filesystem_size_bytes{mountpoint!~"^/boot.*"} * 100 > 95
+    for: 2m
+    labels:
+      severity: critical
+      category: resources
+    annotations:
+      summary: "Critical disk space on {{ $labels.instance }}:{{ $labels.mountpoint }}"
+      description: "Disk usage is above 95% for more than 2 minutes on {{ $labels.mountpoint }}."
+      message: "System is running out of disk space."
+      runbook_url: "https://vpn-docs.example.com/runbooks/critical-disk"
+
+  - alert: HighNetworkTraffic
+    expr: sum(rate(node_network_transmit_bytes_total[5m]) + rate(node_network_receive_bytes_total[5m])) by (instance) > 100 * 1024 * 1024
+    for: 5m
+    labels:
+      severity: warning
+      category: resources
+    annotations:
+      summary: "High network traffic on {{ $labels.instance }}"
+      description: "Network traffic is above 100MB/s for more than 5 minutes."
+      message: "High network load detected."
+      runbook_url: "https://vpn-docs.example.com/runbooks/high-network"
+
+- name: vpn_metrics
+  rules:
+  # VPN-specific metrics
+  - alert: TooManyVPNConnections
+    expr: sum(vpn_active_connections) > 100
+    for: 5m
+    labels:
+      severity: warning
+      category: vpn
+    annotations:
+      summary: "Too many VPN connections"
+      description: "More than 100 active VPN connections for more than 5 minutes."
+      message: "High number of VPN connections detected."
+      runbook_url: "https://vpn-docs.example.com/runbooks/high-connections"
+
+  - alert: VPNBandwidthExceeded
+    expr: sum(rate(vpn_traffic_bytes_total[5m])) > 500 * 1024 * 1024
+    for: 5m
+    labels:
+      severity: warning
+      category: vpn
+    annotations:
+      summary: "VPN bandwidth exceeded"
+      description: "VPN bandwidth usage is above 500MB/s for more than 5 minutes."
+      message: "Abnormally high bandwidth usage detected."
+      runbook_url: "https://vpn-docs.example.com/runbooks/high-bandwidth"
+
+  - alert: VPNConnectionFailures
+    expr: increase(vpn_connection_failures_total[5m]) > 10
+    for: 3m
+    labels:
+      severity: warning
+      category: vpn
+    annotations:
+      summary: "VPN connection failures"
+      description: "More than 10 VPN connection failures in the last 5 minutes."
+      message: "Users may be experiencing connection issues."
+      runbook_url: "https://vpn-docs.example.com/runbooks/connection-failures"
+
+  - alert: VPNLatencyHigh
+    expr: avg(vpn_connection_latency_seconds) > 0.5
+    for: 5m
+    labels:
+      severity: warning
+      category: vpn
+    annotations:
+      summary: "VPN latency is high"
+      description: "Average VPN connection latency is above 500ms for more than 5 minutes."
+      message: "Users may be experiencing performance issues."
+      runbook_url: "https://vpn-docs.example.com/runbooks/high-latency"
+
+- name: vpn_maintenance
+  rules:
+  # Backup and maintenance alerts
+  - alert: BackupFailure
+    expr: time() - backup_last_success_timestamp_seconds > 86400
+    for: 1h
+    labels:
+      severity: critical
+      category: maintenance
+    annotations:
+      summary: "Backup failure detected"
+      description: "No successful backup has been performed in the last 24 hours."
+      message: "Backup failure detected. Please check the backup service."
+      runbook_url: "https://vpn-docs.example.com/runbooks/backup-failure"
+
+  - alert: CertificateExpiringSoon
+    expr: (node_time_seconds - node_filesystem_atime_seconds{filename=~".*\\.crt|.*\\.pem"}) > (90 * 24 * 3600)
+    for: 1d
+    labels:
+      severity: warning
+      category: maintenance
+    annotations:
+      summary: "Certificate expiring soon"
+      description: "TLS certificate will expire in less than 30 days for {{ $labels.filename }}."
+      message: "Certificate renewal required soon."
+      runbook_url: "https://vpn-docs.example.com/runbooks/certificate-expiry"
+
+  - alert: PrometheusTargetMissing
+    expr: up == 0
+    for: 10m
+    labels:
+      severity: warning
+      category: maintenance
+    annotations:
+      summary: "Prometheus target missing ({{ $labels.job }})"
+      description: "Target {{ $labels.instance }} for job {{ $labels.job }} is down for more than 10 minutes."
+      message: "Prometheus is unable to scrape metrics from this target."
+      runbook_url: "https://vpn-docs.example.com/runbooks/target-missing"
