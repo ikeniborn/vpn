@@ -250,6 +250,17 @@ function generate_certificate() {
   local -r CERTIFICATE_NAME="${STATE_DIR}/shadowbox-selfsigned"
   readonly SB_CERTIFICATE_FILE="${CERTIFICATE_NAME}.crt"
   readonly SB_PRIVATE_KEY_FILE="${CERTIFICATE_NAME}.key"
+  
+  # Check if a directory exists at the key location and remove it
+  if [[ -d "${SB_PRIVATE_KEY_FILE}" ]]; then
+    rm -rf "${SB_PRIVATE_KEY_FILE}"
+  fi
+  
+  # Similarly check if a directory exists at the cert location
+  if [[ -d "${SB_CERTIFICATE_FILE}" ]]; then
+    rm -rf "${SB_CERTIFICATE_FILE}"
+  fi
+  
   declare -a openssl_req_flags=(
     -x509 -nodes -days 36500 -newkey rsa:4096
     -subj "/CN=${PUBLIC_HOSTNAME}"
