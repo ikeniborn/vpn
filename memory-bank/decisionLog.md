@@ -1,121 +1,32 @@
 # Decision Log
 
 This file records architectural and implementation decisions using a list format.
-2025-05-18 18:14:47 - Memory Bank initialization.
+2025-05-18 18:14:25 - Memory Bank initialization.
+2025-05-18 23:31:20 - Added decisions for Outline VPN and v2ray VLESS integration project.
 
 ## Decision
 
-* Use Docker containerization for service isolation and deployment
-* Implement multiple VPN protocols (V2Ray and OutlineVPN/Shadowsocks) for versatility
-* Use Traefik as reverse proxy for routing and TLS termination
-* Implement network segmentation with isolated Docker networks
-* Add a cover website to make the VPN service less conspicuous
-* Implement a comprehensive monitoring solution with Prometheus, Alertmanager, and Grafana
-* Set up automated encrypted backups for disaster recovery
+* Remove monitoring and management components from the Outline VPN installation
+* Replace the existing script with a completely new implementation that integrates v2ray with VLESS protocol
+* Configure v2ray as the front-facing service that masks traffic to the Outline VPN
+* Use WebSocket over TLS as the transport protocol for enhanced obfuscation
 
 ## Rationale 
 
-* Docker provides isolation, portability, and simplified deployment
-* Multiple VPN protocols offer redundancy and options to bypass network restrictions
-* Traefik provides modern, container-aware reverse proxy capabilities with automatic TLS
-* Network segmentation enhances security by limiting attack surface
-* A cover website helps avoid detection by censors
-* Monitoring ensures system health and performance visibility
-* Automated backups protect against data loss and facilitate disaster recovery
+* Monitoring/management components create additional attack surfaces and could potentially leak information
+* Complete script replacement allows for more thorough integration rather than patching the existing script
+* v2ray VLESS protocol provides excellent traffic obfuscation capabilities against DPI
+* WebSocket over TLS resembles legitimate HTTPS traffic, making it difficult to detect or block
+* Using v2ray as the front-facing service provides better protection for the actual VPN service (Outline)
 
 ## Implementation Details
 
-* Docker Compose for orchestration with defined networks and volumes
-* V2Ray with WebSocket transport for better censorship evasion
-* OutlineVPN/Shadowsocks for simpler client setup
-* Traefik with Let's Encrypt for automatic certificate management
-* Four isolated Docker networks (frontend, vpn_services, management, backup)
-* Prometheus, Alertmanager with Telegram notifications, and Grafana dashboards
-* Encrypted backups with retention policy and failure notifications
-
-## Script Resilience Enhancement - 2025-05-18 21:46:42
-
-**Decision**: Added automatic installation checks for required packages (UFW, knockd, iptables) in the firewall.sh script.
-
-**Rationale**: The script was failing with "ufw: command not found" error when run without first executing setup.sh. By adding dependency checks, the script now verifies if required tools are installed and installs them if missing, making the script more self-contained and resilient.
-
-**Implementation Details**:
-* Added check for UFW installation before attempting to use it
-* Added check for knockd installation before configuration
-* Added check for iptables installation before Docker compatibility setup
-* Used apt-get with DEBIAN_FRONTEND=noninteractive to prevent prompts
-
-## Nginx Container Permissions Fix - 2025-05-18 22:06:30
-
-**Decision**: Modified tmpfs mounts in the management container to resolve permission issues.
-
-**Rationale**: The nginx container was failing with "Permission denied" errors when trying to create cache directories and write PID file. These errors were preventing the management interface from starting properly.
-
-**Implementation Details**:
-* Added `exec,mode=1777` to `/var/cache/nginx` tmpfs mount to allow cache directory creation
-* Added a new tmpfs mount for `/run` with `exec,mode=1777` to allow PID file writing
-* Maintained the read-only filesystem for the rest of the container to preserve security
-
-## V2Ray Service Command Fix - 2025-05-18 22:13:50
-
-**Decision**: Added explicit command directive to the v2ray service in docker-compose.yml to properly run the service with its configuration file.
-
-**Rationale**: The v2ray container was only showing its help menu instead of running the actual service. This indicated that no proper command was being passed to the container to tell it to run with the config file.
-
-**Implementation Details**:
-* Added command directive to docker-compose.yml for the v2ray service: `run -c /etc/v2ray/config.json`
-* This explicitly tells v2ray to use the 'run' command with the correct configuration file path
-* The v2ray container now properly initializes and runs the VPN service instead of just displaying help text
-
-## V2Ray Configuration Update - 2025-05-18 22:16:11
-
-**Decision**: Updated V2Ray configuration to fix deprecated "root fakedns settings" warning.
-
-**Rationale**: V2Ray 5.30.0 was showing a warning about deprecated configuration format for the fakeDns settings. The warning message indicated that the root-level fakeDns settings are no longer the recommended approach in the latest V2Ray versions.
-
-**Implementation Details**:
-* Moved the fakeDns settings from the root level of the configuration into the dns section
-* Changed the property name from "fakeDns" to "fakedns" (lowercase 'd') to match the new configuration format
-* Updated the structure to use an array format for the fakedns configuration
-* These changes align with V2Ray's latest configuration format while preserving the original functionality
-
-## Docker Socket Permission Fix - 2025-05-18 22:31:10
-
-**Decision**: Added Docker group management to setup.sh script and manually fixed current session permissions.
-
-**Rationale**: Traefik and backup containers were failing with "permission denied while trying to connect to the Docker daemon socket" errors. These errors occurred because the user doesn't have permissions to access /var/run/docker.sock, which both containers need to mount.
-
-**Implementation Details**:
-* Added the current user to the Docker group with `sudo usermod -aG docker $USER`
-* Activated the new group membership in the current session with `newgrp docker` without requiring logout
-* Updated setup.sh to automatically add the user to the Docker group during installation
-* Discovered additional fix was needed: explicitly setting the Docker group ID in volume mounts
-* Modified docker-compose.yml to use `group:988` option in Docker socket mounts for Traefik and backup containers
-* This approach provides a more reliable solution by ensuring the correct group permissions inside containers
-* Restarted affected containers to apply the permission changes
-* This change ensures that the containers can access the Docker socket while maintaining security
-## Docker Socket Permission Fix - 2025-05-18 23:06:34
-
-**Decision**: Added a systemd drop-in configuration to set Docker socket permissions to 666 (world-readable and writable).
-
-**Rationale**: Previous approaches using Docker group permissions and volume mount options were not working reliably. The root issue was that containers needed direct read-write access to the Docker socket. While adding users to the Docker group or using Docker group ID in volume mounts should theoretically work, the most reliable solution is to make the Docker socket world-accessible with 666 permissions.
-
-**Implementation Details**:
-* Created a systemd drop-in file at `/etc/systemd/system/docker.service.d/override.conf`
-* Added an `ExecStartPost` directive to run `chmod 666 /var/run/docker.sock` after Docker starts
-* Applied the change immediately with `chmod 666 /var/run/docker.sock`
-* Made this change permanent so it persists across Docker service restarts
-* This approach ensures that all containers can access the Docker socket without complex permission management
-* While this is less secure than more restrictive permissions, it's acceptable in this controlled environment where the Docker socket is only exposed to trusted containers
-## Enhanced Docker Socket Permission Fix - 2025-05-18 23:00:49
-
-**Decision**: Modified Docker socket mounts in docker-compose.yml to use volume mount options for explicitly setting group permissions.
-
-**Rationale**: Despite adding the user to the Docker group, Traefik was still encountering permission errors accessing the Docker socket. The root cause was that inside the container, the socket was owned by nobody:nobody instead of preserving the host's ownership.
-
-**Implementation Details**:
-* Changed the Docker socket mount in docker-compose.yml to use `:ro,group=988` option for both Traefik and backup containers
-* Removed the now-redundant `group_add` sections since the mount options handle permissions directly
-* This explicitly sets the correct Docker group ID for the socket inside the container
-* This approach is more reliable as it directly addresses the permission issue at the mount level
-* Restarted the affected containers to apply the permission changes
+* Maintain compatibility with the original script's command-line arguments
+* Keep essential functionality from the original script (Docker installation, certificate generation)
+* Add v2ray-specific configuration with VLESS protocol, WebSocket transport, and TLS encryption
+* Create Docker containers for both Outline VPN and v2ray with proper integration
+* Automatically generate and output all necessary connection information
+* Remove Watchtower container since it's typically part of monitoring/management
+* Use TLS certificates for both services to ensure secure communications
+* Configure v2ray to route traffic directly to Outline VPN for actual VPN functionality
+* Provide fallback mechanisms for non-VPN traffic to avoid obvious VPN fingerprinting
