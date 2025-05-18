@@ -236,6 +236,11 @@ sysctl -p /etc/sysctl.d/99-security.conf
 
 # Setup fail2ban
 info "Configuring fail2ban..."
+# Ensure directory exists
+if [ ! -d "/etc/fail2ban" ]; then
+    info "Creating /etc/fail2ban directory..."
+    mkdir -p /etc/fail2ban
+fi
 cat > /etc/fail2ban/jail.local << EOF
 [DEFAULT]
 bantime = 3600
