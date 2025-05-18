@@ -38,6 +38,8 @@ volumes:
     name: vpn_monitoring_data
   backup_data:
     name: vpn_backup_data
+  alertmanager_data:
+    name: vpn_alertmanager_data
 
 services:
   # Traefik - Reverse Proxy
@@ -269,13 +271,15 @@ services:
       - no-new-privileges:true
     networks:
       - management
+      - frontend
     volumes:
       - ./monitoring/alertmanager.yml:/etc/alertmanager/config.yml:ro
+      - alertmanager_data:/alertmanager
     environment:
       - TZ=UTC
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-your_bot_token}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-your_chat_id}
-    user: nobody
+    user: 65534:65534  # Explicitly set nobody user
     command:
       - --config.file=/etc/alertmanager/config.yml
       - --storage.path=/alertmanager

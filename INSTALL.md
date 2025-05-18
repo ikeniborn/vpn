@@ -236,29 +236,29 @@ The firewall script secures your server by configuring UFW with appropriate rule
 
 1. **Start the Docker containers**:
    ```bash
-   docker-compose up -d
+   docker compose --env-file .env up -d
    ```
 
 2. **Check container status**:
    ```bash
-   docker-compose ps
+   docker compose ps
    ```
    
    All containers should show as "Up" status. If any container shows an error status, check the logs:
    ```bash
-   docker-compose logs [service_name]
+   docker compose logs [service_name]
    ```
 
 3. **View real-time logs** (optional):
    ```bash
-   docker-compose logs -f
+   docker compose logs -f
    ```
 
 ### Verify Services
 
 1. **Check if Traefik obtained SSL certificates**:
    ```bash
-   docker-compose exec traefik cat /acme/acme.json | grep "Certificates"
+   docker compose exec traefik cat /acme/acme.json | grep "Certificates"
    ```
 
 2. **Check if all services are accessible via their domains**:
@@ -298,7 +298,7 @@ The firewall script secures your server by configuring UFW with appropriate rule
    - Ensure the Telegram bot token and chat ID are correctly set in the `.env` file
    - Restart the alertmanager service:
      ```bash
-     docker-compose restart alertmanager
+     docker compose restart alertmanager
      ```
    - Test the alert system:
      ```bash
@@ -321,7 +321,7 @@ The firewall script secures your server by configuring UFW with appropriate rule
 
 3. **Test the backup system**:
    ```bash
-   docker-compose exec backup /bin/sh -c "/usr/local/bin/create-backup.sh"
+   docker compose exec backup /bin/sh -c "/usr/local/bin/create-backup.sh"
    ```
 
 ## Troubleshooting
@@ -329,19 +329,19 @@ The firewall script secures your server by configuring UFW with appropriate rule
 ### Common Installation Issues
 
 1. **Docker containers fail to start**:
-   - Check container logs: `docker-compose logs [service_name]`
+   - Check container logs: `docker compose logs [service_name]`
    - Verify port availability: `netstat -tuln`
    - Check disk space: `df -h`
 
 2. **Cannot obtain SSL certificates**:
    - Verify DNS records: `dig +short your-domain.com`
    - Check if ports 80 and 443 are open: `curl -I http://your-domain.com`
-   - Review Traefik logs: `docker-compose logs traefik`
+   - Review Traefik logs: `docker compose logs traefik`
 
 3. **Network connectivity issues**:
    - Check Docker network configuration: `docker network ls`
    - Verify firewall rules: `sudo ufw status`
-   - Test internal container communication: `docker-compose exec [service1] ping [service2]`
+   - Test internal container communication: `docker compose exec [service1] ping [service2]`
 
 4. **Resource constraints**:
    - Check system resources: `htop`
