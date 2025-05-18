@@ -282,6 +282,11 @@ systemctl enable apparmor
 
 # Setup audit rules
 info "Configuring system auditing..."
+# Ensure audit rules directory exists
+if [ ! -d "/etc/audit/rules.d" ]; then
+    info "Creating /etc/audit/rules.d directory..."
+    mkdir -p /etc/audit/rules.d
+fi
 cat > /etc/audit/rules.d/audit.rules << EOF
 # Delete all existing rules
 -D
@@ -321,8 +326,24 @@ cat > /etc/audit/rules.d/audit.rules << EOF
 EOF
 
 # Restart auditd
-systemctl restart auditd
-systemctl enable auditd
+info "Starting auditd service..."
+# Make sure auditd is properly installed
+if ! dpkg -l | grep -q auditd; then
+    info "Re-installing auditd package..."
+    DEBIAN_FRONTEND=noninteractive apt-get install -y auditd
+fi
+
+# Check if the service exists
+if [ -f /lib/systemd/system/auditd.service ] || [ -f /etc/systemd/system/auditd.service ]; then
+    systemctl daemon-reload
+    systemctl restart auditd || warn "Failed to restart auditd service, will try to start it"
+    systemctl start auditd || warn "Failed to start auditd service"
+    systemctl enable auditd || warn "Failed to enable auditd service"
+    info "Auditd service configured"
+else
+    warn "Auditd service not found. Service might need manual configuration."
+    warn "You can try: apt-get install --reinstall auditd"
+fi
 
 # ===================================================================
 # 4. Secure Docker Configuration
