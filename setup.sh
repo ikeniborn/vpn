@@ -256,8 +256,24 @@ maxretry = 3
 EOF
 
 # Restart fail2ban
-systemctl restart fail2ban
-systemctl enable fail2ban
+info "Starting fail2ban service..."
+# Make sure fail2ban is properly installed
+if ! dpkg -l | grep -q fail2ban; then
+    info "Re-installing fail2ban package..."
+    DEBIAN_FRONTEND=noninteractive apt-get install -y fail2ban
+fi
+
+# Check if the service exists
+if [ -f /lib/systemd/system/fail2ban.service ] || [ -f /etc/systemd/system/fail2ban.service ]; then
+    systemctl daemon-reload
+    systemctl restart fail2ban || warn "Failed to restart fail2ban service, will try to start it"
+    systemctl start fail2ban || warn "Failed to start fail2ban service"
+    systemctl enable fail2ban || warn "Failed to enable fail2ban service"
+    info "Fail2ban service configured"
+else
+    warn "Fail2ban service not found. Service might need manual configuration."
+    warn "You can try: apt-get install --reinstall fail2ban"
+fi
 
 # Configure AppArmor
 info "Enabling AppArmor..."
