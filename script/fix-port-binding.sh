@@ -210,12 +210,24 @@ recreate_container() {
         -e "V2RAY_VMESS_AEAD_FORCED=false" \
         v2fly/v2fly-core:latest run -config "$CONFIG_FILE"
     
-    # Verify container is running
-    sleep 3
-    if docker ps | grep -q "$DOCKER_CONTAINER"; then
+    # Verify container is running with more reliable method
+    sleep 5
+    if [ -n "$(docker ps -q -f "name=^${DOCKER_CONTAINER}$")" ]; then
         info "Container started successfully"
+        
+        # Show logs for debugging
+        info "Recent container logs:"
+        docker logs "$DOCKER_CONTAINER" --tail 5
     else
-        error "Container failed to start. Check logs: docker logs $DOCKER_CONTAINER"
+        warn "Container might have failed to start. Checking logs:"
+        docker logs "$DOCKER_CONTAINER" --tail 10 || true
+        
+        # Check again after logs - container might be running even if initial check failed
+        if [ -n "$(docker ps -q -f "name=^${DOCKER_CONTAINER}$")" ]; then
+            info "Container is actually running despite previous check failure"
+        else
+            error "Container definitely not running. Check logs and try again."
+        fi
     fi
 }
 
@@ -248,13 +260,33 @@ verify_ports() {
         warn "⚠️ SOCKS proxy port 1080 is still not listening"
     fi
     
-    # Check transparent proxy port
+    # Check transparent proxy port - wait longer for this critical port
     if ss -tulpn | grep -q ":1081 "; then
         info "✅ Transparent proxy port 1081 is now listening"
     else
-        error "❌ Transparent proxy port 1081 is still not listening"
+        warn "⚠️ Transparent proxy port 1081 is not listening immediately"
         info "This port is critical for transparent routing"
-        docker logs "$DOCKER_CONTAINER" | grep -i "1081\|dokodemo\|error\|fail" | tail -10
+        info "Waiting longer for port to become available (10 seconds)..."
+        
+        # Wait longer for the port to appear
+        for i in {1..10}; do
+            sleep 1
+            echo -n "."
+            if ss -tulpn | grep -q ":1081 "; then
+                echo ""
+                info "✅ Transparent proxy port 1081 is now listening after waiting"
+                break
+            fi
+            
+            # Last iteration - still not listening
+            if [ "$i" -eq 10 ] && ! ss -tulpn | grep -q ":1081 "; then
+                echo ""
+                warn "⚠️ Transparent proxy port 1081 is still not listening after extended wait"
+                info "Checking logs for clues:"
+                docker logs "$DOCKER_CONTAINER" | grep -i "1081\|dokodemo\|error\|fail" | tail -10
+                info "Container will continue running - test connectivity anyway"
+            fi
+        done
     fi
 }
 
