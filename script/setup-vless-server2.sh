@@ -319,12 +319,13 @@ EOF
         docker rm -f v2ray-client
     fi
     
-    # Create Docker network if it doesn't exist
-    if ! docker network ls | grep -q "v2ray-network"; then
-        info "Creating Docker network..."
-        docker network create v2ray-network || true
-    else
+    # Handle Docker network creation
+    info "Setting up Docker network..."
+    if docker network inspect v2ray-network &>/dev/null; then
         info "Docker network v2ray-network already exists, using existing network."
+    else
+        info "Creating Docker network..."
+        docker network create v2ray-network
     fi
     
     # Run v2ray container
