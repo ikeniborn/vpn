@@ -39,10 +39,10 @@ This file tracks the project's current status, including recent changes, current
 * Is there a need for additional client-side configurations or support for other platforms?
 * Should we implement automatic failover between multiple servers?
 * Would a monitoring system for the tunnel status be beneficial?
-* How can we improve error handling and diagnostics for tunnel setup issues?
 * Should we implement logging rotation for v2ray logs?
-* What strategies should we implement for automatic recovery from container failures?
 * Should we add monitoring alerts for tunnel status?
+* What is the best method to automatically run the recovery script on system startup?
+* Should we implement a systemd service for proper startup ordering of services?
 * What is the best approach for generating complex JSON configurations in bash scripts?
 * Is there a better way to handle configuration templates than direct cat/heredoc?
 * Should we develop a comprehensive testing framework for VPN tunnels?
@@ -76,3 +76,10 @@ This file tracks the project's current status, including recent changes, current
   * monitor-server1-traffic.sh - Monitors incoming connections from Server 2 to Server 1
   * monitor-server2-traffic.sh - Monitors Outline VPN client traffic and validates tunnel routing
   * Created traffic-monitoring-guide.md with comprehensive usage instructions
+
+[2025-05-20 01:33:37] - Created comprehensive server recovery solution for post-reboot issues:
+  * Developed recover-services-after-reboot.sh script to automatically fix service outages after reboot
+  * Script automatically detects server type (Server 1 or Server 2) and applies appropriate fixes
+  * Handles restoration of SSH, HTTPS, VLESS tunnel, and Outline VPN connectivity
+  * Created detailed server-reboot-recovery.md documentation with both automatic and manual recovery steps
+  * Implemented complete solution for "after reboot server lost ssh, https, outline connect" issue

@@ -299,3 +299,38 @@ This file records architectural and implementation decisions using a list format
 * Supports saving results to log files for later analysis
 
 [2025-05-20 01:22:34] - Created traffic monitoring scripts for both Server 1 and Server 2
+
+## Decision
+
+* Create a comprehensive server recovery solution for post-reboot service outages
+
+## Rationale
+
+* After server reboots, multiple critical services were failing to start properly:
+  * SSH connectivity lost - preventing administrative access
+  * HTTPS connections failing - blocking external web traffic
+  * VLESS+Reality tunnel broken between Server 1 and Server 2
+  * Outline VPN connections failing for end users
+* Previous scripts addressed individual issues but didn't provide a complete recovery solution
+* A unified approach was needed to automatically restore all services
+* Manual recovery was difficult without SSH access
+* Multiple components needed to be restarted in the correct sequence
+
+## Implementation Details
+
+* Created recover-services-after-reboot.sh script with:
+  * Automatic server type detection (Server 1 vs Server 2)
+  * Docker service verification and restart if needed
+  * v2ray container recreation with proper networking configuration
+  * Port binding fixes for Client 2
+  * Authentication repair between Server 1 and Server 2
+  * iptables rule restoration for proper traffic routing
+  * Outline VPN service restart on Server 2
+  * Comprehensive connectivity testing
+  * Detailed documentation with both automatic and manual recovery procedures
+* The script can be run on either server or both and applies the correct fixes
+* Modular design integrates with existing fix scripts when available
+* Includes fallback mechanisms when specific scripts aren't available
+* Simplifies recovery to a single command execution
+
+[2025-05-20 01:34:38] - Created comprehensive server recovery solution for post-reboot issues
