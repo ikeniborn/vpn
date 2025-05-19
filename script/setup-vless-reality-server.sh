@@ -353,10 +353,10 @@ setup_user_management() {
     info "Setting up user management scripts..."
     
     # Download user management script
-    if [ ! -f "${SCRIPTS_DIR}/manage-vless-users.sh" ]; then
+    if [ ! -f "${SCRIPTS_DIR}/script/manage-vless-users.sh" ]; then
         info "Downloading user management script..."
-        wget -O "${SCRIPTS_DIR}/manage-vless-users.sh" https://raw.githubusercontent.com/yourusername/vpn/main/script/manage-vless-users.sh
-        chmod +x "${SCRIPTS_DIR}/manage-vless-users.sh"
+        wget -O "${SCRIPTS_DIR}/script/manage-vless-users.sh" https://raw.githubusercontent.com/yourusername/vpn/main/script/manage-vless-users.sh
+        chmod +x "${SCRIPTS_DIR}/script/manage-vless-users.sh"
     fi
     
     # We no longer need a separate client generation script since manage-vless-users.sh handles user creation and configuration
@@ -427,9 +427,9 @@ main() {
     info "===================================================================="
     info "VLESS-Reality server setup completed successfully!"
     info "You can now create additional users with:"
-    info "  ./manage-vless-users.sh --add --name \"user-name\""
+    info "  ./script/manage-vless-users.sh --add --name \"user-name\""
     info "And export user configurations with:"
-    info "  ./manage-vless-users.sh --export --uuid \"user-uuid\""
+    info "  ./script/manage-vless-users.sh --export --uuid \"user-uuid\""
     info "===================================================================="
 }
 

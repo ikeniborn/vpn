@@ -20,6 +20,10 @@ This file tracks the project's current status, including recent changes, current
   * tunnel-routing.conf - Shared routing configuration
   * test-tunnel-connection.sh - Diagnostic script
   * route-outline-through-tunnel.sh - Script to update existing Outline installations
+* Fixed setup-vless-reality-server.sh script (2025-05-19):
+  * Resolved the "unknown command" error with x25519 key generation
+  * Replaced Docker container key generation with direct OpenSSL-based approach
+  * Successfully verified script functionality
 
 ## Open Questions/Issues
 

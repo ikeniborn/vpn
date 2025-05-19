@@ -42,3 +42,21 @@ This file records architectural and implementation decisions using a list format
   * Transparent to end-users who connect through Outline VPN
   * Systemd services ensure tunnel persistence across reboots
   * Multiple proxy types (SOCKS, HTTP, transparent) for flexibility
+
+## Decision
+
+* Fix x25519 key generation in setup-vless-reality-server.sh
+
+## Rationale
+
+* The v2fly/v2fly-core Docker image doesn't properly support the `xray x25519` command that was being used
+* Direct key generation with OpenSSL provides a more reliable solution
+* This approach eliminates dependency on container-specific commands
+
+## Implementation Details
+
+* Replaced Docker container key generation with direct OpenSSL-based generation
+* Maintained the same key format and usage in the configuration
+* Fixed the "unknown command" error that was preventing successful deployment
+
+[2025-05-19 15:24:40] - Fixed setup-vless-reality-server.sh script key generation

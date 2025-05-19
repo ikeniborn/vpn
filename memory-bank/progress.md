@@ -21,7 +21,10 @@ This file tracks the project's progress using a task list format.
 
 ## Current Tasks
 
-* None currently
+* Fixed error in setup-vless-reality-server.sh script:
+  * Resolved issue with x25519 key generation that was causing "unknown command" errors
+  * Replaced Docker container key generation with direct OpenSSL-based approach
+  * ✅ Fixed successfully and verified working
 
 ## Next Steps
 
