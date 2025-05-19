@@ -22,7 +22,7 @@ NC='\033[0m' # No Color
 SERVER2_IP=""
 LOG_FILE="/var/log/youtube-traffic-monitor.log"
 DURATION=0
-INTERFACE="eth0"
+INTERFACE="enp0s6"
 VERBOSE=false
 YOUTUBE_DOMAINS_FILE="/tmp/youtube_domains.txt"
 
