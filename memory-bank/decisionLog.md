@@ -242,3 +242,28 @@ This file records architectural and implementation decisions using a list format
 * Used a simpler approach that's less prone to errors
 
 [2025-05-19 17:17:45] - Final simplification of container execution and configuration generation
+
+## Decision
+
+* Create a specialized script to fix the "context canceled" error in the VLESS tunnel
+
+## Rationale
+
+* The error occurs when Server 2's connection parameters don't match Server 1's expectations
+* The UUID being used by Server 2 must be added to Server 1's client list
+* Reality parameters (public key, short ID) may also be mismatched
+* A specialized script ensures consistent application of the fix
+* Properly documents the correct parameters that should be used
+
+## Implementation Details
+
+* Created fix-server-uuid.sh script to add a specific UUID to Server 1's client list
+* Used jq for safe modification of Server 1's config.json
+* Added backup mechanism to preserve original configuration
+* Implemented verification of UUID format and existence
+* Extracts and displays the Reality parameters that Server 2 should be using
+* Identifies mismatches between Server 1's parameters and what Server 2 is using
+* Provides clear guidance on updating Server 2's configuration
+
+[2025-05-20 00:51:52] - Created fix-server-uuid.sh script to resolve the "context canceled" error
+[2025-05-20 00:52:25] - Added comprehensive troubleshooting guide in vless-reality-tunnel-troubleshooting.md

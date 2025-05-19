@@ -190,8 +190,8 @@ check_listening_ports() {
     
     if [[ "$SERVER_TYPE" == "server2" ]]; then
         # Check for HTTP, SOCKS, and dokodemo-door ports
-        # Using grep with extended regex to check for either 0.0.0.0:port or 127.0.0.1:port
-        if ss -tulpn | grep -E "((0.0.0.0|127.0.0.1):18080) "; then
+        # Using grep with extended regex to check for any address including wildcard
+        if ss -tulpn | grep -E "(\*|0.0.0.0|127.0.0.1):18080"; then
             info "✅ HTTP proxy port 18080 is listening."
         else
             warn "⚠️ HTTP proxy port 18080 is not listening."
@@ -201,7 +201,7 @@ check_listening_ports() {
             if [ -f "/var/log/v2ray/error.log" ]; then tail -n 15 "/var/log/v2ray/error.log"; else warn "  /var/log/v2ray/error.log not found on host."; fi
         fi
         
-        if ss -tulpn | grep -E "((0.0.0.0|127.0.0.1):11080) "; then
+        if ss -tulpn | grep -E "(\*|0.0.0.0|127.0.0.1):11080"; then
             info "✅ SOCKS proxy port 11080 is listening."
         else
             warn "⚠️ SOCKS proxy port 11080 is not listening."
@@ -211,7 +211,7 @@ check_listening_ports() {
             if [ -f "/var/log/v2ray/error.log" ]; then tail -n 15 "/var/log/v2ray/error.log"; else warn "  /var/log/v2ray/error.log not found on host."; fi
         fi
         
-        if ss -tulpn | grep -E "((0.0.0.0|127.0.0.1):11081) "; then
+        if ss -tulpn | grep -E "(\*|0.0.0.0|127.0.0.1):11081"; then
             info "✅ Transparent proxy port 11081 is listening."
         else
             error "❌ Transparent proxy port 11081 is not listening." # Keep as error for this critical port
