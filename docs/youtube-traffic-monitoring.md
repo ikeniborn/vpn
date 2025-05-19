@@ -64,12 +64,13 @@ Required parameters:
 - `--server1-ip IP`: The IP address of Server 1
 
 Optional parameters:
-- `--outline-port PORT`: Outline VPN port (default: 7777)
+- `--outline-port PORT`: Outline VPN port (default: 7777, auto-detected if possible)
 - `--outline-network NET`: Outline VPN client network (default: 10.0.0.0/24)
 - `--interface IFACE`: Network interface to monitor (default: eth0)
 - `--duration SECONDS`: How long to monitor (0 = indefinitely, which is the default)
 - `--log-file FILE`: Path to log file (default: /var/log/youtube-traffic-outline-monitor.log)
 - `--verbose`: Enable detailed output of each detected YouTube connection
+- `--skip-checks`: Skip container and port checks and proceed directly to monitoring
 - `--help`: Display usage information
 
 ### Example
@@ -92,6 +93,11 @@ To test YouTube traffic routing through the tunnel:
 2. Start the monitoring script on Server 2:
    ```bash
    sudo ./script/monitor-youtube-traffic-server2.sh --server1-ip <SERVER1_IP> --verbose
+   ```
+
+   If you encounter any port detection issues, try using the `--skip-checks` option:
+   ```bash
+   sudo ./script/monitor-youtube-traffic-server2.sh --skip-checks --server1-ip <SERVER1_IP> --verbose
    ```
 
 3. Connect a client to the Outline VPN on Server 2
@@ -128,9 +134,27 @@ The script provides:
 
 ## Troubleshooting
 
+### Port Detection on Server 2
+
+The Server 2 script includes intelligent port detection for Outline VPN. It will try to:
+
+1. Check Docker container port mappings
+2. Look inside the container for listening ports
+3. Check host system for ports associated with the Outline service
+4. Fall back to the default or user-specified port
+
+If the script cannot detect the correct port but you're sure Outline is running, use the `--skip-checks` option to bypass port verification and continue with monitoring.
+
+## Troubleshooting
+
 If no YouTube traffic is detected:
 
-1. **Check tunnel connectivity**:
+1. **Verify Outline is using the correct port**:
+   ```bash
+   docker port shadowbox
+   ```
+
+2. **Check tunnel connectivity**:
    ```bash
    ./script/test-tunnel-connection.sh --server-type server2 --server1-address <SERVER1_IP>
    ```

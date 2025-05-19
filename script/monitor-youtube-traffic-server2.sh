@@ -197,14 +197,61 @@ check_outline_status() {
     
     info "Outline VPN container is running."
     
-    # Check if Outline port is listening
-    if ! ss -tulpn | grep -q ":$OUTLINE_PORT"; then
-        warn "Outline VPN port $OUTLINE_PORT is not listening."
-        warn "YouTube traffic monitoring may not work properly."
-        return 1
+    # Try to find the actual Outline port from the container
+    local docker_ports
+    docker_ports=$(docker port shadowbox 2>/dev/null)
+    
+    if [ -z "$docker_ports" ]; then
+        # Alternative: try to get from the container itself
+        if ! docker exec shadowbox ss -tulpn &>/dev/null; then
+            warn "Cannot inspect ports inside the Outline container."
+            warn "Will continue with configured port: $OUTLINE_PORT"
+        else
+            # Try to find ss-server ports
+            local container_ports
+            container_ports=$(docker exec shadowbox ss -tulpn 2>/dev/null | grep -E "ss-server|shadowsocks" | grep -oE ':[0-9]+' | grep -oE '[0-9]+' | tr '\n' ' ')
+            
+            if [ -n "$container_ports" ]; then
+                info "Found Outline ports inside container: $container_ports"
+                # Update the port number to the first found port
+                OUTLINE_PORT=$(echo "$container_ports" | awk '{print $1}')
+                info "Using detected Outline port: $OUTLINE_PORT"
+            fi
+        fi
+    else
+        # Extract port from docker port output
+        local host_ports
+        host_ports=$(echo "$docker_ports" | grep -oE '0.0.0.0:[0-9]+' | grep -oE '[0-9]+' | tr '\n' ' ')
+        
+        if [ -n "$host_ports" ]; then
+            info "Found mapped Outline ports: $host_ports"
+            # Update the port number to the first found port
+            OUTLINE_PORT=$(echo "$host_ports" | awk '{print $1}')
+            info "Using detected Outline port: $OUTLINE_PORT"
+        fi
     fi
     
-    info "Outline VPN port $OUTLINE_PORT is listening."
+    # Check if ports can be seen from the host
+    local host_listening_ports
+    host_listening_ports=$(ss -tulpn | grep -E 'ss-server|shadowsocks|shadowbox' | grep -oE ':[0-9]+' | grep -oE '[0-9]+' | tr '\n' ' ')
+    
+    if [ -n "$host_listening_ports" ]; then
+        info "Found Outline listening ports on host: $host_listening_ports"
+        # Update if we have ports
+        OUTLINE_PORT=$(echo "$host_listening_ports" | awk '{print $1}')
+        info "Using detected Outline port: $OUTLINE_PORT"
+    else
+        # Final check with the current port
+        if ! ss -tulpn | grep -q ":$OUTLINE_PORT"; then
+            warn "Outline VPN port $OUTLINE_PORT is not listening."
+            warn "This may be normal if the port is only visible inside the container network."
+            warn "Continuing with monitoring, but some traffic may not be detected."
+        else
+            info "Outline VPN port $OUTLINE_PORT is listening."
+        fi
+    fi
+    
+    # In any case, continue monitoring
     return 0
 }
 
@@ -304,7 +351,7 @@ process_packet() {
     local dns_query
     
     # Check for DNS queries for YouTube domains
-    if [[ "$line" =~ IP[^:]*:\ ([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\.([0-9]+)\ \>\ ([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\.53:.* ]]; then
+    if [[ "$line" =~ IP[^:]*:\ ([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\.([0-9]+)\ \>\ ([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\.(53|5353):.* ]]; then
         src_ip="${BASH_REMATCH[1]}"
         src_port="${BASH_REMATCH[2]}"
         dns_server="${BASH_REMATCH[3]}"
@@ -409,4 +456,27 @@ main() {
     info "Monitoring completed. Check $LOG_FILE for details."
 }
 
-main "$@"
+# Check if we should skip to direct monitoring
+if [ "$1" = "--skip-checks" ]; then
+    check_root
+    info "Skipping port and container checks, proceeding directly to monitoring..."
+    create_youtube_domains_file
+    
+    # Parse any remaining arguments
+    shift
+    parse_args "$@"
+    
+    info "Starting direct monitoring on Server 2"
+    info "Log file: $LOG_FILE"
+    
+    # Register cleanup on exit
+    trap 'info "Monitoring stopped. Summary saved to $LOG_FILE"; exit 0' INT TERM
+    
+    # Start monitoring
+    monitor_traffic
+    
+    info "Monitoring completed. Check $LOG_FILE for details."
+else
+    # Normal execution
+    main "$@"
+fi
