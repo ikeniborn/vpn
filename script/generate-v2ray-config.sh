@@ -40,7 +40,7 @@ cat > "$OUTPUT_FILE" << EOF
   "inbounds": [
     {
       "tag": "socks-inbound",
-      "port": 1080,
+      "port": 11080,
       "listen": "0.0.0.0",
       "protocol": "socks",
       "settings": {
@@ -50,7 +50,7 @@ cat > "$OUTPUT_FILE" << EOF
     },
     {
       "tag": "http-inbound",
-      "port": 8080,
+      "port": 18080,
       "listen": "0.0.0.0",
       "protocol": "http",
       "settings": {
@@ -59,7 +59,7 @@ cat > "$OUTPUT_FILE" << EOF
     },
     {
       "tag": "transparent-inbound",
-      "port": 1081,
+      "port": 11081,
       "listen": "0.0.0.0",
       "protocol": "dokodemo-door",
       "settings": {

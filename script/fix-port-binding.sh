@@ -239,12 +239,12 @@ verify_ports() {
     sleep 2
     
     # Check HTTP proxy port
-    if ss -tulpn | grep -q ":8080 "; then
-        info "✅ HTTP proxy port 8080 is now listening"
+    if ss -tulpn | grep -q ":18080 "; then
+        info "✅ HTTP proxy port 18080 is now listening"
     else
-        warn "⚠️ HTTP proxy port 8080 is still not listening"
+        warn "⚠️ HTTP proxy port 18080 is still not listening"
         info "Checking container logs for clues..."
-        docker logs "$DOCKER_CONTAINER" | grep -i "8080\|http\|error\|fail" | tail -10
+        docker logs "$DOCKER_CONTAINER" | grep -i "18080\|http\|error\|fail" | tail -10
         
         # Try binding explicitly to 0.0.0.0 in the container
         info "Trying to bind ports explicitly inside the container..."
@@ -254,17 +254,17 @@ verify_ports() {
     fi
     
     # Check SOCKS proxy port
-    if ss -tulpn | grep -q ":1080 "; then
-        info "✅ SOCKS proxy port 1080 is now listening"
+    if ss -tulpn | grep -q ":11080 "; then
+        info "✅ SOCKS proxy port 11080 is now listening"
     else
-        warn "⚠️ SOCKS proxy port 1080 is still not listening"
+        warn "⚠️ SOCKS proxy port 11080 is still not listening"
     fi
     
     # Check transparent proxy port - wait longer for this critical port
-    if ss -tulpn | grep -q ":1081 "; then
-        info "✅ Transparent proxy port 1081 is now listening"
+    if ss -tulpn | grep -q ":11081 "; then
+        info "✅ Transparent proxy port 11081 is now listening"
     else
-        warn "⚠️ Transparent proxy port 1081 is not listening immediately"
+        warn "⚠️ Transparent proxy port 11081 is not listening immediately"
         info "This port is critical for transparent routing"
         info "Waiting longer for port to become available (10 seconds)..."
         
@@ -272,18 +272,18 @@ verify_ports() {
         for i in {1..10}; do
             sleep 1
             echo -n "."
-            if ss -tulpn | grep -q ":1081 "; then
+            if ss -tulpn | grep -q ":11081 "; then
                 echo ""
-                info "✅ Transparent proxy port 1081 is now listening after waiting"
+                info "✅ Transparent proxy port 11081 is now listening after waiting"
                 break
             fi
             
             # Last iteration - still not listening
-            if [ "$i" -eq 10 ] && ! ss -tulpn | grep -q ":1081 "; then
+            if [ "$i" -eq 10 ] && ! ss -tulpn | grep -q ":11081 "; then
                 echo ""
-                warn "⚠️ Transparent proxy port 1081 is still not listening after extended wait"
+                warn "⚠️ Transparent proxy port 11081 is still not listening after extended wait"
                 info "Checking logs for clues:"
-                docker logs "$DOCKER_CONTAINER" | grep -i "1081\|dokodemo\|error\|fail" | tail -10
+                docker logs "$DOCKER_CONTAINER" | grep -i "11081\|dokodemo\|error\|fail" | tail -10
                 info "Container will continue running - test connectivity anyway"
             fi
         done
@@ -307,7 +307,7 @@ test_connectivity() {
     info "Testing connectivity..."
     
     # Try simple curl through the proxy
-    local curl_output=$(curl -s -m 15 -x "http://127.0.0.1:8080" https://ifconfig.me 2>&1 || echo "Connection failed")
+    local curl_output=$(curl -s -m 15 -x "http://127.0.0.1:18080" https://ifconfig.me 2>&1 || echo "Connection failed")
     
     if [[ "$curl_output" != *"Connection failed"* && "$curl_output" != *"timed out"* ]]; then
         info "✅ Successfully connected through proxy!"

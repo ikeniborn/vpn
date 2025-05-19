@@ -24,3 +24,5 @@ sudo ./script/restart-v2ray.sh --server1-address 129.146.63.189 --server1-uuid 9
 sudo ./script/fix-port-binding.sh --server1-address 129.146.63.189 --server1-uuid 9daf9658-2b84-4d23-9d07-cfac80499241
 
 sudo ./script/troubleshoot-v2ray-ports.sh
+
+sudo ./script/cleanup-v2ray.sh

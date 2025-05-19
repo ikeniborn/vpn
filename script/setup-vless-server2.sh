@@ -384,7 +384,7 @@ iptables -t nat -A V2RAY -d 224.0.0.0/4 -j RETURN
 iptables -t nat -A V2RAY -d 240.0.0.0/4 -j RETURN
 
 # Route all other traffic through v2ray tunnel
-iptables -t nat -A V2RAY -p tcp -j REDIRECT --to-ports 1081
+iptables -t nat -A V2RAY -p tcp -j REDIRECT --to-ports 11081
 iptables -t nat -A PREROUTING -p tcp -j V2RAY
 
 # Route traffic from Outline VPN through the tunnel (if enabled)
@@ -396,7 +396,7 @@ if [ "${ROUTE_OUTLINE_THROUGH_TUNNEL}" = "true" ]; then
     
     # Add explicit rules for routing Outline traffic through the tunnel
     iptables -t nat -A PREROUTING -s 10.0.0.0/24 -p tcp -j V2RAY
-    iptables -t nat -A PREROUTING -s 10.0.0.0/24 -p udp -j REDIRECT --to-ports 1081
+    iptables -t nat -A PREROUTING -s 10.0.0.0/24 -p udp -j REDIRECT --to-ports 11081
 else
     echo "Direct routing for Outline VPN traffic (not through tunnel)"
     iptables -t nat -A POSTROUTING -o ${INTERNET_IFACE} -s 10.0.0.0/24 -j MASQUERADE
@@ -454,8 +454,8 @@ install_outline() {
 LOCAL_IP=${LOCAL_IP}
 
 # Tunnel proxy
-HTTP_PROXY=http://127.0.0.1:8080
-HTTPS_PROXY=http://127.0.0.1:8080
+HTTP_PROXY=http://127.0.0.1:18080
+HTTPS_PROXY=http://127.0.0.1:18080
 NO_PROXY=${LOCAL_IP},127.0.0.1,localhost
 EOF
     
@@ -574,20 +574,20 @@ test_tunnel() {
     fi
     
     # Check if proxy port is listening
-    if ! ss -tulpn | grep -q ":8080"; then
-        warn "HTTP proxy port 8080 is not listening. Checking container logs:"
+    if ! ss -tulpn | grep -q ":18080"; then
+        warn "HTTP proxy port 18080 is not listening. Checking container logs:"
         docker logs v2ray-client
         warn "You may need to restart the container or check configuration."
     else
-        info "HTTP proxy port 8080 is listening correctly."
+        info "HTTP proxy port 18080 is listening correctly."
     fi
     
     # Check if transparent proxy port is listening
-    if ! ss -tulpn | grep -q ":1081"; then
-        warn "Transparent proxy port 1081 is not listening. This will break routing."
+    if ! ss -tulpn | grep -q ":11081"; then
+        warn "Transparent proxy port 11081 is not listening. This will break routing."
         docker logs v2ray-client | grep -i "error\|fail\|warn" | tail -5
     else
-        info "Transparent proxy port 1081 is listening correctly."
+        info "Transparent proxy port 11081 is listening correctly."
     fi
     
     # Test connection to Server 1
@@ -600,7 +600,7 @@ test_tunnel() {
     
     # Test the connection using curl through the proxy
     info "Testing HTTP proxy tunnel to Server 1..."
-    local proxy_output=$(curl -v --connect-timeout 15 -x http://127.0.0.1:8080 https://ifconfig.me 2>&1)
+    local proxy_output=$(curl -v --connect-timeout 15 -x http://127.0.0.1:18080 https://ifconfig.me 2>&1)
     local proxy_ip=$(echo "$proxy_output" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
     
     if [ -n "$proxy_ip" ]; then

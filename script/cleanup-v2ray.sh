@@ -19,9 +19,9 @@ NC='\033[0m' # No Color
 
 # Default values
 DOCKER_CONTAINER="v2ray-client"
-SOCKS_PORT=1080
-HTTP_PORT=8080
-TPROXY_PORT=1081
+SOCKS_PORT=11080
+HTTP_PORT=18080
+TPROXY_PORT=11081
 
 # Function to display status messages
 info() {
