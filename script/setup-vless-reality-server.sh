@@ -318,6 +318,12 @@ EOF
     
     # Run v2ray container
     info "Starting v2ray container..."
+    
+    # Create log files with correct permissions
+    mkdir -p "$V2RAY_DIR/logs"
+    touch "$V2RAY_DIR/logs/access.log" "$V2RAY_DIR/logs/error.log"
+    chmod -R 777 "$V2RAY_DIR/logs"
+    
     docker run -d \
         --name v2ray \
         --restart always \
@@ -326,7 +332,7 @@ EOF
         -p "$V2RAY_PORT:$V2RAY_PORT/udp" \
         -v "$V2RAY_DIR/config.json:/etc/v2ray/config.json" \
         -v "$V2RAY_DIR/logs:/var/log/v2ray" \
-        v2fly/v2fly-core:latest
+        v2fly/v2fly-core:latest run -c /etc/v2ray/config.json
     
     info "VLESS-Reality server installed successfully!"
     info "Default user UUID: $DEFAULT_UUID"

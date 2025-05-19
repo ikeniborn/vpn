@@ -121,6 +121,19 @@ create_tunnel_user() {
         error "./script/manage-vless-users.sh script not found or not executable"
     fi
     
+    # Check if a user with the same name already exists and remove it
+    info "Checking for existing Server 2 accounts..."
+    if grep -q "$SERVER2_NAME" "$V2RAY_DIR/users.db"; then
+        info "Found existing account with name: $SERVER2_NAME, removing it first"
+        if [ -x "./script/manage-vless-users.sh" ]; then
+            ./script/manage-vless-users.sh --remove --name "$SERVER2_NAME" || warn "Failed to remove existing Server 2 user"
+        else
+            manage-vless-users.sh --remove --name "$SERVER2_NAME" || warn "Failed to remove existing Server 2 user"
+        fi
+        # Wait a moment for the changes to take effect
+        sleep 2
+    fi
+    
     # Generate UUID for Server 2
     local TUNNEL_UUID=$(cat /proc/sys/kernel/random/uuid)
     
