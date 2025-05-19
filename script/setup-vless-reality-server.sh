@@ -28,6 +28,10 @@ USE_PORT_KNOCKING="yes"
 SCRIPTS_DIR="$(pwd)"
 SETUP_FIREWALL="yes"
 
+# v2ray and outline directories
+V2RAY_DIR="/opt/v2ray"
+OUTLINE_DIR="/opt/outline"
+
 # Function to display status messages
 info() {
     echo -e "${GREEN}[INFO]${NC} $1"
@@ -176,28 +180,166 @@ configure_firewall() {
 install_vless_reality() {
     info "Installing VLESS-Reality..."
     
-    # Download installation script if it doesn't exist
-    if [ ! -f "${SCRIPTS_DIR}/outline-v2ray-reality-install.sh" ]; then
-        info "Downloading installation script..."
-        # This file is the setup script itself, no need to download it again
-        info "Setup script is already available"
-        chmod +x "${SCRIPTS_DIR}/outline-v2ray-reality-install.sh"
+    # If hostname not provided, try to detect it
+    if [ -z "$HOSTNAME" ]; then
+        HOSTNAME=$(curl -s ifconfig.me || hostname -I | awk '{print $1}')
+        info "Auto-detected server address: $HOSTNAME"
     fi
     
-    # Configure arguments
-    local INSTALL_ARGS=()
+    # Create necessary directories
+    info "Creating directories..."
+    mkdir -p "$V2RAY_DIR"
+    mkdir -p "$V2RAY_DIR/logs"
+    mkdir -p "$OUTLINE_DIR"
     
-    if [ -n "$HOSTNAME" ]; then
-        INSTALL_ARGS+=("--hostname" "$HOSTNAME")
+    # Generate Reality key pair
+    info "Generating Reality key pair..."
+    
+    # Generate a private key and derive public key using v2ray docker image
+    local KEY_OUTPUT
+    KEY_OUTPUT=$(docker run --rm v2fly/v2fly-core:latest xray x25519)
+    local PRIVATE_KEY=$(echo "$KEY_OUTPUT" | grep "Private key:" | cut -d ' ' -f3)
+    local PUBLIC_KEY=$(echo "$KEY_OUTPUT" | grep "Public key:" | cut -d ' ' -f3)
+    
+    # Save key pair for reference
+    {
+        echo "Private key: $PRIVATE_KEY"
+        echo "Public key: $PUBLIC_KEY"
+    } > "$V2RAY_DIR/reality_keypair.txt"
+    chmod 600 "$V2RAY_DIR/reality_keypair.txt"
+    
+    # Generate random short ID
+    local SHORT_ID=$(openssl rand -hex 8)
+    
+    # Extract server name from destination site
+    local SERVER_NAME="${DEST_SITE%%:*}"
+    
+    # Generate UUID for default user
+    local DEFAULT_UUID=$(cat /proc/sys/kernel/random/uuid)
+    
+    # Create config.json for v2ray
+    info "Creating v2ray configuration..."
+    cat > "$V2RAY_DIR/config.json" <<EOF
+{
+  "log": {
+    "loglevel": "warning",
+    "access": "/var/log/v2ray/access.log",
+    "error": "/var/log/v2ray/error.log"
+  },
+  "inbounds": [
+    {
+      "port": $V2RAY_PORT,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "$DEFAULT_UUID",
+            "flow": "xtls-rprx-vision",
+            "level": 0,
+            "email": "default-user"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "dest": "$DEST_SITE",
+          "xver": 0,
+          "serverNames": [
+            "$SERVER_NAME"
+          ],
+          "privateKey": "$PRIVATE_KEY",
+          "publicKey": "$PUBLIC_KEY",
+          "shortIds": [
+            "$SHORT_ID"
+          ],
+          "fingerprint": "$FINGERPRINT"
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls"
+        ]
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ],
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "ip": [
+          "geoip:private"
+        ],
+        "outboundTag": "direct"
+      }
+    ]
+  }
+}
+EOF
+
+    # Set proper permissions
+    chmod 644 "$V2RAY_DIR/config.json"
+    
+    # Create users database
+    echo "$DEFAULT_UUID|default-user|$(date '+%Y-%m-%d %H:%M:%S')" > "$V2RAY_DIR/users.db"
+    
+    # Pull v2ray Docker image
+    info "Pulling v2ray Docker image..."
+    docker pull v2fly/v2fly-core:latest
+    
+    # Remove existing container if it exists
+    if docker ps -a --format '{{.Names}}' | grep -q "^v2ray$"; then
+        info "Removing existing v2ray container..."
+        docker rm -f v2ray
     fi
     
-    INSTALL_ARGS+=("--v2ray-port" "$V2RAY_PORT")
-    INSTALL_ARGS+=("--dest-site" "$DEST_SITE")
-    INSTALL_ARGS+=("--fingerprint" "$FINGERPRINT")
+    # Create Docker network if it doesn't exist
+    if ! docker network ls | grep -q "outline-network"; then
+        info "Creating Docker network..."
+        docker network create outline-network
+    fi
     
-    # Run installation script
-    info "Running VLESS-Reality installation script..."
-    "${SCRIPTS_DIR}/outline-v2ray-reality-install.sh" "${INSTALL_ARGS[@]}"
+    # Run v2ray container
+    info "Starting v2ray container..."
+    docker run -d \
+        --name v2ray \
+        --restart always \
+        --network outline-network \
+        -p "$V2RAY_PORT:$V2RAY_PORT" \
+        -p "$V2RAY_PORT:$V2RAY_PORT/udp" \
+        -v "$V2RAY_DIR/config.json:/etc/v2ray/config.json" \
+        -v "$V2RAY_DIR/logs:/var/log/v2ray" \
+        v2fly/v2fly-core:latest
+    
+    info "VLESS-Reality server installed successfully!"
+    info "Default user UUID: $DEFAULT_UUID"
+    
+    # Display configuration details
+    echo ""
+    echo "===== VLESS-Reality Configuration ====="
+    echo "Server:      $HOSTNAME"
+    echo "Port:        $V2RAY_PORT"
+    echo "UUID:        $DEFAULT_UUID"
+    echo "Protocol:    VLESS"
+    echo "Flow:        xtls-rprx-vision"
+    echo "Security:    Reality"
+    echo "SNI:         $SERVER_NAME"
+    echo "Fingerprint: $FINGERPRINT"
+    echo "Short ID:    $SHORT_ID"
+    echo "Public Key:  $PUBLIC_KEY"
+    echo "====================================="
+    echo ""
 }
 
 # Setup user management scripts
