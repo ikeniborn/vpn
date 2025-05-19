@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script to generate a valid v2ray configuration file
+# Script to generate a valid v2ray configuration file - FINAL VERSION
 # Usage: ./generate-v2ray-config.sh <server1_address> <server1_port> <server1_uuid> <server1_sni> <server1_fingerprint> [server1_pubkey] [server1_shortid]
 
 # Check arguments
@@ -29,8 +29,8 @@ fi
 # Create output directory if it doesn't exist
 mkdir -p "$(dirname "$OUTPUT_FILE")"
 
-# Write configuration as a single operation to avoid partial writes
-cat > "$OUTPUT_FILE" << 'EOL'
+# Instead of complex templating, just write the complete JSON directly
+cat > "$OUTPUT_FILE" << EOF
 {
   "log": {
     "loglevel": "debug",
@@ -84,11 +84,11 @@ cat > "$OUTPUT_FILE" << 'EOL'
       "settings": {
         "vnext": [
           {
-            "address": "SERVER1_ADDRESS_PLACEHOLDER",
-            "port": SERVER1_PORT_PLACEHOLDER,
+            "address": "${SERVER1_ADDRESS}",
+            "port": ${SERVER1_PORT},
             "users": [
               {
-                "id": "SERVER1_UUID_PLACEHOLDER",
+                "id": "${SERVER1_UUID}",
                 "encryption": "none",
                 "flow": "xtls-rprx-vision"
               }
@@ -100,10 +100,10 @@ cat > "$OUTPUT_FILE" << 'EOL'
         "network": "tcp",
         "security": "reality",
         "realitySettings": {
-          "serverName": "SERVER1_SNI_PLACEHOLDER",
-          "fingerprint": "SERVER1_FINGERPRINT_PLACEHOLDER"
-          REALITY_PUBKEY_PLACEHOLDER
-          REALITY_SHORTID_PLACEHOLDER
+          "serverName": "${SERVER1_SNI}",
+          "fingerprint": "${SERVER1_FINGERPRINT}"$([ -n "$SERVER1_PUBKEY" ] && echo ",
+          \"publicKey\": \"${SERVER1_PUBKEY}\"")$([ -n "$SERVER1_SHORTID" ] && echo ",
+          \"shortId\": \"${SERVER1_SHORTID}\"")
         }
       }
     },
@@ -134,46 +134,38 @@ cat > "$OUTPUT_FILE" << 'EOL'
     ]
   }
 }
-EOL
+EOF
 
-# Replace placeholders
-sed -i "s/SERVER1_ADDRESS_PLACEHOLDER/$SERVER1_ADDRESS/g" "$OUTPUT_FILE"
-sed -i "s/SERVER1_PORT_PLACEHOLDER/$SERVER1_PORT/g" "$OUTPUT_FILE"
-sed -i "s/SERVER1_UUID_PLACEHOLDER/$SERVER1_UUID/g" "$OUTPUT_FILE"
-sed -i "s/SERVER1_SNI_PLACEHOLDER/$SERVER1_SNI/g" "$OUTPUT_FILE"
-sed -i "s/SERVER1_FINGERPRINT_PLACEHOLDER/$SERVER1_FINGERPRINT/g" "$OUTPUT_FILE"
+echo "Configuration file generated."
 
-# Handle optional Reality settings
-if [ -n "$SERVER1_PUBKEY" ]; then
-    sed -i "s/REALITY_PUBKEY_PLACEHOLDER/,\"publicKey\": \"$SERVER1_PUBKEY\"/g" "$OUTPUT_FILE"
-else
-    sed -i "s/REALITY_PUBKEY_PLACEHOLDER//g" "$OUTPUT_FILE"
-fi
-
-if [ -n "$SERVER1_SHORTID" ]; then
-    sed -i "s/REALITY_SHORTID_PLACEHOLDER/,\"shortId\": \"$SERVER1_SHORTID\"/g" "$OUTPUT_FILE"
-else
-    sed -i "s/REALITY_SHORTID_PLACEHOLDER//g" "$OUTPUT_FILE"
-fi
-
-echo "Configuration file generated successfully."
-
-# Validate the JSON if jq is available
+# Validate with jq if available
 if command -v jq &>/dev/null; then
     echo "Validating configuration..."
     if jq . "$OUTPUT_FILE" > /dev/null; then
         echo "Validation successful."
     else
-        echo "WARNING: Generated configuration failed validation!"
-        echo "Attempting to fix..."
-        jq . "$OUTPUT_FILE" > "${OUTPUT_FILE}.fixed" 2>/dev/null && mv "${OUTPUT_FILE}.fixed" "$OUTPUT_FILE"
-        echo "Fixed configuration saved."
+        echo "WARNING: Generated configuration failed validation."
+        echo "Inspecting configuration file..."
+        
+        # Look for common JSON issues
+        grep -n "," "$OUTPUT_FILE" | grep -E ',$'
+        
+        # Try to fix with minification
+        jq -c . "$OUTPUT_FILE" > "${OUTPUT_FILE}.min" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            # Pretty print it back
+            jq . "${OUTPUT_FILE}.min" > "$OUTPUT_FILE" 2>/dev/null
+            echo "Configuration fixed and reformatted."
+            rm "${OUTPUT_FILE}.min"
+        else
+            echo "Could not fix configuration automatically."
+        fi
     fi
 fi
 
-# Final validation
+# Verify critical values
 echo "Checking for critical values..."
-if grep -q "SERVER1_UUID_PLACEHOLDER" "$OUTPUT_FILE"; then
+if ! grep -q "\"id\": \"${SERVER1_UUID}\"" "$OUTPUT_FILE"; then
     echo "ERROR: UUID not properly inserted in configuration!"
     exit 1
 fi

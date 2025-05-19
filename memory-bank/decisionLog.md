@@ -197,3 +197,26 @@ This file records architectural and implementation decisions using a list format
 * Made validation fatal to prevent container startup with invalid configuration
 
 [2025-05-19 17:11:20] - Created dedicated configuration generator script with strict JSON control
+
+## Decision
+
+* Create a completely new configuration generator with placeholder substitution
+
+## Rationale
+
+* Previous approach still resulted in JSON syntax errors
+* Direct JSON writing is error-prone with variable substitution
+* Template substitution is more reliable than direct writing
+* Need to explicitly verify critical values like UUID
+
+## Implementation Details
+
+* Created a completely new configuration template with placeholders
+* Used sed for direct substitution instead of variable expansion in heredoc
+* Added explicit UUID format validation
+* Implemented template-based approach instead of line-by-line building
+* Added critical value verification at the end
+* Made Docker container use explicit command arguments
+* Added automatic fixing with jq if validation fails
+
+[2025-05-19 17:14:55] - Rewrote configuration generator with safe substitution and validation
