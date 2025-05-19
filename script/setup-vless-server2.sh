@@ -189,45 +189,13 @@ install_v2ray_client() {
     # Create necessary directories
     mkdir -p "$V2RAY_DIR"
     mkdir -p "$V2RAY_DIR/logs"
-    
-    # Reality connection string components
-    local REALITY_PARAMS=""
-    if [ -n "$SERVER1_PUBKEY" ]; then
-        REALITY_PARAMS="&pbk=${SERVER1_PUBKEY}"
-    fi
-    
-    if [ -n "$SERVER1_SHORTID" ]; then
-        REALITY_PARAMS="${REALITY_PARAMS}&sid=${SERVER1_SHORTID}"
-    fi
-    
-    # First, create a clean JSON structure with proper formatting
-    local reality_settings=""
-    
-    # Build realitySettings properly
-    if [ -n "$SERVER1_PUBKEY" ] && [ -n "$SERVER1_SHORTID" ]; then
-        reality_settings=$(cat <<EOF
-          "serverName": "${SERVER1_SNI}",
-          "fingerprint": "${SERVER1_FINGERPRINT}",
-          "publicKey": "${SERVER1_PUBKEY}",
-          "shortId": "${SERVER1_SHORTID}"
-EOF
-        )
-    elif [ -n "$SERVER1_PUBKEY" ]; then
-        reality_settings=$(cat <<EOF
-          "serverName": "${SERVER1_SNI}",
-          "fingerprint": "${SERVER1_FINGERPRINT}",
-          "publicKey": "${SERVER1_PUBKEY}"
-EOF
-        )
-    else
-        reality_settings=$(cat <<EOF
-          "serverName": "${SERVER1_SNI}",
-          "fingerprint": "${SERVER1_FINGERPRINT}"
-EOF
-        )
-    fi
+    mkdir -p /var/log/v2ray
+    chmod 777 /var/log/v2ray  # More permissive for container access
     
     # Create v2ray client config
+    info "Creating v2ray configuration..."
+    
+    # Build the config file in a way that ensures valid JSON
     cat > "$V2RAY_DIR/config.json" << EOF
 {
   "log": {
@@ -298,7 +266,27 @@ EOF
         "network": "tcp",
         "security": "reality",
         "realitySettings": {
-${reality_settings}
+          "serverName": "${SERVER1_SNI}",
+          "fingerprint": "${SERVER1_FINGERPRINT}"
+EOF
+
+    # Add optional Reality settings if provided
+    if [ -n "$SERVER1_PUBKEY" ]; then
+        cat >> "$V2RAY_DIR/config.json" << EOF
+,
+          "publicKey": "${SERVER1_PUBKEY}"
+EOF
+    fi
+
+    if [ -n "$SERVER1_SHORTID" ]; then
+        cat >> "$V2RAY_DIR/config.json" << EOF
+,
+          "shortId": "${SERVER1_SHORTID}"
+EOF
+    fi
+
+    # Complete the configuration file
+    cat >> "$V2RAY_DIR/config.json" << EOF
         }
       }
     },
@@ -330,16 +318,20 @@ ${reality_settings}
   }
 }
 EOF
-
-    # Display configuration details
-    info "Configuration created with the following details:"
-    info "- Server 1 Address: ${SERVER1_ADDRESS}"
-    info "- Server 1 Port: ${SERVER1_PORT}"
-    info "- Server 1 SNI: ${SERVER1_SNI}"
-    info "- Server 1 Fingerprint: ${SERVER1_FINGERPRINT}"
-    info "- Reality Settings: Using ${SERVER1_PUBKEY:+public key and }${SERVER1_SHORTID:+short ID}"
     
     chmod 644 "$V2RAY_DIR/config.json"
+    
+    # Validate the JSON configuration
+    info "Validating configuration file..."
+    if command -v jq &>/dev/null; then
+        if jq empty "$V2RAY_DIR/config.json" 2>/dev/null; then
+            info "Configuration file is valid JSON."
+        else
+            error "Invalid JSON configuration. Cannot proceed."
+        fi
+    else
+        warn "jq not installed. Skipping JSON validation."
+    fi
     
     # Pull v2ray Docker image
     info "Pulling v2ray Docker image..."
@@ -351,10 +343,8 @@ EOF
         docker rm -f v2ray-client || warn "Failed to remove existing container, it might be in use"
     fi
     
-    # Handle Docker network creation
-    info "Setting up Docker network..."
-    
     # Try to inspect the network first - this is safer than grepping the list
+    info "Setting up Docker network..."
     if docker network inspect v2ray-network &>/dev/null; then
         info "Docker network v2ray-network already exists, using existing network."
     else
@@ -364,32 +354,7 @@ EOF
         info "Network setup completed."
     fi
     
-    # Create necessary log directories with proper permissions
-    mkdir -p /var/log/v2ray
-    chmod 755 /var/log/v2ray
-    
-    # Validate configuration file
-    info "Validating v2ray configuration file..."
-    if command -v jq &>/dev/null; then
-        if ! jq empty "$V2RAY_DIR/config.json" 2>/dev/null; then
-            error "Invalid JSON in configuration file. Please check the format."
-            jq -e . "$V2RAY_DIR/config.json" 2>&1 || true
-            # Try to fix common issues
-            info "Attempting to fix configuration file..."
-            cp "$V2RAY_DIR/config.json" "$V2RAY_DIR/config.json.bak"
-            jq . "$V2RAY_DIR/config.json.bak" > "$V2RAY_DIR/config.json" 2>/dev/null || true
-        else
-            info "Configuration file validated successfully."
-        fi
-    else
-        warn "jq not found, skipping configuration validation."
-    fi
-    
-    # Create log directory with proper permissions
-    mkdir -p /var/log/v2ray
-    chmod 777 /var/log/v2ray  # More permissive for container access
-    
-    # Run v2ray container with improved setup
+    # Run v2ray container with correct command format
     info "Starting v2ray client container..."
     docker run -d \
         --name v2ray-client \
@@ -398,6 +363,7 @@ EOF
         --cap-add NET_ADMIN \
         -v "$V2RAY_DIR/config.json:/etc/v2ray/config.json" \
         -v "/var/log/v2ray:/var/log/v2ray" \
+        -e "V2RAY_VMESS_AEAD_FORCED=false" \
         v2fly/v2fly-core:latest
         
     # Verify container is running with extended waiting and diagnostics
@@ -412,27 +378,7 @@ EOF
         echo "--- Configuration File ---"
         cat "$V2RAY_DIR/config.json" | grep -v "id\|publicKey" # Hide sensitive info
         
-        # Try to restart with debug mode
-        info "Attempting to restart container in debug mode..."
-        docker rm -f v2ray-client 2>/dev/null || true
-        docker run -d \
-            --name v2ray-client \
-            --restart always \
-            --network host \
-            --cap-add NET_ADMIN \
-            -v "$V2RAY_DIR/config.json:/etc/v2ray/config.json" \
-            -v "/var/log/v2ray:/var/log/v2ray" \
-            -e "V2RAY_VMESS_AEAD_FORCED=false" \
-            -e "V2RAY_LOGLEVEL=debug" \
-            v2fly/v2fly-core:latest
-        
-        # Check again after restart
-        sleep 3
-        if ! docker ps | grep -q v2ray-client; then
-            error "Container still failing to start after debug mode attempt. Please check configuration."
-        else
-            info "Container successfully started in debug mode."
-        fi
+        error "Container failed to start. Cannot proceed with setup."
     else
         info "Container started successfully."
     fi

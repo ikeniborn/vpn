@@ -33,6 +33,11 @@ This file tracks the project's progress using a task list format.
   * Added robust container startup validation and debugging
   * Implemented JSON configuration validation with auto-repair
   * Added debug mode fallback for container failures
+  * Fixed container command issues causing "unknown command" errors
+  * Completely rewrote the configuration templating to ensure valid JSON
+  * Added proper JSON object construction for Reality settings
+  * Increased log level to debug for better diagnostics
+  * Improved configuration visualization for troubleshooting
 
 ## Next Steps
 

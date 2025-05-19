@@ -84,3 +84,24 @@ This file records architectural and implementation decisions using a list format
 
 [2025-05-19 16:37:40] - Fixed setup-vless-server2.sh script Docker network and tunnel configuration
 [2025-05-19 16:49:10] - Improved container startup reliability in setup-vless-server2.sh
+
+## Decision
+
+* Refactor the v2ray configuration generation in setup-vless-server2.sh
+
+## Rationale
+
+* The original JSON template approach caused syntax errors with trailing commas and inconsistent formatting
+* Command line parameter passing to the Docker container was causing "unknown command" errors
+* The container failed to start reliably due to these configuration issues
+
+## Implementation Details
+
+* Completely restructured configuration template generation using variables
+* Used a cleaner approach with heredoc to create properly formatted JSON
+* Removed incorrect command-line parameters from Docker run commands
+* Set debug log level by default for better diagnostics
+* Added detailed documentation of configuration settings during generation
+* Created distinct templates for different Reality setting combinations
+
+[2025-05-19 16:51:50] - Fixed JSON configuration and container command issues
