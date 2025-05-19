@@ -263,12 +263,12 @@ test_outline() {
     info "Testing Outline VPN server..."
     
     # Check if Outline containers are running
-    if ! docker ps --format '{{.Names}}' | grep -q "outline-server"; then
-        error "Outline server container is not running."
+    if ! docker ps --format '{{.Names}}' | grep -q "shadowbox"; then
+        error "Outline server container (shadowbox) is not running."
         return 1
     fi
     
-    success "Outline server container is running."
+    success "Outline server container (shadowbox) is running."
     
     # Check if Outline API is responding
     if ! curl -sk https://localhost:41084/server > /dev/null; then
