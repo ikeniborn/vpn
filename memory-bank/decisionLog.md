@@ -128,3 +128,25 @@ This file records architectural and implementation decisions using a list format
 * Added detailed progress reporting for easier troubleshooting
 
 [2025-05-19 16:57:40] - Completely rebuilt the setup-vless-server2.sh script
+
+## Decision
+
+* Create a dedicated v2ray configuration validation script
+
+## Rationale
+
+* Inline validation and fixing of JSON configuration was not sufficient
+* The container continued to fail due to JSON syntax errors that were hard to detect
+* A dedicated script allows for more robust error checking and repair
+* Isolating validation logic makes it reusable for other components
+
+## Implementation Details
+
+* Created validate-v2ray-config.sh with specialized JSON validation logic
+* Added backup and restore capabilities for configuration safety
+* Implemented specific fixes for common JSON errors like trailing commas
+* Used sed for quick syntax error correction
+* Added integration with the main setup script
+* Provided detailed error reporting for better troubleshooting
+
+[2025-05-19 17:00:30] - Created dedicated v2ray configuration validation script

@@ -321,9 +321,17 @@ EOF
     
     chmod 644 "$V2RAY_DIR/config.json"
     
-    # Validate the JSON configuration
+    # Validate the JSON configuration using our specialized validator script
     info "Validating configuration file..."
-    if command -v jq &>/dev/null; then
+    if [ -f "./script/validate-v2ray-config.sh" ]; then
+        info "Running specialized v2ray configuration validator..."
+        chmod +x ./script/validate-v2ray-config.sh
+        if ! ./script/validate-v2ray-config.sh; then
+            error "JSON validation failed. Cannot proceed with invalid configuration."
+        else
+            info "Configuration file validated and fixed if needed."
+        fi
+    elif command -v jq &>/dev/null; then
         if jq empty "$V2RAY_DIR/config.json" 2>/dev/null; then
             info "Configuration file is valid JSON."
         else

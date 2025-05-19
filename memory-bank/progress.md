@@ -40,6 +40,9 @@ This file tracks the project's progress using a task list format.
   * Improved configuration visualization for troubleshooting
   * Completely rebuilt the script with proper error handling
   * Implemented progressive configuration file building to ensure valid JSON
+  * Created a separate validation script to fix common JSON errors
+  * Added explicit v2ray command parameters to the container startup
+  * Implemented robust configuration validation with backup and restore
 
 ## Next Steps
 
