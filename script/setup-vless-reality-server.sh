@@ -156,10 +156,10 @@ configure_firewall() {
     info "Configuring firewall..."
     
     # Download firewall script if it doesn't exist
-    if [ ! -f "${SCRIPTS_DIR}/firewall.sh" ]; then
+    if [ ! -f "${SCRIPTS_DIR}/script/firewall.sh" ]; then
         info "Downloading firewall script..."
-        wget -O "${SCRIPTS_DIR}/firewall.sh" https://raw.githubusercontent.com/yourusername/vpn/main/script/firewall.sh
-        chmod +x "${SCRIPTS_DIR}/firewall.sh"
+        wget -O "${SCRIPTS_DIR}/script/firewall.sh" https://raw.githubusercontent.com/yourusername/vpn/main/script/firewall.sh
+        chmod +x "${SCRIPTS_DIR}/script/firewall.sh"
     fi
     
     # Configure arguments
@@ -172,7 +172,7 @@ configure_firewall() {
     
     # Run firewall script
     info "Running firewall configuration script..."
-    "${SCRIPTS_DIR}/firewall.sh" "${FIREWALL_ARGS[@]}"
+    "${SCRIPTS_DIR}/script/firewall.sh" "${FIREWALL_ARGS[@]}"
 }
 
 # Install and configure v2ray with VLESS-Reality
