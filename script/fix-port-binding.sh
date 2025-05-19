@@ -204,7 +204,7 @@ recreate_container() {
         --name "$DOCKER_CONTAINER" \
         --restart always \
         --network host \
-        --cap-add NET_ADMIN \
+        --cap-add NET_ADMIN --cap-add NET_BROADCAST --cap-add NET_RAW \
         -v "$V2RAY_DIR/config.json:/etc/v2ray/config.json" \
         -v "/var/log/v2ray:/var/log/v2ray" \
         v2fly/v2fly-core:latest run -config "$CONFIG_FILE"

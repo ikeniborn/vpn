@@ -164,22 +164,50 @@ install_dependencies() {
 
 # Configure IP forwarding
 configure_forwarding() {
-    info "Configuring IP forwarding..."
+    info "Configuring IP forwarding and TPROXY requirements..."
     
     # Enable IP forwarding
+    info "Enabling IPv4 forwarding..."
     echo 1 > /proc/sys/net/ipv4/ip_forward
     
     # Make sure IP forwarding is enabled on boot
-    if grep -q "net.ipv4.ip_forward" /etc/sysctl.conf; then
-        sed -i 's/^#\?net.ipv4.ip_forward.*/net.ipv4.ip_forward=1/' /etc/sysctl.conf
+    if grep -q "^net.ipv4.ip_forward=" /etc/sysctl.conf; then
+        sed -i 's/^net.ipv4.ip_forward=.*/net.ipv4.ip_forward=1/' /etc/sysctl.conf
+    elif grep -q "^#net.ipv4.ip_forward=" /etc/sysctl.conf; then
+        sed -i 's/^#net.ipv4.ip_forward=.*/net.ipv4.ip_forward=1/' /etc/sysctl.conf
     else
         echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
     fi
+
+    # Enable non-local binding (often needed for TPROXY)
+    info "Enabling non-local binding (net.ipv4.ip_nonlocal_bind)..."
+    echo 1 > /proc/sys/net/ipv4/ip_nonlocal_bind
+    if grep -q "^net.ipv4.ip_nonlocal_bind=" /etc/sysctl.conf; then
+        sed -i 's/^net.ipv4.ip_nonlocal_bind=.*/net.ipv4.ip_nonlocal_bind=1/' /etc/sysctl.conf
+    elif grep -q "^#net.ipv4.ip_nonlocal_bind=" /etc/sysctl.conf; then
+        sed -i 's/^#net.ipv4.ip_nonlocal_bind=.*/net.ipv4.ip_nonlocal_bind=1/' /etc/sysctl.conf
+    else
+        echo "net.ipv4.ip_nonlocal_bind=1" >> /etc/sysctl.conf
+    fi
     
-    # Apply sysctl changes
+    # Apply sysctl changes immediately
+    info "Applying sysctl changes..."
     sysctl -p
     
-    info "IP forwarding has been enabled"
+    info "Loading TPROXY kernel modules..."
+    modprobe xt_TPROXY || warn "Failed to load xt_TPROXY module. This might be an issue if not built-in."
+    modprobe nf_tproxy_ipv4 || warn "Failed to load nf_tproxy_ipv4 module. This might be an issue if not built-in."
+    # modprobe nf_tproxy_ipv6 # Uncomment if IPv6 TPROXY is needed
+
+    # Ensure modules are loaded on boot
+    if [ ! -f /etc/modules-load.d/tproxy.conf ]; then
+        info "Ensuring TPROXY modules load on boot..."
+        echo "xt_TPROXY" > /etc/modules-load.d/tproxy.conf
+        echo "nf_tproxy_ipv4" >> /etc/modules-load.d/tproxy.conf
+        # echo "nf_tproxy_ipv6" >> /etc/modules-load.d/tproxy.conf # Uncomment if IPv6 TPROXY is needed
+    fi
+
+    info "IP forwarding and TPROXY prerequisites configured."
 }
 
 # Install and configure v2ray client for tunneling
@@ -279,7 +307,7 @@ install_v2ray_client() {
         --name v2ray-client \
         --restart always \
         --network host \
-        --cap-add NET_ADMIN \
+        --cap-add NET_ADMIN --cap-add NET_BROADCAST --cap-add NET_RAW \
         -v "$V2RAY_DIR/config.json:/etc/v2ray/config.json" \
         -v "/var/log/v2ray:/var/log/v2ray" \
         v2fly/v2fly-core:latest run -config /etc/v2ray/config.json
