@@ -9,6 +9,7 @@ This file tracks the project's current status, including recent changes, current
 * Implementation of two-server tunnel configuration using VLESS+Reality protocol
 * Enable routing traffic from the second server through the first server
 * Setting up Outline VPN on the second server with tunneled traffic
+* Troubleshooting and fixing connection issues between Server 1 and Server 2
 
 ## Recent Changes
 
@@ -19,11 +20,15 @@ This file tracks the project's current status, including recent changes, current
   * setup-vless-server2.sh - Configure second server to route through first server
   * tunnel-routing.conf - Shared routing configuration
   * test-tunnel-connection.sh - Diagnostic script
-  * route-outline-through-tunnel.sh - Script to update existing Outline installations
+  * route-outline-through-tunnel.sh - Helper script to update existing Outline installations
 * Fixed setup-vless-reality-server.sh script (2025-05-19):
   * Resolved the "unknown command" error with x25519 key generation
   * Replaced Docker container key generation with direct OpenSSL-based approach
   * Successfully verified script functionality
+* Created troubleshooting solution for the VLESS tunnel "context canceled" error (2025-05-20):
+  * Developed fix-server-uuid.sh script to add Server 2's UUID to Server 1's client list
+  * Added comprehensive documentation in vless-reality-tunnel-troubleshooting.md
+  * Identified the root cause as a mismatch between Server 2's configuration and Server 1's expectations
 
 ## Open Questions/Issues
 
@@ -62,3 +67,8 @@ This file tracks the project's current status, including recent changes, current
   * monitor-youtube-traffic-server1.sh - Monitors incoming YouTube traffic on Server 1 from Server 2
   * monitor-youtube-traffic-server2.sh - Monitors outgoing YouTube traffic on Server 2 from Outline VPN clients
   * Created youtube-traffic-monitoring.md documentation for using the scripts
+[2025-05-20 00:51:52] - Created fix-server-uuid.sh script to resolve the "context canceled" error in VLESS tunnel:
+  * Adds Server 2's UUID to Server 1's client list
+  * Outputs the correct Reality parameters for Server 2 to use
+  * Documents any mismatches between Server 1's Reality settings and Server 2's configuration
+[2025-05-20 00:52:25] - Added comprehensive troubleshooting documentation in vless-reality-tunnel-troubleshooting.md
