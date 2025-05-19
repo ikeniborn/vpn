@@ -207,7 +207,7 @@ recreate_container() {
         --cap-add NET_ADMIN \
         -v "$V2RAY_DIR/config.json:/etc/v2ray/config.json" \
         -v "/var/log/v2ray:/var/log/v2ray" \
-        v2fly/v2fly-core:latest run -config "$CONFIG_FILE"
+        v2fly/v2fly-core:latest /usr/bin/v2ray -config "$CONFIG_FILE"
     
     # Verify container is running with more reliable method
     sleep 5
