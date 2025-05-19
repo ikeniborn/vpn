@@ -366,10 +366,10 @@ setup_user_management() {
 setup_security_checks() {
     info "Setting up security checks script..."
     
-    if [ ! -f "${SCRIPTS_DIR}/security-checks-reality.sh" ]; then
+    if [ ! -f "${SCRIPTS_DIR}/script/security-checks-reality.sh" ]; then
         info "Downloading security checks script..."
-        wget -O "${SCRIPTS_DIR}/security-checks-reality.sh" https://raw.githubusercontent.com/yourusername/vpn/main/script/security-checks-reality.sh
-        chmod +x "${SCRIPTS_DIR}/security-checks-reality.sh"
+        wget -O "${SCRIPTS_DIR}/script/security-checks-reality.sh" https://raw.githubusercontent.com/yourusername/vpn/main/script/security-checks-reality.sh
+        chmod +x "${SCRIPTS_DIR}/script/security-checks-reality.sh"
     fi
 }
 
@@ -377,9 +377,9 @@ setup_security_checks() {
 verify_security() {
     info "Verifying security settings..."
     
-    if [ -f "${SCRIPTS_DIR}/security-checks-reality.sh" ]; then
+    if [ -f "${SCRIPTS_DIR}/script/security-checks-reality.sh" ]; then
         info "Running security checks..."
-        "${SCRIPTS_DIR}/security-checks-reality.sh"
+        "${SCRIPTS_DIR}/script/security-checks-reality.sh"
     else
         warn "Security checks script not found. Skipping verification."
     fi
