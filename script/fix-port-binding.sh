@@ -69,12 +69,25 @@ check_root() {
 check_container() {
     info "Checking container status..."
     
-    if ! docker ps -a | grep -q "$DOCKER_CONTAINER"; then
+    # Use more reliable method to check if container exists
+    if [ -z "$(docker ps -a -q -f "name=^${DOCKER_CONTAINER}$")" ]; then
         info "Container $DOCKER_CONTAINER does not exist - will create it"
         CONTAINER_EXISTS=false
     else
         info "Container exists, checking configuration..."
         CONTAINER_EXISTS=true
+        
+        # Check container status
+        if [ -z "$(docker ps -q -f "name=^${DOCKER_CONTAINER}$")" ]; then
+            info "Container exists but is not running"
+        else
+            info "Container is running"
+        fi
+        
+        # Force remove existing container regardless of errors from previous attempts
+        info "Removing existing container to avoid conflicts..."
+        docker rm -f "$DOCKER_CONTAINER" || true
+        sleep 2
     fi
 }
 
