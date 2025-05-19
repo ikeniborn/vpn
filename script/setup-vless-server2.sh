@@ -560,6 +560,16 @@ test_tunnel() {
         docker logs v2ray-client
         return 1
     fi
+
+    # Check V2Ray process inside container
+    info "Checking V2Ray process inside container..."
+    if docker exec v2ray-client pgrep -f "v2ray -config /etc/v2ray/config.json" > /dev/null; then
+        info "V2Ray process is running inside the container."
+    else
+        warn "V2Ray process is NOT running inside the container. This is likely the main issue."
+        warn "Showing full container logs:"
+        docker logs v2ray-client
+    fi
     
     # Validate v2ray configuration
     info "Validating v2ray proxy configuration..."
@@ -572,6 +582,37 @@ test_tunnel() {
     else
         warn "v2ray configuration file not found for validation."
     fi
+
+    # Check for processes on HOST using the ports
+    info "Checking for processes on HOST using target ports..."
+    local conflicting_processes=""
+    if ss -Htnlp | grep -q ':18080'; then
+        conflicting_processes+=$(ss -Htnlp | grep ':18080' | awk '{print $NF}' | tr -d '()')
+        conflicting_processes+=" (port 18080), "
+    fi
+    if ss -Htnlp | grep -q ':11081'; then
+        conflicting_processes+=$(ss -Htnlp | grep ':11081' | awk '{print $NF}' | tr -d '()')
+        conflicting_processes+=" (port 11081), "
+    fi
+     if ss -Htnlp | grep -q ':11080'; then
+        conflicting_processes+=$(ss -Htnlp | grep ':11080' | awk '{print $NF}' | tr -d '()')
+        conflicting_processes+=" (port 11080), "
+    fi
+
+    if [ -n "$conflicting_processes" ]; then
+        # Removing trailing comma and space
+        conflicting_processes=${conflicting_processes%, }
+        warn "Potentially conflicting processes found on HOST: $conflicting_processes"
+        warn "These might prevent V2Ray in the container from binding to these ports."
+    else
+        info "No conflicting processes found on HOST for target ports."
+    fi
+
+    # Check UFW status for specific ports
+    if command -v ufw &> /dev/null && ufw status | grep -q "Status: active"; then
+        info "Checking UFW status for V2Ray ports..."
+        ufw status verbose | grep -E '18080|11080|11081' || warn "UFW rules for V2Ray ports not found or ports not explicitly allowed."
+    fi
     
     # Check if proxy port is listening
     if ! ss -tulpn | grep -q ":18080"; then
@@ -582,10 +623,19 @@ test_tunnel() {
         info "HTTP proxy port 18080 is listening correctly."
     fi
     
+    # Check if SOCKS proxy port is listening
+    if ! ss -tulpn | grep -q ":11080"; then
+        warn "SOCKS proxy port 11080 is not listening. Checking container logs:"
+        docker logs v2ray-client
+        warn "You may need to restart the container or check configuration."
+    else
+        info "SOCKS proxy port 11080 is listening correctly."
+    fi
+
     # Check if transparent proxy port is listening
     if ! ss -tulpn | grep -q ":11081"; then
         warn "Transparent proxy port 11081 is not listening. This will break routing."
-        docker logs v2ray-client | grep -i "error\|fail\|warn" | tail -5
+        docker logs v2ray-client | grep -i "error\|fail\|warn" | tail -10
     else
         info "Transparent proxy port 11081 is listening correctly."
     fi
