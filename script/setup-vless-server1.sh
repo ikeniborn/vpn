@@ -117,7 +117,7 @@ create_tunnel_user() {
     info "Creating a special user account for Server 2..."
     
     # Check if manage-vless-users.sh exists and is executable
-    if [ ! -x "$(command -v manage-vless-users.sh)" ] && [ ! -x "./manage-vless-users.sh" ]; then
+    if [ ! -x "$(command -v manage-vless-users.sh)" ] && [ ! -x "./script/manage-vless-users.sh" ]; then
         error "manage-vless-users.sh script not found or not executable"
     fi
     
@@ -126,10 +126,10 @@ create_tunnel_user() {
     
     # Add the user using the management script
     info "Adding Server 2 account with name: $SERVER2_NAME"
-    if [ -x "./manage-vless-users.sh" ]; then
-        ./manage-vless-users.sh --add --name "$SERVER2_NAME" || error "Failed to add Server 2 user"
+    if [ -x "./script/manage-vless-users.sh" ]; then
+        ./script/manage-vless-users.sh --add --name "$SERVER2_NAME" || error "Failed to add Server 2 user"
     else
-        manage-vless-users.sh --add --name "$SERVER2_NAME" || error "Failed to add Server 2 user"
+        /script/manage-vless-users.sh --add --name "$SERVER2_NAME" || error "Failed to add Server 2 user"
     fi
     
     # Get the UUID of the newly created user
