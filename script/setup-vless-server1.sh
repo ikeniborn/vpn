@@ -206,19 +206,37 @@ update_firewall() {
             
             # Check if NAT table exists in before.rules
             if grep -q "*nat" /etc/ufw/before.rules; then
-                # Insert masquerading rule before COMMIT line in *nat section
-                sed -i "/*nat/,/COMMIT/ s/COMMIT/# Forward traffic from Server 2 through Server 1\n-A POSTROUTING -o $INTERNET_FACING_IFACE -j MASQUERADE\n\nCOMMIT/" /etc/ufw/before.rules
+                # Check if masquerading rule already exists
+                if ! grep -q "POSTROUTING -o $INTERNET_FACING_IFACE -j MASQUERADE" /etc/ufw/before.rules; then
+                    # Find the COMMIT line in the nat section and insert the rule before it
+                    awk '
+                    BEGIN {nat_section=0}
+                    /\*nat/ {nat_section=1; print; next}
+                    /COMMIT/ && nat_section==1 {
+                        printf("# Forward traffic from Server 2 through Server 1\n");
+                        printf("-A POSTROUTING -o '"$INTERNET_FACING_IFACE"' -j MASQUERADE\n\n");
+                        nat_section=0;
+                    }
+                    {print}
+                    ' /etc/ufw/before.rules > /tmp/before.rules.new && mv /tmp/before.rules.new /etc/ufw/before.rules
+                fi
             else
-                # Add NAT table with masquerading rule before the final COMMIT
-                sed -i "$ i\\
-*nat\\
-:PREROUTING ACCEPT [0:0]\\
-:POSTROUTING ACCEPT [0:0]\\
-\\
-# Forward traffic from Server 2 through Server 1\\
--A POSTROUTING -o $INTERNET_FACING_IFACE -j MASQUERADE\\
-\\
-COMMIT" /etc/ufw/before.rules
+                # Create a new NAT table section and add to the file before the final COMMIT
+                # First, make a backup
+                cp /etc/ufw/before.rules /etc/ufw/before.rules.bak.$(date +%s)
+                
+                # Create the NAT section content
+                NAT_SECTION="*nat
+:PREROUTING ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
+
+# Forward traffic from Server 2 through Server 1
+-A POSTROUTING -o $INTERNET_FACING_IFACE -j MASQUERADE
+
+COMMIT
+"
+                # Insert before the final line (which should be COMMIT)
+                sed -i '$i\'"$NAT_SECTION" /etc/ufw/before.rules
             fi
             
             info "Added masquerading rules to UFW"
