@@ -39,13 +39,13 @@ This file tracks the project's progress using a task list format.
   * Increased log level to debug for better diagnostics
   * Improved configuration visualization for troubleshooting
   * Completely rebuilt the script with proper error handling
-  * Created a template-based configuration generator with placeholder substitution
-  * Added explicit UUID format validation and critical value verification
-  * Fixed Docker container command to properly run v2ray with configuration
-  * Implemented safe substitution instead of direct variable expansion
+  * Created a direct JSON generation approach with controlled variable interpolation
+  * Added explicit UUID format validation and verification steps
+  * Returned to default Docker entrypoint without custom command arguments
+  * Implemented cleaner conditional inclusion of optional parameters
   * Added automatic fixing with jq if validation fails
-  * Created a more reliable and maintainable configuration generation system
   * Enhanced error reporting with specific checks for missing values
+  * Simplified overall approach to reduce complexity and potential errors
 
 ## Next Steps
 

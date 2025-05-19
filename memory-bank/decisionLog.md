@@ -220,3 +220,25 @@ This file records architectural and implementation decisions using a list format
 * Added automatic fixing with jq if validation fails
 
 [2025-05-19 17:14:55] - Rewrote configuration generator with safe substitution and validation
+
+## Decision
+
+* Simplify the approach by going back to default Docker entrypoint and use direct string interpolation
+
+## Rationale
+
+* Adding command arguments to container was causing issues with v2ray execution
+* Template substitution was still producing malformed JSON with commas
+* Direct string interpolation in a controlled context is more reliable
+* The validation step is critical to ensure correct configuration
+
+## Implementation Details
+
+* Reverted to using default Docker entrypoint with no arguments
+* Used direct variable substitution within heredoc rather than placeholders
+* Implemented cleaner conditional inclusion of optional parameters
+* Added explicit validation that checks critical value presence
+* Included comprehensive error checking for common JSON issues
+* Used a simpler approach that's less prone to errors
+
+[2025-05-19 17:17:45] - Final simplification of container execution and configuration generation
