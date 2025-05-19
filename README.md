@@ -44,28 +44,21 @@ sudo ./script/setup-vless-reality-server.sh \
 - [Implementation Guide](docs/implementation-guide.md): General implementation steps for VLESS-Reality
 - [WebSocket+TLS vs Reality Comparison](docs/websocket-tls-vs-reality.md): In-depth technical comparison
 
-### Technical Plans and Modifications
-
-- [VLESS-Reality Implementation Plan](docs/outline-v2ray-reality-plan.md): Original implementation plan
-- [Reality Install Script Modifications](docs/reality-install-script-modifications.md): Code changes for VLESS-Reality support
 
 ## Scripts
 
 ### Core Scripts
 
 - [setup-vless-reality-server.sh](script/setup-vless-reality-server.sh): All-in-one setup script for new servers
-- [outline-v2ray-reality-install.sh](script/outline-v2ray-reality-install.sh): Main installation script
 - [firewall.sh](script/firewall.sh): Configures firewall with secure defaults
 
 ### User Management
 
 - [manage-vless-users.sh](script/manage-vless-users.sh): Add, remove, list, and export users
-- [generate-vless-reality-client.sh](script/generate-vless-reality-client.sh): Generate client configurations
 
 ### Security
 
 - [security-checks-reality.sh](script/security-checks-reality.sh): Perform security audits on your server
-- [security-checks.sh](script/security-checks.sh): Original security checks script
 
 ## User Management
 
