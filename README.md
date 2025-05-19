@@ -17,7 +17,7 @@ For a new server installation:
 
 ```bash
 # Clone the repository
-git clone https://github.com/username/vpn.git
+git clone https://github.com/yourusername/vpn.git
 cd vpn
 
 # Make scripts executable
@@ -41,7 +41,6 @@ sudo ./script/setup-vless-reality-server.sh \
 ### Installation Guides
 
 - [New Server Installation Guide](docs/vless-reality-new-server-guide.md): Complete guide for setting up VLESS-Reality on a new server
-- [Implementation Guide](docs/implementation-guide.md): General implementation steps for VLESS-Reality
 - [WebSocket+TLS vs Reality Comparison](docs/websocket-tls-vs-reality.md): In-depth technical comparison
 
 ## Scripts

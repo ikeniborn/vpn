@@ -7,7 +7,7 @@
 # - Performs comprehensive security audits on the system
 # - Checks for common misconfigurations
 # - Verifies Docker security settings
-# - Validates Outline VPN and v2ray Reality configurations
+# - Validates v2ray VLESS-Reality configurations
 # - Generates a security report
 # ===================================================================
 
@@ -371,31 +371,31 @@ else
     fail "v2ray directory not found at $V2RAY_DIR"
 fi
 
-# Check Outline directory
-info "Checking Outline VPN directories..."
+# Check output directory
+info "Checking configuration directories..."
 if [ -d "$OUTLINE_DIR" ]; then
-    success "Outline VPN directory exists at $OUTLINE_DIR"
+    success "Configuration directory exists at $OUTLINE_DIR"
     
     # Check directory permissions
     OUTLINE_PERMS=$(stat -c "%a" "$OUTLINE_DIR")
     if [[ "$OUTLINE_PERMS" == "770" || "$OUTLINE_PERMS" == "700" ]]; then
-        success "Outline directory has secure permissions: $OUTLINE_PERMS"
+        success "Configuration directory has secure permissions: $OUTLINE_PERMS"
     else
-        warn "Outline directory has potentially insecure permissions: $OUTLINE_PERMS (should be 770 or 700)"
+        warn "Configuration directory has potentially insecure permissions: $OUTLINE_PERMS (should be 770 or 700)"
     fi
 else
-    warn "Outline VPN directory not found at $OUTLINE_DIR"
+    warn "Configuration directory not found at $OUTLINE_DIR"
 fi
 
 # Check Docker containers
 info "Checking Outline and v2ray containers..."
 if command -v docker >/dev/null; then
-    # Check if outline container is running
-    if docker ps --format "{{.Names}}" | grep -q "^shadowbox$"; then
-        success "Outline VPN container (shadowbox) is running"
-    else
-        fail "Outline VPN container (shadowbox) is not running"
-    fi
+    # Check if other supporting containers are running
+        if docker ps --format "{{.Names}}" | grep -q "^shadowbox$"; then
+            success "Supporting container (shadowbox) is running"
+        else
+            warn "Supporting container (shadowbox) is not running"
+        fi
     
     # Check if v2ray container is running
     if docker ps --format "{{.Names}}" | grep -q "^v2ray$"; then
@@ -404,12 +404,12 @@ if command -v docker >/dev/null; then
         fail "v2ray container is not running"
     fi
     
-    # Check Docker network
-    if docker network ls | grep -q "outline-network"; then
-        success "Docker outline-network exists"
-    else
-        warn "Docker outline-network not found"
-    fi
+    # Check Docker networks
+        if docker network ls | grep -q "outline-network\|v2ray-network"; then
+            success "Docker VPN networks exist"
+        else
+            warn "Docker VPN networks not found"
+        fi
 else
     fail "Docker is not installed, cannot check containers"
 fi

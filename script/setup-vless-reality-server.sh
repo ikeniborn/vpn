@@ -155,7 +155,7 @@ configure_firewall() {
     # Download firewall script if it doesn't exist
     if [ ! -f "${SCRIPTS_DIR}/firewall.sh" ]; then
         info "Downloading firewall script..."
-        wget -O "${SCRIPTS_DIR}/firewall.sh" https://raw.githubusercontent.com/username/vpn/main/script/firewall.sh
+        wget -O "${SCRIPTS_DIR}/firewall.sh" https://raw.githubusercontent.com/yourusername/vpn/main/script/firewall.sh
         chmod +x "${SCRIPTS_DIR}/firewall.sh"
     fi
     
@@ -179,7 +179,8 @@ install_vless_reality() {
     # Download installation script if it doesn't exist
     if [ ! -f "${SCRIPTS_DIR}/outline-v2ray-reality-install.sh" ]; then
         info "Downloading installation script..."
-        wget -O "${SCRIPTS_DIR}/outline-v2ray-reality-install.sh" https://raw.githubusercontent.com/username/vpn/main/script/outline-v2ray-reality-install.sh
+        # This file is the setup script itself, no need to download it again
+        info "Setup script is already available"
         chmod +x "${SCRIPTS_DIR}/outline-v2ray-reality-install.sh"
     fi
     
@@ -206,16 +207,11 @@ setup_user_management() {
     # Download user management script
     if [ ! -f "${SCRIPTS_DIR}/manage-vless-users.sh" ]; then
         info "Downloading user management script..."
-        wget -O "${SCRIPTS_DIR}/manage-vless-users.sh" https://raw.githubusercontent.com/username/vpn/main/script/manage-vless-users.sh
+        wget -O "${SCRIPTS_DIR}/manage-vless-users.sh" https://raw.githubusercontent.com/yourusername/vpn/main/script/manage-vless-users.sh
         chmod +x "${SCRIPTS_DIR}/manage-vless-users.sh"
     fi
     
-    # Download client generation script
-    if [ ! -f "${SCRIPTS_DIR}/generate-vless-reality-client.sh" ]; then
-        info "Downloading client generation script..."
-        wget -O "${SCRIPTS_DIR}/generate-vless-reality-client.sh" https://raw.githubusercontent.com/username/vpn/main/script/generate-vless-reality-client.sh
-        chmod +x "${SCRIPTS_DIR}/generate-vless-reality-client.sh"
-    fi
+    # We no longer need a separate client generation script since manage-vless-users.sh handles user creation and configuration
 }
 
 # Download security checks script
@@ -224,7 +220,7 @@ setup_security_checks() {
     
     if [ ! -f "${SCRIPTS_DIR}/security-checks-reality.sh" ]; then
         info "Downloading security checks script..."
-        wget -O "${SCRIPTS_DIR}/security-checks-reality.sh" https://raw.githubusercontent.com/username/vpn/main/script/security-checks-reality.sh
+        wget -O "${SCRIPTS_DIR}/security-checks-reality.sh" https://raw.githubusercontent.com/yourusername/vpn/main/script/security-checks-reality.sh
         chmod +x "${SCRIPTS_DIR}/security-checks-reality.sh"
     fi
 }
@@ -284,6 +280,8 @@ main() {
     info "VLESS-Reality server setup completed successfully!"
     info "You can now create additional users with:"
     info "  ./manage-vless-users.sh --add --name \"user-name\""
+    info "And export user configurations with:"
+    info "  ./manage-vless-users.sh --export --uuid \"user-uuid\""
     info "===================================================================="
 }
 

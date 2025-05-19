@@ -43,8 +43,8 @@ sudo systemctl enable --now docker
 Run the firewall configuration script:
 
 ```bash
-# Download the firewall script
-wget -O firewall.sh https://raw.githubusercontent.com/username/vpn/main/script/firewall.sh
+# Get the firewall script
+wget -O firewall.sh https://raw.githubusercontent.com/yourusername/vpn/main/script/firewall.sh
 
 # Make it executable
 chmod +x firewall.sh
@@ -75,8 +75,8 @@ sudo ufw status verbose
 ### 3.1 Download Installation Script
 
 ```bash
-wget -O outline-v2ray-reality-install.sh https://raw.githubusercontent.com/username/vpn/main/script/outline-v2ray-reality-install.sh
-chmod +x outline-v2ray-reality-install.sh
+wget -O setup-vless-reality-server.sh https://raw.githubusercontent.com/yourusername/vpn/main/script/setup-vless-reality-server.sh
+chmod +x setup-vless-reality-server.sh
 ```
 
 ### 3.2 Run Installation
@@ -84,13 +84,13 @@ chmod +x outline-v2ray-reality-install.sh
 Basic installation with default settings:
 
 ```bash
-sudo ./outline-v2ray-reality-install.sh
+sudo ./setup-vless-reality-server.sh
 ```
 
 Advanced installation with custom parameters:
 
 ```bash
-sudo ./outline-v2ray-reality-install.sh \
+sudo ./setup-vless-reality-server.sh \
   --hostname your-server-ip \
   --v2ray-port 443 \
   --dest-site www.microsoft.com:443 \
@@ -128,7 +128,7 @@ ss -tuln | grep <configured-port>
 ### 4.1 Download User Management Script
 
 ```bash
-wget -O manage-vless-users.sh https://raw.githubusercontent.com/username/vpn/main/script/manage-vless-users.sh
+wget -O manage-vless-users.sh https://raw.githubusercontent.com/yourusername/vpn/main/script/manage-vless-users.sh
 chmod +x manage-vless-users.sh
 ```
 
@@ -160,17 +160,13 @@ Export user configuration:
 
 ## 5. Client Configuration
 
-### 5.1 Download Client Generation Script
+### 5.1 Generate Client Configuration
+
+To generate a client configuration, use the user management script:
 
 ```bash
-wget -O generate-vless-reality-client.sh https://raw.githubusercontent.com/username/vpn/main/script/generate-vless-reality-client.sh
-chmod +x generate-vless-reality-client.sh
-```
-
-### 5.2 Generate Client Configuration
-
-```bash
-./generate-vless-reality-client.sh --name "client-device"
+./manage-vless-users.sh --add --name "client-device"
+./manage-vless-users.sh --export --uuid "the-generated-uuid"
 ```
 
 This will:
@@ -191,9 +187,9 @@ This will:
 Run the security check script to verify your installation:
 
 ```bash
-wget -O security-checks.sh https://raw.githubusercontent.com/username/vpn/main/script/security-checks.sh
-chmod +x security-checks.sh
-sudo ./security-checks.sh
+wget -O security-checks-reality.sh https://raw.githubusercontent.com/yourusername/vpn/main/script/security-checks-reality.sh
+chmod +x security-checks-reality.sh
+sudo ./security-checks-reality.sh
 ```
 
 This will:
@@ -218,7 +214,7 @@ This will:
 - Check for port conflicts: `ss -tuln`
 
 **Permission issues:**
-- Run the permission fixer: `./outline-v2ray-reality-install.sh --fix-permissions`
+- Run the permission fixer: `./setup-vless-reality-server.sh --fix-permissions`
 
 **Client connection issues:**
 - Try a different TLS fingerprint
@@ -300,4 +296,4 @@ docker restart v2ray
 - The Reality protocol uses X25519 keypairs for security
 - Traffic is hidden by mimicking real websites (using dest parameter)
 - TLS fingerprinting makes detection even more difficult
-- Regular security audits are recommended using the security-checks.sh script
+- Regular security audits are recommended using the security-checks-reality.sh script

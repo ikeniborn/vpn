@@ -133,7 +133,7 @@ function add_user() {
   
   log_success "User '$name' added successfully with UUID: $uuid"
   echo "To generate a client configuration, run:"
-  echo "  ./generate-vless-client.sh --name \"$name\""
+  echo "  ./manage-vless-users.sh --export --uuid \"$uuid\""
 }
 
 function remove_user() {
