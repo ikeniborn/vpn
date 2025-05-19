@@ -2,6 +2,7 @@
 
 This file tracks the project's progress using a task list format.
 2025-05-19 11:04:48 - Initial Memory Bank creation.
+2025-05-19 11:21:29 - Added tunnel setup scripts for two-server configuration.
 
 ## Completed Tasks
 
@@ -11,10 +12,16 @@ This file tracks the project's progress using a task list format.
 * Implemented security checks script (security-checks-reality.sh)
 * Documented installation process in vless-reality-new-server-guide.md
 * Documented comparison between WebSocket+TLS and Reality in websocket-tls-vs-reality.md
+* Created scripts for two-server tunnel setup:
+  * setup-vless-server1.sh - For configuring the first server to accept connections
+  * setup-vless-server2.sh - For configuring the second server to route through the first
+  * tunnel-routing.conf - Configuration file for consistent routing rules
+  * test-tunnel-connection.sh - Script to verify tunnel functionality
+  * route-outline-through-tunnel.sh - Helper script to update existing Outline installations
 
 ## Current Tasks
 
-* Memory Bank initialization
+* None currently
 
 ## Next Steps
 
@@ -23,3 +30,5 @@ This file tracks the project's progress using a task list format.
 * Implement automatic updates for v2ray components
 * Enhance client configuration export with improved documentation
 * Consider creating a simple web UI for user management
+* Create deployment documentation for the two-server tunnel configuration
+* Implement fail-over or backup server configuration
