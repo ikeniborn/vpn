@@ -55,9 +55,10 @@ cleanup_processes() {
     
     if [ -n "$v2ray_services" ]; then
         for service_name in $v2ray_services; do
-            info "Found potential service: $service_name. Stopping and disabling..."
+            info "Found potential service: $service_name. Stopping, disabling, and masking..."
             systemctl stop "$service_name" 2>/dev/null || warn "$service_name could not be stopped."
             systemctl disable "$service_name" 2>/dev/null || warn "$service_name could not be disabled."
+            systemctl mask "$service_name" 2>/dev/null || warn "$service_name could not be masked."
         done
     else
         info "No systemd services matching 'v2ray' or 'v2fly' found."
