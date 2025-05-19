@@ -278,10 +278,13 @@ test_outline() {
     fi
     
     # Check if Outline port is open
-    if ! ss -tulpn | grep -q ":$OUTLINE_PORT"; then
-        warn "Outline VPN port $OUTLINE_PORT does not appear to be open."
+    local open_ports_count
+    open_ports_count=$(ss -tulpn | grep ":$OUTLINE_PORT" | wc -l)
+    
+    if [ "$open_ports_count" -eq 0 ]; then
+        warn "Outline VPN port $OUTLINE_PORT does not appear to be open. (Found $open_ports_count listening)"
     else
-        success "Outline VPN port $OUTLINE_PORT is open."
+        success "Outline VPN port $OUTLINE_PORT is open. (Found $open_ports_count listening)"
     fi
     
     # Test if Outline is routing through the tunnel
