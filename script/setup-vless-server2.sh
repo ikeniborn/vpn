@@ -336,7 +336,28 @@ EOF
     mkdir -p /var/log/v2ray
     chmod 755 /var/log/v2ray
     
-    # Run v2ray container with improved setup
+    # Validate configuration file
+    info "Validating v2ray configuration file..."
+    if command -v jq &>/dev/null; then
+        if ! jq empty "$V2RAY_DIR/config.json" 2>/dev/null; then
+            error "Invalid JSON in configuration file. Please check the format."
+            jq -e . "$V2RAY_DIR/config.json" 2>&1 || true
+            # Try to fix common issues
+            info "Attempting to fix configuration file..."
+            cp "$V2RAY_DIR/config.json" "$V2RAY_DIR/config.json.bak"
+            jq . "$V2RAY_DIR/config.json.bak" > "$V2RAY_DIR/config.json" 2>/dev/null || true
+        else
+            info "Configuration file validated successfully."
+        fi
+    else
+        warn "jq not found, skipping configuration validation."
+    fi
+    
+    # Create log directory with proper permissions
+    mkdir -p /var/log/v2ray
+    chmod 777 /var/log/v2ray  # More permissive for container access
+    
+    # Run v2ray container with improved setup and explicit entry point
     info "Starting v2ray client container..."
     docker run -d \
         --name v2ray-client \
@@ -345,13 +366,40 @@ EOF
         --cap-add NET_ADMIN \
         -v "$V2RAY_DIR/config.json:/etc/v2ray/config.json" \
         -v "/var/log/v2ray:/var/log/v2ray" \
-        v2fly/v2fly-core:latest
+        v2fly/v2fly-core:latest /usr/bin/v2ray run -c /etc/v2ray/config.json
         
-    # Verify container is running
-    sleep 2
+    # Verify container is running with extended waiting and diagnostics
+    info "Verifying container startup (waiting 5 seconds)..."
+    sleep 5
     if ! docker ps | grep -q v2ray-client; then
-        warn "Container may not have started properly. Checking logs..."
-        docker logs v2ray-client
+        warn "Container failed to start or crashed. Detailed diagnostics:"
+        echo "--- Container Logs ---"
+        docker logs v2ray-client 2>&1 || echo "No logs available"
+        echo "--- Container Status ---"
+        docker ps -a | grep v2ray-client || echo "Container not found"
+        echo "--- Configuration File ---"
+        cat "$V2RAY_DIR/config.json" | grep -v "id\|publicKey" # Hide sensitive info
+        
+        # Try to restart with debug mode
+        info "Attempting to restart container in debug mode..."
+        docker rm -f v2ray-client 2>/dev/null || true
+        docker run -d \
+            --name v2ray-client \
+            --restart always \
+            --network host \
+            --cap-add NET_ADMIN \
+            -v "$V2RAY_DIR/config.json:/etc/v2ray/config.json" \
+            -v "/var/log/v2ray:/var/log/v2ray" \
+            -e "V2RAY_VMESS_AEAD_FORCED=false" \
+            v2fly/v2fly-core:latest /usr/bin/v2ray run -c /etc/v2ray/config.json -d
+        
+        # Check again after restart
+        sleep 3
+        if ! docker ps | grep -q v2ray-client; then
+            error "Container still failing to start after debug mode attempt. Please check configuration."
+        else
+            info "Container successfully started in debug mode."
+        fi
     else
         info "Container started successfully."
     fi

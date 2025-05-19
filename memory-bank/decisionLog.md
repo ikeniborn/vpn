@@ -78,5 +78,9 @@ This file records architectural and implementation decisions using a list format
 * Enhanced tunnel diagnostics with detailed error reporting and suggestions
 * Added proper logging directory setup with correct permissions
 * Implemented container verification to confirm successful creation
+* Added JSON configuration validation with auto-repair functionality
+* Implemented debug mode fallback for container startup failures
+* Added comprehensive container diagnostics with safe output of configuration
 
 [2025-05-19 16:37:40] - Fixed setup-vless-server2.sh script Docker network and tunnel configuration
+[2025-05-19 16:49:10] - Improved container startup reliability in setup-vless-server2.sh

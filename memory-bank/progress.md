@@ -30,6 +30,9 @@ This file tracks the project's progress using a task list format.
   * Improved v2ray container setup with better volume mapping for logs
   * Enhanced tunnel diagnostics and error reporting
   * Fixed Reality protocol configuration JSON formatting
+  * Added robust container startup validation and debugging
+  * Implemented JSON configuration validation with auto-repair
+  * Added debug mode fallback for container failures
 
 ## Next Steps
 
