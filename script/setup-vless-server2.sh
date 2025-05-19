@@ -322,7 +322,9 @@ EOF
     # Create Docker network if it doesn't exist
     if ! docker network ls | grep -q "v2ray-network"; then
         info "Creating Docker network..."
-        docker network create v2ray-network
+        docker network create v2ray-network || true
+    else
+        info "Docker network v2ray-network already exists, using existing network."
     fi
     
     # Run v2ray container
