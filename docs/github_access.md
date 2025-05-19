@@ -1,3 +1,6 @@
+git pull https://ikeniborn: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@github.com/ikeniborn/vpn.git
+
+
 ikeniborn
 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
 

@@ -347,21 +347,16 @@ test_connection() {
 # Main function
 main() {
     info "====================================================================="
-    info "V2Ray Cleanup and Final Fix Script"
+    info "V2Ray Host Process Cleanup & Firewall Port Script"
     info "====================================================================="
     
     check_root
-    cleanup_processes
+    cleanup_processes # This function will now exit with error if ports are not freed
     open_firewall_ports
-    restart_container
-    verify_ports
-    test_routing
-    test_connection
     
     info "====================================================================="
-    info "Cleanup and final fix completed!"
-    info "If everything is working correctly, you should be able to run:"
-    info "sudo ./script/test-tunnel-connection.sh --server-type server2 --server1-address YOUR_SERVER1_IP"
+    info "Host process cleanup and firewall port check completed."
+    info "If this script is part of a larger setup, the main script will now proceed with Docker container setup."
     info "====================================================================="
 }
 

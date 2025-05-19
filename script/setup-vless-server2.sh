@@ -186,17 +186,16 @@ configure_forwarding() {
 install_v2ray_client() {
     info "Installing v2ray client for tunneling to Server 1..."
 
-    # Run cleanup script first to stop conflicting processes and ensure firewall is open
+    # Run cleanup script first to stop conflicting processes and ensure firewall is open.
+    # The cleanup script will exit with an error if it fails, halting this script due to 'set -e'.
     if [ -f "./script/cleanup-v2ray.sh" ]; then
-        info "Running cleanup script before V2Ray client installation..."
+        info "Running host cleanup and firewall prep script (./script/cleanup-v2ray.sh)..."
         chmod +x ./script/cleanup-v2ray.sh
-        if ./script/cleanup-v2ray.sh; then
-            info "Cleanup script completed successfully."
-        else
-            warn "Cleanup script encountered errors. Proceeding with caution."
-        fi
+        ./script/cleanup-v2ray.sh # If this fails, setup-vless-server2.sh will exit.
+        info "Host cleanup and firewall prep script completed."
     else
-        warn "./script/cleanup-v2ray.sh not found. Skipping pre-cleanup."
+        error "./script/cleanup-v2ray.sh not found. This script is essential for a clean setup. Aborting."
+        # exit 1 already handled by set -e if error function is called
     fi
     
     # Create necessary directories
@@ -249,10 +248,13 @@ install_v2ray_client() {
     info "Pulling v2ray Docker image..."
     docker pull v2fly/v2fly-core:latest
     
-    # Remove existing container if it exists
-    if docker ps -a --format '{{.Names}}' | grep -q "^v2ray-client$"; then
-        info "Removing existing v2ray-client container..."
-        docker rm -f v2ray-client || warn "Failed to remove existing container, it might be in use"
+    # Always remove any existing v2ray-client container to ensure a fresh start
+    info "Ensuring no old 'v2ray-client' container exists..."
+    if docker ps -a --format '{{.Names}}' | grep -q "^v2ray-client$"; then # This was line 253 before edits
+        info "Found existing 'v2ray-client' container. Removing it..."
+        docker rm -f v2ray-client || { warn "Failed to remove existing 'v2ray-client' container. This might cause issues."; }
+    else
+        info "No old 'v2ray-client' container found."
     fi
     
     # Try to inspect the network first - this is safer than grepping the list
@@ -702,13 +704,20 @@ test_tunnel() {
     fi
     
     # Test the connection using curl through the proxy
-    info "Testing HTTP proxy tunnel to Server 1..."
-    local proxy_output=$(curl -v --connect-timeout 15 -x http://127.0.0.1:18080 https://ifconfig.me 2>&1)
-    local proxy_ip=$(echo "$proxy_output" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    info "Testing HTTP proxy tunnel to Server 1 (via ifconfig.me/ip)..." # This was line 707 before edits
+    # Use -s for silent, -L to follow redirects, --max-time for timeout
+    local external_ip_output
+    external_ip_output=$(curl -sL --max-time 15 -x "http://127.0.0.1:18080" https://ifconfig.me/ip 2>&1)
     
-    if [ -n "$proxy_ip" ]; then
+    # Validate if the output is a valid IP address
+    local detected_ip=""
+    if [[ "$external_ip_output" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        detected_ip="$external_ip_output"
+    fi
+
+    if [ -n "$detected_ip" ] && [ "$detected_ip" != "127.0.0.1" ] && [ "$detected_ip" != "$LOCAL_IP" ]; then
         info "Tunnel is working correctly. Traffic is being routed through Server 1."
-        info "Your traffic appears as coming from: $proxy_ip"
+        info "Your external IP via tunnel appears as: $detected_ip (Server 1's IP)"
         
         # Verify iptables routing for Outline
         if [ "$(iptables -t nat -L PREROUTING | grep -c "V2RAY")" -gt 0 ]; then
