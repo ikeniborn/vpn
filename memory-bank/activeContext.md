@@ -46,6 +46,8 @@ This file tracks the project's current status, including recent changes, current
 * How can we improve error reporting for complex shell scripts?
 * When is direct text manipulation with sed more appropriate than JSON schema validation?
 * What are the best practices for passing commands to Docker containers?
+* What is the most reliable way to generate complex JSON configurations in bash scripts?
+* How should configuration generation be separated from application logic?
 
 [2025-05-19 16:37:50] - Fixed Docker network creation errors in setup-vless-server2.sh and improved tunnel diagnostics
 [2025-05-19 16:49:20] - Enhanced container startup reliability with validation, diagnostics, and debug mode
@@ -53,3 +55,4 @@ This file tracks the project's current status, including recent changes, current
 [2025-05-19 16:58:30] - Completely rebuilt the setup-vless-server2.sh script with progressive configuration building
 [2025-05-19 17:00:40] - Created dedicated JSON validation script for v2ray configuration
 [2025-05-19 17:07:40] - Created direct configuration fix script and simplified container command
+[2025-05-19 17:11:50] - Created dedicated configuration generator script with proper parameters
