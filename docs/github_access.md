@@ -6,11 +6,14 @@ Server 2 Connection Details (Save these for Server 2 setup):
 ============================================================
 Server 1 Address: 129.146.63.189
 Port:            443
-UUID:            12a566a9-c9f8-4631-8069-715400607927
+UUID:            d50a29db-0633-42bf-aab7-7f9bb8cce8dd
 Account Name:    server2
 ============================================================
 
 sudo ./script/setup-vless-server2.sh \
   --server1-address 129.146.63.189 \
-  --server1-uuid 12a566a9-c9f8-4631-8069-715400607927 \
-  --server1-pubkey 5495472d60312d6a746eeb07c329c708e0c7244ee0726811a4f2531f8ba31fd8
+  --server1-uuid d50a29db-0633-42bf-aab7-7f9bb8cce8dd \
+  --server1-pubkey 392a6352619f2a0d6b4b825e2e8fda14dd00b7a578f45537841a2679243f86de \
+  --server1-shortid ebfa2a2d7a605aed
+
+  sudo ./script/test-tunnel-connection.sh --server-type server2 --server1-address 129.146.63.189

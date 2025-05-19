@@ -41,7 +41,7 @@ cat > "$OUTPUT_FILE" << EOF
     {
       "tag": "socks-inbound",
       "port": 1080,
-      "listen": "127.0.0.1",
+      "listen": "0.0.0.0",
       "protocol": "socks",
       "settings": {
         "auth": "noauth",
@@ -51,7 +51,7 @@ cat > "$OUTPUT_FILE" << EOF
     {
       "tag": "http-inbound",
       "port": 8080,
-      "listen": "127.0.0.1",
+      "listen": "0.0.0.0",
       "protocol": "http",
       "settings": {
         "auth": "noauth"

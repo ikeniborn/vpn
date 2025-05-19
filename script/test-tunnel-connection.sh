@@ -190,22 +190,34 @@ check_listening_ports() {
     
     if [[ "$SERVER_TYPE" == "server2" ]]; then
         # Check for HTTP, SOCKS, and dokodemo-door ports
-        if ss -tulpn | grep -q ":8080 "; then
+        # Using grep with extended regex to check for either 0.0.0.0:port or 127.0.0.1:port
+        if ss -tulpn | grep -E "((0.0.0.0|127.0.0.1):8080) "; then
             info "✅ HTTP proxy port 8080 is listening."
         else
             warn "⚠️ HTTP proxy port 8080 is not listening."
+            info "  Checking v2ray configuration and logs:"
+            docker logs "$DOCKER_CONTAINER" | grep -i "8080\|http\|error\|failed" | tail -5
         fi
         
-        if ss -tulpn | grep -q ":1080 "; then
+        if ss -tulpn | grep -E "((0.0.0.0|127.0.0.1):1080) "; then
             info "✅ SOCKS proxy port 1080 is listening."
         else
             warn "⚠️ SOCKS proxy port 1080 is not listening."
+            info "  Checking v2ray configuration and logs:"
+            docker logs "$DOCKER_CONTAINER" | grep -i "1080\|socks\|error\|failed" | tail -5
         fi
         
-        if ss -tulpn | grep -q ":1081 "; then
+        if ss -tulpn | grep -E "((0.0.0.0|127.0.0.1):1081) "; then
             info "✅ Transparent proxy port 1081 is listening."
         else
             error "❌ Transparent proxy port 1081 is not listening."
+            info "  This port is critical for transparent routing."
+            info "  Checking v2ray configuration and logs:"
+            docker logs "$DOCKER_CONTAINER" | grep -i "1081\|transparent\|dokodemo\|error\|failed" | tail -10
+            
+            # Provide a suggestion for restarting
+            info "  Try restarting the v2ray container:"
+            info "  docker restart $DOCKER_CONTAINER"
             return 1
         fi
     else
@@ -279,6 +291,12 @@ test_tunnel() {
         
         # Test HTTP proxy
         local curl_output=$(curl -s -m 15 -x "http://127.0.0.1:8080" https://ifconfig.me 2>&1 || echo "Connection failed")
+        
+        # If first attempt fails, try with 0.0.0.0
+        if [[ "$curl_output" == *"Connection failed"* || "$curl_output" == *"timed out"* ]]; then
+            info "  Initial connection failed, trying with direct server IP..."
+            curl_output=$(curl -s -m 15 -x "http://${LOCAL_IP}:8080" https://ifconfig.me 2>&1 || echo "Connection failed")
+        fi
         
         if [[ "$curl_output" != *"Connection failed"* && "$curl_output" != *"timed out"* ]]; then
             info "✅ Successfully connected through proxy!"
