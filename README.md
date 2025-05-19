@@ -44,7 +44,6 @@ sudo ./script/setup-vless-reality-server.sh \
 - [Implementation Guide](docs/implementation-guide.md): General implementation steps for VLESS-Reality
 - [WebSocket+TLS vs Reality Comparison](docs/websocket-tls-vs-reality.md): In-depth technical comparison
 
-
 ## Scripts
 
 ### Core Scripts
