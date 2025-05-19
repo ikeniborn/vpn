@@ -195,7 +195,7 @@ install_vless_reality() {
     
     # Generate a private key and derive public key using v2ray docker image
     local KEY_OUTPUT
-    KEY_OUTPUT=$(docker run --rm v2fly/v2fly-core:latest xray x25519)
+    KEY_OUTPUT=$(docker run --rm v2fly/v2fly-core:latest v2ray x25519)
     local PRIVATE_KEY=$(echo "$KEY_OUTPUT" | grep "Private key:" | cut -d ' ' -f3)
     local PUBLIC_KEY=$(echo "$KEY_OUTPUT" | grep "Public key:" | cut -d ' ' -f3)
     
