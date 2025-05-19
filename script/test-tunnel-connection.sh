@@ -258,12 +258,12 @@ check_iptables_rules() {
             return 1
         fi
     else
-        # Check for V2RAY chain (case insensitive search)
-        if iptables -t nat -L | grep -iq 'V2RAY'; then
+        # More robust check for V2RAY chain
+        if iptables -t nat -L | awk '/^Chain/ {print $2}' | grep -iq 'V2RAY'; then
             info "✅ V2RAY chain exists in nat table."
             
-            # Check for PREROUTING rule (case insensitive search)
-            if iptables -t nat -L PREROUTING | grep -iq 'V2RAY'; then
+            # More robust check for PREROUTING rule
+            if iptables -t nat -L PREROUTING -v | grep -iq 'V2RAY'; then
                 info "✅ PREROUTING rule references V2RAY chain."
             else
                 error "❌ PREROUTING rule does not reference V2RAY chain."
