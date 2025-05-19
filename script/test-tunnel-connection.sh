@@ -195,25 +195,31 @@ check_listening_ports() {
             info "✅ HTTP proxy port 18080 is listening."
         else
             warn "⚠️ HTTP proxy port 18080 is not listening."
-            info "  Checking v2ray configuration and logs:"
-            docker logs "$DOCKER_CONTAINER" | grep -i "18080\|http\|error\|failed" | tail -5
+            info "  Checking Docker container logs (last 15 lines for $DOCKER_CONTAINER):"
+            docker logs "$DOCKER_CONTAINER" --tail 15
+            info "  Checking V2Ray error log on host (/var/log/v2ray/error.log) (last 15 lines):"
+            if [ -f "/var/log/v2ray/error.log" ]; then tail -n 15 "/var/log/v2ray/error.log"; else warn "  /var/log/v2ray/error.log not found on host."; fi
         fi
         
         if ss -tulpn | grep -E "((0.0.0.0|127.0.0.1):11080) "; then
             info "✅ SOCKS proxy port 11080 is listening."
         else
             warn "⚠️ SOCKS proxy port 11080 is not listening."
-            info "  Checking v2ray configuration and logs:"
-            docker logs "$DOCKER_CONTAINER" | grep -i "11080\|socks\|error\|failed" | tail -5
+            info "  Checking Docker container logs (last 15 lines for $DOCKER_CONTAINER):"
+            docker logs "$DOCKER_CONTAINER" --tail 15
+            info "  Checking V2Ray error log on host (/var/log/v2ray/error.log) (last 15 lines):"
+            if [ -f "/var/log/v2ray/error.log" ]; then tail -n 15 "/var/log/v2ray/error.log"; else warn "  /var/log/v2ray/error.log not found on host."; fi
         fi
         
         if ss -tulpn | grep -E "((0.0.0.0|127.0.0.1):11081) "; then
             info "✅ Transparent proxy port 11081 is listening."
         else
-            error "❌ Transparent proxy port 11081 is not listening."
+            error "❌ Transparent proxy port 11081 is not listening." # Keep as error for this critical port
             info "  This port is critical for transparent routing."
-            info "  Checking v2ray configuration and logs:"
-            docker logs "$DOCKER_CONTAINER" | grep -i "11081\|transparent\|dokodemo\|error\|failed" | tail -10
+            info "  Checking Docker container logs (last 15 lines for $DOCKER_CONTAINER):"
+            docker logs "$DOCKER_CONTAINER" --tail 15
+            info "  Checking V2Ray error log on host (/var/log/v2ray/error.log) (last 15 lines):"
+            if [ -f "/var/log/v2ray/error.log" ]; then tail -n 15 "/var/log/v2ray/error.log"; else warn "  /var/log/v2ray/error.log not found on host."; fi
             
             # Provide a suggestion for restarting
             info "  Try restarting the v2ray container:"

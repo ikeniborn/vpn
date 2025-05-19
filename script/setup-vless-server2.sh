@@ -650,18 +650,24 @@ test_tunnel() {
     
     # Check if proxy port is listening
     if ! ss -tulpn | grep -q ":18080"; then
-        warn "HTTP proxy port 18080 is not listening. Checking container logs:"
-        docker logs v2ray-client
-        warn "You may need to restart the container or check configuration."
+        warn "HTTP proxy port 18080 is not listening."
+        warn "  Checking Docker container logs (last 15 lines for v2ray-client):"
+        docker logs v2ray-client --tail 15
+        warn "  Checking V2Ray error log on host (/var/log/v2ray/error.log) (last 15 lines):"
+        if [ -f "/var/log/v2ray/error.log" ]; then tail -n 15 "/var/log/v2ray/error.log"; else warn "  /var/log/v2ray/error.log not found on host."; fi
+        warn "  You may need to restart the container or check configuration."
     else
         info "HTTP proxy port 18080 is listening correctly."
     fi
     
     # Check if SOCKS proxy port is listening
     if ! ss -tulpn | grep -q ":11080"; then
-        warn "SOCKS proxy port 11080 is not listening. Checking container logs:"
-        docker logs v2ray-client
-        warn "You may need to restart the container or check configuration."
+        warn "SOCKS proxy port 11080 is not listening."
+        warn "  Checking Docker container logs (last 15 lines for v2ray-client):"
+        docker logs v2ray-client --tail 15
+        warn "  Checking V2Ray error log on host (/var/log/v2ray/error.log) (last 15 lines):"
+        if [ -f "/var/log/v2ray/error.log" ]; then tail -n 15 "/var/log/v2ray/error.log"; else warn "  /var/log/v2ray/error.log not found on host."; fi
+        warn "  You may need to restart the container or check configuration."
     else
         info "SOCKS proxy port 11080 is listening correctly."
     fi
@@ -669,7 +675,10 @@ test_tunnel() {
     # Check if transparent proxy port is listening
     if ! ss -tulpn | grep -q ":11081"; then
         warn "Transparent proxy port 11081 is not listening. This will break routing."
-        docker logs v2ray-client | grep -i "error\|fail\|warn" | tail -10
+        warn "  Checking Docker container logs (last 15 lines for v2ray-client):"
+        docker logs v2ray-client --tail 15
+        warn "  Checking V2Ray error log on host (/var/log/v2ray/error.log) (last 15 lines):"
+        if [ -f "/var/log/v2ray/error.log" ]; then tail -n 15 "/var/log/v2ray/error.log"; else warn "  /var/log/v2ray/error.log not found on host."; fi
     else
         info "Transparent proxy port 11081 is listening correctly."
     fi
@@ -680,7 +689,8 @@ test_tunnel() {
     local tproxy_listening=$(ss -tulpn | grep -q ":11081" && echo true || echo false)
 
     if [ "$http_listening" = "false" ] || [ "$socks_listening" = "false" ] || [ "$tproxy_listening" = "false" ]; then
-        warn "One or more critical V2Ray ports are not listening."
+        warn "One or more critical V2Ray ports were not listening after initial setup."
+        warn "  Detailed logs shown above. Attempting to run fix-port-binding.sh..."
         if [ -f "./script/fix-port-binding.sh" ]; then
             info "Attempting to fix port binding issues by running ./script/fix-port-binding.sh..."
             chmod +x ./script/fix-port-binding.sh
