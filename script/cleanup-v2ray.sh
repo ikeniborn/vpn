@@ -46,71 +46,138 @@ check_root() {
 
 # Find and stop any non-container v2ray processes
 cleanup_processes() {
-    info "Finding any v2ray processes outside of Docker..."
-    
+    info "Finding and stopping any v2ray processes outside of Docker..."
+
+    # Attempt to stop known V2Ray systemd services
+    info "Attempting to stop known V2Ray systemd services..."
+    systemctl stop v2ray.service 2>/dev/null || warn "v2ray.service not found or could not be stopped."
+    systemctl stop v2fly.service 2>/dev/null || warn "v2fly.service not found or could not be stopped."
+    systemctl disable v2ray.service 2>/dev/null || warn "v2ray.service could not be disabled."
+    systemctl disable v2fly.service 2>/dev/null || warn "v2fly.service could not be disabled."
+    sleep 1 # Give services time to stop
+
     # Get Docker container PIDs
-    DOCKER_PIDS=$(docker ps -q | xargs docker inspect --format '{{.State.Pid}}' 2>/dev/null || echo "")
+    local DOCKER_PIDS
+    DOCKER_PIDS=$(docker ps -q --filter "name=^${DOCKER_CONTAINER}$" | xargs -r docker inspect --format '{{.State.Pid}}' 2>/dev/null || echo "")
     
     # Find all v2ray processes
-    V2RAY_PIDS=$(pgrep -f v2ray || echo "")
+    local V2RAY_PIDS
+    V2RAY_PIDS=$(pgrep -f "v2ray|v2fly" || echo "")
     
     if [ -z "$V2RAY_PIDS" ]; then
-        info "No v2ray processes found outside of Docker."
-        return 0
+        info "No v2ray/v2fly processes found running outside the target Docker container."
+    else
+        info "Found v2ray/v2fly PIDs: $V2RAY_PIDS"
+        for PID in $V2RAY_PIDS; do
+            # Check if the PID belongs to our Docker container
+            local IS_CONTAINER_PROCESS=false
+            if [ -n "$DOCKER_PIDS" ]; then
+                for DPID in $DOCKER_PIDS; do
+                    if [ "$PID" -eq "$DPID" ]; then
+                        IS_CONTAINER_PROCESS=true
+                        break
+                    fi
+                    # Also check child processes of the container, just in case
+                    if pstree -p "$DPID" | grep -q "($PID)"; then
+                        IS_CONTAINER_PROCESS=true
+                        break
+                    fi
+                done
+            fi
+
+            if [ "$IS_CONTAINER_PROCESS" = "false" ]; then
+                local process_cmdline
+                process_cmdline=$(ps -p "$PID" -o cmd= || echo "unknown process")
+                info "Found non-target v2ray/v2fly process: PID=$PID, CMD=$process_cmdline. Stopping it..."
+                kill -9 "$PID" || warn "Failed to kill process $PID"
+            else
+                info "PID $PID belongs to the target Docker container ${DOCKER_CONTAINER}, skipping."
+            fi
+        done
     fi
-    
-    # Filter out Docker container PIDs
-    for PID in $V2RAY_PIDS; do
-        if ! echo "$DOCKER_PIDS" | grep -q "$PID"; then
-            info "Found non-Docker v2ray process: $PID. Stopping it..."
-            kill -9 $PID || warn "Failed to kill process $PID"
-        fi
-    done
     
     # Verify that processes are stopped
     sleep 1
-    V2RAY_PIDS=$(pgrep -f v2ray || echo "")
-    for PID in $V2RAY_PIDS; do
-        if ! echo "$DOCKER_PIDS" | grep -q "$PID"; then
-            warn "Process $PID still running. Manual intervention may be required."
-        fi
-    done
-    
-    info "Cleanup of non-Docker v2ray processes completed."
+    V2RAY_PIDS=$(pgrep -f "v2ray|v2fly" || echo "")
+    local still_running_pids=""
+    if [ -n "$V2RAY_PIDS" ]; then
+        for PID in $V2RAY_PIDS; do
+             local IS_CONTAINER_PROCESS_CHECK=false
+             if [ -n "$DOCKER_PIDS" ]; then
+                for DPID in $DOCKER_PIDS; do
+                    if [ "$PID" -eq "$DPID" ] || (pstree -p "$DPID" | grep -q "($PID)"); then
+                        IS_CONTAINER_PROCESS_CHECK=true
+                        break
+                    fi
+                done
+            fi
+            if [ "$IS_CONTAINER_PROCESS_CHECK" = "false" ]; then
+                still_running_pids+=" $PID"
+            fi
+        done
+    fi
+
+    if [ -n "$still_running_pids" ]; then
+        warn "Processes still running after cleanup attempt:$still_running_pids. Manual intervention may be required."
+    else
+        info "Cleanup of non-Docker v2ray/v2fly processes appears successful."
+    fi
 }
 
 # Open required ports in UFW
 open_firewall_ports() {
     info "Opening required ports in UFW..."
     
+    local ports_to_open=(
+        "$SOCKS_PORT/tcp"
+        "$HTTP_PORT/tcp"
+        "$TPROXY_PORT/tcp"
+        "$TPROXY_PORT/udp"
+    )
+
     if command -v ufw &>/dev/null; then
-        if ufw status | grep -q "active"; then
-            info "UFW is active. Adding required rules..."
+        if ufw status | grep -q "Status: active"; then # More reliable check for active status
+            info "UFW is active. Ensuring required rules are present..."
+            local ufw_rules_changed=false
+            for port_rule in "${ports_to_open[@]}"; do
+                if ! ufw status verbose | grep -qw "$port_rule"; then
+                    info "Adding UFW rule: allow $port_rule"
+                    ufw allow "$port_rule"
+                    ufw_rules_changed=true
+                else
+                    info "UFW rule for $port_rule already exists."
+                fi
+            done
             
-            # Add rules for required ports
-            ufw allow $SOCKS_PORT/tcp
-            ufw allow $HTTP_PORT/tcp
-            ufw allow $TPROXY_PORT/tcp
-            ufw allow $TPROXY_PORT/udp
-            
-            info "UFW rules added. Reloading UFW..."
-            ufw reload
+            if [ "$ufw_rules_changed" = true ]; then
+                info "Reloading UFW due to new rules..."
+                ufw reload
+            else
+                info "No new UFW rules were added."
+            fi
         else
-            info "UFW is not active."
+            info "UFW is not active. Skipping UFW configuration."
         fi
     else
-        info "UFW not installed."
+        info "UFW not installed. Skipping UFW configuration."
     fi
     
-    # Add direct iptables rules to allow incoming connections
-    info "Adding direct iptables rules to ensure port access..."
+    # Add direct iptables rules to allow incoming connections (as a fallback or supplement)
+    # These rules are inserted at the beginning of the INPUT chain.
+    info "Ensuring direct iptables INPUT rules for port access..."
+    for port_rule in "${ports_to_open[@]}"; do
+        local port_num=$(echo "$port_rule" | cut -d'/' -f1)
+        local proto=$(echo "$port_rule" | cut -d'/' -f2)
+        # Check if rule already exists to avoid duplicates
+        if ! iptables -C INPUT -p "$proto" --dport "$port_num" -j ACCEPT 2>/dev/null; then
+            info "Adding iptables INPUT rule: -p $proto --dport $port_num -j ACCEPT"
+            iptables -I INPUT 1 -p "$proto" --dport "$port_num" -j ACCEPT
+        else
+            info "iptables INPUT rule for $port_rule already exists."
+        fi
+    done
     
-    iptables -I INPUT -p tcp --dport $SOCKS_PORT -j ACCEPT
-    iptables -I INPUT -p tcp --dport $HTTP_PORT -j ACCEPT
-    iptables -I INPUT -p tcp --dport $TPROXY_PORT -j ACCEPT
-    iptables -I INPUT -p udp --dport $TPROXY_PORT -j ACCEPT
-    
-    info "Firewall ports opened."
+    info "Firewall port configuration check completed."
 }
 
 # Restart Docker container

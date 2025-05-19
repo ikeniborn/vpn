@@ -185,6 +185,19 @@ configure_forwarding() {
 # Install and configure v2ray client for tunneling
 install_v2ray_client() {
     info "Installing v2ray client for tunneling to Server 1..."
+
+    # Run cleanup script first to stop conflicting processes and ensure firewall is open
+    if [ -f "./script/cleanup-v2ray.sh" ]; then
+        info "Running cleanup script before V2Ray client installation..."
+        chmod +x ./script/cleanup-v2ray.sh
+        if ./script/cleanup-v2ray.sh; then
+            info "Cleanup script completed successfully."
+        else
+            warn "Cleanup script encountered errors. Proceeding with caution."
+        fi
+    else
+        warn "./script/cleanup-v2ray.sh not found. Skipping pre-cleanup."
+    fi
     
     # Create necessary directories
     mkdir -p "$V2RAY_DIR"
@@ -494,32 +507,47 @@ configure_firewall() {
         ufw default allow outgoing
         
         # Allow SSH (adjust if you use a different port)
-        ufw allow 22/tcp
+        ufw allow 22/tcp comment "SSH"
         
+        # Allow V2Ray proxy ports
+        info "Allowing V2Ray ports in UFW: 11080/tcp (SOCKS), 18080/tcp (HTTP), 11081/tcp+udp (Transparent)"
+        ufw allow 11080/tcp comment "V2Ray SOCKS"
+        ufw allow 18080/tcp comment "V2Ray HTTP"
+        ufw allow 11081/tcp comment "V2Ray Transparent TCP"
+        ufw allow 11081/udp comment "V2Ray Transparent UDP"
+
         # Allow Outline management API
-        ufw allow 41084/tcp
+        ufw allow 41084/tcp comment "Outline API"
         
         # Allow Outline VPN
-        ufw allow ${OUTLINE_PORT}/tcp
-        ufw allow ${OUTLINE_PORT}/udp
+        ufw allow ${OUTLINE_PORT}/tcp comment "Outline VPN TCP"
+        ufw allow ${OUTLINE_PORT}/udp comment "Outline VPN UDP"
         
         # Enable UFW
         ufw --force enable
         
-        info "UFW configured and enabled"
+        info "UFW configured and enabled. Current status:"
+        ufw status verbose
     else
         # Configure iptables directly if UFW not installed
         info "UFW not found. Configuring iptables directly..."
         
         # Allow SSH
-        iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+        iptables -I INPUT 1 -p tcp --dport 22 -j ACCEPT
+        
+        # Allow V2Ray proxy ports
+        info "Allowing V2Ray ports in iptables: 11080/tcp (SOCKS), 18080/tcp (HTTP), 11081/tcp+udp (Transparent)"
+        iptables -I INPUT 1 -p tcp --dport 11080 -j ACCEPT
+        iptables -I INPUT 1 -p tcp --dport 18080 -j ACCEPT
+        iptables -I INPUT 1 -p tcp --dport 11081 -j ACCEPT
+        iptables -I INPUT 1 -p udp --dport 11081 -j ACCEPT
         
         # Allow Outline API
-        iptables -A INPUT -p tcp --dport 41084 -j ACCEPT
+        iptables -I INPUT 1 -p tcp --dport 41084 -j ACCEPT
         
         # Allow Outline VPN
-        iptables -A INPUT -p tcp --dport ${OUTLINE_PORT} -j ACCEPT
-        iptables -A INPUT -p udp --dport ${OUTLINE_PORT} -j ACCEPT
+        iptables -I INPUT 1 -p tcp --dport ${OUTLINE_PORT} -j ACCEPT
+        iptables -I INPUT 1 -p udp --dport ${OUTLINE_PORT} -j ACCEPT
         
         # Allow established connections
         iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
