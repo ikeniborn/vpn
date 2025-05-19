@@ -354,8 +354,8 @@ EOF
         info "Network setup completed."
     fi
     
-    # Run v2ray container with correct command format
-    info "Starting v2ray client container..."
+    # Run v2ray container with ENTRYPOINT parameter
+    info "Starting v2ray client container with proper entrypoint..."
     docker run -d \
         --name v2ray-client \
         --restart always \
@@ -364,7 +364,7 @@ EOF
         -v "$V2RAY_DIR/config.json:/etc/v2ray/config.json" \
         -v "/var/log/v2ray:/var/log/v2ray" \
         -e "V2RAY_VMESS_AEAD_FORCED=false" \
-        v2fly/v2fly-core:latest
+        v2fly/v2fly-core:latest /usr/bin/v2ray run -c /etc/v2ray/config.json
         
     # Verify container is running with extended waiting and diagnostics
     info "Verifying container startup (waiting 5 seconds)..."

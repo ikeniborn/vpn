@@ -105,3 +105,26 @@ This file records architectural and implementation decisions using a list format
 * Created distinct templates for different Reality setting combinations
 
 [2025-05-19 16:51:50] - Fixed JSON configuration and container command issues
+
+## Decision
+
+* Completely rewrite the setup-vless-server2.sh script using a progressive configuration building approach
+
+## Rationale
+
+* Multiple isolated fixes were not working correctly together
+* The script had various subtle JSON formatting issues that were hard to patch individually
+* A comprehensive solution was needed to ensure proper container startup
+* The approach of patching parts of the script was proving insufficient for robust operation
+
+## Implementation Details
+
+* Developed a progressive JSON building approach using multiple appends to ensure valid structure
+* Rebuilt the container startup process with proper validation at each step
+* Removed all command parameters that were causing errors
+* Created a more robust error handling system with informative diagnostics
+* Added comprehensive validation of the configuration before attempting container startup
+* Used properly secure file permissions throughout the script
+* Added detailed progress reporting for easier troubleshooting
+
+[2025-05-19 16:57:40] - Completely rebuilt the setup-vless-server2.sh script
