@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # ===================================================================
-# Outline VPN with v2ray VLESS - Firewall Configuration
+# VLESS-Reality VPN - Firewall Configuration
 # ===================================================================
 # This script:
 # - Configures UFW with secure defaults
 # - Sets up port knocking for SSH (optional)
-# - Opens required ports for v2ray VLESS and Outline VPN
+# - Opens required ports for VLESS-Reality protocol
 # - Configures IP forwarding for VPN traffic
 # - Prevents common network attacks
 # - Ensures Docker compatibility
@@ -366,8 +366,8 @@ EOF
     systemctl daemon-reload
     systemctl enable docker-iptables.service
     
-    # Ensure outline-network is allowed
-    info "Ensuring outline-network connectivity is allowed..."
+    # Ensure v2ray-network is allowed
+    info "Ensuring v2ray-network connectivity is allowed..."
     ufw allow in on docker0 to any
     ufw allow in on br-+ to any
 else

@@ -5,7 +5,7 @@ Create a new file called `manage-vless-users.sh` with the following content:
 ```bash
 #!/bin/bash
 #
-# Script to manage VLESS users for Outline VPN with Reality protocol
+# Script to manage VLESS users for VLESS-Reality protocol
 # This script allows listing, adding, removing, and exporting users
 
 set -euo pipefail
@@ -34,7 +34,7 @@ function display_usage() {
   cat <<EOF
 Usage: $(basename "$0") [options]
 
-Manage VLESS users for Outline VPN with Reality protocol.
+Manage VLESS users for VLESS-Reality protocol.
 
 Operations:
   --list                List all configured users

@@ -28,9 +28,8 @@ USE_PORT_KNOCKING="yes"
 SCRIPTS_DIR="$(pwd)"
 SETUP_FIREWALL="yes"
 
-# v2ray and outline directories
+# v2ray directory
 V2RAY_DIR="/opt/v2ray"
-OUTLINE_DIR="/opt/outline"
 
 # Function to display status messages
 info() {
@@ -190,7 +189,6 @@ install_vless_reality() {
     info "Creating directories..."
     mkdir -p "$V2RAY_DIR"
     mkdir -p "$V2RAY_DIR/logs"
-    mkdir -p "$OUTLINE_DIR"
     
     # Generate Reality key pair
     info "Generating Reality key pair..."
@@ -305,9 +303,9 @@ EOF
     fi
     
     # Create Docker network if it doesn't exist
-    if ! docker network ls | grep -q "outline-network"; then
+    if ! docker network ls | grep -q "v2ray-network"; then
         info "Creating Docker network..."
-        docker network create outline-network
+        docker network create v2ray-network
     fi
     
     # Run v2ray container
@@ -315,7 +313,7 @@ EOF
     docker run -d \
         --name v2ray \
         --restart always \
-        --network outline-network \
+        --network v2ray-network \
         -p "$V2RAY_PORT:$V2RAY_PORT" \
         -p "$V2RAY_PORT:$V2RAY_PORT/udp" \
         -v "$V2RAY_DIR/config.json:/etc/v2ray/config.json" \

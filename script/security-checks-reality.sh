@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # ===================================================================
-# Outline VPN with v2ray VLESS-Reality - Security Checks
+# VLESS-Reality VPN - Security Checks
 # ===================================================================
 # This script:
 # - Performs comprehensive security audits on the system
 # - Checks for common misconfigurations
 # - Verifies Docker security settings
-# - Validates v2ray VLESS-Reality configurations
+# - Validates VLESS-Reality configurations
 # - Generates a security report
 # ===================================================================
 
@@ -23,11 +23,10 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Output file for report
-REPORT_FILE="/tmp/outline-v2ray-reality-security-report-$(date +%Y%m%d-%H%M%S).txt"
+REPORT_FILE="/tmp/vless-reality-security-report-$(date +%Y%m%d-%H%M%S).txt"
 VERBOSE=false  # Set to true for verbose output
 
-# Default paths for Outline and v2ray
-OUTLINE_DIR="${OUTLINE_DIR:-/opt/outline}"
+# Default path for v2ray
 V2RAY_DIR="${V2RAY_DIR:-/opt/v2ray}"
 
 # Function to display status messages
@@ -75,7 +74,7 @@ check_root() {
 check_root
 
 # Initialize report file
-echo "OUTLINE VPN WITH V2RAY VLESS-REALITY SECURITY AUDIT REPORT" > "$REPORT_FILE"
+echo "VLESS-REALITY VPN SECURITY AUDIT REPORT" > "$REPORT_FILE"
 echo "Generated on: $(date)" >> "$REPORT_FILE"
 echo "Hostname: $(hostname)" >> "$REPORT_FILE"
 echo "=======================================" >> "$REPORT_FILE"
@@ -371,32 +370,11 @@ else
     fail "v2ray directory not found at $V2RAY_DIR"
 fi
 
-# Check output directory
-info "Checking configuration directories..."
-if [ -d "$OUTLINE_DIR" ]; then
-    success "Configuration directory exists at $OUTLINE_DIR"
-    
-    # Check directory permissions
-    OUTLINE_PERMS=$(stat -c "%a" "$OUTLINE_DIR")
-    if [[ "$OUTLINE_PERMS" == "770" || "$OUTLINE_PERMS" == "700" ]]; then
-        success "Configuration directory has secure permissions: $OUTLINE_PERMS"
-    else
-        warn "Configuration directory has potentially insecure permissions: $OUTLINE_PERMS (should be 770 or 700)"
-    fi
-else
-    warn "Configuration directory not found at $OUTLINE_DIR"
-fi
+# No replacement needed - removing this section entirely
 
 # Check Docker containers
-info "Checking Outline and v2ray containers..."
+info "Checking v2ray container..."
 if command -v docker >/dev/null; then
-    # Check if other supporting containers are running
-        if docker ps --format "{{.Names}}" | grep -q "^shadowbox$"; then
-            success "Supporting container (shadowbox) is running"
-        else
-            warn "Supporting container (shadowbox) is not running"
-        fi
-    
     # Check if v2ray container is running
     if docker ps --format "{{.Names}}" | grep -q "^v2ray$"; then
         success "v2ray container is running"
@@ -405,11 +383,11 @@ if command -v docker >/dev/null; then
     fi
     
     # Check Docker networks
-        if docker network ls | grep -q "outline-network\|v2ray-network"; then
-            success "Docker VPN networks exist"
-        else
-            warn "Docker VPN networks not found"
-        fi
+    if docker network ls | grep -q "v2ray-network"; then
+        success "Docker v2ray network exists"
+    else
+        warn "Docker v2ray network not found"
+    fi
 else
     fail "Docker is not installed, cannot check containers"
 fi
