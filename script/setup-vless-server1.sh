@@ -118,7 +118,7 @@ create_tunnel_user() {
     
     # Check if manage-vless-users.sh exists and is executable
     if [ ! -x "$(command -v manage-vless-users.sh)" ] && [ ! -x "./script/manage-vless-users.sh" ]; then
-        error "manage-vless-users.sh script not found or not executable"
+        error "./script/manage-vless-users.sh script not found or not executable"
     fi
     
     # Generate UUID for Server 2
@@ -129,11 +129,11 @@ create_tunnel_user() {
     if [ -x "./script/manage-vless-users.sh" ]; then
         ./script/manage-vless-users.sh --add --name "$SERVER2_NAME" || error "Failed to add Server 2 user"
     else
-        /script/manage-vless-users.sh --add --name "$SERVER2_NAME" || error "Failed to add Server 2 user"
+        manage-vless-users.sh --add --name "$SERVER2_NAME" || error "Failed to add Server 2 user"
     fi
     
-    # Get the UUID of the newly created user
-    local TUNNEL_UUID=$(grep "$SERVER2_NAME" "$V2RAY_DIR/users.db" | cut -d'|' -f1)
+    # Get the UUID of the newly created user (use only the first match to avoid multiple UUIDs)
+    local TUNNEL_UUID=$(grep -m 1 "$SERVER2_NAME" "$V2RAY_DIR/users.db" | cut -d'|' -f1)
     
     if [ -z "$TUNNEL_UUID" ]; then
         error "Failed to retrieve UUID for Server 2 user"
@@ -158,7 +158,7 @@ create_tunnel_user() {
     if [ -x "./script/manage-vless-users.sh" ]; then
         ./script/manage-vless-users.sh --export --uuid "$TUNNEL_UUID" > "server2_config.txt"
     else
-        script/manage-vless-users.sh --export --uuid "$TUNNEL_UUID" > "server2_config.txt"
+        manage-vless-users.sh --export --uuid "$TUNNEL_UUID" > "server2_config.txt"
     fi
     
     info "Configuration saved to server2_config.txt"
