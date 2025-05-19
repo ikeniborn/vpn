@@ -34,3 +34,7 @@ This file tracks the project's current status, including recent changes, current
 * Is there a need for additional client-side configurations or support for other platforms?
 * Should we implement automatic failover between multiple servers?
 * Would a monitoring system for the tunnel status be beneficial?
+* How can we improve error handling and diagnostics for tunnel setup issues?
+* Should we implement logging rotation for v2ray logs?
+
+[2025-05-19 16:37:50] - Fixed Docker network creation errors in setup-vless-server2.sh and improved tunnel diagnostics

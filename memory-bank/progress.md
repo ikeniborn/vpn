@@ -25,6 +25,11 @@ This file tracks the project's progress using a task list format.
   * Resolved issue with x25519 key generation that was causing "unknown command" errors
   * Replaced Docker container key generation with direct OpenSSL-based approach
   * ✅ Fixed successfully and verified working
+* Fixed issues in setup-vless-server2.sh:
+  * Fixed Docker network creation error
+  * Improved v2ray container setup with better volume mapping for logs
+  * Enhanced tunnel diagnostics and error reporting
+  * Fixed Reality protocol configuration JSON formatting
 
 ## Next Steps
 

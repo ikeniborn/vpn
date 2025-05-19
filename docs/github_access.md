@@ -11,5 +11,5 @@ Account Name:    server2
 ============================================================
 
 sudo ./script/setup-vless-server2.sh \
-  --server1-address proxy.ikeniborn.ru \
+  --server1-address 129.146.63.189 \
   --server1-uuid 12a566a9-c9f8-4631-8069-715400607927

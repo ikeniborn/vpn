@@ -60,3 +60,23 @@ This file records architectural and implementation decisions using a list format
 * Fixed the "unknown command" error that was preventing successful deployment
 
 [2025-05-19 15:24:40] - Fixed setup-vless-reality-server.sh script key generation
+
+## Decision
+
+* Fix Docker network creation and improve tunnel configuration in setup-vless-server2.sh
+
+## Rationale
+
+* The original Docker network creation logic was causing errors when the network already existed
+* The Reality protocol configuration had formatting issues in the JSON structure
+* The tunnel diagnostics were insufficient for proper troubleshooting
+
+## Implementation Details
+
+* Improved Docker network creation with better error handling and checking
+* Fixed the Reality protocol JSON configuration to ensure valid format
+* Enhanced tunnel diagnostics with detailed error reporting and suggestions
+* Added proper logging directory setup with correct permissions
+* Implemented container verification to confirm successful creation
+
+[2025-05-19 16:37:40] - Fixed setup-vless-server2.sh script Docker network and tunnel configuration

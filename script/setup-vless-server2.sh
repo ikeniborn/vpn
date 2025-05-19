@@ -272,9 +272,9 @@ install_v2ray_client() {
         "security": "reality",
         "realitySettings": {
           "serverName": "${SERVER1_SNI}",
-          "fingerprint": "${SERVER1_FINGERPRINT}"${REALITY_PARAMS:+,}
-          ${SERVER1_PUBKEY:+"publicKey": "${SERVER1_PUBKEY}"}${SERVER1_SHORTID:+,}
-          ${SERVER1_SHORTID:+"shortId": "${SERVER1_SHORTID}"}
+          "fingerprint": "${SERVER1_FINGERPRINT}"
+          ${SERVER1_PUBKEY:+, "publicKey": "${SERVER1_PUBKEY}"}
+          ${SERVER1_SHORTID:+, "shortId": "${SERVER1_SHORTID}"}
         }
       }
     },
@@ -316,19 +316,27 @@ EOF
     # Remove existing container if it exists
     if docker ps -a --format '{{.Names}}' | grep -q "^v2ray-client$"; then
         info "Removing existing v2ray-client container..."
-        docker rm -f v2ray-client
+        docker rm -f v2ray-client || warn "Failed to remove existing container, it might be in use"
     fi
     
     # Handle Docker network creation
     info "Setting up Docker network..."
+    
+    # Try to inspect the network first - this is safer than grepping the list
     if docker network inspect v2ray-network &>/dev/null; then
         info "Docker network v2ray-network already exists, using existing network."
     else
+        # Create the network and suppress error if it already exists
         info "Creating Docker network..."
-        docker network create v2ray-network
+        docker network create v2ray-network 2>/dev/null || true
+        info "Network setup completed."
     fi
     
-    # Run v2ray container
+    # Create necessary log directories with proper permissions
+    mkdir -p /var/log/v2ray
+    chmod 755 /var/log/v2ray
+    
+    # Run v2ray container with improved setup
     info "Starting v2ray client container..."
     docker run -d \
         --name v2ray-client \
@@ -336,8 +344,17 @@ EOF
         --network host \
         --cap-add NET_ADMIN \
         -v "$V2RAY_DIR/config.json:/etc/v2ray/config.json" \
-        -v "$V2RAY_DIR/logs:/var/log/v2ray" \
+        -v "/var/log/v2ray:/var/log/v2ray" \
         v2fly/v2fly-core:latest
+        
+    # Verify container is running
+    sleep 2
+    if ! docker ps | grep -q v2ray-client; then
+        warn "Container may not have started properly. Checking logs..."
+        docker logs v2ray-client
+    else
+        info "Container started successfully."
+    fi
     
     info "v2ray client installed and running"
 }
@@ -541,19 +558,60 @@ configure_firewall() {
     fi
 }
 
-# Test the tunnel connection
+# Test the tunnel connection with enhanced diagnostics
 test_tunnel() {
     info "Testing tunnel connection to Server 1..."
     
-    # Wait a few seconds for the tunnel to establish
-    sleep 5
+    # Wait longer for the tunnel to establish
+    info "Waiting for tunnel to initialize (10 seconds)..."
+    sleep 10
+    
+    # Check if v2ray-client container is running
+    if ! docker ps | grep -q v2ray-client; then
+        error "v2ray-client container is not running. Please check docker logs:"
+        docker logs v2ray-client
+        return 1
+    fi
+    
+    # Check if proxy port is listening
+    if ! ss -tulpn | grep -q ":8080"; then
+        warn "HTTP proxy port 8080 is not listening. Checking container logs:"
+        docker logs v2ray-client
+        warn "You may need to restart the container or check configuration."
+    else
+        info "HTTP proxy port 8080 is listening correctly."
+    fi
+    
+    # Test connection to Server 1
+    info "Testing connectivity to Server 1 ($SERVER1_ADDRESS)..."
+    if ! ping -c 3 -W 5 "$SERVER1_ADDRESS" >/dev/null 2>&1; then
+        warn "Cannot ping Server 1. This may be normal if ICMP is blocked."
+    else
+        info "Server 1 is reachable via ping."
+    fi
     
     # Test the connection using curl through the proxy
-    if curl -s --connect-timeout 10 -x http://127.0.0.1:8080 https://ifconfig.me > /dev/null; then
+    info "Testing HTTP proxy tunnel to Server 1..."
+    local proxy_output=$(curl -v --connect-timeout 15 -x http://127.0.0.1:8080 https://ifconfig.me 2>&1)
+    local proxy_ip=$(echo "$proxy_output" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    
+    if [ -n "$proxy_ip" ]; then
         info "Tunnel is working correctly. Traffic is being routed through Server 1."
+        info "Your traffic appears as coming from: $proxy_ip"
     else
-        warn "Tunnel test failed. Please check the configuration and Server 1 connectivity."
-        warn "You may need to manually verify the connection and correct any issues."
+        warn "Tunnel test failed. Here's the diagnostic information:"
+        echo "$proxy_output" | grep -i "error\|failed\|couldn't"
+        
+        # Check v2ray logs for errors
+        warn "Checking v2ray logs for errors:"
+        docker logs v2ray-client | grep -i "error\|fail\|warn" | tail -10
+        
+        warn "Tunnel connection failed. Possible issues:"
+        warn "1. Server 1 might not be properly configured or accessible"
+        warn "2. Reality protocol settings might be incorrect (missing public key?)"
+        warn "3. Firewall might be blocking the connection"
+        warn "4. V2Ray configuration might have syntax errors"
+        warn "Run './script/test-tunnel-connection.sh --server-type server2 --server1-address $SERVER1_ADDRESS' for detailed diagnostics"
     fi
 }
 
