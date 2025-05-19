@@ -268,7 +268,7 @@ install_v2ray_client() {
     # Verify container is running with extended waiting and diagnostics
     info "Verifying container startup (waiting 5 seconds)..."
     sleep 5
-    if ! docker ps | grep -q v2ray-client; then
+    if [ -z "$(docker ps -q --filter name=^v2ray-client$)" ]; then
         warn "Container failed to start or crashed. Detailed diagnostics:"
         echo "--- Container Logs ---"
         docker logs v2ray-client 2>&1 || echo "No logs available"
@@ -493,7 +493,7 @@ test_tunnel() {
     sleep 10
     
     # Check if v2ray-client container is running
-    if ! docker ps | grep -q v2ray-client; then
+    if [ -z "$(docker ps -q --filter name=^v2ray-client$)" ]; then
         error "v2ray-client container is not running. Please check docker logs:"
         docker logs v2ray-client
         return 1
