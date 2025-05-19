@@ -192,156 +192,44 @@ install_v2ray_client() {
     mkdir -p /var/log/v2ray
     chmod 777 /var/log/v2ray  # More permissive for container access
     
-    # Create v2ray client config
+    # Create v2ray client config using the generator script
     info "Creating v2ray configuration..."
     
-    # Build the config file in a way that ensures valid JSON
-    cat > "$V2RAY_DIR/config.json" << EOF
-{
-  "log": {
-    "loglevel": "debug",
-    "access": "/var/log/v2ray/access.log",
-    "error": "/var/log/v2ray/error.log"
-  },
-  "inbounds": [
-    {
-      "tag": "socks-inbound",
-      "port": 1080,
-      "listen": "127.0.0.1",
-      "protocol": "socks",
-      "settings": {
-        "auth": "noauth",
-        "udp": true
-      }
-    },
-    {
-      "tag": "http-inbound",
-      "port": 8080,
-      "listen": "127.0.0.1",
-      "protocol": "http",
-      "settings": {
-        "auth": "noauth"
-      }
-    },
-    {
-      "tag": "transparent-inbound",
-      "port": 1081,
-      "listen": "0.0.0.0",
-      "protocol": "dokodemo-door",
-      "settings": {
-        "network": "tcp,udp",
-        "followRedirect": true
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["http", "tls"]
-      },
-      "streamSettings": {
-        "sockopt": {
-          "tproxy": "tproxy"
-        }
-      }
-    }
-  ],
-  "outbounds": [
-    {
-      "tag": "tunnel-out",
-      "protocol": "vless",
-      "settings": {
-        "vnext": [
-          {
-            "address": "${SERVER1_ADDRESS}",
-            "port": ${SERVER1_PORT},
-            "users": [
-              {
-                "id": "${SERVER1_UUID}",
-                "encryption": "none",
-                "flow": "xtls-rprx-vision"
-              }
-            ]
-          }
-        ]
-      },
-      "streamSettings": {
-        "network": "tcp",
-        "security": "reality",
-        "realitySettings": {
-          "serverName": "${SERVER1_SNI}",
-          "fingerprint": "${SERVER1_FINGERPRINT}"
-EOF
-
-    # Add optional Reality settings if provided
-    if [ -n "$SERVER1_PUBKEY" ]; then
-        cat >> "$V2RAY_DIR/config.json" << EOF
-,
-          "publicKey": "${SERVER1_PUBKEY}"
-EOF
+    if [ -f "./script/generate-v2ray-config.sh" ]; then
+        info "Using configuration generator script..."
+        chmod +x ./script/generate-v2ray-config.sh
+        
+        # Generate the configuration with proper validation
+        if ! ./script/generate-v2ray-config.sh \
+            "$SERVER1_ADDRESS" \
+            "$SERVER1_PORT" \
+            "$SERVER1_UUID" \
+            "$SERVER1_SNI" \
+            "$SERVER1_FINGERPRINT" \
+            "$SERVER1_PUBKEY" \
+            "$SERVER1_SHORTID" \
+            "$V2RAY_DIR/config.json"; then
+            
+            error "Failed to generate valid configuration. Check script output."
+        fi
+        
+        info "Configuration generated successfully."
+    else
+        error "Configuration generator script not found. Cannot proceed."
     fi
-
-    if [ -n "$SERVER1_SHORTID" ]; then
-        cat >> "$V2RAY_DIR/config.json" << EOF
-,
-          "shortId": "${SERVER1_SHORTID}"
-EOF
-    fi
-
-    # Complete the configuration file
-    cat >> "$V2RAY_DIR/config.json" << EOF
-        }
-      }
-    },
-    {
-      "tag": "direct",
-      "protocol": "freedom",
-      "settings": {}
-    }
-  ],
-  "routing": {
-    "domainStrategy": "IPIfNonMatch",
-    "rules": [
-      {
-        "type": "field",
-        "ip": ["127.0.0.1/32"],
-        "outboundTag": "direct"
-      },
-      {
-        "type": "field",
-        "ip": ["geoip:private"],
-        "outboundTag": "direct"
-      },
-      {
-        "type": "field",
-        "inboundTag": ["socks-inbound", "http-inbound", "transparent-inbound"],
-        "outboundTag": "tunnel-out"
-      }
-    ]
-  }
-}
-EOF
     
     chmod 644 "$V2RAY_DIR/config.json"
     
-    # Fix and validate the JSON configuration
-    info "Fixing and validating configuration file..."
-    
-    # First apply direct fixes to common JSON issues
-    if [ -f "./script/fix-v2ray-config.sh" ]; then
-        info "Running direct v2ray configuration fixer..."
-        chmod +x ./script/fix-v2ray-config.sh
-        ./script/fix-v2ray-config.sh "$V2RAY_DIR/config.json"
-        info "Applied JSON fixes directly to the configuration file."
-    fi
-    
-    # Then validate with jq if available
+    # Validate the configuration
+    info "Validating final configuration..."
     if command -v jq &>/dev/null; then
         if jq empty "$V2RAY_DIR/config.json" 2>/dev/null; then
             info "Configuration file is valid JSON."
         else
-            warn "Configuration might still have issues after fixing."
-            warn "Will attempt to start container anyway."
+            error "Configuration is not valid JSON. Cannot proceed."
         fi
     else
-        warn "jq not installed. Skipping JSON validation."
+        warn "jq not installed. Skipping validation."
     fi
     
     # Pull v2ray Docker image

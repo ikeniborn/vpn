@@ -172,3 +172,28 @@ This file records architectural and implementation decisions using a list format
 * Simplified overall logic for better maintainability
 
 [2025-05-19 17:06:30] - Created direct configuration fix script and simplified container command
+
+## Decision
+
+* Create a dedicated configuration generator script with strict JSON structure control
+
+## Rationale
+
+* Previous approaches with validation and fixes were still insufficient
+* Identified specific JSON issues in the configuration:
+  * Missing UUID in users section
+  * Trailing commas in realitySettings
+* Direct text manipulation with sed not reliable enough for complex JSON
+* Need complete control over JSON generation process
+
+## Implementation Details
+
+* Created generate-v2ray-config.sh to produce valid JSON from input parameters
+* Used a combination of static templates and dynamic content insertion
+* Added line-by-line JSON construction for critical sections
+* Implemented proper comma handling in optional parameters
+* Added standalone validation process
+* Completely replaced the complex heredoc-based configuration with generator script
+* Made validation fatal to prevent container startup with invalid configuration
+
+[2025-05-19 17:11:20] - Created dedicated configuration generator script with strict JSON control
