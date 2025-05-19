@@ -132,3 +132,47 @@ To prevent these issues after future reboots:
    sudo systemctl enable docker
    ```
 
+2. Add the recovery script to a startup service or cron job:
+   ```bash
+   sudo crontab -e
+   ```
+   
+   Add the line:
+   ```
+   @reboot sleep 60 && /home/user/script/recover-services-after-reboot.sh >> /var/log/reboot-recovery.log 2>&1
+   ```
+
+3. Create systemd service files for v2ray containers to ensure they start in the correct order
+
+## Troubleshooting
+
+If services still fail to start after running the recovery script:
+
+1. Check Docker logs:
+   ```bash
+   docker logs v2ray        # On Server 1
+   docker logs v2ray-client # On Server 2
+   ```
+
+2. Verify iptables rules:
+   ```bash
+   sudo iptables -t nat -L
+   ```
+
+3. Check if ports are properly bound:
+   ```bash
+   ss -tulpn | grep -E "443|11080|18080|11081"
+   ```
+
+4. Ensure both servers have synchronized time:
+   ```bash
+   date
+   sudo systemctl restart systemd-timesyncd.service
+   ```
+
+5. Verify that both servers are using the correct Reality parameters:
+   ```bash
+   sudo ./script/fix-server-uuid.sh
+   ```
+   
+   The output will show any mismatches between Server 1's actual parameters and what Server 2 is using.
