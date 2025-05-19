@@ -58,3 +58,7 @@ This file tracks the project's current status, including recent changes, current
 [2025-05-19 17:11:50] - Created dedicated configuration generator script with proper parameters
 [2025-05-19 17:15:20] - Rewrote configuration generator with template-based placeholder substitution
 [2025-05-19 17:18:15] - Final simplification of container execution and configuration generation
+[2025-05-19 19:52:00] - Added YouTube traffic monitoring scripts for both Server 1 and Server 2:
+  * monitor-youtube-traffic-server1.sh - Monitors incoming YouTube traffic on Server 1 from Server 2
+  * monitor-youtube-traffic-server2.sh - Monitors outgoing YouTube traffic on Server 2 from Outline VPN clients
+  * Created youtube-traffic-monitoring.md documentation for using the scripts
