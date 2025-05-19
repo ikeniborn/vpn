@@ -290,11 +290,14 @@ test_outline() {
     # Test if Outline is routing through the tunnel
     info "Testing if Outline traffic routes through the tunnel (requires active connection)..."
     
-    if ss -tanp | grep -q ":$OUTLINE_PORT.*ESTABLISHED"; then
-        success "Outline has active connections. Traffic should be routing through the tunnel."
+    local active_conns
+    active_conns=$(ss -anp | grep ":$OUTLINE_PORT" | grep -Ev 'LISTEN|UNCONN' | wc -l)
+    
+    if [ "$active_conns" -gt 0 ]; then
+        success "Outline has active connections (found $active_conns). Traffic should be routing through the tunnel."
     else
-        warn "No active Outline connections detected. Cannot verify routing."
-        warn "Connect a client to test fully."
+        warn "No active Outline connections detected (established TCP or active UDP). Cannot verify routing."
+        warn "Connect a client and ensure traffic is flowing to test fully."
     fi
     
     return 0
