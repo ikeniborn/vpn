@@ -30,3 +30,5 @@ sudo ./script/test-tunnel-connection.sh --server-type server2 --server1-address 
 
 # On Server 2
 curl -x http://127.0.0.1:18080 https://ifconfig.me
+
+gjG8w3rZ2b6fiNpX

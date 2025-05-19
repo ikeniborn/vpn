@@ -267,3 +267,35 @@ This file records architectural and implementation decisions using a list format
 
 [2025-05-20 00:51:52] - Created fix-server-uuid.sh script to resolve the "context canceled" error
 [2025-05-20 00:52:25] - Added comprehensive troubleshooting guide in vless-reality-tunnel-troubleshooting.md
+
+## Decision
+
+* Create comprehensive traffic monitoring scripts for both Server 1 and Server 2
+
+## Rationale
+
+* Need to verify routing is working correctly in the two-server tunnel setup
+* Manual verification methods were time-consuming and error-prone
+* Tunnel issues can be difficult to diagnose without proper traffic visibility
+* Need to monitor both sides of the tunnel connection to identify specific issues
+* Regular monitoring helps ensure the tunnel remains functional over time
+* Traffic analysis helps verify that Outline VPN clients are properly routed through Server 1
+
+## Implementation Details
+
+* Created two specialized monitoring scripts:
+  * monitor-server1-traffic.sh - Monitors incoming connections from Server 2
+  * monitor-server2-traffic.sh - Monitors Outline VPN client traffic and tunnel routing
+* Scripts provide multiple monitoring modes (basic, detailed, continuous)
+* Functionality includes:
+  * Validation of configuration (IP forwarding, iptables rules, listening ports)
+  * Real-time connection monitoring with statistics
+  * Tunnel performance testing
+  * Packet capture for detailed traffic analysis
+  * Comprehensive diagnostics for troubleshooting
+* Created traffic-monitoring-guide.md with extensive documentation
+* Scripts use standard tools (tcpdump, iptables, netstat, ss) for compatibility
+* Both scripts work independently but provide complementary information
+* Supports saving results to log files for later analysis
+
+[2025-05-20 01:22:34] - Created traffic monitoring scripts for both Server 1 and Server 2

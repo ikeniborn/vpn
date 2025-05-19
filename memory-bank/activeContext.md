@@ -72,3 +72,7 @@ This file tracks the project's current status, including recent changes, current
   * Outputs the correct Reality parameters for Server 2 to use
   * Documents any mismatches between Server 1's Reality settings and Server 2's configuration
 [2025-05-20 00:52:25] - Added comprehensive troubleshooting documentation in vless-reality-tunnel-troubleshooting.md
+[2025-05-20 01:22:18] - Created traffic monitoring scripts for Server 1 and Server 2:
+  * monitor-server1-traffic.sh - Monitors incoming connections from Server 2 to Server 1
+  * monitor-server2-traffic.sh - Monitors Outline VPN client traffic and validates tunnel routing
+  * Created traffic-monitoring-guide.md with comprehensive usage instructions

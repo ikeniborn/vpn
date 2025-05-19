@@ -18,6 +18,11 @@ This file tracks the project's progress using a task list format.
   * tunnel-routing.conf - Configuration file for consistent routing rules
   * test-tunnel-connection.sh - Script to verify tunnel functionality
   * route-outline-through-tunnel.sh - Helper script to update existing Outline installations
+* Created traffic monitoring scripts for Server 1 and Server 2:
+  * monitor-server1-traffic.sh - Monitors incoming connections from Server 2
+  * monitor-server2-traffic.sh - Monitors Outline VPN client traffic and tunnel routing
+  * Added comprehensive documentation in traffic-monitoring-guide.md
+  * ✅ Successfully implemented and verified
 * Fixed error in setup-vless-reality-server.sh script:
   * Resolved issue with x25519 key generation that was causing "unknown command" errors
   * Replaced Docker container key generation with direct OpenSSL-based approach
@@ -60,12 +65,14 @@ This file tracks the project's progress using a task list format.
 * Testing the fix-server-uuid.sh script on production servers
 * Validating that the tunnel connection works properly after applying the fix
 * Exploring automatic detection and resolution of configuration mismatches
+* Testing the new traffic monitoring scripts between Server 1 and Server 2
 
 ## Next Steps
   
 * Review current implementation for any security improvements
 * ✅ Added monitoring capabilities for YouTube traffic detection
 * ✅ Implemented solution for the "context canceled" error in the VLESS tunnel
+* ✅ Created comprehensive traffic monitoring scripts for both servers
 * Implement automatic updates for v2ray components
 * Enhance client configuration export with improved documentation
 * Consider creating a simple web UI for user management
@@ -75,3 +82,4 @@ This file tracks the project's progress using a task list format.
 * Implement logging rotation for v2ray logs
 * Develop automatic recovery mechanisms for container failures
 * Add monitoring alerts for tunnel status and connection health
+* Create a unified dashboard for monitoring all aspects of the tunnel setup
