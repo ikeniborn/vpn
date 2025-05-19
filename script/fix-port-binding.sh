@@ -1,12 +1,14 @@
 #!/bin/bash
 
 # ===================================================================
-# Fix V2Ray Port Binding Issues
+# Fix or Create V2Ray Container with Proper Port Binding
 # ===================================================================
 # This script:
+# - Creates v2ray container if it doesn't exist
 # - Fixes port binding issues with v2ray Docker container
 # - Ensures the container has proper network configuration
-# - Restarts the container with host networking mode
+# - Creates or restarts the container with host networking mode
+# - Generates configuration if needed
 # ===================================================================
 
 set -euo pipefail
@@ -16,9 +18,31 @@ YELLOW='\033[0;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+# Variables
 DOCKER_CONTAINER="v2ray-client"
 V2RAY_DIR="/opt/v2ray"
 CONFIG_FILE="/etc/v2ray/config.json"
+CONTAINER_EXISTS=false
+SERVER1_ADDRESS=""
+SERVER1_UUID=""
+
+# Check for parameters
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --server1-address)
+            SERVER1_ADDRESS="$2"
+            shift
+            ;;
+        --server1-uuid)
+            SERVER1_UUID="$2"
+            shift
+            ;;
+        *)
+            warn "Unknown parameter: $1"
+            ;;
+    esac
+    shift
+done
 
 # Function to display status messages
 info() {
@@ -46,10 +70,12 @@ check_container() {
     info "Checking container status..."
     
     if ! docker ps -a | grep -q "$DOCKER_CONTAINER"; then
-        error "Container $DOCKER_CONTAINER does not exist"
+        info "Container $DOCKER_CONTAINER does not exist - will create it"
+        CONTAINER_EXISTS=false
+    else
+        info "Container exists, checking configuration..."
+        CONTAINER_EXISTS=true
     fi
-    
-    info "Container exists, checking configuration..."
 }
 
 # Backup original configuration
@@ -64,12 +90,52 @@ backup_config() {
     fi
 }
 
+# Create config directory if needed
+create_config_dir() {
+    info "Creating config directory if needed..."
+    mkdir -p "$V2RAY_DIR"
+}
+
+# Generate configuration if needed
+generate_config() {
+    if [ ! -f "$V2RAY_DIR/config.json" ]; then
+        info "No configuration file found, need to generate one"
+        
+        if [ -z "$SERVER1_ADDRESS" ] || [ -z "$SERVER1_UUID" ]; then
+            error "Missing required parameters to generate config. Please provide --server1-address and --server1-uuid"
+        fi
+        
+        if [ -f "./script/generate-v2ray-config.sh" ]; then
+            info "Using configuration generator script..."
+            chmod +x ./script/generate-v2ray-config.sh
+            
+            # Generate the configuration with proper validation
+            if ! ./script/generate-v2ray-config.sh \
+                "$SERVER1_ADDRESS" \
+                "443" \
+                "$SERVER1_UUID" \
+                "www.microsoft.com" \
+                "chrome" \
+                "" \
+                "" \
+                "$V2RAY_DIR/config.json"; then
+                
+                error "Failed to generate valid configuration. Check script output."
+            fi
+            
+            info "Configuration generated successfully."
+        else
+            error "Configuration generator script not found and no existing config. Cannot proceed."
+        fi
+    fi
+}
+
 # Fix configuration file
 fix_config() {
     info "Checking configuration file..."
     
     if [ ! -f "$V2RAY_DIR/config.json" ]; then
-        error "Configuration file not found at $V2RAY_DIR/config.json"
+        error "Configuration file not found at $V2RAY_DIR/config.json after generation attempt"
     fi
     
     # Check if jq is installed
@@ -100,13 +166,24 @@ fix_config() {
     fi
 }
 
-# Recreate the container with proper networking
+# Create or recreate the container with proper networking
 recreate_container() {
-    info "Recreating v2ray container with proper networking..."
+    info "Creating/recreating v2ray container with proper networking..."
     
-    # Stop and remove existing container
-    docker stop "$DOCKER_CONTAINER" || true
-    docker rm "$DOCKER_CONTAINER" || true
+    # First make sure v2ray image is available
+    info "Pulling v2ray Docker image if not present..."
+    docker pull v2fly/v2fly-core:latest
+    
+    # Make sure the log directory exists
+    mkdir -p /var/log/v2ray
+    chmod 777 /var/log/v2ray
+    
+    # Stop and remove existing container if it exists
+    if [ "$CONTAINER_EXISTS" = true ]; then
+        info "Removing existing container..."
+        docker stop "$DOCKER_CONTAINER" || true
+        docker rm "$DOCKER_CONTAINER" || true
+    fi
     
     # Create a new container with host networking
     info "Creating new container with host networking..."
@@ -205,7 +282,9 @@ test_connectivity() {
 # Main function
 main() {
     check_root
+    create_config_dir
     check_container
+    generate_config
     backup_config
     fix_config
     recreate_container

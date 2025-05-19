@@ -20,3 +20,6 @@ sudo ./script/setup-vless-server2.sh \
   sudo ./script/test-tunnel-connection.sh --server-type server2 --server1-address 129.146.63.189
 
   sudo ./script/restart-v2ray.sh --server1-address 129.146.63.189 --server1-uuid 9daf9658-2b84-4d23-9d07-cfac80499241
+
+  sudo ./script/fix-port-binding.sh
+
