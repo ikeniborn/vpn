@@ -116,6 +116,22 @@ check_outline() {
     else
         info "Found running Outline server."
     fi
+    
+    # Source the tunnel routing configuration file if it exists
+    if [ -f "./script/tunnel-routing.conf" ]; then
+        source "./script/tunnel-routing.conf"
+        info "Loaded routing configuration from tunnel-routing.conf"
+        
+        # Check if the ROUTE_OUTLINE_THROUGH_TUNNEL flag is set
+        if [ "$ROUTE_OUTLINE_THROUGH_TUNNEL" = "true" ]; then
+            info "Outline traffic will be routed through the tunnel"
+        else
+            info "Outline traffic will be routed directly (not through the tunnel)"
+        fi
+    else
+        warn "tunnel-routing.conf not found, using default settings"
+        ROUTE_OUTLINE_THROUGH_TUNNEL=true
+    fi
 }
 
 # Check if the tunnel is running
@@ -178,19 +194,89 @@ EOF
 update_routing() {
     info "Updating routing rules for Outline..."
     
+    # Source the tunnel routing configuration file if it exists
+    if [ -f "./script/tunnel-routing.conf" ]; then
+        source "./script/tunnel-routing.conf"
+        info "Loaded routing configuration from tunnel-routing.conf"
+    else
+        warn "tunnel-routing.conf not found, using default settings"
+        # Default values if config file not found
+        ROUTE_OUTLINE_THROUGH_TUNNEL=true
+        OUTLINE_NETWORK="10.0.0.0/24"
+    fi
+    
+    # Get the internet-facing interface
+    INTERNET_IFACE=$(ip -4 route show default | awk '{print $5}' | head -n1)
+    if [ -z "$INTERNET_IFACE" ]; then
+        warn "Could not determine internet-facing interface. Trying alternative method."
+        INTERNET_IFACE=$(ip -o -4 route show to default | awk '{print $5}' | head -n1)
+        if [ -z "$INTERNET_IFACE" ]; then
+            error "Failed to determine outgoing network interface. Manual configuration needed."
+        fi
+    fi
+    info "Using network interface: $INTERNET_IFACE for traffic forwarding"
+    
+    # Create a function to verify IP forwarding
+    verify_ip_forwarding() {
+        if [ "$(cat /proc/sys/net/ipv4/ip_forward)" -ne 1 ]; then
+            warn "IP forwarding is not enabled. Enabling now..."
+            echo 1 > /proc/sys/net/ipv4/ip_forward
+            
+            # Make sure IP forwarding is enabled on boot
+            if grep -q "net.ipv4.ip_forward" /etc/sysctl.conf; then
+                sed -i 's/^#\?net.ipv4.ip_forward.*/net.ipv4.ip_forward=1/' /etc/sysctl.conf
+            else
+                echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+            fi
+            
+            # Apply sysctl changes
+            sysctl -p
+            
+            return 1  # IP forwarding was not enabled
+        fi
+        return 0  # IP forwarding was already enabled
+    }
+    
     # Create iptables rules for Outline
     cat > /usr/local/bin/outline-tunnel-routing.sh << EOF
 #!/bin/bash
 
+# Verify IP forwarding is enabled
+function verify_ip_forwarding() {
+    if [ \$(cat /proc/sys/net/ipv4/ip_forward) -ne 1 ]; then
+        echo "IP forwarding is not enabled. Enabling now..."
+        echo 1 > /proc/sys/net/ipv4/ip_forward
+        sysctl -w net.ipv4.ip_forward=1
+    fi
+}
+
+# Run the verification function
+verify_ip_forwarding
+
 # Clear any existing rules related to Outline
-iptables -t nat -D POSTROUTING -o lo -s 10.0.0.0/24 -j MASQUERADE 2>/dev/null || true
-iptables -t nat -D POSTROUTING -s 10.0.0.0/24 -j MASQUERADE 2>/dev/null || true
+iptables -t nat -D POSTROUTING -o lo -s ${OUTLINE_NETWORK} -j MASQUERADE 2>/dev/null || true
+iptables -t nat -D POSTROUTING -s ${OUTLINE_NETWORK} -j MASQUERADE 2>/dev/null || true
+iptables -t nat -D PREROUTING -s ${OUTLINE_NETWORK} -p tcp -j V2RAY 2>/dev/null || true
+iptables -t nat -D PREROUTING -s ${OUTLINE_NETWORK} -p udp -j REDIRECT --to-ports 1081 2>/dev/null || true
 
 # Allow direct connections to this server
 iptables -t nat -A V2RAY -d ${LOCAL_IP} -j RETURN 2>/dev/null || true
 
-# Add masquerading rule for Outline clients
-iptables -t nat -A POSTROUTING -o lo -s 10.0.0.0/24 -j MASQUERADE
+# Check if we should route Outline traffic through the tunnel
+if [ "${ROUTE_OUTLINE_THROUGH_TUNNEL}" = "true" ]; then
+    echo "Configuring Outline to route through tunnel"
+    
+    # Add rules to direct Outline traffic through the tunnel
+    iptables -t nat -A PREROUTING -s ${OUTLINE_NETWORK} -p tcp -j V2RAY 2>/dev/null || true
+    iptables -t nat -A PREROUTING -s ${OUTLINE_NETWORK} -p udp -j REDIRECT --to-ports 1081 2>/dev/null || true
+    
+    # Add proper masquerading rule for Outline clients
+    iptables -t nat -A POSTROUTING -s ${OUTLINE_NETWORK} -o ${INTERNET_IFACE} -j MASQUERADE
+else
+    echo "Configuring Outline for direct internet access (not through tunnel)"
+    # Add masquerading rule for direct access
+    iptables -t nat -A POSTROUTING -s ${OUTLINE_NETWORK} -o ${INTERNET_IFACE} -j MASQUERADE
+fi
 EOF
     
     chmod +x /usr/local/bin/outline-tunnel-routing.sh
@@ -266,6 +352,36 @@ test_connection() {
         warn "Outline VPN port $OUTLINE_PORT does not appear to be open."
     else
         info "Outline VPN port $OUTLINE_PORT is open."
+    fi
+    
+    # Check if IP forwarding is enabled
+    if [ "$(cat /proc/sys/net/ipv4/ip_forward)" -ne 1 ]; then
+        warn "IP forwarding is not enabled. This will cause routing issues."
+    else
+        info "IP forwarding is properly enabled."
+    fi
+    
+    # Test connectivity between servers
+    info "Testing connectivity to Server 1..."
+    if ping -c 3 -W 5 "$SERVER1_ADDRESS" >/dev/null 2>&1; then
+        info "Server 1 is reachable via ping."
+    else
+        warn "Cannot ping Server 1. This may be normal if ICMP is blocked."
+    fi
+    
+    # Verify iptables routing for Outline
+    if [[ "$ROUTE_OUTLINE_THROUGH_TUNNEL" = "true" ]]; then
+        if [ "$(iptables -t nat -L PREROUTING | grep -c "${OUTLINE_NETWORK}")" -gt 0 ]; then
+            info "iptables PREROUTING rules for Outline VPN are correctly set up."
+        else
+            warn "iptables PREROUTING rules for Outline VPN are missing."
+        fi
+    fi
+    
+    if [ "$(iptables -t nat -L POSTROUTING | grep -c "${OUTLINE_NETWORK}")" -gt 0 ]; then
+        info "iptables POSTROUTING rules for Outline VPN are correctly set up."
+    else
+        warn "iptables POSTROUTING rules for Outline VPN are missing."
     fi
     
     # Success message

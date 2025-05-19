@@ -316,13 +316,53 @@ EOF
 configure_routing() {
     info "Configuring routing for traffic through the tunnel..."
     
+    # Source the tunnel routing configuration file if it exists
+    if [ -f "./script/tunnel-routing.conf" ]; then
+        source "./script/tunnel-routing.conf"
+        info "Loaded routing configuration from tunnel-routing.conf"
+    else
+        warn "tunnel-routing.conf not found, using default settings"
+        # Default value if config file not found
+        ROUTE_OUTLINE_THROUGH_TUNNEL=true
+    fi
+    
+    # Get the internet-facing interface
+    INTERNET_IFACE=$(ip -4 route show default | awk '{print $5}' | head -n1)
+    if [ -z "$INTERNET_IFACE" ]; then
+        warn "Could not determine internet-facing interface. Using fallback method."
+        INTERNET_IFACE=$(ip -o -4 route show to default | awk '{print $5}' | head -n1)
+        if [ -z "$INTERNET_IFACE" ]; then
+            error "Failed to determine outgoing network interface. Manual configuration needed."
+        fi
+    fi
+    info "Using network interface: $INTERNET_IFACE for traffic forwarding"
+    
     # Create iptables rules script
     cat > /usr/local/bin/setup-tunnel-routing.sh << EOF
 #!/bin/bash
 
-# Clear existing rules
-iptables -t nat -F
-iptables -t mangle -F
+# Verify IP forwarding is enabled
+function verify_ip_forwarding() {
+    if [ \$(cat /proc/sys/net/ipv4/ip_forward) -ne 1 ]; then
+        echo "IP forwarding is not enabled. Enabling now..."
+        echo 1 > /proc/sys/net/ipv4/ip_forward
+        sysctl -w net.ipv4.ip_forward=1
+    fi
+}
+
+# Verify IP forwarding
+verify_ip_forwarding
+
+# Clear existing rules for our chains only (not all rules)
+iptables -t nat -F V2RAY 2>/dev/null || true
+iptables -t mangle -F V2RAY 2>/dev/null || true
+iptables -t mangle -F V2RAY_MARK 2>/dev/null || true
+
+# Remove our chains if they exist (to avoid errors on creation)
+iptables -t nat -D PREROUTING -p tcp -j V2RAY 2>/dev/null || true
+iptables -t nat -X V2RAY 2>/dev/null || true
+iptables -t mangle -X V2RAY 2>/dev/null || true
+iptables -t mangle -X V2RAY_MARK 2>/dev/null || true
 
 # Create new chain for tunnel
 iptables -t nat -N V2RAY
@@ -347,8 +387,20 @@ iptables -t nat -A V2RAY -d 240.0.0.0/4 -j RETURN
 iptables -t nat -A V2RAY -p tcp -j REDIRECT --to-ports 1081
 iptables -t nat -A PREROUTING -p tcp -j V2RAY
 
-# Route traffic from Outline VPN through the tunnel
-iptables -t nat -A POSTROUTING -o lo -s 10.0.0.0/24 -j MASQUERADE
+# Route traffic from Outline VPN through the tunnel (if enabled)
+if [ "${ROUTE_OUTLINE_THROUGH_TUNNEL}" = "true" ]; then
+    echo "Routing Outline VPN traffic (10.0.0.0/24) through tunnel"
+    
+    # Use proper outgoing interface for masquerading
+    iptables -t nat -A POSTROUTING -o ${INTERNET_IFACE} -s 10.0.0.0/24 -j MASQUERADE
+    
+    # Add explicit rules for routing Outline traffic through the tunnel
+    iptables -t nat -A PREROUTING -s 10.0.0.0/24 -p tcp -j V2RAY
+    iptables -t nat -A PREROUTING -s 10.0.0.0/24 -p udp -j REDIRECT --to-ports 1081
+else
+    echo "Direct routing for Outline VPN traffic (not through tunnel)"
+    iptables -t nat -A POSTROUTING -o ${INTERNET_IFACE} -s 10.0.0.0/24 -j MASQUERADE
+fi
 EOF
     
     chmod +x /usr/local/bin/setup-tunnel-routing.sh
@@ -488,6 +540,16 @@ configure_firewall() {
 test_tunnel() {
     info "Testing tunnel connection to Server 1..."
     
+    # Verify IP forwarding is enabled
+    if [ "$(cat /proc/sys/net/ipv4/ip_forward)" -ne 1 ]; then
+        warn "IP forwarding is not enabled. This will cause routing issues."
+        info "Enabling IP forwarding now..."
+        echo 1 > /proc/sys/net/ipv4/ip_forward
+        sysctl -w net.ipv4.ip_forward=1
+    else
+        info "IP forwarding is properly enabled."
+    fi
+    
     # Wait longer for the tunnel to establish
     info "Waiting for tunnel to initialize (10 seconds)..."
     sleep 10
@@ -499,6 +561,18 @@ test_tunnel() {
         return 1
     fi
     
+    # Validate v2ray configuration
+    info "Validating v2ray proxy configuration..."
+    if [ -f "$V2RAY_DIR/config.json" ]; then
+        if ! docker exec v2ray-client v2ray test -config /etc/v2ray/config.json &>/dev/null; then
+            warn "v2ray configuration test failed. This may indicate configuration issues."
+        else
+            info "v2ray configuration is valid."
+        fi
+    else
+        warn "v2ray configuration file not found for validation."
+    fi
+    
     # Check if proxy port is listening
     if ! ss -tulpn | grep -q ":8080"; then
         warn "HTTP proxy port 8080 is not listening. Checking container logs:"
@@ -506,6 +580,14 @@ test_tunnel() {
         warn "You may need to restart the container or check configuration."
     else
         info "HTTP proxy port 8080 is listening correctly."
+    fi
+    
+    # Check if transparent proxy port is listening
+    if ! ss -tulpn | grep -q ":1081"; then
+        warn "Transparent proxy port 1081 is not listening. This will break routing."
+        docker logs v2ray-client | grep -i "error\|fail\|warn" | tail -5
+    else
+        info "Transparent proxy port 1081 is listening correctly."
     fi
     
     # Test connection to Server 1
@@ -524,6 +606,19 @@ test_tunnel() {
     if [ -n "$proxy_ip" ]; then
         info "Tunnel is working correctly. Traffic is being routed through Server 1."
         info "Your traffic appears as coming from: $proxy_ip"
+        
+        # Verify iptables routing for Outline
+        if [ "$(iptables -t nat -L PREROUTING | grep -c "V2RAY")" -gt 0 ]; then
+            info "iptables PREROUTING rules for the tunnel are correctly set up."
+        else
+            warn "iptables PREROUTING rules for the tunnel are missing."
+        fi
+        
+        if [ "$(iptables -t nat -L POSTROUTING | grep -c "10.0.0.0/24")" -gt 0 ]; then
+            info "iptables POSTROUTING rules for Outline VPN are correctly set up."
+        else
+            warn "iptables POSTROUTING rules for Outline VPN are missing."
+        fi
     else
         warn "Tunnel test failed. Here's the diagnostic information:"
         echo "$proxy_output" | grep -i "error\|failed\|couldn't"

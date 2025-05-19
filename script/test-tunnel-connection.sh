@@ -1,13 +1,12 @@
 #!/bin/bash
 
 # ===================================================================
-# VLESS-Reality Tunnel Test Script
+# Tunnel Connection Testing Script
 # ===================================================================
 # This script:
 # - Tests connectivity between Server 1 and Server 2
-# - Verifies that traffic is routing through the tunnel
-# - Checks Outline VPN connectivity
-# - Diagnoses common tunnel issues
+# - Verifies proper routing and tunnel configuration
+# - Performs diagnostics to identify common issues
 # ===================================================================
 
 set -euo pipefail
@@ -15,14 +14,14 @@ set -euo pipefail
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 RED='\033[0;31m'
-BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Default values
-SERVER_TYPE=""
+SERVER_TYPE="server2"  # Options: server1, server2
 SERVER1_ADDRESS=""
-V2RAY_DIR="/opt/v2ray"
-OUTLINE_PORT="7777"
+CONFIG_DIR="/opt/v2ray"
+DOCKER_CONTAINER="v2ray-client"
+DETAILED=false
 
 # Function to display status messages
 info() {
@@ -38,30 +37,23 @@ error() {
     return 1
 }
 
-success() {
-    echo -e "${BLUE}[SUCCESS]${NC} $1"
-}
-
 # Function to display usage
 display_usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
 
-This script tests the tunnel connection between Server 1 and Server 2.
+This script tests the connectivity between Server 1 and Server 2 for the VLESS+Reality tunnel.
 
-Required Options:
-  --server-type TYPE       Specify "server1" or "server2"
-
-For Server 2 testing:
-  --server1-address ADDR   Server 1 hostname or IP address
-
-Optional Options:
-  --outline-port PORT      Port for Outline VPN (default: 7777)
-  --help                   Display this help message
+Options:
+  --server-type TYPE      Server type to test: server1 or server2 (default: server2)
+  --server1-address ADDR  Address of Server 1 (required for server2 testing)
+  --config-dir DIR        Directory with v2ray config (default: /opt/v2ray)
+  --container NAME        Name of the v2ray Docker container (default: v2ray-client)
+  --detailed              Show detailed diagnostic information
+  --help                  Display this help message
 
 Example:
-  $(basename "$0") --server-type server1
-  $(basename "$0") --server-type server2 --server1-address 123.45.67.89
+  $(basename "$0") --server-type server2 --server1-address 123.45.67.89 --detailed
 
 EOF
 }
@@ -78,9 +70,16 @@ parse_args() {
                 SERVER1_ADDRESS="$2"
                 shift
                 ;;
-            --outline-port)
-                OUTLINE_PORT="$2"
+            --config-dir)
+                CONFIG_DIR="$2"
                 shift
+                ;;
+            --container)
+                DOCKER_CONTAINER="$2"
+                shift
+                ;;
+            --detailed)
+                DETAILED=true
                 ;;
             --help)
                 display_usage
@@ -93,323 +92,267 @@ parse_args() {
         shift
     done
 
-    # Check required parameters
-    if [ -z "$SERVER_TYPE" ]; then
-        error "Server type is required. Use --server-type option."
-        display_usage
+    # Validate server type
+    if [[ "$SERVER_TYPE" != "server1" && "$SERVER_TYPE" != "server2" ]]; then
+        error "Invalid server type: $SERVER_TYPE. Must be 'server1' or 'server2'."
         exit 1
     fi
 
-    if [ "$SERVER_TYPE" != "server1" ] && [ "$SERVER_TYPE" != "server2" ]; then
-        error "Server type must be 'server1' or 'server2'."
-        display_usage
+    # For server2, we need the address of server1
+    if [[ "$SERVER_TYPE" == "server2" && -z "$SERVER1_ADDRESS" ]]; then
+        error "Server 1 address is required when testing from Server 2."
+        echo "Use --server1-address to specify the address of Server 1."
         exit 1
     fi
 
-    if [ "$SERVER_TYPE" == "server2" ] && [ -z "$SERVER1_ADDRESS" ]; then
-        error "Server 1 address is required for Server 2 testing. Use --server1-address option."
-        display_usage
-        exit 1
+    info "Configuration:"
+    info "- Server type: $SERVER_TYPE"
+    if [[ "$SERVER_TYPE" == "server2" ]]; then
+        info "- Server 1 address: $SERVER1_ADDRESS"
     fi
+    info "- Config directory: $CONFIG_DIR"
+    info "- Docker container: $DOCKER_CONTAINER"
 }
 
-# Function to check if a command exists
-command_exists() {
-    command -v "$1" &> /dev/null
-}
-
-# Function to check if Docker is running
-check_docker() {
-    info "Checking Docker status..."
-    if ! command_exists docker; then
-        error "Docker is not installed."
-        return 1
-    fi
-
-    if ! docker info &> /dev/null; then
-        error "Docker is not running or you don't have permission to use it."
-        return 1
-    fi
-
-    success "Docker is running properly."
-    return 0
-}
-
-# Function to check if v2ray is running
-check_v2ray() {
-    local container_name="v2ray"
-    
-    if [ "$SERVER_TYPE" == "server2" ]; then
-        container_name="v2ray-client"
-    fi
-    
-    info "Checking $container_name container status..."
-    
-    if ! docker ps --format '{{.Names}}' | grep -q "^$container_name$"; then
-        error "$container_name container is not running."
-        
-        # Check if container exists but is not running
-        if docker ps -a --format '{{.Names}}' | grep -q "^$container_name$"; then
-            warn "$container_name container exists but is not running."
-            echo "You can start it with: docker start $container_name"
-        else
-            warn "$container_name container does not exist."
-            if [ "$SERVER_TYPE" == "server1" ]; then
-                echo "Run setup-vless-server1.sh to configure Server 1."
-            else
-                echo "Run setup-vless-server2.sh to configure Server 2."
-            fi
-        fi
-        
-        return 1
-    fi
-    
-    success "$container_name container is running."
-    
-    # Check logs for errors
-    info "Checking $container_name logs for errors..."
-    if docker logs "$container_name" 2>&1 | grep -i "error\|fatal\|panic" > /dev/null; then
-        warn "Found potential errors in $container_name logs:"
-        docker logs "$container_name" 2>&1 | grep -i "error\|fatal\|panic" | head -n 5
-        echo "Check full logs with: docker logs $container_name"
-    else
-        success "No obvious errors found in $container_name logs."
-    fi
-    
-    return 0
-}
-
-# Function to test IP forwarding
-test_ip_forwarding() {
-    info "Testing IP forwarding configuration..."
+# Verify IP forwarding is enabled
+verify_ip_forwarding() {
+    info "Checking if IP forwarding is enabled..."
     
     local ip_forward=$(cat /proc/sys/net/ipv4/ip_forward)
-    if [ "$ip_forward" != "1" ]; then
-        error "IP forwarding is not enabled. Should be 1, but is $ip_forward."
-        echo "Enable with: echo 1 > /proc/sys/net/ipv4/ip_forward"
-        echo "And make it permanent by adding net.ipv4.ip_forward=1 to /etc/sysctl.conf"
+    
+    if [ "$ip_forward" -eq 1 ]; then
+        info "✅ IP forwarding is enabled."
+        return 0
+    else
+        error "❌ IP forwarding is not enabled (value: $ip_forward)."
+        info "  To enable IP forwarding, run:"
+        info "  echo 1 > /proc/sys/net/ipv4/ip_forward"
+        info "  sysctl -w net.ipv4.ip_forward=1"
+        return 1
+    fi
+}
+
+# Check Docker container status
+check_container_status() {
+    info "Checking Docker container status..."
+    
+    if ! command -v docker &>/dev/null; then
+        error "❌ Docker is not installed."
         return 1
     fi
     
-    success "IP forwarding is enabled."
+    if [ -z "$(docker ps -q -f name=^$DOCKER_CONTAINER$)" ]; then
+        error "❌ Docker container '$DOCKER_CONTAINER' is not running."
+        
+        if [ -n "$(docker ps -a -q -f name=^$DOCKER_CONTAINER$)" ]; then
+            info "  Container exists but is not running. Check logs:"
+            docker logs "$DOCKER_CONTAINER" | tail -n 10
+        else
+            info "  Container does not exist."
+        fi
+        
+        return 1
+    else
+        info "✅ Docker container '$DOCKER_CONTAINER' is running."
+        return 0
+    fi
+}
+
+# Check v2ray configuration
+check_v2ray_config() {
+    info "Checking v2ray configuration..."
+    
+    local config_file="$CONFIG_DIR/config.json"
+    
+    if [ ! -f "$config_file" ]; then
+        error "❌ Configuration file not found: $config_file"
+        return 1
+    fi
+    
+    info "✅ Configuration file exists: $config_file"
+    
+    # Validate JSON if jq is available
+    if command -v jq &>/dev/null; then
+        if jq empty "$config_file" 2>/dev/null; then
+            info "✅ Configuration file is valid JSON."
+        else
+            error "❌ Configuration file is not valid JSON."
+            return 1
+        fi
+    fi
+    
     return 0
 }
 
-# Function to test network connectivity
-test_connectivity() {
-    if [ "$SERVER_TYPE" == "server1" ]; then
-        info "Server 1: Testing external connectivity..."
-        
-        # Test outbound internet connectivity
-        if ! curl -s --connect-timeout 5 https://ifconfig.me > /dev/null; then
-            error "Cannot connect to the internet. Check network configuration."
-            return 1
+# Check listening ports
+check_listening_ports() {
+    info "Checking listening ports..."
+    
+    if [[ "$SERVER_TYPE" == "server2" ]]; then
+        # Check for HTTP, SOCKS, and dokodemo-door ports
+        if ss -tulpn | grep -q ":8080 "; then
+            info "✅ HTTP proxy port 8080 is listening."
+        else
+            warn "⚠️ HTTP proxy port 8080 is not listening."
         fi
         
-        success "Server 1 has internet connectivity."
+        if ss -tulpn | grep -q ":1080 "; then
+            info "✅ SOCKS proxy port 1080 is listening."
+        else
+            warn "⚠️ SOCKS proxy port 1080 is not listening."
+        fi
         
-        # Display external IP
-        local external_ip=$(curl -s --connect-timeout 5 https://ifconfig.me)
-        info "Server 1 external IP: $external_ip"
-        
-        return 0
+        if ss -tulpn | grep -q ":1081 "; then
+            info "✅ Transparent proxy port 1081 is listening."
+        else
+            error "❌ Transparent proxy port 1081 is not listening."
+            return 1
+        fi
     else
-        # Server 2 tests
-        info "Server 2: Testing tunnel connectivity to Server 1..."
-        
-        # Test connection to Server 1
-        if ! ping -c 3 "$SERVER1_ADDRESS" > /dev/null; then
-            error "Cannot ping Server 1 at $SERVER1_ADDRESS. Check network configuration."
+        # Check VLESS port for Server 1
+        if ss -tulpn | grep -q ":443 "; then
+            info "✅ VLESS port 443 is listening."
+        else
+            warn "⚠️ VLESS port 443 is not listening."
+        fi
+    fi
+    
+    return 0
+}
+
+# Check iptables rules
+check_iptables_rules() {
+    info "Checking iptables rules..."
+    
+    if [[ "$SERVER_TYPE" == "server1" ]]; then
+        # Check for masquerade rule
+        if iptables -t nat -L POSTROUTING | grep -q 'MASQUERADE'; then
+            info "✅ POSTROUTING masquerade rule is configured."
+            
+            # Check for Outline subnet rule
+            if iptables -t nat -L POSTROUTING | grep -q '10.0.0.0/24'; then
+                info "✅ POSTROUTING rule for Outline VPN subnet is configured."
+            else
+                warn "⚠️ POSTROUTING rule for Outline VPN subnet is missing."
+            fi
+        else
+            error "❌ POSTROUTING masquerade rule is missing."
             return 1
         fi
-        
-        success "Server 2 can reach Server 1."
-        
-        # Test the proxy connection 
-        info "Testing proxy connection through tunnel..."
-        if ! command_exists curl; then
-            warn "curl not installed. Cannot test proxy connection."
+    else
+        # Check for V2RAY chain
+        if iptables -t nat -L | grep -q 'V2RAY'; then
+            info "✅ V2RAY chain exists in nat table."
+            
+            # Check for PREROUTING rule
+            if iptables -t nat -L PREROUTING | grep -q 'V2RAY'; then
+                info "✅ PREROUTING rule references V2RAY chain."
+            else
+                error "❌ PREROUTING rule does not reference V2RAY chain."
+                return 1
+            fi
+            
+            # Check for Outline subnet rules
+            if iptables -t nat -L PREROUTING | grep -q '10.0.0.0/24'; then
+                info "✅ PREROUTING rule for Outline VPN subnet exists."
+            else
+                warn "⚠️ PREROUTING rule for Outline VPN subnet is missing."
+            fi
+            
+            # Check for masquerade rule with correct interface
+            if iptables -t nat -L POSTROUTING | grep -q 'MASQUERADE.*o lo'; then
+                warn "⚠️ Masquerade rule uses loopback interface (lo) instead of outgoing interface."
+            fi
+        else
+            error "❌ V2RAY chain not found in nat table."
             return 1
         fi
+    fi
+    
+    return 0
+}
+
+# Test the tunnel
+test_tunnel() {
+    if [[ "$SERVER_TYPE" == "server2" ]]; then
+        info "Testing tunnel connectivity..."
         
         # Test HTTP proxy
-        local proxy_ip=$(curl -s --connect-timeout 10 -x http://127.0.0.1:8080 https://ifconfig.me 2>/dev/null)
-        local direct_ip=$(curl -s --connect-timeout 10 https://ifconfig.me 2>/dev/null)
+        local curl_output=$(curl -s -m 15 -x "http://127.0.0.1:8080" https://ifconfig.me 2>&1 || echo "Connection failed")
         
-        if [ -z "$proxy_ip" ]; then
-            error "Proxy connection through tunnel failed. Check v2ray-client configuration."
+        if [[ "$curl_output" != *"Connection failed"* && "$curl_output" != *"timed out"* ]]; then
+            info "✅ Successfully connected through proxy!"
+            info "  Your IP appears as: $curl_output"
+            return 0
+        else
+            error "❌ Failed to connect through proxy."
+            info "  Error output: $curl_output"
             return 1
         fi
-        
-        if [ "$proxy_ip" == "$direct_ip" ]; then
-            warn "Proxy connection working but IP is the same as direct connection."
-            warn "This suggests traffic might not be properly tunneling through Server 1."
-            warn "Direct: $direct_ip, Proxy: $proxy_ip"
-        else
-            success "Proxy connection through tunnel is working!"
-            info "Direct IP: $direct_ip, Tunneled IP: $proxy_ip"
-        fi
-        
+    else
+        info "Skipping tunnel test when running on Server 1."
         return 0
     fi
 }
 
-# Function to test Outline VPN (Server 2 only)
-test_outline() {
-    if [ "$SERVER_TYPE" != "server2" ]; then
-        return 0
-    fi
-    
-    info "Testing Outline VPN server..."
-    
-    # Check if Outline containers are running
-    if ! docker ps --format '{{.Names}}' | grep -q "shadowbox"; then
-        error "Outline server container (shadowbox) is not running."
-        return 1
-    fi
-    
-    success "Outline server container (shadowbox) is running."
-    
-    # Check if Outline API is responding
-    if ! curl -sk https://localhost:41084/server > /dev/null; then
-        warn "Outline API is not responding on port 41084."
-    else
-        success "Outline API is responding."
-    fi
-    
-    # Check if Outline port is open
-    local open_ports_count
-    open_ports_count=$(ss -tulpn | grep ":$OUTLINE_PORT" | wc -l)
-    
-    if [ "$open_ports_count" -eq 0 ]; then
-        warn "Outline VPN port $OUTLINE_PORT does not appear to be open. (Found $open_ports_count listening)"
-    else
-        success "Outline VPN port $OUTLINE_PORT is open. (Found $open_ports_count listening)"
-    fi
-    
-    # Test if Outline is routing through the tunnel
-    info "Testing if Outline traffic routes through the tunnel (requires active connection)..."
-    
-    local active_conns
-    active_conns=$(ss -anp | grep ":$OUTLINE_PORT" | grep -Ev 'LISTEN|UNCONN' | wc -l)
-    
-    if [ "$active_conns" -gt 0 ]; then
-        success "Outline has active connections (found $active_conns). Traffic should be routing through the tunnel."
-    else
-        warn "No active Outline connections detected (established TCP or active UDP). Cannot verify routing."
-        warn "Connect a client and ensure traffic is flowing to test fully."
-    fi
-    
-    return 0
-}
-
-# Function to check firewall rules
-check_firewall() {
-    info "Checking firewall configuration..."
-    
-    if command_exists ufw; then
-        # Check UFW status
-        if ! ufw status | grep -q "Status: active"; then
-            warn "UFW is installed but not active."
-        else
-            success "UFW is active."
+# Test route handling
+test_route_handling() {
+    if [[ "$SERVER_TYPE" == "server2" ]]; then
+        info "Testing route handling..."
+        
+        # Source the tunnel routing configuration if available
+        if [ -f "./script/tunnel-routing.conf" ]; then
+            source "./script/tunnel-routing.conf"
             
-            # Check specific rules
-            if [ "$SERVER_TYPE" == "server1" ]; then
-                if ! ufw status | grep -q "443"; then
-                    warn "UFW: No rule found for v2ray port (443)."
-                fi
-            else
-                if ! ufw status | grep -q "$OUTLINE_PORT"; then
-                    warn "UFW: No rule found for Outline VPN port ($OUTLINE_PORT)."
-                fi
+            # Check if ROUTE_OUTLINE_THROUGH_TUNNEL is implemented
+            if [ -n "${ROUTE_OUTLINE_THROUGH_TUNNEL+x}" ]; then
+                info "✅ ROUTE_OUTLINE_THROUGH_TUNNEL flag found: $ROUTE_OUTLINE_THROUGH_TUNNEL"
                 
-                if ! ufw status | grep -q "41084"; then
-                    warn "UFW: No rule found for Outline API port (41084)."
+                # Check outgoing interface for masquerading
+                local interfaces=$(iptables -t nat -L POSTROUTING | grep 'MASQUERADE' | grep -o 'o [^ ]*' | awk '{print $2}')
+                
+                if [[ "$interfaces" == *"lo"* && "$interfaces" == *""* ]]; then
+                    warn "⚠️ Masquerading uses loopback interface, which is incorrect."
+                    
+                    # Get the correct interface
+                    local correct_iface=$(ip -4 route show default | awk '{print $5}' | head -n1)
+                    info "  The correct interface should be: $correct_iface"
+                    return 1
                 fi
-            fi
-        fi
-    else
-        # Check iptables
-        if ! command_exists iptables; then
-            warn "Neither UFW nor iptables-save found. Cannot check firewall rules."
-            return 1
-        fi
-        
-        # Check for masquerading rules (NAT)
-        if ! iptables -t nat -L POSTROUTING | grep -q "MASQUERADE"; then
-            warn "No masquerading rules found in iptables. Traffic forwarding may not work."
-        else
-            success "iptables masquerading rules found."
-        fi
-        
-        if [ "$SERVER_TYPE" == "server2" ]; then
-            # Check for redirection to v2ray (transparent proxy)
-            if ! iptables -t nat -L | grep -q "REDIRECT.*1081"; then
-                warn "No redirection rules to v2ray transparent proxy found."
-                warn "Traffic may not be routed through the tunnel."
             else
-                success "iptables redirection rules to v2ray found."
+                warn "⚠️ ROUTE_OUTLINE_THROUGH_TUNNEL flag not found in configuration."
+                return 1
             fi
+        else
+            warn "⚠️ tunnel-routing.conf not found."
+            return 1
         fi
     fi
     
     return 0
-}
-
-# Function to display system information
-show_system_info() {
-    info "Collecting system information..."
-    
-    echo "---------- System Information ----------"
-    echo "Hostname: $(hostname)"
-    echo "Kernel: $(uname -r)"
-    echo "Distribution: $(cat /etc/os-release | grep "PRETTY_NAME" | cut -d'"' -f2)"
-    echo "IP Addresses: $(hostname -I)"
-    
-    echo "---------- Memory Usage ----------"
-    free -h
-    
-    echo "---------- Disk Usage ----------"
-    df -h | grep -v "tmpfs\|udev"
-    
-    echo "---------- Docker Containers ----------"
-    docker ps
-    
-    echo "---------- Network Connections ----------"
-    ss -tulpn | grep -E ":($OUTLINE_PORT|41084|443|1080|8080|1081)"
 }
 
 # Main function
 main() {
     parse_args "$@"
     
-    echo "====================================================================="
-    if [ "$SERVER_TYPE" == "server1" ]; then
-        echo "Testing VLESS-Reality Server 1 (Tunnel Entry Point)"
-    else
-        echo "Testing VLESS-Reality Server 2 (Traffic Source / Outline VPN)"
-        echo "Server 1 Address: $SERVER1_ADDRESS"
-    fi
-    echo "====================================================================="
+    # Run tests and record results
+    verify_ip_forwarding
     
-    # Run tests
-    check_docker
-    check_v2ray
-    test_ip_forwarding
-    test_connectivity
-    check_firewall
-    
-    if [ "$SERVER_TYPE" == "server2" ]; then
-        test_outline
+    if [[ "$SERVER_TYPE" == "server2" ]]; then
+        check_container_status
     fi
     
-    # Show system information
-    show_system_info
+    check_v2ray_config
+    check_listening_ports
+    check_iptables_rules
     
-    echo "====================================================================="
-    echo "Tunnel testing completed. See above for results and recommendations."
-    echo "====================================================================="
+    if [[ "$SERVER_TYPE" == "server2" ]]; then
+        test_tunnel
+        test_route_handling
+    fi
+    
+    info "========== TUNNEL CONNECTION TEST COMPLETED =========="
 }
 
 main "$@"

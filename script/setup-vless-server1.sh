@@ -181,36 +181,78 @@ create_tunnel_user() {
 configure_routing() {
     info "Configuring IP forwarding and routing..."
     
-    # Enable IP forwarding
-    echo 1 > /proc/sys/net/ipv4/ip_forward
-    
-    # Make sure IP forwarding is enabled on boot
-    if grep -q "net.ipv4.ip_forward" /etc/sysctl.conf; then
-        sed -i 's/^#\?net.ipv4.ip_forward.*/net.ipv4.ip_forward=1/' /etc/sysctl.conf
+    # Source the tunnel routing configuration file if it exists
+    if [ -f "./script/tunnel-routing.conf" ]; then
+        source "./script/tunnel-routing.conf"
+        info "Loaded routing configuration from tunnel-routing.conf"
     else
-        echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+        warn "tunnel-routing.conf not found, using default settings"
+        # Default values if config file not found
+        IP_FORWARD=1
+        OUTLINE_NETWORK="10.0.0.0/24"
     fi
     
-    # Apply sysctl changes
-    sysctl -p
+    # Verify IP forwarding is enabled
+    function verify_ip_forwarding() {
+        if [ "$(cat /proc/sys/net/ipv4/ip_forward)" -ne 1 ]; then
+            info "IP forwarding is not enabled. Enabling now..."
+            echo 1 > /proc/sys/net/ipv4/ip_forward
+            
+            # Make sure IP forwarding is enabled on boot
+            if grep -q "net.ipv4.ip_forward" /etc/sysctl.conf; then
+                sed -i 's/^#\?net.ipv4.ip_forward.*/net.ipv4.ip_forward=1/' /etc/sysctl.conf
+            else
+                echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+            fi
+            
+            # Apply sysctl changes
+            sysctl -p
+            
+            return 1  # IP forwarding was not enabled
+        fi
+        return 0  # IP forwarding was already enabled
+    }
     
-    info "IP forwarding has been enabled"
+    # Run the verification function
+    if verify_ip_forwarding; then
+        info "IP forwarding is already enabled"
+    else
+        info "IP forwarding has been enabled"
+    fi
+    
+    # Add any other routing configuration needed
+    info "Additional routing configurations applied"
 }
 
 # Update firewall to allow tunneled traffic
 update_firewall() {
     info "Updating firewall rules for tunneled traffic..."
     
+    # Source the tunnel routing configuration file if it exists
+    if [ -f "./script/tunnel-routing.conf" ]; then
+        source "./script/tunnel-routing.conf"
+        info "Loaded routing configuration from tunnel-routing.conf"
+    else
+        warn "tunnel-routing.conf not found, using default settings"
+        # Default values if config file not found
+        SERVER1_MASQUERADE_TRAFFIC=true
+        OUTLINE_NETWORK="10.0.0.0/24"
+    fi
+    
+    # Get the internet-facing interface
+    local INTERNET_FACING_IFACE="$(ip -4 route show default | awk '{print $5}' | head -n1)"
+    if [ -z "$INTERNET_FACING_IFACE" ]; then
+        warn "Could not determine internet-facing interface. Trying alternative method."
+        INTERNET_FACING_IFACE="$(ip -o -4 route show to default | awk '{print $5}' | head -n1)"
+        if [ -z "$INTERNET_FACING_IFACE" ]; then
+            error "Failed to determine outgoing network interface. Manual configuration needed."
+        fi
+    fi
+    info "Using interface: $INTERNET_FACING_IFACE for outbound traffic"
+    
     # Check if UFW is active
     if ufw status | grep -q "Status: active"; then
-        # Get the internet-facing interface
-        local INTERNET_FACING_IFACE="$(ip -4 route show default | awk '{print $5}' | head -n1)"
-        
-        if [ -z "$INTERNET_FACING_IFACE" ]; then
-            warn "Could not determine internet-facing interface. Masquerading may not work correctly."
-        else
-            info "Using interface: $INTERNET_FACING_IFACE for outbound traffic"
-        fi
+        info "UFW is active. Configuring UFW rules..."
         
         # Add masquerading rule to UFW's before.rules if not already present
         if ! grep -q "POSTROUTING -o $INTERNET_FACING_IFACE -j MASQUERADE" /etc/ufw/before.rules; then
@@ -219,32 +261,31 @@ update_firewall() {
             
             # Check if NAT table exists in before.rules
             if grep -q "*nat" /etc/ufw/before.rules; then
-                # Check if masquerading rule already exists
-                if ! grep -q "POSTROUTING -o $INTERNET_FACING_IFACE -j MASQUERADE" /etc/ufw/before.rules; then
-                    # Find the COMMIT line in the nat section and insert the rule before it
-                    awk '
-                    BEGIN {nat_section=0}
-                    /\*nat/ {nat_section=1; print; next}
-                    /COMMIT/ && nat_section==1 {
-                        printf("# Forward traffic from Server 2 through Server 1\n");
-                        printf("-A POSTROUTING -o '"$INTERNET_FACING_IFACE"' -j MASQUERADE\n\n");
-                        nat_section=0;
-                    }
-                    {print}
-                    ' /etc/ufw/before.rules > /tmp/before.rules.new && mv /tmp/before.rules.new /etc/ufw/before.rules
-                fi
+                # Find the COMMIT line in the nat section and insert the rule before it
+                awk '
+                BEGIN {nat_section=0}
+                /\*nat/ {nat_section=1; print; next}
+                /COMMIT/ && nat_section==1 {
+                    printf("# Forward traffic from Server 2 through Server 1\n");
+                    printf("-A POSTROUTING -o '"$INTERNET_FACING_IFACE"' -j MASQUERADE\n");
+                    # Allow Outline VPN subnet traffic
+                    printf("# Allow Outline VPN subnet traffic\n");
+                    printf("-A POSTROUTING -s '"$OUTLINE_NETWORK"' -o '"$INTERNET_FACING_IFACE"' -j MASQUERADE\n\n");
+                    nat_section=0;
+                }
+                {print}
+                ' /etc/ufw/before.rules > /tmp/before.rules.new && mv /tmp/before.rules.new /etc/ufw/before.rules
             else
-                # Create a new NAT table section and add to the file before the final COMMIT
-                # First, make a backup
-                cp /etc/ufw/before.rules /etc/ufw/before.rules.bak.$(date +%s)
-                
-                # Create the NAT section content
+                # Create a new NAT table section
                 NAT_SECTION="*nat
 :PREROUTING ACCEPT [0:0]
 :POSTROUTING ACCEPT [0:0]
 
 # Forward traffic from Server 2 through Server 1
 -A POSTROUTING -o $INTERNET_FACING_IFACE -j MASQUERADE
+
+# Allow Outline VPN subnet traffic
+-A POSTROUTING -s $OUTLINE_NETWORK -o $INTERNET_FACING_IFACE -j MASQUERADE
 
 COMMIT
 "
@@ -254,6 +295,12 @@ COMMIT
             
             info "Added masquerading rules to UFW"
             
+            # Enable IP forwarding in UFW
+            if ! grep -q "DEFAULT_FORWARD_POLICY=\"ACCEPT\"" /etc/default/ufw; then
+                sed -i 's/DEFAULT_FORWARD_POLICY="DROP"/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
+                info "Enabled forwarding policy in UFW"
+            fi
+            
             # Reload UFW
             ufw reload
         else
@@ -262,17 +309,18 @@ COMMIT
     else
         warn "UFW is not active. Using direct iptables rules instead."
         
-        # Get the internet-facing interface
-        local INTERNET_FACING_IFACE="$(ip -4 route show default | awk '{print $5}' | head -n1)"
-        
-        if [ -z "$INTERNET_FACING_IFACE" ]; then
-            warn "Could not determine internet-facing interface. Masquerading may not work correctly."
+        # Check if the SERVER1_MASQUERADE_TRAFFIC flag is set to true
+        if [ "$SERVER1_MASQUERADE_TRAFFIC" = "true" ]; then
+            # Add masquerading rule for general traffic
+            iptables -t nat -A POSTROUTING -o "$INTERNET_FACING_IFACE" -j MASQUERADE
+            
+            # Add specific rule for Outline VPN subnet
+            iptables -t nat -A POSTROUTING -s "$OUTLINE_NETWORK" -o "$INTERNET_FACING_IFACE" -j MASQUERADE
+            
+            info "Added masquerading rules for traffic forwarding"
         else
-            info "Using interface: $INTERNET_FACING_IFACE for outbound traffic"
+            warn "SERVER1_MASQUERADE_TRAFFIC is not set to true. Skipping masquerade rules."
         fi
-        
-        # Add masquerading rule
-        iptables -t nat -A POSTROUTING -o "$INTERNET_FACING_IFACE" -j MASQUERADE
         
         # Save iptables rules
         if command -v iptables-save &> /dev/null; then
@@ -281,6 +329,14 @@ COMMIT
             warn "iptables-save not found. Rules will not persist after reboot."
             warn "Consider installing iptables-persistent: apt-get install iptables-persistent"
         fi
+    fi
+    
+    # Verify the rules are applied
+    info "Verifying firewall rules..."
+    if iptables -t nat -L POSTROUTING | grep -q "MASQUERADE"; then
+        info "MASQUERADE rules are correctly configured."
+    else
+        warn "MASQUERADE rules do not appear to be applied correctly."
     fi
 }
 
