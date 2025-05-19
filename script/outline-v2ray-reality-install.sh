@@ -1,10 +1,3 @@
-# Outline VPN with v2ray VLESS Implementation
-
-This document contains the implementation details for installing Outline VPN with v2ray VLESS protocol masking. The script below removes monitoring and management components from the original Outline installer while adding v2ray VLESS integration.
-
-## Installation Script
-
-```bash
 #!/bin/bash
 #
 # Copyright 2018 The Outline Authors
@@ -21,7 +14,7 @@ This document contains the implementation details for installing Outline VPN wit
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Script to install Outline Server with v2ray VLESS protocol masking
+# Script to install Outline Server with v2ray VLESS Reality protocol
 # This version removes monitoring and management components for enhanced privacy.
 
 # You may set the following environment variables, overriding their defaults:
@@ -32,9 +25,12 @@ This document contains the implementation details for installing Outline VPN wit
 # SHADOWBOX_DIR: Directory for persistent Outline Server state.
 # V2RAY_CONTAINER_NAME: Docker instance name for v2ray (default v2ray).
 # V2RAY_DIR: Directory for persistent v2ray state.
+# V2RAY_IMAGE: The Docker image to use for v2ray (default v2fly/v2fly-core:latest).
 # V2RAY_UUID: UUID for VLESS protocol authentication (auto-generated if not provided).
-# V2RAY_WS_PATH: WebSocket path for VLESS protocol (default /ws).
 # V2RAY_PORT: Port for v2ray to listen on (default 443).
+# REALITY_DEST_SITE: Destination site to mimic (default www.microsoft.com:443)
+# REALITY_FINGERPRINT: TLS fingerprint to simulate (default chrome)
+# REALITY_SHORTID: Short ID for Reality (auto-generated if not provided)
 
 # Requires curl and docker to be installed
 
@@ -42,11 +38,16 @@ set -euo pipefail
 
 function display_usage() {
   cat <<EOF
-Usage: install_server.sh [--hostname <hostname>] [--v2ray-port <port>] [--keys-port <port>]
+Usage: install_server.sh [--hostname <hostname>] [--v2ray-port <port>] [--keys-port <port>] [--fix-permissions]
+                        [--dest-site <domain:port>] [--fingerprint <type>]
 
-  --hostname   The hostname to be used for accessing the VPN
-  --v2ray-port The port number for v2ray VLESS protocol (default: 443)
-  --keys-port  The port number for the access keys
+  --hostname        The hostname to be used for accessing the VPN
+  --v2ray-port      The port number for v2ray VLESS protocol (default: 443)
+  --keys-port       The port number for the access keys
+  --dest-site       The destination site to mimic (default: www.microsoft.com:443)
+  --fingerprint     TLS fingerprint to simulate (default: chrome)
+  --fix-permissions Only fix permissions for existing installation
+  --help            Display this help message
 EOF
 }
 
@@ -64,14 +65,6 @@ function log_command() {
   # The most recent STDERR output will also be stored in LAST_ERROR.
   "$@" > >(tee -a "${FULL_LOG}") 2> >(tee -a "${FULL_LOG}" > "${LAST_ERROR}")
 }
-
-function log_error() {
-  local -r ERROR_TEXT="\033[0;31m"  # red
-  local -r NO_COLOR="\033[0m"
-  echo -e "${ERROR_TEXT}$1${NO_COLOR}"
-  echo "$1" >> "${FULL_LOG}"
-}
-
 # Pretty prints text to stdout, and also writes to log file if set.
 function log_start_step() {
   local -r str="> $*"
@@ -154,28 +147,6 @@ function install_docker() {
     umask 0022
     fetch https://get.docker.com/ | sh
   ) >&2
-}
-
-function start_docker() {
-  systemctl enable --now docker.service >&2
-}
-
-function docker_container_exists() {
-  docker ps -a --format '{{.Names}}'| grep --quiet "^$1$"
-}
-
-function remove_shadowbox_container() {
-  remove_docker_container "${CONTAINER_NAME}"
-}
-
-function remove_v2ray_container() {
-  remove_docker_container "${V2RAY_CONTAINER_NAME}"
-}
-
-function remove_docker_container() {
-  docker rm -f "$1" >&2
-}
-
 function handle_docker_container_conflict() {
   local -r CONTAINER_NAME="$1"
   local -r EXIT_ON_NEGATIVE_USER_RESPONSE="$2"
@@ -251,29 +222,21 @@ function generate_secret_key() {
   readonly SB_API_PREFIX
 }
 
-function generate_certificate() {
-  # Generate self-signed cert and store it in the persistent state directory.
-  local -r CERTIFICATE_NAME="${STATE_DIR}/shadowbox-selfsigned"
-  readonly SB_CERTIFICATE_FILE="${CERTIFICATE_NAME}.crt"
-  readonly SB_PRIVATE_KEY_FILE="${CERTIFICATE_NAME}.key"
-  declare -a openssl_req_flags=(
-    -x509 -nodes -days 36500 -newkey rsa:4096
-    -subj "/CN=${PUBLIC_HOSTNAME}"
-    -keyout "${SB_PRIVATE_KEY_FILE}" -out "${SB_CERTIFICATE_FILE}"
-  )
-  openssl req "${openssl_req_flags[@]}" >&2
-}
-
-function generate_certificate_fingerprint() {
-  # Add a tag with the SHA-256 fingerprint of the certificate.
-  local CERT_OPENSSL_FINGERPRINT
-  CERT_OPENSSL_FINGERPRINT="$(openssl x509 -in "${SB_CERTIFICATE_FILE}" -noout -sha256 -fingerprint)" || return
-  # Example format: "BDDBC9A4395CB34E6ECF1843619F07A2090737356367"
-  local CERT_HEX_FINGERPRINT
-  CERT_HEX_FINGERPRINT="$(echo "${CERT_OPENSSL_FINGERPRINT#*=}" | tr -d :)" || return
-  output_config "certSha256:${CERT_HEX_FINGERPRINT}"
-}
-
+# Generate reality keypair for VLESS Reality
+function generate_reality_keypair() {
+  # Generate reality keypair for VLESS Reality
+  mkdir -p "${V2RAY_DIR}"
+  
+  # Use docker to generate the keypair since it has xray installed
+  local PRIVATE_KEY_OUTPUT
+  PRIVATE_KEY_OUTPUT=$(docker run --rm "${V2RAY_IMAGE}" xray x25519)
+  
+  # Extract private and public keys
+  REALITY_PRIVATE_KEY=$(echo "$PRIVATE_KEY_OUTPUT" | grep "Private key:" | cut -d' ' -f3)
+  REALITY_PUBLIC_KEY=$(echo "$PRIVATE_KEY_OUTPUT" | grep "Public key:" | cut -d' ' -f3)
+  
+  # Save keys to file for reference
+  echo "Private key: ${REALITY_PRIVATE_KEY}" > "${V2RAY_DIR}/reality_keypair.txt"
 function join() {
   local IFS="$1"
   shift
@@ -290,8 +253,22 @@ function write_outline_config() {
 }
 
 function write_v2ray_config() {
-  # Create v2ray config with VLESS protocol
+  # Create v2ray config with VLESS Reality protocol
   mkdir -p "${V2RAY_DIR}"
+  
+  # Check if a directory exists at the config.json location and remove it
+  if [[ -d "${V2RAY_DIR}/config.json" ]]; then
+    rm -rf "${V2RAY_DIR}/config.json"
+  fi
+  
+  # Parse destination site
+  local DEST_DOMAIN
+  local DEST_PORT
+  IFS=':' read -r DEST_DOMAIN DEST_PORT <<< "${REALITY_DEST_SITE}"
+  if [[ -z "$DEST_PORT" ]]; then
+    DEST_PORT="443"  # Default to 443 if not specified
+  fi
+  
   cat > "${V2RAY_DIR}/config.json" << EOF
 {
   "log": {
@@ -308,37 +285,25 @@ function write_v2ray_config() {
         "clients": [
           {
             "id": "${V2RAY_UUID}",
+            "flow": "xtls-rprx-vision",
             "level": 0
           }
         ],
-        "decryption": "none",
-        "fallbacks": [
-          {
-            "dest": 80,
-            "xver": 1
-          }
-        ]
+        "decryption": "none"
       },
       "streamSettings": {
-        "network": "ws",
-        "wsSettings": {
-          "path": "${V2RAY_WS_PATH}",
-          "headers": {
-            "Host": "${PUBLIC_HOSTNAME}"
-          }
-        },
-        "security": "tls",
-        "tlsSettings": {
-          "certificates": [
-            {
-              "certificateFile": "${SB_CERTIFICATE_FILE}",
-              "keyFile": "${SB_PRIVATE_KEY_FILE}"
-            }
-          ],
-          "alpn": ["http/1.1"]
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "dest": "${REALITY_DEST_SITE}",
+          "serverNames": ["${DEST_DOMAIN}"],
+          "privateKey": "${REALITY_PRIVATE_KEY}",
+          "shortIds": ["${REALITY_SHORTID}"],
+          "fingerprint": "${REALITY_FINGERPRINT}"
         }
       },
-      "tag": "vless-ws-tls"
+      "tag": "vless-reality"
     }
   ],
   "outbounds": [
@@ -359,7 +324,7 @@ function write_v2ray_config() {
       "settings": {
         "servers": [
           {
-            "address": "127.0.0.1",
+            "address": "${CONTAINER_NAME}",
             "port": ${OUTLINE_PORT},
             "method": "${SS_METHOD}",
             "password": "${SS_PASSWORD}"
@@ -380,26 +345,6 @@ function write_v2ray_config() {
         "outboundTag": "blocked"
       },
       {
-        "type": "field",
-        "inboundTag": [
-          "vless-ws-tls"
-        ],
-        "outboundTag": "shadowsocks-outbound"
-      }
-    ]
-  },
-  "dns": {
-    "servers": [
-      "1.1.1.1",
-      "8.8.8.8",
-      "https+local://dns.google/dns-query",
-      "localhost"
-    ]
-  }
-}
-EOF
-}
-
 function start_shadowbox() {
   # Start the shadowbox container
   local -r START_SCRIPT="${STATE_DIR}/start_container.sh"
@@ -414,11 +359,19 @@ set -eu
 docker stop "${CONTAINER_NAME}" 2> /dev/null || true
 docker rm -f "${CONTAINER_NAME}" 2> /dev/null || true
 
+# Ensure the Docker network exists
+docker network inspect outline-network >/dev/null 2>&1 || docker network create outline-network
+
 docker_command=(
   docker
   run
   -d
-  --name "${CONTAINER_NAME}" --restart always --net host
+  --name "${CONTAINER_NAME}" --restart always
+  --network outline-network
+  
+  # Port mapping instead of host networking
+  -p ${OUTLINE_PORT}:${OUTLINE_PORT}/tcp
+  -p ${OUTLINE_PORT}:${OUTLINE_PORT}/udp
 
   # Use log rotation. See https://docs.docker.com/config/containers/logging/configure/.
   --log-driver local
@@ -428,10 +381,6 @@ docker_command=(
 
   # Where the container keeps its persistent state.
   -e "SB_STATE_DIR=${STATE_DIR}"
-
-  # Location of the certificates.
-  -e "SB_CERTIFICATE_FILE=${SB_CERTIFICATE_FILE}"
-  -e "SB_PRIVATE_KEY_FILE=${SB_PRIVATE_KEY_FILE}"
 
   # Shadowsocks configuration
   -e "PORT=${OUTLINE_PORT}"
@@ -460,55 +409,39 @@ EOF
 }
 
 function start_v2ray() {
-  # Start the v2ray container
-  local -r START_SCRIPT="${V2RAY_DIR}/start_container.sh"
-  cat <<-EOF > "${START_SCRIPT}"
-# This script starts the v2ray container.
-# If you need to customize how the server is run, you can edit this script, then restart with:
-#
-#     "${START_SCRIPT}"
-
-set -eu
-
-docker stop "${V2RAY_CONTAINER_NAME}" 2> /dev/null || true
-docker rm -f "${V2RAY_CONTAINER_NAME}" 2> /dev/null || true
-
-docker_command=(
-  docker
-  run
-  -d
-  --name "${V2RAY_CONTAINER_NAME}" --restart always --net host
-
-  # Use log rotation
-  --log-driver local
-
-  # v2ray configuration
-  -v "${V2RAY_DIR}/config.json:/etc/v2ray/config.json:ro"
-  
-  # Certificate access
-  -v "${SB_CERTIFICATE_FILE}:${SB_CERTIFICATE_FILE}:ro"
-  -v "${SB_PRIVATE_KEY_FILE}:${SB_PRIVATE_KEY_FILE}:ro"
-
-  # Create log directory
-  -v "${V2RAY_DIR}/logs:/var/log/v2ray"
-
-  # The v2ray image to run
-  "v2fly/v2fly-core:latest"
-)
-"\${docker_command[@]}"
-EOF
-  chmod +x "${START_SCRIPT}"
-  
-  # Execute the start script
-  local STDERR_OUTPUT
-  STDERR_OUTPUT="$({ "${START_SCRIPT}" >/dev/null; } 2>&1)" && return
-  readonly STDERR_OUTPUT
-  log_error "FAILED"
+  # Check if the v2ray container already exists
   if docker_container_exists "${V2RAY_CONTAINER_NAME}"; then
-    handle_docker_container_conflict "${V2RAY_CONTAINER_NAME}" true
-    return
+    if ! run_step "Removing existing ${V2RAY_CONTAINER_NAME}" remove_v2ray_container; then
+      log_error "Failed to remove existing ${V2RAY_CONTAINER_NAME} container"
+      return 1
+    fi
+  fi
+
+  # Create the logs directory
+  mkdir -p "${V2RAY_DIR}/logs"
+  
+  # Start v2ray directly with the proper command
+  log_start_step "Starting v2ray container with direct command"
+  
+  # Execute the docker run command directly
+  if docker run -d \
+    --name "${V2RAY_CONTAINER_NAME}" \
+    --restart always \
+    --network outline-network \
+    -p "${V2RAY_PORT}:${V2RAY_PORT}/tcp" \
+    -p "${V2RAY_PORT}:${V2RAY_PORT}/udp" \
+    --log-driver local \
+    -v "${V2RAY_DIR}/config.json:/etc/v2ray/config.json:ro" \
+    -v "${V2RAY_DIR}/logs:/var/log/v2ray" \
+    "${V2RAY_IMAGE:-v2fly/v2fly-core:latest}" \
+    run \
+    -c \
+    /etc/v2ray/config.json >/dev/null 2>&1; then
+    
+    echo "OK"
+    return 0
   else
-    log_error "${STDERR_OUTPUT}"
+    log_error "FAILED"
     return 1
   fi
 }
@@ -518,45 +451,26 @@ function output_config() {
 }
 
 function check_firewall() {
-  if ! fetch --max-time 5 --cacert "${SB_CERTIFICATE_FILE}" "https://${PUBLIC_HOSTNAME}:${V2RAY_PORT}${V2RAY_WS_PATH}" >/dev/null; then
-     log_error "BLOCKED"
-     FIREWALL_STATUS="\
+  # For Reality, we can't check using curl as we did with TLS+WebSocket
+  # Instead, we'll just check if the port is open
+  if ss -tuln | grep -q ":${V2RAY_PORT} "; then
+    echo "Port ${V2RAY_PORT} is open"
+  else
+    log_error "BLOCKED"
+    FIREWALL_STATUS="\
 You won't be able to access it externally, despite your server being correctly
 set up, because there's a firewall (in this machine, your router or cloud
 provider) that is preventing incoming connections to port ${V2RAY_PORT}."
-  else
-    FIREWALL_STATUS="\
-If you have connection problems, it may be that your router or cloud provider
-blocks inbound connections, even though your machine seems to allow them."
   fi
+  
   FIREWALL_STATUS="\
 ${FIREWALL_STATUS}
-
-Make sure to open the following ports on your firewall, router or cloud provider:
-- v2ray port ${V2RAY_PORT}, for both TCP and UDP
-"
-}
-
-function set_hostname() {
-  # These are URLs that return the client's apparent IP address.
-  # We have more than one to try in case one starts failing
-  local -ar urls=(
-    'https://icanhazip.com/'
-    'https://ipinfo.io/ip'
-    'https://domains.google.com/checkip'
-  )
-  for url in "${urls[@]}"; do
-    PUBLIC_HOSTNAME="$(fetch --ipv4 "${url}")" && return
-  done
-  echo "Failed to determine the server's IP address. Try using --hostname <server IP>." >&2
-  return 1
-}
 
 function install_vpn() {
   local MACHINE_TYPE
   MACHINE_TYPE="$(uname -m)"
-  if [[ "${MACHINE_TYPE}" != "x86_64" ]]; then
-    log_error "Unsupported machine type: ${MACHINE_TYPE}. Please run this script on a x86_64 machine"
+  if [[ "${MACHINE_TYPE}" != "x86_64" && "${MACHINE_TYPE}" != "aarch64" ]]; then
+    log_error "Unsupported machine type: ${MACHINE_TYPE}. This script supports x86_64 and aarch64 architectures"
     exit 1
   fi
 
@@ -565,6 +479,12 @@ function install_vpn() {
 
   export CONTAINER_NAME="${CONTAINER_NAME:-shadowbox}"
   export V2RAY_CONTAINER_NAME="${V2RAY_CONTAINER_NAME:-v2ray}"
+  
+  # Set appropriate V2Ray image based on architecture if not specified
+  if [[ -z "${V2RAY_IMAGE:-}" ]]; then
+    V2RAY_IMAGE="v2fly/v2fly-core:latest"  # This image supports both x86_64 and aarch64
+  fi
+  export V2RAY_IMAGE
 
   run_step "Verifying that Docker is installed" verify_docker_installed
   run_step "Verifying that Docker daemon is running" verify_docker_running
@@ -592,10 +512,11 @@ function install_vpn() {
     OUTLINE_PORT=$(get_random_port)
   fi
   readonly OUTLINE_PORT
-
-  # Set WebSocket path
-  export V2RAY_WS_PATH="${V2RAY_WS_PATH:-/ws}"
-  readonly V2RAY_WS_PATH
+  
+  # Set Reality parameters
+  export REALITY_DEST_SITE="${FLAGS_DEST_SITE:-${REALITY_DEST_SITE:-www.microsoft.com:443}}"
+  export REALITY_FINGERPRINT="${FLAGS_FINGERPRINT:-${REALITY_FINGERPRINT:-chrome}}"
+  readonly REALITY_DEST_SITE REALITY_FINGERPRINT
 
   # Set Shadowsocks method and password
   export SS_METHOD="${SS_METHOD:-chacha20-ietf-poly1305}"
@@ -605,7 +526,15 @@ function install_vpn() {
   readonly SS_METHOD SS_PASSWORD
 
   readonly ACCESS_CONFIG="${ACCESS_CONFIG:-${SHADOWBOX_DIR}/access.txt}"
-  readonly SB_IMAGE="${SB_IMAGE:-shadowsocks/shadowsocks-libev:latest}"
+  # Select appropriate Docker image based on architecture
+  if [[ -z "${SB_IMAGE:-}" ]]; then
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+      SB_IMAGE="shadowsocks/shadowsocks-libev:latest"  # multi-arch image with ARM64 support
+    else
+      SB_IMAGE="shadowsocks/shadowsocks-libev:latest"  # default for x86_64
+    fi
+  fi
+  readonly SB_IMAGE
 
   PUBLIC_HOSTNAME="${FLAGS_HOSTNAME:-${SB_PUBLIC_IP:-}}"
   if [[ -z "${PUBLIC_HOSTNAME}" ]]; then
@@ -622,11 +551,11 @@ function install_vpn() {
   run_step "Creating persistent state dir" create_persisted_state_dir
   run_step "Generating UUID for v2ray" generate_uuid
   run_step "Generating secret key" generate_secret_key
-  run_step "Generating TLS certificate" generate_certificate
-  run_step "Generating SHA-256 certificate fingerprint" generate_certificate_fingerprint
+  run_step "Generating Reality keypair" generate_reality_keypair
   run_step "Writing Outline config" write_outline_config
   run_step "Writing v2ray config" write_v2ray_config
-
+  
+  run_step "Creating Docker network" create_docker_network
   run_step "Starting Outline VPN" start_shadowbox
   run_step "Starting v2ray with VLESS" start_v2ray
 
@@ -636,18 +565,21 @@ function install_vpn() {
   # Output the connection information
   cat <<END_OF_SERVER_OUTPUT
 
-CONGRATULATIONS! Your Outline VPN with v2ray VLESS masking is up and running.
+CONGRATULATIONS! Your Outline VPN with v2ray VLESS Reality is up and running on ${MACHINE_TYPE} architecture.
 
-To connect using v2ray with VLESS protocol:
+To connect using v2ray with VLESS Reality protocol:
 
-Server:   ${PUBLIC_HOSTNAME}
-Port:     ${V2RAY_PORT}
-UUID:     ${V2RAY_UUID}
-Protocol: VLESS
-TLS:      YES
-Network:  WebSocket
-Path:     ${V2RAY_WS_PATH}
-TLS Host: ${PUBLIC_HOSTNAME}
+Server:       ${PUBLIC_HOSTNAME}
+Port:         ${V2RAY_PORT}
+UUID:         ${V2RAY_UUID}
+Protocol:     VLESS
+Flow:         xtls-rprx-vision
+Security:     Reality
+Dest:         ${REALITY_DEST_SITE}
+SNI:          ${REALITY_DEST_SITE%%:*}
+Fingerprint:  ${REALITY_FINGERPRINT}
+ShortID:      ${REALITY_SHORTID}
+PublicKey:    ${REALITY_PUBLIC_KEY}
 
 ${FIREWALL_STATUS}
 END_OF_SERVER_OUTPUT
@@ -683,7 +615,7 @@ function escape_json_string() {
 
 function parse_flags() {
   local params
-  params="$(getopt --longoptions hostname:,v2ray-port:,keys-port: -n "$0" -- "$0" "$@")"
+  params="$(getopt --longoptions hostname:,v2ray-port:,keys-port:,dest-site:,fingerprint:,fix-permissions,help -n "$0" -- "$0" "$@")"
   eval set -- "${params}"
 
   while (( $# > 0 )); do
@@ -710,6 +642,21 @@ function parse_flags() {
           exit 1
         fi
         ;;
+      --dest-site)
+        FLAGS_DEST_SITE="$1"
+        shift
+        ;;
+      --fingerprint)
+        FLAGS_FINGERPRINT="$1"
+        shift
+        ;;
+      --fix-permissions)
+        FLAGS_FIX_PERMISSIONS=true
+        ;;
+      --help)
+        display_usage
+        exit 0
+        ;;
       --)
         break
         ;;
@@ -727,64 +674,149 @@ function parse_flags() {
   return 0
 }
 
+# Function to fix permissions for V2Ray and Outline VPN files
+function fix_permissions() {
+  # Default paths if not set
+  local OUTLINE_DIR=${SHADOWBOX_DIR:-/opt/outline}
+  local V2RAY_DIR=${V2RAY_DIR:-/opt/v2ray}
+  
+  echo "Fixing permissions for V2Ray and Outline VPN files..."
+  
+  # Set correct permissions for V2Ray config
+  if [[ -f "${V2RAY_DIR}/config.json" ]]; then
+    chmod 644 "${V2RAY_DIR}/config.json"
+    echo "Permission fixed: ${V2RAY_DIR}/config.json"
+  else
+    log_error "V2Ray config file not found at ${V2RAY_DIR}/config.json"
+  fi
+  
+  # Set correct permissions for Reality keypair file
+  if [[ -f "${V2RAY_DIR}/reality_keypair.txt" ]]; then
+    chmod 600 "${V2RAY_DIR}/reality_keypair.txt"
+    echo "Permission fixed: ${V2RAY_DIR}/reality_keypair.txt"
+  else
+    log_error "Reality keypair file not found at ${V2RAY_DIR}/reality_keypair.txt"
+  fi
+  
+  echo "Restarting containers..."
+  
+  # Try to restart the containers
+  if docker_container_exists "v2ray"; then
+    docker restart v2ray >/dev/null 2>&1 && echo "v2ray container restarted successfully"
+  else
+    log_error "v2ray container not found, skipping restart"
+  fi
+  
+  if docker_container_exists "shadowbox"; then
+    docker restart shadowbox >/dev/null 2>&1 && echo "shadowbox container restarted successfully"
+  else
+    log_error "shadowbox container not found, skipping restart"
+  fi
+  
+  echo "Permission fix completed!"
+}
+
 function main() {
   trap finish EXIT
   declare FLAGS_HOSTNAME=""
   declare -i FLAGS_V2RAY_PORT=0
   declare -i FLAGS_KEYS_PORT=0
+  declare FLAGS_DEST_SITE=""
+  declare FLAGS_FINGERPRINT=""
+  declare FLAGS_FIX_PERMISSIONS=false
+  
   parse_flags "$@"
-  install_vpn
+  
+  # Run only permission fix if requested
+  if [[ "${FLAGS_FIX_PERMISSIONS}" == true ]]; then
+    fix_permissions
+  else
+    install_vpn
+  fi
 }
 
 main "$@"
-```
+Make sure to open the following ports on your firewall, router or cloud provider:
+- v2ray port ${V2RAY_PORT}, for both TCP and UDP
+"
+}
 
-## Usage Instructions
+function set_hostname() {
+  # These are URLs that return the client's apparent IP address.
+  # We have more than one to try in case one starts failing
+  local -ar urls=(
+    'https://icanhazip.com/'
+    'https://ipinfo.io/ip'
+    'https://domains.google.com/checkip'
+  )
+  for url in "${urls[@]}"; do
+    PUBLIC_HOSTNAME="$(fetch --ipv4 "${url}")" && return
+  done
+  echo "Failed to determine the server's IP address. Try using --hostname <server IP>." >&2
+  return 1
+}
+        "type": "field",
+        "inboundTag": [
+          "vless-reality"
+        ],
+        "outboundTag": "shadowsocks-outbound"
+      }
+    ]
+  },
+  "dns": {
+    "servers": [
+      "1.1.1.1",
+      "8.8.8.8",
+      "https+local://dns.google/dns-query",
+      "localhost"
+    ]
+  }
+}
+EOF
+  # Ensure the config file has proper permissions for the container to read
+  chmod 644 "${V2RAY_DIR}/config.json"
+}
 
-After implementing this script, it can be used with the following commands:
+function create_docker_network() {
+  # Create a Docker network for the containers to communicate with each other
+  docker network inspect outline-network >/dev/null 2>&1 || docker network create outline-network
+}
+  echo "Public key: ${REALITY_PUBLIC_KEY}" >> "${V2RAY_DIR}/reality_keypair.txt"
+  chmod 600 "${V2RAY_DIR}/reality_keypair.txt"
+  
+  # Generate short ID if not provided
+  if [[ -z "${REALITY_SHORTID:-}" ]]; then
+    REALITY_SHORTID=$(openssl rand -hex 8)
+    echo "Short ID: ${REALITY_SHORTID}" >> "${V2RAY_DIR}/reality_keypair.txt"
+  fi
+  
+  readonly REALITY_PRIVATE_KEY REALITY_PUBLIC_KEY REALITY_SHORTID
+}
+}
 
-1. **Basic installation (uses default options):**
-   ```bash
-   ./outline-v2ray-install.sh
-   ```
+function start_docker() {
+  systemctl enable --now docker.service >&2
+}
 
-2. **Custom hostname and ports:**
-   ```bash
-   ./outline-v2ray-install.sh --hostname example.com --v2ray-port 443 --keys-port 8388
-   ```
+function docker_container_exists() {
+  docker ps -a --format '{{.Names}}'| grep --quiet "^$1$"
+}
 
-3. **Environment variable customization:**
-   ```bash
-   SS_METHOD=aes-256-gcm SS_PASSWORD=myCustomPassword ./outline-v2ray-install.sh
-   ```
+function remove_shadowbox_container() {
+  remove_docker_container "${CONTAINER_NAME}"
+}
 
-## Implementation Notes
+function remove_v2ray_container() {
+  remove_docker_container "${V2RAY_CONTAINER_NAME}"
+}
 
-1. **Removed Components:**
-   - Watchtower container
-   - Management API and web interface
-   - All monitoring components (Prometheus, Alertmanager, Grafana)
+function remove_docker_container() {
+  docker rm -f "$1" >&2
+}
 
-2. **Key Additions:**
-   - v2ray VLESS protocol integration
-   - WebSocket transport for traffic masking
-   - TLS encryption for secure communications
-   - Automatic UUID generation
-   - Direct routing between v2ray and Outline VPN
-
-3. **Security Enhancements:**
-   - No management API exposed
-   - Minimal attack surface
-   - Strong default encryption
-
-4. **Client Configuration:**
-   - The output provides all necessary information for connecting with v2ray VLESS clients
-   - Compatible with v2ray, v2rayNG, Qv2ray, and other clients
-
-## Next Steps
-
-After implementing this script:
-
-1. Switch to Code mode to implement the actual installation script
-2. Test the implementation on a clean server
-3. Create additional documentation for client configuration if needed
+function log_error() {
+  local -r ERROR_TEXT="\033[0;31m"  # red
+  local -r NO_COLOR="\033[0m"
+  echo -e "${ERROR_TEXT}$1${NO_COLOR}"
+  echo "$1" >> "${FULL_LOG}"
+}

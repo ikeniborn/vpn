@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Script to generate VLESS client configurations and QR codes
-# for Outline VPN with v2ray VLESS protocol
+# for Outline VPN with v2ray VLESS Reality protocol
 
 set -euo pipefail
 
@@ -13,6 +13,15 @@ V2RAY_WS_PATH="/ws"
 CLIENT_NAME=""
 DISPLAY_QR=true
 
+# Reality config defaults
+REALITY_CONFIG=false
+SERVER_NAME=""
+DEST_SITE=""
+FINGERPRINT=""
+SHORT_ID=""
+PRIVATE_KEY=""
+PUBLIC_KEY=""
+
 function log_error() {
   local -r ERROR_TEXT="\033[0;31m"  # red
   local -r NO_COLOR="\033[0m"
@@ -23,7 +32,7 @@ function display_usage() {
   cat <<EOF
 Usage: $(basename "$0") [options]
 
-Generate a new VLESS client configuration and QR code for Outline VPN with v2ray.
+Generate a new VLESS client configuration and QR code for Outline VPN with v2ray Reality.
 
 Options:
   --name NAME        Name/alias for the client (required)
@@ -64,13 +73,22 @@ function get_server_hostname() {
   # Try to get the hostname from the config file
   local hostname
   
-  # First, try to extract from v2ray config
-  if hostname=$(jq -r '.inbounds[0].streamSettings.wsSettings.headers.Host' "$V2RAY_CONFIG" 2>/dev/null) && [ "$hostname" != "null" ] && [ -n "$hostname" ]; then
-    echo "$hostname"
-    return 0
+  if [ "$REALITY_CONFIG" = true ]; then
+    # For Reality, use the server's IP address
+    if hostname=$(hostname -I | awk '{print $1}'); then
+      echo "$hostname"
+      return 0
+    fi
+  else
+    # First, try to extract from v2ray config for WebSocket+TLS
+    if hostname=$(jq -r '.inbounds[0].streamSettings.wsSettings.headers.Host' "$V2RAY_CONFIG" 2>/dev/null) && 
+       [ "$hostname" != "null" ] && [ -n "$hostname" ]; then
+      echo "$hostname"
+      return 0
+    fi
   fi
   
-  # If that fails, try to guess using public IP services
+  # If the above methods fail, try to guess using public IP services
   local -a urls=(
     'https://icanhazip.com/'
     'https://ipinfo.io/ip'
@@ -98,7 +116,13 @@ function add_client_to_config() {
   
   # Add the new client to the config
   temp_config=$(mktemp)
-  jq --arg uuid "$uuid" --arg name "$name" '.inbounds[0].settings.clients += [{"id": $uuid, "level": 0, "email": $name}]' "$V2RAY_CONFIG" > "$temp_config"
+  
+  # Check if using Reality (flow field needed)
+  if [ "$REALITY_CONFIG" = true ]; then
+    jq --arg uuid "$uuid" --arg name "$name" '.inbounds[0].settings.clients += [{"id": $uuid, "flow": "xtls-rprx-vision", "level": 0, "email": $name}]' "$V2RAY_CONFIG" > "$temp_config"
+  else
+    jq --arg uuid "$uuid" --arg name "$name" '.inbounds[0].settings.clients += [{"id": $uuid, "level": 0, "email": $name}]' "$V2RAY_CONFIG" > "$temp_config"
+  fi
   
   # Check if jq command was successful
   if [ $? -ne 0 ]; then
@@ -134,13 +158,19 @@ function generate_v2ray_uri() {
   local name="$2"
   local server="$3"
   local port="$4"
-  local path="$5"
   
-  # URL encode the path (replace / with %2F)
-  local encoded_path="${path//\//\%2F}"
-  
-  # Format: vless://UUID@server:port?encryption=none&security=tls&type=ws&host=server&path=%2Fws#alias
-  echo "vless://${uuid}@${server}:${port}?encryption=none&security=tls&type=ws&host=${server}&path=${encoded_path}#${name}"
+  # Check if Reality is configured
+  if [ "$REALITY_CONFIG" = true ]; then
+    # Format: vless://UUID@server:port?encryption=none&flow=xtls-rprx-vision&security=reality&sni=server.com&fp=fingerprint&pbk=publicKey&sid=shortId#name
+    echo "vless://${uuid}@${server}:${port}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${SERVER_NAME}&fp=${FINGERPRINT}&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}#${name}"
+  else
+    # For backward compatibility with WebSocket+TLS
+    # URL encode the path (replace / with %2F)
+    local encoded_path="${V2RAY_WS_PATH//\//\%2F}"
+    
+    # Format: vless://UUID@server:port?encryption=none&security=tls&type=ws&host=server&path=%2Fws#alias
+    echo "vless://${uuid}@${server}:${port}?encryption=none&security=tls&type=ws&host=${server}&path=${encoded_path}#${name}"
+  fi
 }
 
 function generate_qr_code() {
@@ -166,12 +196,72 @@ function extract_config_values() {
     V2RAY_PORT=$port
   fi
   
-  # Extract WebSocket path from config
-  local ws_path
-  ws_path=$(jq -r '.inbounds[0].streamSettings.wsSettings.path' "$V2RAY_CONFIG")
-  if [ "$ws_path" != "null" ] && [ -n "$ws_path" ]; then
-    V2RAY_WS_PATH=$ws_path
+  # Check if using Reality protocol
+  if jq -e '.inbounds[0].streamSettings.security == "reality"' "$V2RAY_CONFIG" > /dev/null; then
+    REALITY_CONFIG=true
+    
+    # Extract Reality settings
+    SERVER_NAME=$(jq -r '.inbounds[0].streamSettings.realitySettings.serverNames[0]' "$V2RAY_CONFIG")
+    DEST_SITE=$(jq -r '.inbounds[0].streamSettings.realitySettings.dest' "$V2RAY_CONFIG")
+    FINGERPRINT=$(jq -r '.inbounds[0].streamSettings.realitySettings.fingerprint' "$V2RAY_CONFIG")
+    SHORT_ID=$(jq -r '.inbounds[0].streamSettings.realitySettings.shortIds[0]' "$V2RAY_CONFIG")
+    PRIVATE_KEY=$(jq -r '.inbounds[0].streamSettings.realitySettings.privateKey' "$V2RAY_CONFIG")
+    
+    # Compute public key from private key
+    if command -v xray &> /dev/null; then
+      PUBLIC_KEY=$(echo "$PRIVATE_KEY" | xray x25519 -i | grep "Public key:" | cut -d' ' -f3)
+    elif docker ps -a --format '{{.Names}}' | grep -q "^v2ray$"; then
+      PUBLIC_KEY=$(docker exec v2ray xray x25519 -i "$PRIVATE_KEY" | grep "Public key:" | cut -d' ' -f3)
+    else
+      PUBLIC_KEY=$(docker run --rm "${V2RAY_IMAGE:-v2fly/v2fly-core:latest}" xray x25519 -i "$PRIVATE_KEY" | grep "Public key:" | cut -d' ' -f3)
+    fi
+  else
+    REALITY_CONFIG=false
+    
+    # For backward compatibility, extract WebSocket path
+    local ws_path
+    ws_path=$(jq -r '.inbounds[0].streamSettings.wsSettings.path' "$V2RAY_CONFIG" 2>/dev/null)
+    if [ "$ws_path" != "null" ] && [ -n "$ws_path" ]; then
+      V2RAY_WS_PATH=$ws_path
+    fi
   fi
+}
+
+function display_connection_info() {
+  local uuid="$1"
+  local name="$2"
+  local server="$3"
+  local port="$4"
+  local uri="$5"
+  
+  echo ""
+  echo "=============== VLESS Client Connection Details ==============="
+  echo ""
+  echo "Client Name: $name"
+  echo "Server:      $server"
+  echo "Port:        $port"
+  echo "UUID:        $uuid"
+  echo "Protocol:    VLESS"
+  
+  if [ "$REALITY_CONFIG" = true ]; then
+    echo "Security:    Reality"
+    echo "Flow:        xtls-rprx-vision"
+    echo "SNI:         $SERVER_NAME"
+    echo "Fingerprint: $FINGERPRINT"
+    echo "Short ID:    $SHORT_ID"
+    echo "Public Key:  $PUBLIC_KEY"
+  else
+    # For backward compatibility
+    echo "Security:    TLS"
+    echo "Network:     WebSocket"
+    echo "Path:        $V2RAY_WS_PATH"
+    echo "TLS Host:    $server"
+  fi
+  
+  echo ""
+  echo "Connection string for manual configuration:"
+  echo "$uri"
+  echo ""
 }
 
 function parse_flags() {
@@ -239,29 +329,14 @@ function main() {
   
   # Generate v2ray URI
   local uri
-  uri=$(generate_v2ray_uri "$uuid" "$CLIENT_NAME" "$server" "$V2RAY_PORT" "$V2RAY_WS_PATH")
+  uri=$(generate_v2ray_uri "$uuid" "$CLIENT_NAME" "$server" "$V2RAY_PORT")
   
   # Display connection information
-  echo ""
-  echo "=============== VLESS Client Connection Details ==============="
-  echo ""
-  echo "Client Name: $CLIENT_NAME"
-  echo "Server:      $server"
-  echo "Port:        $V2RAY_PORT"
-  echo "UUID:        $uuid"
-  echo "Protocol:    VLESS"
-  echo "TLS:         YES"
-  echo "Network:     WebSocket"
-  echo "Path:        $V2RAY_WS_PATH"
-  echo "TLS Host:    $server"
-  echo ""
-  echo "Connection string for manual configuration:"
-  echo "$uri"
-  echo ""
-  echo "Scan this QR code with your v2ray client app:"
-  echo ""
+  display_connection_info "$uuid" "$CLIENT_NAME" "$server" "$V2RAY_PORT" "$uri"
   
   # Generate and display QR code
+  echo "Scan this QR code with your v2ray client app:"
+  echo ""
   generate_qr_code "$uri"
   
   echo ""
