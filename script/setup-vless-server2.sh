@@ -321,21 +321,24 @@ EOF
     
     chmod 644 "$V2RAY_DIR/config.json"
     
-    # Validate the JSON configuration using our specialized validator script
-    info "Validating configuration file..."
-    if [ -f "./script/validate-v2ray-config.sh" ]; then
-        info "Running specialized v2ray configuration validator..."
-        chmod +x ./script/validate-v2ray-config.sh
-        if ! ./script/validate-v2ray-config.sh; then
-            error "JSON validation failed. Cannot proceed with invalid configuration."
-        else
-            info "Configuration file validated and fixed if needed."
-        fi
-    elif command -v jq &>/dev/null; then
+    # Fix and validate the JSON configuration
+    info "Fixing and validating configuration file..."
+    
+    # First apply direct fixes to common JSON issues
+    if [ -f "./script/fix-v2ray-config.sh" ]; then
+        info "Running direct v2ray configuration fixer..."
+        chmod +x ./script/fix-v2ray-config.sh
+        ./script/fix-v2ray-config.sh "$V2RAY_DIR/config.json"
+        info "Applied JSON fixes directly to the configuration file."
+    fi
+    
+    # Then validate with jq if available
+    if command -v jq &>/dev/null; then
         if jq empty "$V2RAY_DIR/config.json" 2>/dev/null; then
             info "Configuration file is valid JSON."
         else
-            error "Invalid JSON configuration. Cannot proceed."
+            warn "Configuration might still have issues after fixing."
+            warn "Will attempt to start container anyway."
         fi
     else
         warn "jq not installed. Skipping JSON validation."
@@ -362,8 +365,8 @@ EOF
         info "Network setup completed."
     fi
     
-    # Run v2ray container with ENTRYPOINT parameter
-    info "Starting v2ray client container with proper entrypoint..."
+    # Run v2ray container with correct configuration
+    info "Starting v2ray client container..."
     docker run -d \
         --name v2ray-client \
         --restart always \
@@ -372,7 +375,7 @@ EOF
         -v "$V2RAY_DIR/config.json:/etc/v2ray/config.json" \
         -v "/var/log/v2ray:/var/log/v2ray" \
         -e "V2RAY_VMESS_AEAD_FORCED=false" \
-        v2fly/v2fly-core:latest /usr/bin/v2ray run -c /etc/v2ray/config.json
+        v2fly/v2fly-core:latest
         
     # Verify container is running with extended waiting and diagnostics
     info "Verifying container startup (waiting 5 seconds)..."

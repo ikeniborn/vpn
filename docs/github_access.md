@@ -12,4 +12,5 @@ Account Name:    server2
 
 sudo ./script/setup-vless-server2.sh \
   --server1-address 129.146.63.189 \
-  --server1-uuid 12a566a9-c9f8-4631-8069-715400607927
+  --server1-uuid 12a566a9-c9f8-4631-8069-715400607927 \
+  --server1-pubkey 5495472d60312d6a746eeb07c329c708e0c7244ee0726811a4f2531f8ba31fd8

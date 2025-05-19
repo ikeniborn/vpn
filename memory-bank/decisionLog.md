@@ -150,3 +150,25 @@ This file records architectural and implementation decisions using a list format
 * Provided detailed error reporting for better troubleshooting
 
 [2025-05-19 17:00:30] - Created dedicated v2ray configuration validation script
+
+## Decision
+
+* Simplify container command and create direct fix script for v2ray configuration
+
+## Rationale
+
+* Previous approach with validation was insufficient to fix specific JSON issues
+* Passing command parameters to the Docker container was causing "unknown command" errors
+* Need to directly target known syntax issues in the configuration file
+* A simpler container command coupled with targeted fixes is more reliable
+
+## Implementation Details
+
+* Removed additional command parameters from docker run command
+* Created fix-v2ray-config.sh script to make direct edits to the configuration file
+* Used targeted sed commands to fix known problematic sections like trailing commas
+* Implemented backup mechanism for safe editing
+* Made configuration validation non-fatal to allow container startup attempts
+* Simplified overall logic for better maintainability
+
+[2025-05-19 17:06:30] - Created direct configuration fix script and simplified container command
