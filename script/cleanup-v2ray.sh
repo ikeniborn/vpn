@@ -48,44 +48,53 @@ check_root() {
 cleanup_processes() {
     info "Finding and stopping any v2ray processes outside of Docker..."
 
-    # Attempt to stop known V2Ray systemd services
-    info "Attempting to stop known V2Ray systemd services..."
-    systemctl stop v2ray.service 2>/dev/null || warn "v2ray.service not found or could not be stopped."
-    systemctl stop v2fly.service 2>/dev/null || warn "v2fly.service not found or could not be stopped."
-    systemctl disable v2ray.service 2>/dev/null || warn "v2ray.service could not be disabled."
-    systemctl disable v2fly.service 2>/dev/null || warn "v2fly.service could not be disabled."
+    # Attempt to stop and disable *any* systemd service that looks like v2ray/v2fly
+    info "Attempting to stop and disable all potential V2Ray/V2Fly systemd services..."
+    local v2ray_services
+    v2ray_services=$(systemctl list-units --type=service --all | grep -E 'v2ray|v2fly' | awk '{print $1}')
+    
+    if [ -n "$v2ray_services" ]; then
+        for service_name in $v2ray_services; do
+            info "Found potential service: $service_name. Stopping and disabling..."
+            systemctl stop "$service_name" 2>/dev/null || warn "$service_name could not be stopped."
+            systemctl disable "$service_name" 2>/dev/null || warn "$service_name could not be disabled."
+        done
+    else
+        info "No systemd services matching 'v2ray' or 'v2fly' found."
+    fi
     sleep 1 # Give services time to stop
 
-    # Get Docker container PIDs
-    local DOCKER_PIDS
-    DOCKER_PIDS=$(docker ps -q --filter "name=^${DOCKER_CONTAINER}$" | xargs -r docker inspect --format '{{.State.Pid}}' 2>/dev/null || echo "")
+    # Get Docker container PIDs for the *target* container
+    local TARGET_DOCKER_PIDS
+    TARGET_DOCKER_PIDS=$(docker ps -q --filter "name=^${DOCKER_CONTAINER}$" | xargs -r docker inspect --format '{{.State.Pid}}' 2>/dev/null || echo "")
     
-    # Find all v2ray processes
-    local V2RAY_PIDS
-    V2RAY_PIDS=$(pgrep -f "v2ray|v2fly" || echo "")
+    # Find all v2ray/v2fly processes
+    local ALL_V2RAY_PIDS
+    ALL_V2RAY_PIDS=$(pgrep -f "v2ray|v2fly" || echo "")
     
-    if [ -z "$V2RAY_PIDS" ]; then
-        info "No v2ray/v2fly processes found running outside the target Docker container."
+    if [ -z "$ALL_V2RAY_PIDS" ]; then
+        info "No v2ray/v2fly processes found running."
     else
-        info "Found v2ray/v2fly PIDs: $V2RAY_PIDS"
-        for PID in $V2RAY_PIDS; do
-            # Check if the PID belongs to our Docker container
-            local IS_CONTAINER_PROCESS=false
-            if [ -n "$DOCKER_PIDS" ]; then
-                for DPID in $DOCKER_PIDS; do
-                    if [ "$PID" -eq "$DPID" ]; then
-                        IS_CONTAINER_PROCESS=true
+        info "Found v2ray/v2fly PIDs: $ALL_V2RAY_PIDS"
+        for PID in $ALL_V2RAY_PIDS; do
+            local IS_TARGET_CONTAINER_PROCESS=false
+            if [ -n "$TARGET_DOCKER_PIDS" ]; then
+                for DPID in $TARGET_DOCKER_PIDS; do
+                    # Check if PID is the main container process or one of its children
+                    if [ "$PID" -eq "$DPID" ] || (command -v pstree >/dev/null && pstree -p "$DPID" | grep -q "($PID)"); then
+                        IS_TARGET_CONTAINER_PROCESS=true
                         break
-                    fi
-                    # Also check child processes of the container, just in case
-                    if pstree -p "$DPID" | grep -q "($PID)"; then
-                        IS_CONTAINER_PROCESS=true
-                        break
+                    elif [ -z "$(command -v pstree)" ] && [ -d "/proc/$DPID/task" ]; then
+                        # Fallback if pstree is not available, check /proc (less reliable for deep children)
+                        if grep -q "$PID" /proc/$DPID/task/*/status 2>/dev/null; then
+                           IS_TARGET_CONTAINER_PROCESS=true
+                           break
+                        fi
                     fi
                 done
             fi
 
-            if [ "$IS_CONTAINER_PROCESS" = "false" ]; then
+            if [ "$IS_TARGET_CONTAINER_PROCESS" = "false" ]; then
                 local process_cmdline
                 process_cmdline=$(ps -p "$PID" -o cmd= || echo "unknown process")
                 info "Found non-target v2ray/v2fly process: PID=$PID, CMD=$process_cmdline. Stopping it..."
@@ -97,30 +106,46 @@ cleanup_processes() {
     fi
     
     # Verify that processes are stopped
-    sleep 1
-    V2RAY_PIDS=$(pgrep -f "v2ray|v2fly" || echo "")
-    local still_running_pids=""
-    if [ -n "$V2RAY_PIDS" ]; then
-        for PID in $V2RAY_PIDS; do
-             local IS_CONTAINER_PROCESS_CHECK=false
-             if [ -n "$DOCKER_PIDS" ]; then
-                for DPID in $DOCKER_PIDS; do
-                    if [ "$PID" -eq "$DPID" ] || (pstree -p "$DPID" | grep -q "($PID)"); then
-                        IS_CONTAINER_PROCESS_CHECK=true
+    sleep 2 # Increased delay
+    ALL_V2RAY_PIDS=$(pgrep -f "v2ray|v2fly" || echo "")
+    local still_running_host_pids=""
+    if [ -n "$ALL_V2RAY_PIDS" ]; then
+        for PID in $ALL_V2RAY_PIDS; do
+             local IS_TARGET_CONTAINER_PROCESS_CHECK=false
+             if [ -n "$TARGET_DOCKER_PIDS" ]; then
+                for DPID in $TARGET_DOCKER_PIDS; do
+                    if [ "$PID" -eq "$DPID" ] || (command -v pstree >/dev/null && pstree -p "$DPID" | grep -q "($PID)") || \
+                       ([ -z "$(command -v pstree)" ] && [ -d "/proc/$DPID/task" ] && grep -q "$PID" /proc/$DPID/task/*/status 2>/dev/null); then
+                        IS_TARGET_CONTAINER_PROCESS_CHECK=true
                         break
                     fi
                 done
             fi
-            if [ "$IS_CONTAINER_PROCESS_CHECK" = "false" ]; then
-                still_running_pids+=" $PID"
+            if [ "$IS_TARGET_CONTAINER_PROCESS_CHECK" = "false" ]; then
+                still_running_host_pids+=" $PID"
             fi
         done
     fi
 
-    if [ -n "$still_running_pids" ]; then
-        warn "Processes still running after cleanup attempt:$still_running_pids. Manual intervention may be required."
+    if [ -n "$still_running_host_pids" ]; then
+        error "Host V2Ray/V2Fly processes still running after cleanup attempt:$still_running_host_pids. These must be stopped manually. Aborting."
+        exit 1 # Exit if cleanup fails to prevent further issues
     else
         info "Cleanup of non-Docker v2ray/v2fly processes appears successful."
+    fi
+
+    # Explicitly check if target ports are free on the host
+    info "Verifying target ports are free on the host..."
+    local ports_in_use=""
+    if ss -Htnlp | grep -q ":$HTTP_PORT "; then ports_in_use+=" $HTTP_PORT(HTTP)"; fi
+    if ss -Htnlp | grep -q ":$SOCKS_PORT "; then ports_in_use+=" $SOCKS_PORT(SOCKS)"; fi
+    if ss -Htnlp | grep -q ":$TPROXY_PORT "; then ports_in_use+=" $TPROXY_PORT(TPROXY)"; fi
+
+    if [ -n "$ports_in_use" ]; then
+        error "Target ports are still in use on the host after cleanup:$ports_in_use. Aborting."
+        exit 1
+    else
+        info "Target ports ($HTTP_PORT, $SOCKS_PORT, $TPROXY_PORT) are free on the host."
     fi
 }
 
