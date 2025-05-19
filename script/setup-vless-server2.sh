@@ -666,6 +666,32 @@ test_tunnel() {
     else
         info "Transparent proxy port 11081 is listening correctly."
     fi
+
+    # If any critical port is not listening, try to run fix-port-binding.sh
+    local http_listening=$(ss -tulpn | grep -q ":18080" && echo true || echo false)
+    local socks_listening=$(ss -tulpn | grep -q ":11080" && echo true || echo false)
+    local tproxy_listening=$(ss -tulpn | grep -q ":11081" && echo true || echo false)
+
+    if [ "$http_listening" = "false" ] || [ "$socks_listening" = "false" ] || [ "$tproxy_listening" = "false" ]; then
+        warn "One or more critical V2Ray ports are not listening."
+        if [ -f "./script/fix-port-binding.sh" ]; then
+            info "Attempting to fix port binding issues by running ./script/fix-port-binding.sh..."
+            chmod +x ./script/fix-port-binding.sh
+            # Pass necessary parameters if fix-port-binding.sh needs to regenerate config
+            if ./script/fix-port-binding.sh --server1-address "$SERVER1_ADDRESS" --server1-uuid "$SERVER1_UUID"; then
+                info "fix-port-binding.sh executed. Re-checking ports after a delay..."
+                sleep 5 # Give V2Ray time to restart and bind
+                # Re-check ports
+                if ! ss -tulpn | grep -q ":18080"; then warn "HTTP port 18080 STILL NOT listening after fix attempt."; else info "HTTP port 18080 NOW listening after fix attempt."; fi
+                if ! ss -tulpn | grep -q ":11080"; then warn "SOCKS port 11080 STILL NOT listening after fix attempt."; else info "SOCKS port 11080 NOW listening after fix attempt."; fi
+                if ! ss -tulpn | grep -q ":11081"; then warn "Transparent port 11081 STILL NOT listening after fix attempt."; else info "Transparent port 11081 NOW listening after fix attempt."; fi
+            else
+                warn "fix-port-binding.sh failed to execute successfully."
+            fi
+        else
+            warn "./script/fix-port-binding.sh not found. Cannot attempt automatic fix for port binding."
+        fi
+    fi
     
     # Test connection to Server 1
     info "Testing connectivity to Server 1 ($SERVER1_ADDRESS)..."
