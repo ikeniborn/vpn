@@ -155,10 +155,10 @@ create_tunnel_user() {
     
     # Export the configuration for easy setup on Server 2
     info "Exporting configuration for Server 2..."
-    if [ -x "./manage-vless-users.sh" ]; then
-        ./manage-vless-users.sh --export --uuid "$TUNNEL_UUID" > "server2_config.txt"
+    if [ -x "./script/manage-vless-users.sh" ]; then
+        ./script/manage-vless-users.sh --export --uuid "$TUNNEL_UUID" > "server2_config.txt"
     else
-        manage-vless-users.sh --export --uuid "$TUNNEL_UUID" > "server2_config.txt"
+        script/manage-vless-users.sh --export --uuid "$TUNNEL_UUID" > "server2_config.txt"
     fi
     
     info "Configuration saved to server2_config.txt"
