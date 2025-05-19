@@ -349,6 +349,19 @@ main() {
     configure_routing
     update_firewall
     
+    # Ensure Server 2's UUID is correctly added to Server 1's client list
+    info "Ensuring Server 2's UUID is correctly added to client list..."
+    local TUNNEL_UUID=$(grep -m 1 "$SERVER2_NAME" "$V2RAY_DIR/users.db" | cut -d'|' -f1)
+    
+    if [ -f "./script/fix-server-uuid.sh" ]; then
+        chmod +x ./script/fix-server-uuid.sh
+        ./script/fix-server-uuid.sh --uuid "$TUNNEL_UUID" --name "$SERVER2_NAME"
+        info "Server 2's UUID confirmed in Server 1's client list"
+    else
+        warn "fix-server-uuid.sh not found. Please run it manually if needed:"
+        warn "sudo ./script/fix-server-uuid.sh --uuid \"$TUNNEL_UUID\" --name \"$SERVER2_NAME\""
+    fi
+    
     info "====================================================================="
     info "Server 1 (Tunnel Entry Point) has been configured successfully!"
     info "Server 2 will be able to connect and route traffic through this server."

@@ -373,19 +373,56 @@ configure_routing() {
         ROUTE_OUTLINE_THROUGH_TUNNEL=true
     fi
     
-    # Get the internet-facing interface
-    INTERNET_IFACE=$(ip -4 route show default | awk '{print $5}' | head -n1)
-    if [ -z "$INTERNET_IFACE" ]; then
-        warn "Could not determine internet-facing interface. Using fallback method."
-        INTERNET_IFACE=$(ip -o -4 route show to default | awk '{print $5}' | head -n1)
-        if [ -z "$INTERNET_IFACE" ]; then
-            error "Failed to determine outgoing network interface. Manual configuration needed."
-        fi
-    fi
-    info "Using network interface: $INTERNET_IFACE for traffic forwarding"
+    # Save the routing config to a permanent location
+    echo "# Tunnel Routing Configuration" > "$V2RAY_DIR/tunnel-routing.conf"
+    echo "ROUTE_OUTLINE_THROUGH_TUNNEL=true" >> "$V2RAY_DIR/tunnel-routing.conf"
     
-    # Create iptables rules script
-    cat > /usr/local/bin/setup-tunnel-routing.sh << EOF
+    # Check if the setup-tunnel-routing.sh script exists and use it
+    if [ -f "./script/setup-tunnel-routing.sh" ]; then
+        info "Using setup-tunnel-routing.sh script for iptables configuration..."
+        chmod +x ./script/setup-tunnel-routing.sh
+        
+        # Copy the script to system location
+        cp ./script/setup-tunnel-routing.sh /usr/local/bin/
+        chmod +x /usr/local/bin/setup-tunnel-routing.sh
+        
+        # Execute the script
+        /usr/local/bin/setup-tunnel-routing.sh
+        
+        # Create systemd service to run the script after reboot
+        cat > /etc/systemd/system/tunnel-routing.service << EOF
+[Unit]
+Description=Configure Tunnel Routing Rules
+After=network.target v2ray-tunnel.service
+Requires=v2ray-tunnel.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/setup-tunnel-routing.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+        systemctl daemon-reload
+        systemctl enable tunnel-routing.service
+    else
+        warn "setup-tunnel-routing.sh not found. Using built-in routing configuration."
+        
+        # Get the internet-facing interface
+        INTERNET_IFACE=$(ip -4 route show default | awk '{print $5}' | head -n1)
+        if [ -z "$INTERNET_IFACE" ]; then
+            warn "Could not determine internet-facing interface. Using fallback method."
+            INTERNET_IFACE=$(ip -o -4 route show to default | awk '{print $5}' | head -n1)
+            if [ -z "$INTERNET_IFACE" ]; then
+                error "Failed to determine outgoing network interface. Manual configuration needed."
+            fi
+        fi
+        info "Using network interface: $INTERNET_IFACE for traffic forwarding"
+        
+        # Create iptables rules script with built-in configuration
+        cat > /usr/local/bin/setup-tunnel-routing.sh << EOF
 #!/bin/bash
 
 # Verify IP forwarding is enabled
@@ -449,14 +486,14 @@ else
     iptables -t nat -A POSTROUTING -o ${INTERNET_IFACE} -s 10.0.0.0/24 -j MASQUERADE
 fi
 EOF
-    
-    chmod +x /usr/local/bin/setup-tunnel-routing.sh
-    
-    # Execute the script now
-    /usr/local/bin/setup-tunnel-routing.sh
-    
-    # Create systemd service to run the script after reboot
-    cat > /etc/systemd/system/tunnel-routing.service << EOF
+        
+        chmod +x /usr/local/bin/setup-tunnel-routing.sh
+        
+        # Execute the script now
+        /usr/local/bin/setup-tunnel-routing.sh
+        
+        # Create systemd service to run the script after reboot
+        cat > /etc/systemd/system/tunnel-routing.service << EOF
 [Unit]
 Description=Configure Tunnel Routing Rules
 After=network.target v2ray-tunnel.service
@@ -470,9 +507,10 @@ RemainAfterExit=yes
 [Install]
 WantedBy=multi-user.target
 EOF
-    
-    systemctl daemon-reload
-    systemctl enable tunnel-routing.service
+        
+        systemctl daemon-reload
+        systemctl enable tunnel-routing.service
+    fi
     
     info "Routing configuration has been set up"
 }
@@ -718,23 +756,65 @@ test_tunnel() {
 
     if [ "$http_listening" = "false" ] || [ "$socks_listening" = "false" ] || [ "$tproxy_listening" = "false" ]; then
         warn "One or more critical V2Ray ports were not listening after initial setup."
-        warn "  Detailed logs shown above. Attempting to run fix-port-binding.sh..."
+        warn "  Detailed logs shown above. Attempting to fix port binding issues..."
+        
+        # First, copy fix-port-binding.sh to system location if available
         if [ -f "./script/fix-port-binding.sh" ]; then
-            info "Attempting to fix port binding issues by running ./script/fix-port-binding.sh..."
-            chmod +x ./script/fix-port-binding.sh
-            # Pass necessary parameters if fix-port-binding.sh needs to regenerate config
-            if ./script/fix-port-binding.sh --server1-address "$SERVER1_ADDRESS" --server1-uuid "$SERVER1_UUID"; then
-                info "fix-port-binding.sh executed. Re-checking ports after a delay..."
+            info "Copying fix-port-binding.sh to system location..."
+            cp ./script/fix-port-binding.sh /usr/local/bin/
+            chmod +x /usr/local/bin/fix-port-binding.sh
+            
+            # Run the port binding fix script
+            info "Executing fix-port-binding.sh..."
+            if /usr/local/bin/fix-port-binding.sh --server1-address "$SERVER1_ADDRESS" --server1-uuid "$SERVER1_UUID"; then
+                info "Port binding issues fixed. Re-checking ports after a delay..."
                 sleep 5 # Give V2Ray time to restart and bind
-                # Re-check ports
-                if ! ss -tulpn | grep -q ":18080"; then warn "HTTP port 18080 STILL NOT listening after fix attempt."; else info "HTTP port 18080 NOW listening after fix attempt."; fi
-                if ! ss -tulpn | grep -q ":11080"; then warn "SOCKS port 11080 STILL NOT listening after fix attempt."; else info "SOCKS port 11080 NOW listening after fix attempt."; fi
-                if ! ss -tulpn | grep -q ":11081"; then warn "Transparent port 11081 STILL NOT listening after fix attempt."; else info "Transparent port 11081 NOW listening after fix attempt."; fi
+                
+                # Re-check ports and display status
+                if ! ss -tulpn | grep -q ":18080"; then
+                    warn "HTTP port 18080 STILL NOT listening after fix attempt."
+                else
+                    info "HTTP port 18080 NOW listening after fix attempt."
+                fi
+                
+                if ! ss -tulpn | grep -q ":11080"; then
+                    warn "SOCKS port 11080 STILL NOT listening after fix attempt."
+                else
+                    info "SOCKS port 11080 NOW listening after fix attempt."
+                fi
+                
+                if ! ss -tulpn | grep -q ":11081"; then
+                    warn "Transparent port 11081 STILL NOT listening after fix attempt."
+                else
+                    info "Transparent port 11081 NOW listening after fix attempt."
+                fi
+                
+                # Create a systemd service to run fix-port-binding.sh on system startup
+                info "Creating systemd service to fix port binding on startup..."
+                cat > /etc/systemd/system/fix-port-binding.service << EOF
+[Unit]
+Description=Fix V2Ray Port Binding Issues
+After=docker.service network.target
+Before=v2ray-tunnel.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/fix-port-binding.sh --server1-address "$SERVER1_ADDRESS" --server1-uuid "$SERVER1_UUID"
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+                systemctl daemon-reload
+                systemctl enable fix-port-binding.service
+                info "Port binding fix service created and enabled"
             else
                 warn "fix-port-binding.sh failed to execute successfully."
             fi
         else
             warn "./script/fix-port-binding.sh not found. Cannot attempt automatic fix for port binding."
+            warn "If port binding issues persist, you can fix them manually after setup."
         fi
     fi
     
