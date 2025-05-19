@@ -68,12 +68,12 @@ cleanup_processes() {
     local TARGET_DOCKER_PIDS
     TARGET_DOCKER_PIDS=$(docker ps -q --filter "name=^${DOCKER_CONTAINER}$" | xargs -r docker inspect --format '{{.State.Pid}}' 2>/dev/null || echo "")
     
-    # Find all v2ray/v2fly processes
+    # Find all v2ray/v2fly processes by exact name
     local ALL_V2RAY_PIDS
-    ALL_V2RAY_PIDS=$(pgrep -f "v2ray|v2fly" || echo "")
+    ALL_V2RAY_PIDS=$(pgrep -x "v2ray" || pgrep -x "v2fly" || echo "") # Try exact matches
     
     if [ -z "$ALL_V2RAY_PIDS" ]; then
-        info "No v2ray/v2fly processes found running."
+        info "No v2ray/v2fly processes (by exact name match) found running."
     else
         info "Found v2ray/v2fly PIDs: $ALL_V2RAY_PIDS"
         for PID in $ALL_V2RAY_PIDS; do
@@ -107,7 +107,7 @@ cleanup_processes() {
     
     # Verify that processes are stopped
     sleep 2 # Increased delay
-    ALL_V2RAY_PIDS=$(pgrep -f "v2ray|v2fly" || echo "")
+    ALL_V2RAY_PIDS=$(pgrep -x "v2ray" || pgrep -x "v2fly" || echo "") # Try exact matches
     local still_running_host_pids=""
     if [ -n "$ALL_V2RAY_PIDS" ]; then
         for PID in $ALL_V2RAY_PIDS; do
