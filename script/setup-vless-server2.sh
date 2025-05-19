@@ -186,18 +186,30 @@ configure_forwarding() {
 install_v2ray_client() {
     info "Installing v2ray client for tunneling to Server 1..."
 
-    # Run cleanup script first to stop conflicting processes and ensure firewall is open.
+    # STEP 1: Stop and remove any existing 'v2ray-client' Docker container from previous runs.
+    info "Attempting to stop and remove any pre-existing 'v2ray-client' Docker container..."
+    if docker ps -a --format '{{.Names}}' | grep -q "^v2ray-client$"; then
+        info "Found pre-existing 'v2ray-client' container. Stopping and removing it..."
+        docker stop v2ray-client || warn "Failed to stop pre-existing v2ray-client container. It might not be running."
+        docker rm -f v2ray-client || warn "Failed to remove pre-existing v2ray-client container."
+        info "Pre-existing 'v2ray-client' container removed."
+    else
+        info "No pre-existing 'v2ray-client' Docker container found."
+    fi
+    sleep 1 # Give Docker a moment
+
+    # STEP 2: Run cleanup script to stop other conflicting host processes and ensure firewall is open.
     # The cleanup script will exit with an error if it fails, halting this script due to 'set -e'.
     if [ -f "./script/cleanup-v2ray.sh" ]; then
         info "Running host cleanup and firewall prep script (./script/cleanup-v2ray.sh)..."
         chmod +x ./script/cleanup-v2ray.sh
-        ./script/cleanup-v2ray.sh # If this fails, setup-vless-server2.sh will exit.
-        info "Host cleanup and firewall prep script completed."
+        ./script/cleanup-v2ray.sh # If this fails (e.g., ports still in use by non-docker v2ray), setup-vless-server2.sh will exit.
+        info "Host cleanup and firewall prep script completed successfully."
     else
         error "./script/cleanup-v2ray.sh not found. This script is essential for a clean setup. Aborting."
-        # exit 1 already handled by set -e if error function is called
     fi
     
+    # STEP 3: Proceed with V2Ray client setup (config generation, new container run)
     # Create necessary directories
     mkdir -p "$V2RAY_DIR"
     mkdir -p "$V2RAY_DIR/logs"
@@ -248,14 +260,7 @@ install_v2ray_client() {
     info "Pulling v2ray Docker image..."
     docker pull v2fly/v2fly-core:latest
     
-    # Always remove any existing v2ray-client container to ensure a fresh start
-    info "Ensuring no old 'v2ray-client' container exists..."
-    if docker ps -a --format '{{.Names}}' | grep -q "^v2ray-client$"; then # This was line 253 before edits
-        info "Found existing 'v2ray-client' container. Removing it..."
-        docker rm -f v2ray-client || { warn "Failed to remove existing 'v2ray-client' container. This might cause issues."; }
-    else
-        info "No old 'v2ray-client' container found."
-    fi
+    # Note: The step for removing 'v2ray-client' container was moved to the beginning of this function.
     
     # Try to inspect the network first - this is safer than grepping the list
     info "Setting up Docker network..."
