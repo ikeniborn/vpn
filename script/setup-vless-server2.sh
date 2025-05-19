@@ -200,11 +200,38 @@ install_v2ray_client() {
         REALITY_PARAMS="${REALITY_PARAMS}&sid=${SERVER1_SHORTID}"
     fi
     
+    # First, create a clean JSON structure with proper formatting
+    local reality_settings=""
+    
+    # Build realitySettings properly
+    if [ -n "$SERVER1_PUBKEY" ] && [ -n "$SERVER1_SHORTID" ]; then
+        reality_settings=$(cat <<EOF
+          "serverName": "${SERVER1_SNI}",
+          "fingerprint": "${SERVER1_FINGERPRINT}",
+          "publicKey": "${SERVER1_PUBKEY}",
+          "shortId": "${SERVER1_SHORTID}"
+EOF
+        )
+    elif [ -n "$SERVER1_PUBKEY" ]; then
+        reality_settings=$(cat <<EOF
+          "serverName": "${SERVER1_SNI}",
+          "fingerprint": "${SERVER1_FINGERPRINT}",
+          "publicKey": "${SERVER1_PUBKEY}"
+EOF
+        )
+    else
+        reality_settings=$(cat <<EOF
+          "serverName": "${SERVER1_SNI}",
+          "fingerprint": "${SERVER1_FINGERPRINT}"
+EOF
+        )
+    fi
+    
     # Create v2ray client config
     cat > "$V2RAY_DIR/config.json" << EOF
 {
   "log": {
-    "loglevel": "warning",
+    "loglevel": "debug",
     "access": "/var/log/v2ray/access.log",
     "error": "/var/log/v2ray/error.log"
   },
@@ -271,10 +298,7 @@ install_v2ray_client() {
         "network": "tcp",
         "security": "reality",
         "realitySettings": {
-          "serverName": "${SERVER1_SNI}",
-          "fingerprint": "${SERVER1_FINGERPRINT}"
-          ${SERVER1_PUBKEY:+, "publicKey": "${SERVER1_PUBKEY}"}
-          ${SERVER1_SHORTID:+, "shortId": "${SERVER1_SHORTID}"}
+${reality_settings}
         }
       }
     },
@@ -306,6 +330,14 @@ install_v2ray_client() {
   }
 }
 EOF
+
+    # Display configuration details
+    info "Configuration created with the following details:"
+    info "- Server 1 Address: ${SERVER1_ADDRESS}"
+    info "- Server 1 Port: ${SERVER1_PORT}"
+    info "- Server 1 SNI: ${SERVER1_SNI}"
+    info "- Server 1 Fingerprint: ${SERVER1_FINGERPRINT}"
+    info "- Reality Settings: Using ${SERVER1_PUBKEY:+public key and }${SERVER1_SHORTID:+short ID}"
     
     chmod 644 "$V2RAY_DIR/config.json"
     
@@ -357,7 +389,7 @@ EOF
     mkdir -p /var/log/v2ray
     chmod 777 /var/log/v2ray  # More permissive for container access
     
-    # Run v2ray container with improved setup and explicit entry point
+    # Run v2ray container with improved setup
     info "Starting v2ray client container..."
     docker run -d \
         --name v2ray-client \
@@ -366,7 +398,7 @@ EOF
         --cap-add NET_ADMIN \
         -v "$V2RAY_DIR/config.json:/etc/v2ray/config.json" \
         -v "/var/log/v2ray:/var/log/v2ray" \
-        v2fly/v2fly-core:latest /usr/bin/v2ray run -c /etc/v2ray/config.json
+        v2fly/v2fly-core:latest
         
     # Verify container is running with extended waiting and diagnostics
     info "Verifying container startup (waiting 5 seconds)..."
@@ -391,7 +423,8 @@ EOF
             -v "$V2RAY_DIR/config.json:/etc/v2ray/config.json" \
             -v "/var/log/v2ray:/var/log/v2ray" \
             -e "V2RAY_VMESS_AEAD_FORCED=false" \
-            v2fly/v2fly-core:latest /usr/bin/v2ray run -c /etc/v2ray/config.json -d
+            -e "V2RAY_LOGLEVEL=debug" \
+            v2fly/v2fly-core:latest
         
         # Check again after restart
         sleep 3

@@ -36,5 +36,8 @@ This file tracks the project's current status, including recent changes, current
 * Would a monitoring system for the tunnel status be beneficial?
 * How can we improve error handling and diagnostics for tunnel setup issues?
 * Should we implement logging rotation for v2ray logs?
+* What strategies should we implement for automatic recovery from container failures?
+* Should we add monitoring alerts for tunnel status?
 
 [2025-05-19 16:37:50] - Fixed Docker network creation errors in setup-vless-server2.sh and improved tunnel diagnostics
+[2025-05-19 16:49:20] - Enhanced container startup reliability with validation, diagnostics, and debug mode
