@@ -314,7 +314,7 @@ function start_shadowbox() {
     -v "${STATE_DIR}:${STATE_DIR}"
     -e "SB_STATE_DIR=${STATE_DIR}"
     -e "SB_PUBLIC_IP=${PUBLIC_HOSTNAME}"
-    -e "SB_API_PORT=${ACCESS_KEY_PORT}"
+    -e "SB_API_PORT=${API_PORT}"
     -e "SB_API_PREFIX=${SB_API_PREFIX}"
     -e "SB_CERTIFICATE_FILE=${SB_CERTIFICATE_FILE}"
     -e "SB_PRIVATE_KEY_FILE=${SB_PRIVATE_KEY_FILE}"
@@ -552,6 +552,15 @@ install_shadowbox() {
   if [[ $API_PORT == 0 ]]; then
     API_PORT=${SB_API_PORT:-$(get_random_port)}
   fi
+  
+  # Set ACCESS_KEY_PORT before using it
+  log_for_sentry "Setting access key port"
+  if [[ $FLAGS_KEYS_PORT != 0 ]]; then
+    ACCESS_KEY_PORT=$FLAGS_KEYS_PORT
+  else
+    ACCESS_KEY_PORT=$(get_random_port)
+  fi
+  
   readonly ACCESS_CONFIG=${ACCESS_CONFIG:-$SHADOWBOX_DIR/access.txt}
   readonly SB_IMAGE
 
@@ -1021,8 +1030,8 @@ function parse_flags() {
   [[ $? == 0 ]] || exit 1
   eval set -- $params
   declare -g FLAGS_HOSTNAME=""
-  declare -gi FLAGS_API_PORT=0
-  declare -gi FLAGS_KEYS_PORT=0
+  declare -gi FLAGS_API_PORT=7777
+  declare -gi FLAGS_KEYS_PORT=8888
   declare -gi FLAGS_V2RAY_PORT=443
   declare -g FLAGS_DEST_SITE="www.microsoft.com:443"
   declare -g FLAGS_FINGERPRINT="chrome"
