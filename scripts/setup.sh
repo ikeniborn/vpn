@@ -155,19 +155,22 @@ detect_architecture() {
     
     case $ARCH in
         aarch64|arm64)
-            SB_IMAGE="shadowsocks/shadowsocks-libev:v3.3.5"
-            WATCHTOWER_IMAGE="containrrr/watchtower:latest"  # Use latest, which supports multi-arch
-            V2RAY_IMAGE="v2fly/v2fly-core:latest"  # Using official image which is multi-arch
+            # Use the well-tested ARM64 images from the ericqmore project
+            SB_IMAGE="ken1029/shadowbox:latest"
+            WATCHTOWER_IMAGE="ken1029/watchtower:arm64"
+            V2RAY_IMAGE="v2fly/v2fly-core:latest"
             info "ARM64 architecture detected, using ARM64-compatible images"
             ;;
         armv7l)
-            SB_IMAGE="shadowsocks/shadowsocks-libev:v3.3.5"
-            WATCHTOWER_IMAGE="containrrr/watchtower:latest"  # Use latest, which supports multi-arch
-            V2RAY_IMAGE="v2fly/v2fly-core:latest"  # Using official image which is multi-arch
+            # Use the well-tested ARMv7 images from the ericqmore project
+            SB_IMAGE="ken1029/shadowbox:latest"
+            WATCHTOWER_IMAGE="ken1029/watchtower:arm32"
+            V2RAY_IMAGE="v2fly/v2fly-core:latest"
             info "ARMv7 architecture detected, using ARMv7-compatible images"
             ;;
         x86_64|amd64)
-            SB_IMAGE="shadowsocks/shadowsocks-libev:v3.3.5"
+            # For x86 architecture, use standard images
+            SB_IMAGE="shadowsocks/shadowsocks-libev:latest"
             WATCHTOWER_IMAGE="containrrr/watchtower:latest"
             V2RAY_IMAGE="v2fly/v2fly-core:latest"
             info "x86_64 architecture detected, using standard images"
@@ -580,105 +583,52 @@ EOF
 create_docker_compose() {
     info "Creating Docker Compose configuration..."
     
-    # Determine a different image to use for the outline server based on architecture
-    local OUTLINE_IMAGE=""
-    case $ARCH in
-        aarch64|arm64)
-            OUTLINE_IMAGE="shadowsocks/shadowsocks-libev:v3.3.5"
-            ;;
-        armv7l)
-            OUTLINE_IMAGE="shadowsocks/shadowsocks-libev:v3.3.5"
-            ;;
-        x86_64|amd64)
-            OUTLINE_IMAGE="shadowsocks/shadowsocks-libev:v3.3.5"
-            ;;
-        *)
-            OUTLINE_IMAGE="shadowsocks/shadowsocks-libev:v3.3.5"
-            ;;
-    esac
-    
-    info "Using Outline Server image: ${OUTLINE_IMAGE}"
+    # We'll use the SB_IMAGE variable directly, which has already been set
+    # based on architecture in the detect_architecture function
+    info "Using Outline Server image: ${SB_IMAGE}"
     
     cat > "${BASE_DIR}/docker-compose.yml" <<EOF
 version: '3'
 
 services:
   outline-server:
-    image: ${OUTLINE_IMAGE}
+    image: ${SB_IMAGE}
     container_name: outline-server
     restart: always
-    # Disable user namespace remapping for this container
-    userns_mode: "host"
-    privileged: true
+    # Use host networking mode which works better with the ken1029/shadowbox image
+    network_mode: "host"
     volumes:
-      - ./outline-server/config.json:/etc/shadowsocks-libev/config.json:Z
-      - ./outline-server/access.json:/etc/shadowsocks-libev/access.json:Z
-      - ./outline-server/data:/opt/outline/data:Z
-      - ./logs/outline:/var/log/shadowsocks:Z
-    ports:
-      - "${OUTLINE_PORT}:${OUTLINE_PORT}/tcp"
-      - "${OUTLINE_PORT}:${OUTLINE_PORT}/udp"
-    networks:
-      vpn-network:
-        ipv4_address: 172.16.238.2
+      - ./outline-server/config.json:/etc/shadowsocks-libev/config.json
+      - ./outline-server/access.json:/etc/shadowsocks-libev/access.json
+      - ./outline-server/data:/opt/outline/data
+      - ./logs/outline:/var/log/shadowsocks
     environment:
       - SS_CONFIG=/etc/shadowsocks-libev/config.json
     cap_add:
       - NET_ADMIN
-      - SYS_ADMIN
       
   v2ray:
-    # Use the official image which has better documentation and support
     image: ${V2RAY_IMAGE}
     container_name: v2ray
     restart: always
-    # Disable user namespace remapping for this container
-    userns_mode: "host"
-    privileged: true
-    # Use a very simple setup with shell script to handle setup
-    entrypoint: ["/bin/sh", "-c"]
-    command: |
-      mkdir -p /etc/v2ray
-      cat /tmp/config.json > /etc/v2ray/config.json
-      echo "Starting v2ray with config at /etc/v2ray/config.json"
-      /usr/bin/v2ray run -c /etc/v2ray/config.json || \
-      /usr/local/bin/v2ray run -c /etc/v2ray/config.json || \
-      v2ray run -c /etc/v2ray/config.json
+    network_mode: "host"
     volumes:
-      - ./v2ray/config.json:/tmp/config.json:Z
-      - ./logs/v2ray:/var/log/v2ray:Z
-    ports:
-      - "${V2RAY_PORT}:${V2RAY_PORT}/tcp"
-      - "${V2RAY_PORT}:${V2RAY_PORT}/udp"
-    networks:
-      vpn-network:
-        ipv4_address: 172.16.238.3
-    depends_on:
-      - outline-server
+      - ./v2ray/config.json:/etc/v2ray/config.json
+      - ./logs/v2ray:/var/log/v2ray
+    command: run -c /etc/v2ray/config.json
     cap_add:
       - NET_ADMIN
-      - SYS_ADMIN
 
   watchtower:
     image: ${WATCHTOWER_IMAGE}
     container_name: watchtower
     restart: always
-    # Disable user namespace remapping for this container
-    userns_mode: "host"
-    privileged: true
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:Z
+      - /var/run/docker.sock:/var/run/docker.sock
     command: --cleanup --tlsverify --interval 3600
     depends_on:
       - outline-server
       - v2ray
-
-networks:
-  vpn-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.16.238.0/24
 EOF
 }
 
