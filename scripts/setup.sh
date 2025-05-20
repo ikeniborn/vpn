@@ -118,10 +118,26 @@ function log_for_sentry() {
 # Check if required utility is installed
 function ensure_required_tool() {
   local tool_name=$1
+  local auto_install=${2:-false}
+  
   if ! command_exists ${tool_name}; then
-    log_error "${tool_name} is not installed but is required for port checking"
-    echo -n
-    if confirm "> Would you like to install ${tool_name}? [Y/n] "; then
+    log_error ">>> ${tool_name} is not installed but is required for port checking <<<"
+    log_error ">>> The script is waiting for your response below <<<"
+    
+    if [ "$auto_install" = "true" ]; then
+      echo "Auto-installing ${tool_name} (auto-install enabled)..."
+      install_tool=true
+    else
+      echo -e "\n\033[1;33m>>> REQUIRED INPUT <<<\033[0m"
+      if confirm "> Would you like to install ${tool_name}? [Y/n] "; then
+        install_tool=true
+      else
+        install_tool=false
+      fi
+    fi
+    
+    if [ "$install_tool" = "true" ]; then
+      echo "Installing ${tool_name}..."
       if [ -x "$(command -v apt-get)" ]; then
         apt-get update && apt-get install -y ${tool_name}
       elif [ -x "$(command -v yum)" ]; then
@@ -132,10 +148,19 @@ function ensure_required_tool() {
         pacman -Sy --noconfirm ${tool_name}
       else
         log_error "Could not install ${tool_name}. Please install it manually and try again."
+        log_error "On most systems, you can use: sudo apt install ${tool_name}"
         return 1
       fi
+      
+      # Verify installation was successful
+      if ! command_exists ${tool_name}; then
+        log_error "Installation of ${tool_name} failed. Please install it manually and try again."
+        return 1
+      fi
+      echo "${tool_name} installed successfully."
     else
       log_error "Installation cannot proceed without ${tool_name}."
+      log_error "Please install it manually with: sudo apt install ${tool_name} (or equivalent for your distro)"
       return 1
     fi
   fi
@@ -925,10 +950,12 @@ install_shadowbox() {
   run_step "Checking Docker permissions" check_docker_permissions
   
   # Ensure required utilities are installed
-  run_step "Checking for required utilities" ensure_required_tool "lsof"
+  echo "Checking for required utilities (lsof)..."
+  # Enable auto-install to avoid prompting
+  run_step "Checking for required utilities" ensure_required_tool "lsof" true
   if command_exists apt-get; then
     # Check for netstat too on systems where it might be available
-    ensure_required_tool "net-tools" >/dev/null 2>&1 || true
+    ensure_required_tool "net-tools" true >/dev/null 2>&1 || true
   fi
 
   log_for_sentry "Creating Outline directory"
