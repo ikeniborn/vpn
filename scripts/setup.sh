@@ -258,23 +258,6 @@ function write_config() {
 }
 
 function start_shadowbox() {
-  # Detect architecture for proper image selection
-  ARCH=$(uname -m)
-  case $ARCH in
-    aarch64|arm64)
-      SB_IMAGE=${SB_IMAGE:-"ken1029/shadowbox:latest"}
-      ;;
-    armv7l)
-      SB_IMAGE=${SB_IMAGE:-"ken1029/shadowbox:latest"}
-      ;;
-    x86_64|amd64)
-      SB_IMAGE=${SB_IMAGE:-"quay.io/outline/shadowbox:stable"}
-      ;;
-    *)
-      log_error "Unsupported architecture: $ARCH"
-      exit 1
-      ;;
-  esac
   
   # TODO(fortuna): Write PUBLIC_HOSTNAME and API_PORT to config file,
   # rather than pass in the environment.
@@ -406,13 +389,32 @@ install_shadowbox() {
   mkdir -p --mode=770 $SHADOWBOX_DIR
   chmod u+s $SHADOWBOX_DIR
 
+  # Detect architecture for proper image selection
+  log_for_sentry "Detecting system architecture"
+  ARCH=$(uname -m)
+  case $ARCH in
+    aarch64|arm64)
+      SB_IMAGE=${SB_IMAGE:-"ken1029/shadowbox:latest"}
+      ;;
+    armv7l)
+      SB_IMAGE=${SB_IMAGE:-"ken1029/shadowbox:latest"}
+      ;;
+    x86_64|amd64)
+      SB_IMAGE=${SB_IMAGE:-"quay.io/outline/shadowbox:stable"}
+      ;;
+    *)
+      log_error "Unsupported architecture: $ARCH"
+      exit 1
+      ;;
+  esac
+
   log_for_sentry "Setting API port"
   API_PORT="${FLAGS_API_PORT}"
   if [[ $API_PORT == 0 ]]; then
     API_PORT=${SB_API_PORT:-$(get_random_port)}
   fi
   readonly ACCESS_CONFIG=${ACCESS_CONFIG:-$SHADOWBOX_DIR/access.txt}
-  readonly SB_IMAGE=${SB_IMAGE:-quay.io/outline/shadowbox:stable}
+  readonly SB_IMAGE
 
   log_for_sentry "Setting PUBLIC_HOSTNAME"
   # TODO(fortuna): Make sure this is IPv4
