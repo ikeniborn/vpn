@@ -329,17 +329,33 @@ function get_random_port {
 }
 
 function create_persisted_state_dir() {
+  echo "DEBUG: SHADOWBOX_DIR is $SHADOWBOX_DIR"
   readonly STATE_DIR="$SHADOWBOX_DIR/persisted-state"
-  mkdir -p --mode=770 "${STATE_DIR}"
+  echo "DEBUG: Creating STATE_DIR at ${STATE_DIR}"
+  
+  # Try to create directory with error catching
+  if ! mkdir -p --mode=770 "${STATE_DIR}"; then
+    log_error "Failed to create state directory ${STATE_DIR}"
+    echo "Please check if you have write permissions to $SHADOWBOX_DIR"
+    return 1
+  fi
+  
+  echo "DEBUG: Setting permissions on ${STATE_DIR}"
   chmod g+s "${STATE_DIR}"
   
   # Create v2ray directory if it doesn't exist
   readonly V2RAY_STATE_DIR="${V2RAY_DIR:-$SHADOWBOX_DIR/v2ray}"
-  mkdir -p --mode=770 "${V2RAY_STATE_DIR}" || {
+  echo "DEBUG: Creating V2RAY_STATE_DIR at ${V2RAY_STATE_DIR}"
+  
+  if ! mkdir -p --mode=770 "${V2RAY_STATE_DIR}"; then
     log_error "Failed to create v2ray state directory"
+    echo "Please check if you have write permissions to $SHADOWBOX_DIR"
     return 1
   }
+  
+  echo "DEBUG: Setting permissions on ${V2RAY_STATE_DIR}"
   chmod g+s "${V2RAY_STATE_DIR}"
+  echo "DEBUG: Directories created successfully"
 }
 
 # Generate a secret key for access to the Management API and store it in a tag.
@@ -917,7 +933,15 @@ install_shadowbox() {
 
   log_for_sentry "Creating Outline directory"
   export SHADOWBOX_DIR="${SHADOWBOX_DIR:-/opt/outline}"
-  mkdir -p --mode=770 $SHADOWBOX_DIR
+  
+  # Add more verbose output
+  echo "DEBUG: Creating directory at $SHADOWBOX_DIR"
+  if ! mkdir -p --mode=770 $SHADOWBOX_DIR; then
+    log_error "Failed to create Outline directory $SHADOWBOX_DIR"
+    echo "Check permissions and try again, or specify a different directory using SHADOWBOX_DIR env variable"
+    return 1
+  fi
+  echo "DEBUG: Setting permissions on $SHADOWBOX_DIR"
   chmod u+s $SHADOWBOX_DIR
 
   # Detect architecture for proper image selection
@@ -971,14 +995,39 @@ install_shadowbox() {
   # Note we can't do "mv" here as do_install_server.sh may already be tailing
   # this file.
   log_for_sentry "Initializing ACCESS_CONFIG"
+  echo "DEBUG: Setting up $ACCESS_CONFIG"
   [[ -f $ACCESS_CONFIG ]] && cp $ACCESS_CONFIG $ACCESS_CONFIG.bak && > $ACCESS_CONFIG
 
   # Make a directory for persistent state
-  run_step "Creating persistent state dir" create_persisted_state_dir
-  run_step "Generating secret key" generate_secret_key
-  run_step "Generating TLS certificate" generate_certificate
-  run_step "Generating SHA-256 certificate fingerprint" generate_certificate_fingerprint
-  run_step "Writing config" write_config
+  echo "DEBUG: About to create persistent state directory..."
+  run_step "Creating persistent state dir" create_persisted_state_dir || {
+    log_error "Failed to create persistent state directory"
+    return 1
+  }
+  
+  echo "DEBUG: About to generate secret key..."
+  run_step "Generating secret key" generate_secret_key || {
+    log_error "Failed to generate secret key"
+    return 1
+  }
+  
+  echo "DEBUG: About to generate TLS certificate..."
+  run_step "Generating TLS certificate" generate_certificate || {
+    log_error "Failed to generate TLS certificate"
+    return 1
+  }
+  
+  echo "DEBUG: About to generate certificate fingerprint..."
+  run_step "Generating SHA-256 certificate fingerprint" generate_certificate_fingerprint || {
+    log_error "Failed to generate certificate fingerprint"
+    return 1
+  }
+  
+  echo "DEBUG: About to write config..."
+  run_step "Writing config" write_config || {
+    log_error "Failed to write config"
+    return 1
+  }
 
   # TODO(dborkan): if the script fails after docker run, it will continue to fail
   # as the names shadowbox and watchtower will already be in use.  Consider
@@ -1531,7 +1580,8 @@ function main() {
     if ! install_shadowbox; then
       # If installation failed, offer to restart Docker as a last resort
       echo ""
-      echo "Installation failed. This may be due to lingering Docker resources or port conflicts."
+      log_error "Installation failed. This may be due to lingering Docker resources, port conflicts, or permission issues."
+      log_error "Check the DEBUG output above to see where the process stopped."
       
       if command_exists systemctl; then
         echo ""
