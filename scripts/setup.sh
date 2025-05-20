@@ -381,13 +381,37 @@ EOF
 
     # Create shadowbox_server_config.json file, which is required by ken1029/shadowbox image
     info "Creating shadowbox_server_config.json file..."
-    local server_ip=$(hostname -I | awk '{print $1}' || curl -4 -s ifconfig.me || curl -4 -s icanhazip.com)
     
+    # Try multiple methods to get the server's IP address
+    # Using hostname -I as the primary method and avoiding potentially blocked external services
+    local server_ip=""
+    
+    # Method 1: Try hostname command (most reliable for local network)
+    server_ip=$(hostname -I | awk '{print $1}' 2>/dev/null)
+    
+    # Method 2: Try ip route command as fallback
+    if [ -z "$server_ip" ] || [ "$server_ip" = "127.0.0.1" ]; then
+        server_ip=$(ip route get 1.2.3.4 | awk '{print $7}' 2>/dev/null)
+        info "Using IP from ip route command: ${server_ip}"
+    fi
+    
+    # Method 3: Only try external services as last resort and only if we have connectivity
+    if [ -z "$server_ip" ] || [ "$server_ip" = "127.0.0.1" ]; then
+        # Check if we have internet connectivity before attempting external service
+        if ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
+            server_ip=$(curl -4 -s --connect-timeout 5 ifconfig.me 2>/dev/null ||
+                       curl -4 -s --connect-timeout 5 icanhazip.com 2>/dev/null)
+            info "Using IP from external service: ${server_ip}"
+        fi
+    fi
+    
+    # Final fallback if all methods fail
     if [ -z "$server_ip" ]; then
         warn "Could not determine server IP address. Using localhost as fallback."
         server_ip="127.0.0.1"
     fi
     
+    info "Using server IP address for configuration: ${server_ip}"
     mkdir -p "${OUTLINE_DIR}/data"
     
     cat > "${OUTLINE_DIR}/data/shadowbox_server_config.json" <<EOF
@@ -954,8 +978,29 @@ start_services() {
                     warn "Outline Server hostname configuration error detected. Applying fix..."
                     
                     # Apply fix for Outline Server - ensure hostname is properly set
-                    local server_ip=$(hostname -I | awk '{print $1}' || curl -4 -s ifconfig.me || curl -4 -s icanhazip.com)
+                    # Using same improved IP detection logic as configure_outline function
+                    local server_ip=""
                     
+                    # Method 1: Try hostname command (most reliable for local network)
+                    server_ip=$(hostname -I | awk '{print $1}' 2>/dev/null)
+                    
+                    # Method 2: Try ip route command as fallback
+                    if [ -z "$server_ip" ] || [ "$server_ip" = "127.0.0.1" ]; then
+                        server_ip=$(ip route get 1.2.3.4 | awk '{print $7}' 2>/dev/null)
+                        info "Using IP from ip route command: ${server_ip}"
+                    fi
+                    
+                    # Method 3: Only try external services as very last resort
+                    if [ -z "$server_ip" ] || [ "$server_ip" = "127.0.0.1" ]; then
+                        # Check if we have internet connectivity before attempting external service
+                        if ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
+                            server_ip=$(curl -4 -s --connect-timeout 5 ifconfig.me 2>/dev/null ||
+                                      curl -4 -s --connect-timeout 5 icanhazip.com 2>/dev/null)
+                            info "Using IP from external service: ${server_ip}"
+                        fi
+                    fi
+                    
+                    # Final fallback if all methods fail
                     if [ -z "$server_ip" ]; then
                         warn "Could not determine server IP address. Using localhost as fallback."
                         server_ip="127.0.0.1"
@@ -1078,9 +1123,29 @@ ensure_outline_config() {
     if [ ! -f "${OUTLINE_DIR}/data/shadowbox_server_config.json" ] || ! grep -q "hostname" "${OUTLINE_DIR}/data/shadowbox_server_config.json"; then
         warn "Missing or invalid shadowbox_server_config.json. Recreating file..."
         
-        # Get server hostname/IP
-        local server_ip=$(hostname -I | awk '{print $1}' || curl -4 -s ifconfig.me || curl -4 -s icanhazip.com)
+        # Get server hostname/IP using the improved detection logic
+        local server_ip=""
         
+        # Method 1: Try hostname command (most reliable for local network)
+        server_ip=$(hostname -I | awk '{print $1}' 2>/dev/null)
+        
+        # Method 2: Try ip route command as fallback
+        if [ -z "$server_ip" ] || [ "$server_ip" = "127.0.0.1" ]; then
+            server_ip=$(ip route get 1.2.3.4 | awk '{print $7}' 2>/dev/null)
+            info "Using IP from ip route command: ${server_ip}"
+        fi
+        
+        # Method 3: Only try external services as very last resort
+        if [ -z "$server_ip" ] || [ "$server_ip" = "127.0.0.1" ]; then
+            # Check if we have internet connectivity before attempting external service
+            if ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
+                server_ip=$(curl -4 -s --connect-timeout 5 ifconfig.me 2>/dev/null ||
+                          curl -4 -s --connect-timeout 5 icanhazip.com 2>/dev/null)
+                info "Using IP from external service: ${server_ip}"
+            fi
+        fi
+        
+        # Final fallback if all methods fail
         if [ -z "$server_ip" ]; then
             warn "Could not determine server IP address. Using localhost as fallback."
             server_ip="127.0.0.1"
