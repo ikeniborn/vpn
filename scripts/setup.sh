@@ -157,7 +157,8 @@ detect_architecture() {
         aarch64|arm64)
             # Use the well-tested ARM64 images from the ericqmore project
             SB_IMAGE="ken1029/shadowbox:latest"
-            WATCHTOWER_IMAGE="ken1029/watchtower:arm64"
+            # Use the official watchtower image which supports multiple architectures through Docker's manifest support
+            WATCHTOWER_IMAGE="containrrr/watchtower:latest"
             V2RAY_IMAGE="v2fly/v2fly-core:latest"
             DOCKER_PLATFORM="linux/arm64"
             info "ARM64 architecture detected, using ARM64-compatible images"
@@ -165,7 +166,8 @@ detect_architecture() {
         armv7l)
             # Use the well-tested ARMv7 images from the ericqmore project
             SB_IMAGE="ken1029/shadowbox:latest"
-            WATCHTOWER_IMAGE="ken1029/watchtower:arm32"
+            # Use the official watchtower image which supports multiple architectures
+            WATCHTOWER_IMAGE="containrrr/watchtower:latest"
             V2RAY_IMAGE="v2fly/v2fly-core:latest"
             DOCKER_PLATFORM="linux/arm/v7"
             info "ARMv7 architecture detected, using ARMv7-compatible images"
@@ -705,7 +707,7 @@ services:
       - apparmor:unconfined
       - no-new-privileges:false
     privileged: true
-    platform: ${DOCKER_PLATFORM}
+    # No platform specification for watchtower to allow Docker to automatically select the correct platform
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     command: --cleanup --tlsverify --interval 3600
