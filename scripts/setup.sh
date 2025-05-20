@@ -1727,8 +1727,8 @@ function setup_routing() {
   
   # Check if shadowbox is connected to network
   if ! docker network inspect vpn-network 2>/dev/null | grep -q "shadowbox"; then
-    echo "Connecting shadowbox to vpn-network with IP ${SHADOWBOX_IP:-172.19.0.2}..."
-    if ! docker network connect --ip=${SHADOWBOX_IP:-172.19.0.2} vpn-network shadowbox; then
+    echo "Connecting shadowbox to vpn-network with IP ${SHADOWBOX_IP}..."
+    if ! docker network connect --ip=${SHADOWBOX_IP} vpn-network shadowbox; then
       log_error "Failed to connect shadowbox to network"
       log_error "Falling back to host networking mode"
       export DOCKER_NETWORK_ISSUES=1
