@@ -27,7 +27,7 @@ METRICS_DIR="${BASE_DIR}/metrics"
 
 # Default values
 OUTLINE_PORT="8388"
-API_PORT="8388"  # By default, use the same port as Outline
+API_PORT="8989"  # Default API port different from Outline port
 V2RAY_PORT="443"
 DEST_SITE="www.microsoft.com:443"
 FINGERPRINT="chrome"
@@ -56,14 +56,14 @@ and VLESS-Reality VPN solution.
 
 Options:
   --outline-port PORT     Port for Outline Server (default: 8388)
-  --api-port PORT         Port for Outline API management (default: same as outline-port)
+  --api-port PORT         Port for Outline API management (default: 8989)
   --v2ray-port PORT       Port for v2ray VLESS protocol (default: 443)
   --dest-site SITE        Destination site to mimic (default: www.microsoft.com:443)
   --fingerprint TYPE      TLS fingerprint to simulate (default: chrome)
   --help                  Display this help message
 
 Example:
-  $(basename "$0") --outline-port 8388 --api-port 8389 --v2ray-port 443
+  $(basename "$0") --outline-port 8388 --api-port 8989 --v2ray-port 443
 EOF
 }
 
@@ -1237,75 +1237,72 @@ check_required_scripts() {
 ensure_outline_config() {
     info "Ensuring Outline Server configuration is valid..."
     
-    # Check if shadowbox_server_config.json exists and contains a hostname
-    if [ ! -f "${OUTLINE_DIR}/data/shadowbox_server_config.json" ] || ! grep -q "hostname" "${OUTLINE_DIR}/data/shadowbox_server_config.json"; then
-        warn "Missing or invalid shadowbox_server_config.json. Recreating file..."
-        
-        # Get server hostname/IP using the improved detection logic
-        local server_ip=""
-        
-        # Method 1: Try hostname command (most reliable for local network)
-        server_ip=$(hostname -I | awk '{print $1}' 2>/dev/null)
-        
-        # Method 2: Try ip route command as fallback
-        if [ -z "$server_ip" ] || [ "$server_ip" = "127.0.0.1" ]; then
-            server_ip=$(ip route get 1.2.3.4 | awk '{print $7}' 2>/dev/null)
-            info "Using IP from ip route command: ${server_ip}"
-        fi
-        
-        # Method 3: Only try external services as very last resort
-        if [ -z "$server_ip" ] || [ "$server_ip" = "127.0.0.1" ]; then
-            # Check if we have internet connectivity before attempting external service
-            if ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
-                server_ip=$(curl -4 -s --connect-timeout 5 ifconfig.me 2>/dev/null ||
-                          curl -4 -s --connect-timeout 5 icanhazip.com 2>/dev/null)
-                info "Using IP from external service: ${server_ip}"
-            fi
-        fi
-        
-        # Final fallback if all methods fail
-        if [ -z "$server_ip" ]; then
-            warn "Could not determine server IP address. Using localhost as fallback."
-            server_ip="127.0.0.1"
-        fi
-        
-        info "Using server IP address: $server_ip"
-        
-        # Create directory if not exists
-        mkdir -p "${OUTLINE_DIR}/data"
-        
-        # Create the shadowbox_server_config.json file
-        # Generate a random API prefix for security
-        local api_prefix=$(head -c 16 /dev/urandom | base64 | tr '/+' '_-' | tr -d '=' | head -c 8)
-        
-        cat > "${OUTLINE_DIR}/data/shadowbox_server_config.json" <<EOF
-{
-"hostname": "${server_ip}",
-"apiPort": ${API_PORT},
-"apiPrefix": "${api_prefix}",
-"portForNewAccessKeys": ${OUTLINE_PORT},
-"accessKeyDataLimit": {},
-"defaultDataLimit": null,
-"unrestrictedAccessKeyDataLimit": {}
-}
-EOF
-        chmod 600 "${OUTLINE_DIR}/data/shadowbox_server_config.json"
-        
-        # Create persisted-state directory specifically for Outline SB_STATE_DIR environment variable
-        mkdir -p "${OUTLINE_DIR}/persisted-state"
-        
-        # Create a copy of the config in the persisted-state directory
-        cp "${OUTLINE_DIR}/data/shadowbox_server_config.json" "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
-        chmod 600 "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
-        
-        # Export the server IP for later use in docker-compose
-        export SERVER_IP="${server_ip}"
-        
-        info "Shadowbox configuration file created successfully"
-        return 0
+    # Get server hostname/IP using the improved detection logic
+    local server_ip=""
+    
+    # Method 1: Try hostname command (most reliable for local network)
+    server_ip=$(hostname -I | awk '{print $1}' 2>/dev/null)
+    
+    # Method 2: Try ip route command as fallback
+    if [ -z "$server_ip" ] || [ "$server_ip" = "127.0.0.1" ]; then
+        server_ip=$(ip route get 1.2.3.4 | awk '{print $7}' 2>/dev/null)
+        info "Using IP from ip route command: ${server_ip}"
     fi
     
-    info "Outline Server configuration appears valid"
+    # Method 3: Only try external services as very last resort
+    if [ -z "$server_ip" ] || [ "$server_ip" = "127.0.0.1" ]; then
+        # Check if we have internet connectivity before attempting external service
+        if ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
+            server_ip=$(curl -4 -s --connect-timeout 5 ifconfig.me 2>/dev/null ||
+                      curl -4 -s --connect-timeout 5 icanhazip.com 2>/dev/null)
+            info "Using IP from external service: ${server_ip}"
+        fi
+    fi
+    
+    # Final fallback if all methods fail
+    if [ -z "$server_ip" ]; then
+        warn "Could not determine server IP address. Using localhost as fallback."
+        server_ip="127.0.0.1"
+    fi
+    
+    info "Using server IP address: $server_ip"
+    
+    # Create directories if they don't exist
+    mkdir -p "${OUTLINE_DIR}/data"
+    mkdir -p "${OUTLINE_DIR}/persisted-state"
+    
+    # The "TypeError: path must be a string or Buffer" error occurs when
+    # the server tries to read the configuration file but it's missing or invalid
+    
+    # Generate a random API prefix for security
+    local api_prefix=$(head -c 16 /dev/urandom | base64 | tr '/+' '_-' | tr -d '=' | head -c 8)
+    
+    # Create the shadowbox_server_config.json file in both locations
+    # to ensure it exists in both the data and persisted-state directories
+    info "Creating shadowbox_server_config.json in ${OUTLINE_DIR}/data and ${OUTLINE_DIR}/persisted-state"
+    
+    # Create the config file with apiPort parameter correctly set
+    cat > "${OUTLINE_DIR}/data/shadowbox_server_config.json" <<EOF
+{
+  "hostname": "${server_ip}",
+  "apiPort": ${API_PORT},
+  "apiPrefix": "${api_prefix}",
+  "portForNewAccessKeys": ${OUTLINE_PORT},
+  "accessKeyDataLimit": {},
+  "defaultDataLimit": null,
+  "unrestrictedAccessKeyDataLimit": {}
+}
+EOF
+    chmod 600 "${OUTLINE_DIR}/data/shadowbox_server_config.json"
+    
+    # Copy to persisted-state directory
+    cp "${OUTLINE_DIR}/data/shadowbox_server_config.json" "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
+    chmod 600 "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
+    
+    # Export the server IP for later use in docker-compose
+    export SERVER_IP="${server_ip}"
+    
+    info "Shadowbox configuration files created successfully"
     return 0
 }
 
@@ -1422,6 +1419,14 @@ main() {
     setup_cron_jobs
     start_services
     ensure_outline_config
+    # Check for TypeError in docker logs and fix if needed
+    if docker logs outline-server 2>&1 | grep -q "TypeError: path must be a string or Buffer"; then
+        warn "Detected 'TypeError: path must be a string or Buffer' error. Applying fix..."
+        ensure_outline_config
+        # Restart the container to apply the fix
+        docker restart outline-server
+        sleep 10
+    fi
     health_check
     display_summary
     generate_outline_management_json
