@@ -59,8 +59,9 @@ cat <<WARNING
                         IMPORTANT NOTICE
 ====================================================================
 This script requires exclusive access to certain network ports.
-If you have other services using ports 7777, 8888, or 443,
+If you have other services using ports on your system,
 they may be temporarily stopped during installation.
+The script will use random available ports for management and access keys.
 
 The script will attempt to create directories in /opt/outline
 which requires root (sudo) privileges.
@@ -374,10 +375,32 @@ function finish {
 
 function get_random_port {
   local num=0  # Init to an invalid value, to prevent "unbound variable" errors.
-  until (( 1024 <= num && num < 65536)); do
-    num=$(( $RANDOM + ($RANDOM % 2) * 32768 ));
-  done;
-  echo $num;
+  local excluded_ports=("7777" "8888")  # List of ports to exclude
+  
+  while true; do
+    # Generate a random port in the valid range
+    until (( 1024 <= num && num < 65536)); do
+      num=$(( $RANDOM + ($RANDOM % 2) * 32768 ));
+    done
+    
+    # Check if the port is in the excluded list
+    local excluded=false
+    for excluded_port in "${excluded_ports[@]}"; do
+      if [[ "$num" -eq "$excluded_port" ]]; then
+        excluded=true
+        break
+      fi
+    done
+    
+    # If port is not excluded, return it
+    if [[ "$excluded" == false ]]; then
+      echo $num
+      return 0
+    fi
+    
+    # Reset and try again
+    num=0
+  done
 }
 
 function create_persisted_state_dir() {
@@ -614,7 +637,7 @@ function start_shadowbox() {
   sleep 5
   
   # Use enhanced port availability function for all required ports
-  local all_ports=("${API_PORT}" "${ACCESS_KEY_PORT}" "7777" "8888")
+  local all_ports=("${API_PORT}" "${ACCESS_KEY_PORT}")
   if ! ensure_ports_available "${all_ports[@]}"; then
     return 1
   fi
@@ -732,7 +755,7 @@ function start_shadowbox() {
   echo "Performing final port availability check before container creation"
   local port_still_in_use=false
   
-  for port in "${API_PORT}" "${ACCESS_KEY_PORT}" "7777" "8888"; do
+  for port in "${API_PORT}" "${ACCESS_KEY_PORT}"; do
     if lsof -i:${port} >/dev/null 2>&1 || netstat -tunl 2>/dev/null | grep -q ":${port} "; then
       echo "WARNING: Port ${port} still appears to be in use. Will try emergency measures..."
       port_still_in_use=true
@@ -1008,6 +1031,7 @@ $FIREWALL_STATUS
 Make sure to open the following ports on your firewall, router or cloud provider:
 - Management port ${API_PORT}, for TCP
 - Access key port ${ACCESS_KEY_PORT}, for TCP and UDP
+- V2Ray port ${V2RAY_PORT}, for TCP and UDP
 "
 }
 
@@ -1108,7 +1132,7 @@ function stop_all_containers() {
   local v2ray_port=${V2RAY_PORT:-443}
   
   # Define ports to free with default values to avoid unbound variable errors
-  local ports_to_free=("7777" "8888" "443" "10000" "$api_port" "$access_key_port" "$v2ray_port")
+  local ports_to_free=("443" "10000" "$api_port" "$access_key_port" "$v2ray_port")
   
   # Make the array unique
   ports_to_free=($(echo "${ports_to_free[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
@@ -1188,6 +1212,7 @@ install_shadowbox() {
   API_PORT="${FLAGS_API_PORT}"
   if [[ $API_PORT == 0 ]]; then
     API_PORT=${SB_API_PORT:-$(get_random_port)}
+    echo "Using randomly generated API port: ${API_PORT}"
   fi
   
   # Set ACCESS_KEY_PORT before using it
@@ -1196,7 +1221,14 @@ install_shadowbox() {
     ACCESS_KEY_PORT=$FLAGS_KEYS_PORT
   else
     ACCESS_KEY_PORT=$(get_random_port)
+    echo "Using randomly generated access key port: ${ACCESS_KEY_PORT}"
   fi
+  
+  # Ensure ports are different
+  while [[ "$API_PORT" == "$ACCESS_KEY_PORT" ]]; do
+    echo "Generated ports are identical, regenerating ACCESS_KEY_PORT..."
+    ACCESS_KEY_PORT=$(get_random_port)
+  done
   
   readonly ACCESS_CONFIG=${ACCESS_CONFIG:-$SHADOWBOX_DIR/access.txt}
   readonly SB_IMAGE
@@ -1809,8 +1841,8 @@ function parse_flags() {
   [[ $? == 0 ]] || exit 1
   eval set -- $params
   declare -g FLAGS_HOSTNAME=""
-  declare -gi FLAGS_API_PORT=7777
-  declare -gi FLAGS_KEYS_PORT=8888
+  declare -gi FLAGS_API_PORT=0  # Default to 0 to use random port
+  declare -gi FLAGS_KEYS_PORT=0  # Default to 0 to use random port
   declare -gi FLAGS_V2RAY_PORT=443
   declare -g FLAGS_DEST_SITE="www.microsoft.com:443"
   declare -g FLAGS_FINGERPRINT="chrome"
@@ -1909,8 +1941,8 @@ function main() {
   trap finish EXIT
   
   # Set default values for critical variables to prevent "unbound variable" errors
-  API_PORT=${API_PORT:-7777}
-  ACCESS_KEY_PORT=${ACCESS_KEY_PORT:-8888}
+  API_PORT=${API_PORT:-0}  # Use 0 to trigger random port generation
+  ACCESS_KEY_PORT=${ACCESS_KEY_PORT:-0}  # Use 0 to trigger random port generation
   V2RAY_PORT=${V2RAY_PORT:-443}
   # Make subnet options globally available
   export subnets=("${SUBNET_OPTIONS[@]}")
