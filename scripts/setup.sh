@@ -45,6 +45,32 @@
 
 set -euo pipefail
 
+# Check if running as root
+if [ "$(id -u)" != "0" ]; then
+   echo "This script must be run as root"
+   echo "Please use: sudo $0"
+   exit 1
+fi
+
+# Print warning about potential issues
+cat <<WARNING
+====================================================================
+                        IMPORTANT NOTICE
+====================================================================
+This script requires exclusive access to certain network ports.
+If you have other services using ports 7777, 8888, or 443,
+they may be temporarily stopped during installation.
+
+The script will attempt to create directories in /opt/outline
+which requires root (sudo) privileges.
+
+Press Ctrl+C now if you want to cancel.
+Otherwise, the installation will begin in 5 seconds...
+WARNING
+
+sleep 5
+echo "Starting installation..."
+
 function display_usage() {
   cat <<EOF
 Usage: install_server.sh [--hostname <hostname>] [--api-port <port>] [--keys-port <port>]
@@ -446,21 +472,44 @@ function ensure_ports_available() {
   
   echo "Ensuring all required ports are available (${ports[*]})..."
   
-  # First attempt - try to surgically find and kill processes using the ports
+  # Use lsof and netstat to get a comprehensive list of port usage
+  echo "Checking current port usage status:"
   for port in "${ports[@]}"; do
-    echo "Freeing port $port..."
-    echo "Checking processes using port $port..."
-    # Try both netstat and fuser approaches
-    fuser -k ${port}/tcp ${port}/udp >/dev/null 2>&1 || true
+    echo "Port ${port} usage:"
+    lsof -i:${port} 2>/dev/null || echo "  No processes found by lsof"
+    netstat -tunlp 2>/dev/null | grep ":${port} " || echo "  No processes found by netstat"
+  done
+  
+  # First attempt - try multiple tools to free ports
+  for port in "${ports[@]}"; do
+    echo "Aggressively freeing port $port..."
+    
+    # Try fuser to kill processes
+    echo "Using fuser to free port $port"
+    fuser -k -9 ${port}/tcp ${port}/udp >/dev/null 2>&1 || true
     
     # Find processes using this port with netstat and kill them
     if command_exists netstat; then
+      echo "Using netstat to find processes on port $port"
       local pids
       pids=$(netstat -tunlp 2>/dev/null | grep ":${port} " | awk '{print $7}' | cut -d'/' -f1)
       for pid in $pids; do
         if [ -n "$pid" ]; then
           echo "Killing process $pid using port $port"
           kill -9 "$pid" >/dev/null 2>&1 || true
+        fi
+      done
+    fi
+    
+    # Try to find Docker containers using this port and remove them
+    if command_exists docker; then
+      echo "Looking for Docker containers using port $port"
+      local containers
+      containers=$(docker ps -a | grep "${port}->" | awk '{print $1}')
+      for container in $containers; do
+        if [ -n "$container" ]; then
+          echo "Removing Docker container $container using port $port"
+          docker rm -f "$container" >/dev/null 2>&1 || true
         fi
       done
     fi
@@ -537,9 +586,31 @@ function start_shadowbox() {
     systemctl status docker --no-pager || true
   fi
   
-  # First try to release with fuser
-  fuser -k ${API_PORT}/tcp ${API_PORT}/udp ${ACCESS_KEY_PORT}/tcp ${ACCESS_KEY_PORT}/udp >/dev/null 2>&1 || true
-  sleep 2
+  # More aggressive port freeing with multiple techniques
+  echo "Performing aggressive port freeing for API_PORT ${API_PORT} and ACCESS_KEY_PORT ${ACCESS_KEY_PORT}"
+  
+  # Try multiple approaches to free ports
+  fuser -k -9 ${API_PORT}/tcp ${API_PORT}/udp ${ACCESS_KEY_PORT}/tcp ${ACCESS_KEY_PORT}/udp >/dev/null 2>&1 || true
+  
+  # Try to kill processes using netstat
+  if command_exists netstat; then
+    for port in "${API_PORT}" "${ACCESS_KEY_PORT}"; do
+      local port_pids
+      port_pids=$(netstat -tunlp 2>/dev/null | grep ":${port} " | awk '{print $7}' | cut -d'/' -f1)
+      for pid in $port_pids; do
+        if [ -n "$pid" ]; then
+          echo "Killing process $pid using port $port with SIGKILL"
+          kill -9 "$pid" >/dev/null 2>&1 || true
+        fi
+      done
+    done
+  fi
+  
+  # Check if any Docker proxy processes might be holding the ports
+  echo "Checking for any Docker proxy processes using these ports"
+  ps aux | grep -E "docker-proxy.*(${API_PORT}|${ACCESS_KEY_PORT})" | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null || true
+  
+  sleep 5
   
   # Use enhanced port availability function for all required ports
   local all_ports=("${API_PORT}" "${ACCESS_KEY_PORT}" "7777" "8888")
@@ -611,12 +682,42 @@ function start_shadowbox() {
     ACCESS_PORT_FLAG="-p ${FLAGS_KEYS_PORT}:${FLAGS_KEYS_PORT}/tcp -p ${FLAGS_KEYS_PORT}:${FLAGS_KEYS_PORT}/udp"
   fi
   
-  # Try one final port check just before container creation
-  for port in "${API_PORT}" "${ACCESS_KEY_PORT}"; do
+  # Final thorough port check before container creation
+  echo "Performing final port availability check before container creation"
+  local port_still_in_use=false
+  
+  for port in "${API_PORT}" "${ACCESS_KEY_PORT}" "7777" "8888"; do
     if lsof -i:${port} >/dev/null 2>&1 || netstat -tunl 2>/dev/null | grep -q ":${port} "; then
-      echo "WARNING: Port ${port} still appears to be in use. Attempting to proceed anyway..."
+      echo "WARNING: Port ${port} still appears to be in use. Will try emergency measures..."
+      port_still_in_use=true
+      
+      # Emergency measures - display what's using the port
+      echo "Processes using port ${port}:"
+      lsof -i:${port} 2>/dev/null || echo "  No lsof info available"
+      netstat -tunlp 2>/dev/null | grep ":${port} " || echo "  No netstat info available"
+      
+      # Last resort - try to use a different port if this is a configurable port
+      if [ "${port}" = "${API_PORT}" ]; then
+        echo "Attempting to use a different API port as emergency measure"
+        API_PORT=$(get_random_port)
+        echo "New API_PORT: ${API_PORT}"
+      elif [ "${port}" = "${ACCESS_KEY_PORT}" ]; then
+        echo "Attempting to use a different access key port as emergency measure"
+        ACCESS_KEY_PORT=$(get_random_port)
+        echo "New ACCESS_KEY_PORT: ${ACCESS_KEY_PORT}"
+      fi
+      
+      # Final attempt to kill processes
+      fuser -k -9 ${port}/tcp ${port}/udp >/dev/null 2>&1 || true
     fi
   done
+  
+  if [ "$port_still_in_use" = true ]; then
+    echo "WARNING: Some ports were still in use, but we've taken emergency measures."
+    echo "If the installation fails, please try rebooting your system and running the script again."
+  else
+    echo "All required ports are now available for container creation."
+  fi
   
   # Use the host network mode if we're still having issues
   local network_mode="--network vpn-network --ip 172.18.0.2"
@@ -701,23 +802,55 @@ function start_shadowbox() {
     return 0
   fi
   
-  # If the container didn't start, try host networking as a fallback
-  if [[ -z "$DOCKER_NETWORK_ISSUES" && $STDERR_OUTPUT == *"failed to listen on TCP socket: address already in use"* ]]; then
-    echo "Trying again with host networking mode..."
-    export DOCKER_NETWORK_ISSUES=1
-    
-    # Clean up failed container if it exists
-    docker rm -f shadowbox >/dev/null 2>&1 || true
-    
-    # Modify network flags to use host networking
-    docker_shadowbox_flags=("${docker_shadowbox_flags[@]/--network vpn-network --ip 172.18.0.2/--network host}")
-    
-    # Try starting again
-    STDERR_OUTPUT=$(docker run -d "${docker_shadowbox_flags[@]}" ${SB_IMAGE} 2>&1)
-    RET=$?
-    if [[ $RET -eq 0 ]]; then
-      echo "Container started successfully with host networking!"
-      return 0
+  # If the container didn't start, try host networking and random ports as a fallback
+  if [[ $RET -ne 0 ]]; then
+    if [[ $STDERR_OUTPUT == *"failed to listen on TCP socket: address already in use"* ]]; then
+      echo "Trying again with host networking mode and random ports..."
+      export DOCKER_NETWORK_ISSUES=1
+      
+      # Clean up failed container if it exists
+      docker rm -f shadowbox >/dev/null 2>&1 || true
+      
+      # Try with completely new random ports
+      echo "Generating new random ports for retry..."
+      local orig_api_port="${API_PORT}"
+      local orig_access_port="${ACCESS_KEY_PORT}"
+      
+      API_PORT=$(get_random_port)
+      ACCESS_KEY_PORT=$(get_random_port)
+      
+      echo "New ports: API_PORT=${API_PORT}, ACCESS_KEY_PORT=${ACCESS_KEY_PORT}"
+      
+      # Modify docker flags
+      # First, remove the existing port mappings
+      for i in "${!docker_shadowbox_flags[@]}"; do
+        if [[ "${docker_shadowbox_flags[i]}" == *"${orig_api_port}"* || "${docker_shadowbox_flags[i]}" == *"${orig_access_port}"* ]]; then
+          unset 'docker_shadowbox_flags[i]'
+        fi
+      done
+      
+      # Filter out empty elements
+      docker_shadowbox_flags=("${docker_shadowbox_flags[@]}")
+      
+      # Add new port mappings
+      docker_shadowbox_flags+=(-p "${API_PORT}:${API_PORT}/tcp")
+      docker_shadowbox_flags+=(-p "${ACCESS_KEY_PORT}:${ACCESS_KEY_PORT}/tcp")
+      docker_shadowbox_flags+=(-p "${ACCESS_KEY_PORT}:${ACCESS_KEY_PORT}/udp")
+      
+      # Modify network flags to use host networking
+      docker_shadowbox_flags=("${docker_shadowbox_flags[@]/--network vpn-network --ip 172.18.0.2/--network host}")
+      
+      # Update environment variables with new ports
+      docker_shadowbox_flags+=(-e "SB_API_PORT=${API_PORT}")
+      
+      echo "Attempting to start with modified configuration..."
+      # Try starting again
+      STDERR_OUTPUT=$(docker run -d "${docker_shadowbox_flags[@]}" ${SB_IMAGE} 2>&1)
+      RET=$?
+      if [[ $RET -eq 0 ]]; then
+        echo "Container started successfully with host networking and new ports!"
+        return 0
+      fi
     fi
   fi
   
