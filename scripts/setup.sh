@@ -949,6 +949,36 @@ start_services() {
                     # Remove failed containers
                     docker-compose down --remove-orphans
                     sleep 5
+                # Check for Outline Server hostname configuration errors
+                elif docker-compose logs outline-server 2>&1 | grep -q "Need to specify hostname in shadowbox_server_config.json"; then
+                    warn "Outline Server hostname configuration error detected. Applying fix..."
+                    
+                    # Apply fix for Outline Server - ensure hostname is properly set
+                    local server_ip=$(hostname -I | awk '{print $1}' || curl -4 -s ifconfig.me || curl -4 -s icanhazip.com)
+                    
+                    if [ -z "$server_ip" ]; then
+                        warn "Could not determine server IP address. Using localhost as fallback."
+                        server_ip="127.0.0.1"
+                    fi
+                    
+                    info "Using server IP address: $server_ip for Outline Server"
+                    
+                    # Create or update the shadowbox_server_config.json file
+                    mkdir -p "${OUTLINE_DIR}/data"
+                    cat > "${OUTLINE_DIR}/data/shadowbox_server_config.json" <<EOF
+{
+  "hostname": "${server_ip}",
+  "portForNewAccessKeys": ${OUTLINE_PORT},
+  "accessKeyDataLimit": {},
+  "defaultDataLimit": null,
+  "unrestrictedAccessKeyDataLimit": {}
+}
+EOF
+                    chmod 600 "${OUTLINE_DIR}/data/shadowbox_server_config.json"
+                    
+                    # Remove failed containers
+                    docker-compose down --remove-orphans
+                    sleep 5
                 fi
             fi
         else
@@ -1040,6 +1070,47 @@ check_required_scripts() {
     fi
 }
 
+# Ensure Outline Server configuration is valid
+ensure_outline_config() {
+    info "Ensuring Outline Server configuration is valid..."
+    
+    # Check if shadowbox_server_config.json exists and contains a hostname
+    if [ ! -f "${OUTLINE_DIR}/data/shadowbox_server_config.json" ] || ! grep -q "hostname" "${OUTLINE_DIR}/data/shadowbox_server_config.json"; then
+        warn "Missing or invalid shadowbox_server_config.json. Recreating file..."
+        
+        # Get server hostname/IP
+        local server_ip=$(hostname -I | awk '{print $1}' || curl -4 -s ifconfig.me || curl -4 -s icanhazip.com)
+        
+        if [ -z "$server_ip" ]; then
+            warn "Could not determine server IP address. Using localhost as fallback."
+            server_ip="127.0.0.1"
+        fi
+        
+        info "Using server IP address: $server_ip"
+        
+        # Create directory if not exists
+        mkdir -p "${OUTLINE_DIR}/data"
+        
+        # Create the shadowbox_server_config.json file
+        cat > "${OUTLINE_DIR}/data/shadowbox_server_config.json" <<EOF
+{
+  "hostname": "${server_ip}",
+  "portForNewAccessKeys": ${OUTLINE_PORT},
+  "accessKeyDataLimit": {},
+  "defaultDataLimit": null,
+  "unrestrictedAccessKeyDataLimit": {}
+}
+EOF
+        chmod 600 "${OUTLINE_DIR}/data/shadowbox_server_config.json"
+        
+        info "Shadowbox configuration file created successfully"
+        return 0
+    fi
+    
+    info "Outline Server configuration appears valid"
+    return 0
+}
+
 # Perform health check
 health_check() {
     info "Performing initial health check..."
@@ -1054,24 +1125,14 @@ health_check() {
         return 1
     fi
     
+    # Ensure Outline configuration is valid
+    ensure_outline_config
+    
     # Check if containers are running
     if ! docker ps | grep -q "outline-server"; then
         warn "Outline Server container is not running"
-        
-        # Check if shadowbox_server_config.json is present
-        if [ ! -f "${OUTLINE_DIR}/data/shadowbox_server_config.json" ]; then
-            warn "Missing shadowbox_server_config.json file. This is required for the Outline Server."
-            warn "Run fix-outline.sh to create this file and restart containers."
-        fi
-        
         docker logs outline-server
         return 1
-    fi
-    
-    # Check for shadowbox_server_config.json file
-    if [ ! -f "${OUTLINE_DIR}/data/shadowbox_server_config.json" ]; then
-        warn "Missing shadowbox_server_config.json file. This is required for the Outline Server."
-        warn "Container may fail soon. Run fix-outline.sh if container restarts or fails."
     fi
     
     # Special check for v2ray
@@ -1154,6 +1215,7 @@ main() {
     create_alert_script
     setup_cron_jobs
     start_services
+    ensure_outline_config
     health_check
     display_summary
     
