@@ -424,6 +424,16 @@ EOF
 }
 EOF
     chmod 600 "${OUTLINE_DIR}/data/shadowbox_server_config.json"
+    
+    # Create persisted-state directory specifically for Outline SB_STATE_DIR environment variable
+    mkdir -p "${OUTLINE_DIR}/persisted-state"
+    
+    # Create a copy of the config in the persisted-state directory
+    cp "${OUTLINE_DIR}/data/shadowbox_server_config.json" "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
+    chmod 600 "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
+    
+    # Export the server IP for later use in docker-compose
+    export SERVER_IP="${server_ip}"
 }
 
 # Configure v2ray with updated routing
@@ -683,12 +693,16 @@ services:
       - ./outline-server/config.json:/etc/shadowsocks-libev/config.json:Z
       - ./outline-server/access.json:/etc/shadowsocks-libev/access.json:Z
       - ./outline-server/data:/opt/outline/data:Z
+      - ./outline-server/data:/opt/outline/persisted-state:Z
       - ./logs/outline:/var/log/shadowsocks:Z
     ports:
       - "${OUTLINE_PORT}:${OUTLINE_PORT}/tcp"
       - "${OUTLINE_PORT}:${OUTLINE_PORT}/udp"
     environment:
       - SS_CONFIG=/etc/shadowsocks-libev/config.json
+      - SB_PUBLIC_IP=${SERVER_IP:-localhost}
+      - SB_API_PORT=${OUTLINE_PORT}
+      - SB_STATE_DIR=/opt/outline/persisted-state
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
@@ -926,6 +940,15 @@ start_services() {
     info "Starting VPN services..."
     
     cd "${BASE_DIR}"
+
+    # Export SERVER_IP for Docker Compose environment variable substitution
+    # Try multiple methods to get a reliable server IP address
+    SERVER_IP=$(hostname -I | awk '{print $1}' 2>/dev/null ||
+                ip route get 1.1.1.1 | awk '{print $7}' 2>/dev/null ||
+                echo "localhost")
+    export SERVER_IP
+    
+    info "Using server IP for Docker Compose: ${SERVER_IP}"
     
     # First, ensure any old containers are properly removed
     info "Cleaning up any old containers..."
@@ -1020,6 +1043,16 @@ start_services() {
 }
 EOF
                     chmod 600 "${OUTLINE_DIR}/data/shadowbox_server_config.json"
+                    
+                    # Create persisted-state directory specifically for Outline SB_STATE_DIR environment variable
+                    mkdir -p "${OUTLINE_DIR}/persisted-state"
+                    
+                    # Create a copy of the config in the persisted-state directory
+                    cp "${OUTLINE_DIR}/data/shadowbox_server_config.json" "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
+                    chmod 600 "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
+                    
+                    # Export updated server IP for docker-compose
+                    export SERVER_IP="${server_ip}"
                     
                     # Remove failed containers
                     docker-compose down --remove-orphans
@@ -1167,6 +1200,16 @@ ensure_outline_config() {
 }
 EOF
         chmod 600 "${OUTLINE_DIR}/data/shadowbox_server_config.json"
+        
+        # Create persisted-state directory specifically for Outline SB_STATE_DIR environment variable
+        mkdir -p "${OUTLINE_DIR}/persisted-state"
+        
+        # Create a copy of the config in the persisted-state directory
+        cp "${OUTLINE_DIR}/data/shadowbox_server_config.json" "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
+        chmod 600 "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
+        
+        # Export the server IP for later use in docker-compose
+        export SERVER_IP="${server_ip}"
         
         info "Shadowbox configuration file created successfully"
         return 0
