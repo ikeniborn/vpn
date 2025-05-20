@@ -1788,6 +1788,11 @@ function setup_routing() {
   # Check if v2ray is connected to network
   if ! docker network inspect vpn-network 2>/dev/null | grep -q "v2ray"; then
     echo "Connecting v2ray to vpn-network with IP ${V2RAY_IP}..."
+    # First try to disconnect to handle stale endpoints
+    docker network disconnect vpn-network v2ray >/dev/null 2>&1 || true
+    # Small delay to ensure disconnection completes
+    sleep 2
+    # Now connect with specific IP
     if ! docker network connect --ip=${V2RAY_IP} vpn-network v2ray; then
       log_error "Failed to connect v2ray to network"
       log_error "Falling back to host networking mode"
