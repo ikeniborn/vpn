@@ -367,7 +367,8 @@ function add_api_url_to_config() {
 }
 
 function check_firewall() {
-  local readonly ACCESS_KEY_PORT=$(curl --insecure -s ${LOCAL_API_URL}/access-keys | 
+  # Make ACCESS_KEY_PORT available globally for configure_firewall function
+  ACCESS_KEY_PORT=$(curl --insecure -s ${LOCAL_API_URL}/access-keys |
       docker exec -i shadowbox node -e '
           const fs = require("fs");
           const accessKeys = JSON.parse(fs.readFileSync(0, {encoding: "utf-8"}));
