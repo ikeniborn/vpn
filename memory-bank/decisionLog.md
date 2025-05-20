@@ -37,3 +37,4 @@ This file records architectural and implementation decisions using a list format
 2025-05-20 10:08:39 - Made architectural decisions for the integrated Shadowsocks/Outline Server + VLESS+Reality VPN solution deployment scripts.
 2025-05-20 14:32:13 - Added explicit platform specification to Docker Compose configuration to resolve platform mismatch between host (linux/arm64/v8) and container images (linux/amd64).
 2025-05-20 14:36:45 - Added creation of shadowbox_server_config.json to the setup.sh script to fix critical Outline Server configuration issue. Created additional troubleshooting script and documentation.
+2025-05-20 17:42:00 - Enhanced container management in setup.sh to prevent "address already in use" errors by implementing robust container cleanup, port release, and network resource cleanup functions. This prevents Docker networking conflicts when restarting services.

@@ -350,15 +350,24 @@ function write_config() {
 }
 
 function start_shadowbox() {
+  # Free up network resources even if container doesn't exist
+  echo "Ensuring network ports are released..."
+  # Check and kill any process that might be using the API port or ACCESS_KEY_PORT
+  fuser -k ${API_PORT}/tcp ${ACCESS_KEY_PORT}/tcp >/dev/null 2>&1 || true
+  # Wait a moment for ports to be fully released
+  sleep 2
   
-  # Create Docker network if it doesn't exist
-  if ! docker network inspect vpn-network &>/dev/null; then
-    docker network create --subnet=172.18.0.0/24 vpn-network || {
-      log_error "Failed to create Docker network"
-      log_for_sentry "Docker network creation failed"
-      return 1
-    }
-  fi
+  # Recreate Docker network from scratch instead of reusing
+  echo "Recreating Docker network..."
+  docker network rm vpn-network >/dev/null 2>&1 || true
+  sleep 2
+  
+  # Create Docker network
+  docker network create --subnet=172.18.0.0/24 vpn-network || {
+    log_error "Failed to create Docker network"
+    log_for_sentry "Docker network creation failed"
+    return 1
+  }
   
   # TODO(fortuna): Write PUBLIC_HOSTNAME and API_PORT to config file,
   # rather than pass in the environment.
@@ -615,10 +624,35 @@ function configure_firewall() {
   echo "If you need to restore previous rules, you can use: $0 --restore-firewall"
 }
 
+# Function to stop and remove all containers and clean up networking
+function stop_all_containers() {
+  echo "Stopping all VPN-related containers..."
+  
+  # Stop containers first
+  docker stop shadowbox v2ray watchtower >/dev/null 2>&1 || true
+  
+  # Use the robust container removal function for each container
+  ensure_container_removed "shadowbox"
+  ensure_container_removed "v2ray"
+  ensure_container_removed "watchtower"
+  
+  # Clean up the Docker network
+  echo "Cleaning up Docker network..."
+  docker network rm vpn-network >/dev/null 2>&1 || true
+  
+  # Wait for network resources to be fully released
+  sleep 3
+  
+  return 0
+}
+
 install_shadowbox() {
   # Make sure we don't leak readable files to other users.
   umask 0007
 
+  # Stop all existing containers to prevent port conflicts
+  run_step "Stopping all existing containers" stop_all_containers
+  
   run_step "Verifying that Docker is installed" verify_docker_installed
   run_step "Verifying that Docker daemon is running" verify_docker_running
 
@@ -988,6 +1022,11 @@ EOF
 function start_v2ray() {
   V2RAY_DIR="${V2RAY_DIR:-$SHADOWBOX_DIR/v2ray}"
   local V2RAY_PORT="${V2RAY_PORT:-443}"
+  
+  # Release v2ray ports before starting
+  echo "Releasing v2ray ports..."
+  fuser -k ${V2RAY_PORT}/tcp ${V2RAY_PORT}/udp 10000/tcp 10000/udp >/dev/null 2>&1 || true
+  sleep 2
   
   # Create log directory if it doesn't exist
   mkdir -p "${V2RAY_DIR}/logs" || {
