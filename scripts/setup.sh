@@ -1,4 +1,5 @@
 #!/bin/bash
+
 # Copyright 2018 The Outline Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -58,9 +59,8 @@ cat <<WARNING
                         IMPORTANT NOTICE
 ====================================================================
 This script requires exclusive access to certain network ports.
-If you have other services using ports on your system,
+If you have other services using ports 7777, 8888, or 443,
 they may be temporarily stopped during installation.
-The script will use random available ports for management and access keys.
 
 The script will attempt to create directories in /opt/outline
 which requires root (sudo) privileges.
@@ -374,32 +374,10 @@ function finish {
 
 function get_random_port {
   local num=0  # Init to an invalid value, to prevent "unbound variable" errors.
-  local excluded_ports=("7777" "8888")  # List of ports to exclude
-  
-  while true; do
-    # Generate a random port in the valid range
-    until (( 1024 <= num && num < 65536)); do
-      num=$(( $RANDOM + ($RANDOM % 2) * 32768 ));
-    done
-    
-    # Check if the port is in the excluded list
-    local excluded=false
-    for excluded_port in "${excluded_ports[@]}"; do
-      if [[ "$num" -eq "$excluded_port" ]]; then
-        excluded=true
-        break
-      fi
-    done
-    
-    # If port is not excluded, return it
-    if [[ "$excluded" == false ]]; then
-      echo $num
-      return 0
-    fi
-    
-    # Reset and try again
-    num=0
-  done
+  until (( 1024 <= num && num < 65536)); do
+    num=$(( $RANDOM + ($RANDOM % 2) * 32768 ));
+  done;
+  echo $num;
 }
 
 function create_persisted_state_dir() {
@@ -498,48 +476,48 @@ function ensure_ports_available() {
   # Use lsof and netstat to get a comprehensive list of port usage
   echo "Checking current port usage status:"
   for port in "${ports[@]}"; do
-    # Skip checks for port 0 (random port)
-    if [ "$port" -eq 0 ]; then
-      continue
-    fi
-    
     echo "Port ${port} usage:"
     lsof -i:${port} 2>/dev/null || echo "  No processes found by lsof"
     netstat -tunlp 2>/dev/null | grep ":${port} " || echo "  No processes found by netstat"
   done
   
-  # First attempt - safer approach to free ports
+  # First attempt - try multiple tools to free ports
   for port in "${ports[@]}"; do
-    # Skip port 0 and SSH port 22
-    if [ "$port" -eq 0 ] || [ "$port" -eq 22 ]; then
-      continue
+    echo "Aggressively freeing port $port..."
+    
+    # Try fuser to kill processes
+    echo "Using fuser to free port $port"
+    fuser -k -9 ${port}/tcp ${port}/udp >/dev/null 2>&1 || true
+    
+    # Find processes using this port with netstat and kill them
+    if command_exists netstat; then
+      echo "Using netstat to find processes on port $port"
+      local pids
+      pids=$(netstat -tunlp 2>/dev/null | grep ":${port} " | awk '{print $7}' | cut -d'/' -f1)
+      for pid in $pids; do
+        if [ -n "$pid" ]; then
+          echo "Killing process $pid using port $port"
+          kill -9 "$pid" >/dev/null 2>&1 || true
+        fi
+      done
     fi
     
-    echo "Safely freeing port $port..."
-    
-    # Check if this is a standard SSH port
-    if [ "$port" -eq 22 ]; then
-      echo "Skipping SSH port 22 for safety"
-      continue
-    fi
-    
-    # Try to find Docker containers using this port and stop them safely
+    # Try to find Docker containers using this port and remove them
     if command_exists docker; then
       echo "Looking for Docker containers using port $port"
       local containers
       containers=$(docker ps -a | grep "${port}->" | awk '{print $1}')
       for container in $containers; do
         if [ -n "$container" ]; then
-          echo "Stopping Docker container $container using port $port"
-          docker stop "$container" >/dev/null 2>&1 || true
-          docker rm "$container" >/dev/null 2>&1 || true
+          echo "Removing Docker container $container using port $port"
+          docker rm -f "$container" >/dev/null 2>&1 || true
         fi
       done
     fi
   done
   
   # Give ports a moment to be released
-  sleep 3
+  sleep 5
   
   # Now check and retry if needed
   while [ $attempt -le $max_attempts ]; do
@@ -609,41 +587,34 @@ function start_shadowbox() {
     systemctl status docker --no-pager || true
   fi
   
-  # Safer port freeing technique
-  echo "Safely releasing ports for API_PORT ${API_PORT} and ACCESS_KEY_PORT ${ACCESS_KEY_PORT}"
+  # More aggressive port freeing with multiple techniques
+  echo "Performing aggressive port freeing for API_PORT ${API_PORT} and ACCESS_KEY_PORT ${ACCESS_KEY_PORT}"
   
-  # Only target Docker-related processes to avoid killing SSH
-  echo "Looking for Docker processes using these ports..."
+  # Try multiple approaches to free ports
+  fuser -k -9 ${API_PORT}/tcp ${API_PORT}/udp ${ACCESS_KEY_PORT}/tcp ${ACCESS_KEY_PORT}/udp >/dev/null 2>&1 || true
   
-  # Stop any Docker containers using these ports first
-  for port in "${API_PORT}" "${ACCESS_KEY_PORT}"; do
-    if [ "$port" -ne 0 ] && [ "$port" -ne 22 ]; then
-      echo "Checking Docker containers for port ${port}..."
-      local containers
-      containers=$(docker ps -a | grep "${port}->" | awk '{print $1}')
-      for container in $containers; do
-        if [ -n "$container" ]; then
-          echo "Stopping Docker container $container using port $port"
-          docker stop "$container" >/dev/null 2>&1 || true
-          docker rm -f "$container" >/dev/null 2>&1 || true
+  # Try to kill processes using netstat
+  if command_exists netstat; then
+    for port in "${API_PORT}" "${ACCESS_KEY_PORT}"; do
+      local port_pids
+      port_pids=$(netstat -tunlp 2>/dev/null | grep ":${port} " | awk '{print $7}' | cut -d'/' -f1)
+      for pid in $port_pids; do
+        if [ -n "$pid" ]; then
+          echo "Killing process $pid using port $port with SIGKILL"
+          kill -9 "$pid" >/dev/null 2>&1 || true
         fi
       done
-    fi
-  done
+    done
+  fi
   
-  # Check if any Docker proxy processes might be holding the ports - target only Docker proxy
-  echo "Checking for Docker proxy processes using these ports"
-  if [ "$API_PORT" -ne 0 ] && [ "$API_PORT" -ne 22 ]; then
-    ps aux | grep "docker-proxy.*${API_PORT}" | grep -v grep | awk '{print $2}' | xargs -r kill 2>/dev/null || true
-  fi
-  if [ "$ACCESS_KEY_PORT" -ne 0 ] && [ "$ACCESS_KEY_PORT" -ne 22 ]; then
-    ps aux | grep "docker-proxy.*${ACCESS_KEY_PORT}" | grep -v grep | awk '{print $2}' | xargs -r kill 2>/dev/null || true
-  fi
+  # Check if any Docker proxy processes might be holding the ports
+  echo "Checking for any Docker proxy processes using these ports"
+  ps aux | grep -E "docker-proxy.*(${API_PORT}|${ACCESS_KEY_PORT})" | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null || true
   
   sleep 5
   
   # Use enhanced port availability function for all required ports
-  local all_ports=("${API_PORT}" "${ACCESS_KEY_PORT}")
+  local all_ports=("${API_PORT}" "${ACCESS_KEY_PORT}" "7777" "8888")
   if ! ensure_ports_available "${all_ports[@]}"; then
     return 1
   fi
@@ -757,35 +728,33 @@ function start_shadowbox() {
     ACCESS_PORT_FLAG="-p ${FLAGS_KEYS_PORT}:${FLAGS_KEYS_PORT}/tcp -p ${FLAGS_KEYS_PORT}:${FLAGS_KEYS_PORT}/udp"
   fi
   
-  # Final port check before container creation
+  # Final thorough port check before container creation
   echo "Performing final port availability check before container creation"
   local port_still_in_use=false
   
-  for port in "${API_PORT}" "${ACCESS_KEY_PORT}"; do
-    # Skip port 0 (random port) and port 22 (SSH)
-    if [ "$port" -eq 0 ] || [ "$port" -eq 22 ]; then
-      continue
-    fi
-    
+  for port in "${API_PORT}" "${ACCESS_KEY_PORT}" "7777" "8888"; do
     if lsof -i:${port} >/dev/null 2>&1 || netstat -tunl 2>/dev/null | grep -q ":${port} "; then
-      echo "WARNING: Port ${port} still appears to be in use. Will use alternative port..."
+      echo "WARNING: Port ${port} still appears to be in use. Will try emergency measures..."
       port_still_in_use=true
       
-      # Display what's using the port
+      # Emergency measures - display what's using the port
       echo "Processes using port ${port}:"
       lsof -i:${port} 2>/dev/null || echo "  No lsof info available"
       netstat -tunlp 2>/dev/null | grep ":${port} " || echo "  No netstat info available"
       
-      # Use a different port if this is a configurable port
+      # Last resort - try to use a different port if this is a configurable port
       if [ "${port}" = "${API_PORT}" ]; then
-        echo "Switching to a different API port"
+        echo "Attempting to use a different API port as emergency measure"
         API_PORT=$(get_random_port)
         echo "New API_PORT: ${API_PORT}"
       elif [ "${port}" = "${ACCESS_KEY_PORT}" ]; then
-        echo "Switching to a different access key port"
+        echo "Attempting to use a different access key port as emergency measure"
         ACCESS_KEY_PORT=$(get_random_port)
         echo "New ACCESS_KEY_PORT: ${ACCESS_KEY_PORT}"
       fi
+      
+      # Final attempt to kill processes
+      fuser -k -9 ${port}/tcp ${port}/udp >/dev/null 2>&1 || true
     fi
   done
   
@@ -1039,7 +1008,6 @@ $FIREWALL_STATUS
 Make sure to open the following ports on your firewall, router or cloud provider:
 - Management port ${API_PORT}, for TCP
 - Access key port ${ACCESS_KEY_PORT}, for TCP and UDP
-- V2Ray port ${V2RAY_PORT}, for TCP and UDP
 "
 }
 
@@ -1132,27 +1100,34 @@ function stop_all_containers() {
   echo "Cleaning up Docker network..."
   docker network rm vpn-network >/dev/null 2>&1 || true
   
-  # Safer port cleanup - don't use fuser directly which can kill SSH
-  echo "Performing safer cleanup of ports..."
+  # More thorough port and process cleanup
+  echo "Performing thorough cleanup of ports and processes..."
   # Use defaults for variables that might not be set yet
-  local api_port=${API_PORT:-0}
-  local access_key_port=${ACCESS_KEY_PORT:-0}
+  local api_port=${API_PORT:-7777}
+  local access_key_port=${ACCESS_KEY_PORT:-8888}
   local v2ray_port=${V2RAY_PORT:-443}
   
-  # Only target specific Docker-related processes
-  echo "Cleaning up Docker-related processes only..."
+  # Define ports to free with default values to avoid unbound variable errors
+  local ports_to_free=("7777" "8888" "443" "10000" "$api_port" "$access_key_port" "$v2ray_port")
   
-  # Check for Docker proxy processes
-  if command_exists ps && command_exists grep; then
-    echo "Looking for Docker proxy processes..."
-    # Find and kill only docker proxy processes
-    ps aux | grep "docker-proxy" | grep -v grep | awk '{print $2}' | xargs -r kill 2>/dev/null || true
-    sleep 2
+  # Make the array unique
+  ports_to_free=($(echo "${ports_to_free[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+  
+  # First attempt with fuser
+  for port in "${ports_to_free[@]}"; do
+    fuser -k -9 ${port}/tcp ${port}/udp >/dev/null 2>&1 || true
+  done
+  
+  # Wait longer for full cleanup
+  echo "Waiting for network resources to be fully released..."
+  sleep 8
+  
+  # Optional - restart Docker if system has systemctl
+  if command_exists systemctl; then
+    echo "Restarting Docker service to ensure clean state..."
+    systemctl restart docker >/dev/null 2>&1 || true
+    sleep 5
   fi
-  
-  # Wait for resources to be released without aggressive killing
-  echo "Waiting for network resources to be released..."
-  sleep 5
   
   return 0
 }
@@ -1213,7 +1188,6 @@ install_shadowbox() {
   API_PORT="${FLAGS_API_PORT}"
   if [[ $API_PORT == 0 ]]; then
     API_PORT=${SB_API_PORT:-$(get_random_port)}
-    echo "Using randomly generated API port: ${API_PORT}"
   fi
   
   # Set ACCESS_KEY_PORT before using it
@@ -1222,14 +1196,7 @@ install_shadowbox() {
     ACCESS_KEY_PORT=$FLAGS_KEYS_PORT
   else
     ACCESS_KEY_PORT=$(get_random_port)
-    echo "Using randomly generated access key port: ${ACCESS_KEY_PORT}"
   fi
-  
-  # Ensure ports are different
-  while [[ "$API_PORT" == "$ACCESS_KEY_PORT" ]]; do
-    echo "Generated ports are identical, regenerating ACCESS_KEY_PORT..."
-    ACCESS_KEY_PORT=$(get_random_port)
-  done
   
   readonly ACCESS_CONFIG=${ACCESS_CONFIG:-$SHADOWBOX_DIR/access.txt}
   readonly SB_IMAGE
@@ -1609,27 +1576,11 @@ function start_v2ray() {
     fi
   fi
   
-  # Check if ports are in use before using them
-  echo "Checking if v2ray ports ${V2RAY_PORT} and 10000 are available..."
-  local port_in_use=false
-  
-  # Check V2RAY_PORT
-  if [ "$V2RAY_PORT" -ne 0 ] && [ "$V2RAY_PORT" -ne 22 ]; then
-    if lsof -i:${V2RAY_PORT} >/dev/null 2>&1 || netstat -tunl 2>/dev/null | grep -q ":${V2RAY_PORT} "; then
-      echo "Standard v2ray port ${V2RAY_PORT} not available, will use alternative port"
-      port_in_use=true
-    fi
-  fi
-  
-  # Check internal port 10000
-  if lsof -i:10000 >/dev/null 2>&1 || netstat -tunl 2>/dev/null | grep -q ":10000 "; then
-    echo "Internal port 10000 is not available"
-    port_in_use=true
-  fi
-  
-  # If any port is in use, generate a new one
-  if [ "$port_in_use" = true ]; then
-    # Choose an alternative port if current one is not available
+  # Use the enhanced port availability function
+  local v2ray_ports=("${V2RAY_PORT}" "10000")
+  if ! ensure_ports_available "${v2ray_ports[@]}"; then
+    echo "Standard v2ray port ${V2RAY_PORT} not available, trying alternative port..."
+    # Choose an alternative port if 443 is not available
     V2RAY_PORT=$(get_random_port)
     export V2RAY_PORT
     echo "Using alternative V2RAY_PORT=${V2RAY_PORT}"
@@ -1639,6 +1590,12 @@ function start_v2ray() {
     if [[ -f "$config_file" ]]; then
       sed -i "s/\"port\": 443,/\"port\": ${V2RAY_PORT},/" "$config_file"
       echo "Updated v2ray configuration with new port ${V2RAY_PORT}"
+    fi
+    
+    # Try again with the new port
+    local v2ray_ports=("${V2RAY_PORT}" "10000")
+    if ! ensure_ports_available "${v2ray_ports[@]}"; then
+      return 1
     fi
   fi
   
@@ -1770,41 +1727,11 @@ function setup_routing() {
     return 0
   fi
 
-  # Make sure SHADOWBOX_IP is set before using it
-  if [ -z "$SHADOWBOX_IP" ]; then
-    echo "SHADOWBOX_IP not set, attempting to determine from network..."
-    # Try to get IP from network configuration
-    if docker network inspect vpn-network --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}' >/dev/null 2>&1; then
-      local subnet=$(docker network inspect vpn-network --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}')
-      if [ -n "$subnet" ]; then
-        local prefix=$(echo ${subnet} | cut -d'/' -f1 | cut -d'.' -f1-3)
-        export SHADOWBOX_IP="${prefix}.2"
-        export V2RAY_IP="${prefix}.3"
-        echo "Determined SHADOWBOX_IP=${SHADOWBOX_IP} and V2RAY_IP=${V2RAY_IP} from network config"
-      else
-        log_error "Failed to get subnet from existing network"
-        export DOCKER_NETWORK_ISSUES=1
-        return 0
-      fi
-    else
-      log_error "Failed to inspect network, falling back to host networking"
-      export DOCKER_NETWORK_ISSUES=1
-      return 0
-    fi
-  fi
-
   # Connect containers to network if needed
   local need_reconnect=false
   
   # Check if shadowbox is connected to network
   if ! docker network inspect vpn-network 2>/dev/null | grep -q "shadowbox"; then
-    # Double check that SHADOWBOX_IP is set before using it
-    if [ -z "$SHADOWBOX_IP" ]; then
-      log_error "SHADOWBOX_IP still not set, cannot connect to network"
-      export DOCKER_NETWORK_ISSUES=1
-      return 0
-    fi
-    
     echo "Connecting shadowbox to vpn-network with IP ${SHADOWBOX_IP}..."
     if ! docker network connect --ip=${SHADOWBOX_IP} vpn-network shadowbox; then
       log_error "Failed to connect shadowbox to network"
@@ -1818,11 +1745,6 @@ function setup_routing() {
   # Check if v2ray is connected to network
   if ! docker network inspect vpn-network 2>/dev/null | grep -q "v2ray"; then
     echo "Connecting v2ray to vpn-network with IP ${V2RAY_IP}..."
-    # First try to disconnect to handle stale endpoints
-    docker network disconnect vpn-network v2ray >/dev/null 2>&1 || true
-    # Small delay to ensure disconnection completes
-    sleep 2
-    # Now connect with specific IP
     if ! docker network connect --ip=${V2RAY_IP} vpn-network v2ray; then
       log_error "Failed to connect v2ray to network"
       log_error "Falling back to host networking mode"
@@ -1887,8 +1809,8 @@ function parse_flags() {
   [[ $? == 0 ]] || exit 1
   eval set -- $params
   declare -g FLAGS_HOSTNAME=""
-  declare -gi FLAGS_API_PORT=0  # Default to 0 to use random port
-  declare -gi FLAGS_KEYS_PORT=0  # Default to 0 to use random port
+  declare -gi FLAGS_API_PORT=7777
+  declare -gi FLAGS_KEYS_PORT=8888
   declare -gi FLAGS_V2RAY_PORT=443
   declare -g FLAGS_DEST_SITE="www.microsoft.com:443"
   declare -g FLAGS_FINGERPRINT="chrome"
@@ -1987,12 +1909,9 @@ function main() {
   trap finish EXIT
   
   # Set default values for critical variables to prevent "unbound variable" errors
-  API_PORT=${API_PORT:-0}  # Use 0 to trigger random port generation
-  ACCESS_KEY_PORT=${ACCESS_KEY_PORT:-0}  # Use 0 to trigger random port generation
+  API_PORT=${API_PORT:-7777}
+  ACCESS_KEY_PORT=${ACCESS_KEY_PORT:-8888}
   V2RAY_PORT=${V2RAY_PORT:-443}
-  # Initialize network IPs with empty values
-  export SHADOWBOX_IP=""
-  export V2RAY_IP=""
   # Make subnet options globally available
   export subnets=("${SUBNET_OPTIONS[@]}")
   
@@ -2014,12 +1933,9 @@ function main() {
         echo ""
         echo "Do you want to try restarting Docker daemon as a last resort?"
         if confirm "> This will restart the Docker daemon and try again. Would you like to proceed? [Y/n] "; then
-          echo "Stopping and starting Docker containers (safer than restarting daemon)..."
-          # Only stop containers by name rather than all containers to avoid killing critical system containers
-          docker stop shadowbox v2ray watchtower >/dev/null 2>&1 || true
-          # Clean up Docker network
-          docker network rm vpn-network >/dev/null 2>&1 || true
-          sleep 5
+          echo "Restarting Docker daemon..."
+          systemctl restart docker
+          sleep 10
           echo "Attempting installation again..."
           
           # Clear any network-specific variables in case they're causing issues
