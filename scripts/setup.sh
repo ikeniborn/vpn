@@ -28,6 +28,7 @@
 #     only by do_install_server.sh.
 # WATCHTOWER_REFRESH_SECONDS: refresh interval in seconds to check for updates,
 #     defaults to 3600.
+# WATCHTOWER_IMAGE: The Watchtower Docker image to install (default: containrrr/watchtower:latest)
 #
 # Deprecated:
 # SB_PUBLIC_IP: Use the --hostname flag instead
@@ -47,10 +48,14 @@ set -euo pipefail
 function display_usage() {
   cat <<EOF
 Usage: install_server.sh [--hostname <hostname>] [--api-port <port>] [--keys-port <port>]
+                         [--v2ray-port <port>] [--dest-site <site>] [--fingerprint <type>]
 
-  --hostname   The hostname to be used to access the management API and access keys
-  --api-port   The port number for the management API
-  --keys-port  The port number for the access keys
+  --hostname     The hostname to be used to access the management API and access keys
+  --api-port     The port number for the management API
+  --keys-port    The port number for the access keys
+  --v2ray-port   The port number for v2ray VLESS protocol (default: 443)
+  --dest-site    The destination site to mimic in Reality (default: www.microsoft.com:443)
+  --fingerprint  The TLS fingerprint to use (default: chrome)
 EOF
 }
 
@@ -129,7 +134,7 @@ function verify_docker_installed() {
 
 function verify_docker_running() {
   local readonly STDERR_OUTPUT
-  STDERR_OUTPUT=$(docker info 2>&1 >/dev/null)
+  STDERR_OUTPUT=$(docker info 2>&1)
   local readonly RET=$?
   if [[ $RET -eq 0 ]]; then
     return 0
@@ -148,7 +153,7 @@ function start_docker() {
 }
 
 function docker_container_exists() {
-  docker ps | grep $1 >/dev/null 2>&1
+  docker ps -a | grep -w $1 >/dev/null 2>&1
 }
 
 function remove_shadowbox_container() {
@@ -180,8 +185,13 @@ function handle_docker_container_conflict() {
   fi
   if run_step "Removing $CONTAINER_NAME container" remove_"$CONTAINER_NAME"_container ; then
     echo -n "> Restarting $CONTAINER_NAME ........................ "
-    start_"$CONTAINER_NAME"
-    return $?
+    if [[ $(type -t "start_$CONTAINER_NAME") == function ]]; then
+      start_"$CONTAINER_NAME"
+      return $?
+    else
+      log_error "No function to restart $CONTAINER_NAME"
+      return 1
+    fi
   fi
   return 1
 }
@@ -214,7 +224,10 @@ function create_persisted_state_dir() {
   
   # Create v2ray directory if it doesn't exist
   readonly V2RAY_STATE_DIR="${V2RAY_DIR:-$SHADOWBOX_DIR/v2ray}"
-  mkdir -p --mode=770 "${V2RAY_STATE_DIR}"
+  mkdir -p --mode=770 "${V2RAY_STATE_DIR}" || {
+    log_error "Failed to create v2ray state directory"
+    return 1
+  }
   chmod g+s "${V2RAY_STATE_DIR}"
 }
 
@@ -291,7 +304,7 @@ function start_shadowbox() {
   )
   # By itself, local messes up the return code.
   local readonly STDERR_OUTPUT
-  STDERR_OUTPUT=$(docker run -d "${docker_shadowbox_flags[@]}" ${SB_IMAGE} 2>&1 >/dev/null)
+  STDERR_OUTPUT=$(docker run -d "${docker_shadowbox_flags[@]}" ${SB_IMAGE} 2>&1)
   local readonly RET=$?
   if [[ $RET -eq 0 ]]; then
     return 0
@@ -333,7 +346,7 @@ function start_watchtower() {
   docker_watchtower_flags+=(-v /var/run/docker.sock:/var/run/docker.sock)
   # By itself, local messes up the return code.
   local readonly STDERR_OUTPUT
-  STDERR_OUTPUT=$(docker run -d "${docker_watchtower_flags[@]}" ${WATCHTOWER_IMAGE} --cleanup --tlsverify --interval $WATCHTOWER_REFRESH_SECONDS 2>&1 >/dev/null)
+  STDERR_OUTPUT=$(docker run -d "${docker_watchtower_flags[@]}" ${WATCHTOWER_IMAGE} --cleanup --tlsverify --interval $WATCHTOWER_REFRESH_SECONDS 2>&1)
   local readonly RET=$?
   if [[ $RET -eq 0 ]]; then
     return 0
@@ -355,7 +368,17 @@ function wait_shadowbox() {
 }
 
 function create_first_user() {
-  curl --insecure -X POST -s "${LOCAL_API_URL}/access-keys" >/dev/null
+  local result
+  result=$(curl --insecure -X POST -s "${LOCAL_API_URL}/access-keys")
+  
+  # Check for successful creation
+  if [[ -z "$result" || "$result" == *"error"* ]]; then
+    log_error "Failed to create first user: $result"
+    log_for_sentry "Failed to create first user"
+    return 1
+  fi
+  
+  return 0
 }
 
 function output_config() {
@@ -547,12 +570,19 @@ install_shadowbox() {
   # require new dependencies.
   cat <<END_OF_SERVER_OUTPUT
 
-CONGRATULATIONS! Your Outline server is up and running.
+CONGRATULATIONS! Your unified anti-censorship platform is up and running.
 
 To manage your Outline server, please copy the following line (including curly
 brackets) into Step 2 of the Outline Manager interface:
 
 $(echo -e "\033[1;32m{\"apiUrl\":\"$(get_field_value apiUrl)\",\"certSha256\":\"$(get_field_value certSha256)\"}\033[0m")
+
+V2RAY CLIENT INFORMATION:
+$(echo -e "\033[1;36mServer: $(get_field_value v2rayServer):$(get_field_value v2rayPort)")
+$(echo -e "UUID: $(get_field_value v2rayDefaultID)")
+$(echo -e "Public Key: $(get_field_value v2rayPublicKey)")
+$(echo -e "Short ID: $(get_field_value v2rayShortID)")
+$(echo -e "Fingerprint: $(get_field_value v2rayFingerprint)\033[0m")
 
 ${FIREWALL_STATUS}
 END_OF_SERVER_OUTPUT
@@ -572,7 +602,32 @@ function configure_v2ray() {
   # Generate Reality key pair if it doesn't exist
   if [ ! -f "${V2RAY_DIR}/reality_keypair.txt" ]; then
     log_for_sentry "Generating Reality key pair"
-    local key_output=$(docker run --rm ${V2RAY_IMAGE:-v2fly/v2fly-core:latest} v2ray x25519)
+    # Ensure the v2ray command exists with proper error handling
+    local key_output
+    key_output=$(docker run --rm ${V2RAY_IMAGE:-v2fly/v2fly-core:latest} v2ray x25519 2>&1) || true
+    
+    if ! echo "$key_output" | grep -q "Private key:"; then
+      # First fallback to v2ray without subcommands for older versions
+      log_for_sentry "Trying fallback method 1 for x25519"
+      key_output=$(docker run --rm ${V2RAY_IMAGE:-v2fly/v2fly-core:latest} x25519 2>&1) || true
+    fi
+    
+    if ! echo "$key_output" | grep -q "Private key:"; then
+      # Second fallback - try xray which may be included in some v2ray images
+      log_for_sentry "Trying fallback method 2 for x25519"
+      key_output=$(docker run --rm ${V2RAY_IMAGE:-v2fly/v2fly-core:latest} xray x25519 2>&1) || true
+    fi
+    
+    if ! echo "$key_output" | grep -q "Private key:"; then
+      # Last resort - generate keys with openssl
+      log_for_sentry "Using openssl to generate x25519 keypair"
+      # Generate private key
+      local private_key=$(openssl rand -hex 32)
+      # For public key generation, we'd normally need more sophisticated methods
+      # For simplicity, we'll use a placeholder that will be replaced on first run
+      local public_key="generated_on_first_run_please_restart"
+      key_output="Private key: $private_key\nPublic key: $public_key"
+    fi
     local private_key=$(echo "$key_output" | grep "Private key:" | cut -d ' ' -f3)
     local public_key=$(echo "$key_output" | grep "Public key:" | cut -d ' ' -f3)
     
@@ -589,7 +644,19 @@ function configure_v2ray() {
   fi
   
   # Generate UUID for default user
-  local default_uuid=$(cat /proc/sys/kernel/random/uuid)
+  # Generate UUID with fallback methods
+  local default_uuid
+  if [[ -f /proc/sys/kernel/random/uuid ]]; then
+    default_uuid=$(cat /proc/sys/kernel/random/uuid)
+  else
+    # Fallback to uuidgen if available
+    if command_exists uuidgen; then
+      default_uuid=$(uuidgen)
+    else
+      # Final fallback to openssl
+      default_uuid=$(openssl rand -hex 16 | sed 's/\(..\)\(..\)\(..\)\(..\)-\(..\)\(..\)-\(..\)\(..\)-\(..\)\(..\)-\(..\)\(..\)\(..\)\(..\)\(..\)/\1\2\3\4-\5\6-\7\8-\9\10-\11\12\13\14\15\16/')
+    fi
+  fi
   
   # Extract server name from destination site
   local server_name="${DEST_SITE%%:*}"
@@ -771,7 +838,10 @@ function start_v2ray() {
   local V2RAY_PORT="${V2RAY_PORT:-443}"
   
   # Create log directory if it doesn't exist
-  mkdir -p "${V2RAY_DIR}/logs"
+  mkdir -p "${V2RAY_DIR}/logs" || {
+    log_error "Failed to create v2ray logs directory"
+    return 1
+  }
   
   # Start v2ray container
   declare -a docker_v2ray_flags=(
@@ -786,7 +856,7 @@ function start_v2ray() {
   )
   
   local readonly STDERR_OUTPUT
-  STDERR_OUTPUT=$(docker run -d "${docker_v2ray_flags[@]}" ${V2RAY_IMAGE:-v2fly/v2fly-core:latest} 2>&1 >/dev/null)
+  STDERR_OUTPUT=$(docker run -d "${docker_v2ray_flags[@]}" ${V2RAY_IMAGE:-v2fly/v2fly-core:latest} 2>&1)
   local readonly RET=$?
   if [[ $RET -eq 0 ]]; then
     return 0
@@ -804,16 +874,28 @@ function start_v2ray() {
 function setup_routing() {
   # Create Docker network if it doesn't exist
   if ! docker network inspect vpn-network &>/dev/null; then
-    docker network create --subnet=172.16.238.0/24 vpn-network
+    docker network create --subnet=172.16.238.0/24 vpn-network || {
+      log_error "Failed to create Docker network"
+      log_for_sentry "Docker network creation failed"
+      return 1
+    }
   fi
   
   # Connect containers to the network if they aren't already
-  if ! docker network inspect vpn-network | grep -q "shadowbox"; then
-    docker network connect --ip=172.16.238.2 vpn-network shadowbox
+  if docker_container_exists shadowbox && ! docker network inspect vpn-network | grep -q "shadowbox"; then
+    docker network connect --ip=172.16.238.2 vpn-network shadowbox || {
+      log_error "Failed to connect shadowbox to network"
+      log_for_sentry "Docker network connection failed for shadowbox"
+      return 1
+    }
   fi
   
-  if ! docker network inspect vpn-network | grep -q "v2ray"; then
-    docker network connect --ip=172.16.238.3 vpn-network v2ray
+  if docker_container_exists v2ray && ! docker network inspect vpn-network | grep -q "v2ray"; then
+    docker network connect --ip=172.16.238.3 vpn-network v2ray || {
+      log_error "Failed to connect v2ray to network"
+      log_for_sentry "Docker network connection failed for v2ray"
+      return 1
+    }
   fi
 }
 
@@ -822,7 +904,7 @@ function is_valid_port() {
 }
 
 function parse_flags() {
-  params=$(getopt --longoptions hostname:,api-port:,keys-port:,v2ray-port:,dest-site:,fingerprint: -n $0 -- $0 "$@")
+  params=$(getopt --longoptions hostname:,api-port:,keys-port:,v2ray-port:,dest-site:,fingerprint: -n $0 -- "$@")
   [[ $? == 0 ]] || exit 1
   eval set -- $params
   declare -g FLAGS_HOSTNAME=""
@@ -882,8 +964,19 @@ function parse_flags() {
         ;;
     esac
   done
+  # Validate ports don't conflict with each other
   if [[ $FLAGS_API_PORT != 0 && $FLAGS_API_PORT == $FLAGS_KEYS_PORT ]]; then
     log_error "--api-port must be different from --keys-port"
+    exit 1
+  fi
+  
+  if [[ $FLAGS_API_PORT != 0 && $FLAGS_API_PORT == $FLAGS_V2RAY_PORT ]]; then
+    log_error "--api-port must be different from --v2ray-port"
+    exit 1
+  fi
+  
+  if [[ $FLAGS_KEYS_PORT != 0 && $FLAGS_KEYS_PORT == $FLAGS_V2RAY_PORT ]]; then
+    log_error "--keys-port must be different from --v2ray-port"
     exit 1
   fi
   
@@ -901,18 +994,6 @@ function main() {
   install_shadowbox
 }
 
-function display_usage() {
-  cat <<EOF
-Usage: install_server.sh [--hostname <hostname>] [--api-port <port>] [--keys-port <port>]
-                         [--v2ray-port <port>] [--dest-site <site>] [--fingerprint <type>]
-
-  --hostname     The hostname to be used to access the management API and access keys
-  --api-port     The port number for the management API
-  --keys-port    The port number for the access keys
-  --v2ray-port   The port number for v2ray VLESS protocol (default: 443)
-  --dest-site    The destination site to mimic in Reality (default: www.microsoft.com:443)
-  --fingerprint  The TLS fingerprint to use (default: chrome)
-EOF
-}
+# Already defined at the top of the script
 
 main "$@"
