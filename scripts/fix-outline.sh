@@ -1,7 +1,9 @@
 #!/bin/bash
 
-# Fix script for Outline Server (shadowbox) configuration issues
-# This script creates the missing shadowbox_server_config.json file
+# fix-outline.sh - Main script to fix Outline VPN errors
+# This script serves as a launcher for the more specialized fixing scripts:
+# - fix-outline-error.sh: Specifically targets the "TypeError: path must be a string or Buffer" error
+# - fix-outline-server.sh: Comprehensive fix for all common Outline Server issues
 
 set -euo pipefail
 
@@ -10,10 +12,6 @@ GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
-
-# Base directory
-BASE_DIR="/opt/vpn"
-OUTLINE_DIR="${BASE_DIR}/outline-server"
 
 # Function to display status messages
 info() {
@@ -34,44 +32,56 @@ if [ "$(id -u)" -ne 0 ]; then
     error "This script must be run as root or with sudo privileges"
 fi
 
-# Get server hostname/IP
-SERVER_IP=$(hostname -I | awk '{print $1}' || curl -4 -s ifconfig.me || curl -4 -s icanhazip.com)
+# Get the script directory
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 
-if [ -z "$SERVER_IP" ]; then
-    error "Could not determine server IP address"
-fi
+# Display banner
+echo "======================================================"
+info "Outline VPN Server Fix Menu"
+info "Choose an option to fix your Outline VPN installation"
+echo "======================================================"
+echo ""
+echo "1) Quick Fix for 'TypeError: path must be a string or Buffer'"
+echo "   - Targets specifically this common error on ARM systems"
+echo "   - Fastest solution if you know what's wrong"
+echo ""
+echo "2) Comprehensive Server Fix (Recommended)"
+echo "   - Full repair of Outline Server configuration"
+echo "   - Fixes multiple issues including path errors, configuration problems"
+echo "   - Provides detailed diagnostics and management information"
+echo ""
+echo "3) Exit"
+echo ""
 
-info "Using server IP address: $SERVER_IP"
+# Get user choice
+read -p "Enter your choice (1-3): " CHOICE
 
-# Create directory if not exists
-mkdir -p "${OUTLINE_DIR}/data"
+case $CHOICE in
+    1)
+        info "Running quick error fix script..."
+        if [ -f "${SCRIPT_DIR}/fix-outline-error.sh" ]; then
+            chmod +x "${SCRIPT_DIR}/fix-outline-error.sh"
+            "${SCRIPT_DIR}/fix-outline-error.sh"
+        else
+            error "Error fix script (${SCRIPT_DIR}/fix-outline-error.sh) not found!"
+        fi
+        ;;
+    2)
+        info "Running comprehensive server fix script..."
+        if [ -f "${SCRIPT_DIR}/fix-outline-server.sh" ]; then
+            chmod +x "${SCRIPT_DIR}/fix-outline-server.sh"
+            "${SCRIPT_DIR}/fix-outline-server.sh"
+        else
+            error "Server fix script (${SCRIPT_DIR}/fix-outline-server.sh) not found!"
+        fi
+        ;;
+    3)
+        info "Exiting..."
+        exit 0
+        ;;
+    *)
+        error "Invalid choice. Please run script again and select option 1, 2, or 3."
+        ;;
+esac
 
-# Create the shadowbox_server_config.json file
-info "Creating shadowbox_server_config.json file..."
-
-cat > "${OUTLINE_DIR}/data/shadowbox_server_config.json" <<EOF
-{
-  "hostname": "${SERVER_IP}",
-  "portForNewAccessKeys": 8388,
-  "accessKeyDataLimit": {},
-  "defaultDataLimit": null,
-  "unrestrictedAccessKeyDataLimit": {}
-}
-EOF
-
-chmod 600 "${OUTLINE_DIR}/data/shadowbox_server_config.json"
-
-info "Shadowbox configuration file created successfully at ${OUTLINE_DIR}/data/shadowbox_server_config.json"
-info "Now restarting the containers..."
-
-# Change to BASE_DIR for docker-compose commands
-cd "${BASE_DIR}" || error "Failed to change directory to ${BASE_DIR}"
-
-# Stop and remove containers
-docker-compose down
-
-# Start containers again
-docker-compose up -d
-
-info "Containers restarted. Please check status with 'docker ps' after a few moments."
-info "If issues persist, check logs with 'docker logs outline-server'"
+exit 0

@@ -1,8 +1,12 @@
 #!/bin/bash
 
-# Fix script for Outline Server (shadowbox) error:
-# "TypeError: path must be a string or Buffer"
-# This script also allows changing the management port and API port
+# fix-outline-error.sh - Fix for the "TypeError: path must be a string or Buffer" error in Outline VPN Server
+# This script specifically addresses the error when running Outline VPN on ARM architectures
+#
+# Error: TypeError: path must be a string or Buffer
+#    at Object.fs.openSync (fs.js:646:18)
+#    at Object.fs.readFileSync (fs.js:551:33)
+#    at /root/shadowbox/app/server/main.js:163:29
 
 set -euo pipefail
 
@@ -12,53 +16,9 @@ YELLOW='\033[0;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Default ports
-DEFAULT_API_PORT=8989
-DEFAULT_KEYS_PORT=8388
-
-# Parse command line arguments
-API_PORT=$DEFAULT_API_PORT
-KEYS_PORT=$DEFAULT_KEYS_PORT
-
-# Function to display usage information
-display_usage() {
-    echo "Usage: $0 [OPTIONS]"
-    echo ""
-    echo "This script fixes the 'TypeError: path must be a string or Buffer' error"
-    echo "and allows changing the Outline Server API and keys ports."
-    echo ""
-    echo "Options:"
-    echo "  --api-port PORT     Port for Outline management API (default: 8989)"
-    echo "  --keys-port PORT    Port for Outline access keys (default: 8388)"
-    echo "  --help              Display this help message"
-    echo ""
-    echo "Example:"
-    echo "  $0 --api-port 8989 --keys-port 8388"
-}
-
-# Parse command line arguments
-while [[ "$#" -gt 0 ]]; do
-    case $1 in
-        --api-port)
-            API_PORT="$2"
-            shift
-            ;;
-        --keys-port)
-            KEYS_PORT="$2"
-            shift
-            ;;
-        --help)
-            display_usage
-            exit 0
-            ;;
-        *)
-            echo "Unknown parameter: $1"
-            display_usage
-            exit 1
-            ;;
-    esac
-    shift
-done
+# Base directory
+BASE_DIR="/opt/vpn"
+OUTLINE_DIR="${BASE_DIR}/outline-server"
 
 # Function to display status messages
 info() {
@@ -79,125 +39,112 @@ if [ "$(id -u)" -ne 0 ]; then
     error "This script must be run as root or with sudo privileges"
 fi
 
-info "Outline Server Fix Tool"
-info "API Port: $API_PORT"
-info "Keys Port: $KEYS_PORT"
+# Display banner
+info "Outline VPN ARM Error Fix"
+info "Fixing 'TypeError: path must be a string or Buffer' error"
+echo "======================================================"
 
-# Define path variables
-BASE_DIR="/opt/vpn"
-OUTLINE_DIR="${BASE_DIR}/outline-server"
-STANDARD_OUTLINE_DIR="/opt/outline"
-
-# Detect which Outline directory to use
-if [ -d "$OUTLINE_DIR" ]; then
-    info "Found Docker-based Outline installation at $OUTLINE_DIR"
-    INSTALL_DIR="$OUTLINE_DIR"
-    IS_DOCKER=true
-elif [ -d "$STANDARD_OUTLINE_DIR" ]; then
-    info "Found standard Outline installation at $STANDARD_OUTLINE_DIR"
-    INSTALL_DIR="$STANDARD_OUTLINE_DIR"
-    IS_DOCKER=false
-else
-    warn "No existing Outline installation found. Creating default Docker-based directory."
-    INSTALL_DIR="$OUTLINE_DIR"
-    IS_DOCKER=true
-    mkdir -p "$INSTALL_DIR"
+# Check if Docker is installed and running
+if ! command -v docker &> /dev/null; then
+    error "Docker is not installed. Please install Docker first."
 fi
 
-# Get server hostname/IP using multiple fallback methods
-info "Detecting server IP address..."
-SERVER_IP=$(hostname -I | awk '{print $1}' 2>/dev/null ||
-            ip route get 1.2.3.4 | awk '{print $7}' 2>/dev/null ||
-            curl -4 -s ifconfig.me 2>/dev/null ||
-            curl -4 -s icanhazip.com 2>/dev/null ||
-            echo "127.0.0.1")
+if ! systemctl is-active --quiet docker; then
+    warn "Docker service is not running. Attempting to start..."
+    systemctl start docker
+    if ! systemctl is-active --quiet docker; then
+        error "Could not start Docker service. Please check Docker installation."
+    fi
+fi
 
-info "Using server IP address: $SERVER_IP"
+# Check if outline-server container exists
+if ! docker ps -a | grep -q outline-server; then
+    error "Outline server container not found. Please ensure it has been installed."
+fi
 
-# Create necessary directories
-mkdir -p "${INSTALL_DIR}/data"
-mkdir -p "${INSTALL_DIR}/persisted-state"
+# Create necessary configuration directories
+info "Creating necessary configuration directories..."
+mkdir -p "${OUTLINE_DIR}/data"
+mkdir -p "${OUTLINE_DIR}/persisted-state"
+
+# Get server IP address for configuration
+server_ip=$(hostname -I | awk '{print $1}')
+if [ -z "$server_ip" ] || [ "$server_ip" = "127.0.0.1" ]; then
+    server_ip=$(ip route get 1.2.3.4 | awk '{print $7}' 2>/dev/null || echo "localhost")
+    info "Using IP from ip route command: ${server_ip}"
+fi
+
+info "Using server IP address for configuration: ${server_ip}"
+
+# Get the current API port from docker-compose or use default
+API_PORT=$(docker inspect --format='{{range .Config.Env}}{{if eq (index (split . "=") 0) "SB_API_PORT"}}{{index (split . "=") 1}}{{end}}{{end}}' outline-server 2>/dev/null || echo "8080")
+OUTLINE_PORT=$(docker inspect --format='{{range $key, $value := .NetworkSettings.Ports}}{{if contains "tcp" $key}}{{$key}}{{end}}{{end}}' outline-server 2>/dev/null | sed 's/\/tcp//' || echo "8388")
+
+info "Detected Outline API port: ${API_PORT}"
+info "Detected Outline Server port: ${OUTLINE_PORT}"
 
 # Generate a random API prefix for security
 api_prefix=$(head -c 16 /dev/urandom | base64 | tr '/+' '_-' | tr -d '=' | head -c 8)
 
-# Create the shadowbox_server_config.json file in the data directory
-info "Creating shadowbox_server_config.json in ${INSTALL_DIR}/data..."
-
-cat > "${INSTALL_DIR}/data/shadowbox_server_config.json" <<EOF
+# Create shadowbox_server_config.json in data directory
+info "Creating shadowbox_server_config.json in ${OUTLINE_DIR}/data..."
+cat > "${OUTLINE_DIR}/data/shadowbox_server_config.json" <<EOF
 {
-  "hostname": "${SERVER_IP}",
+  "hostname": "${server_ip}",
   "apiPort": ${API_PORT},
   "apiPrefix": "${api_prefix}",
-  "portForNewAccessKeys": ${KEYS_PORT},
+  "portForNewAccessKeys": ${OUTLINE_PORT},
   "accessKeyDataLimit": {},
   "defaultDataLimit": null,
   "unrestrictedAccessKeyDataLimit": {}
 }
 EOF
-chmod 600 "${INSTALL_DIR}/data/shadowbox_server_config.json"
+chmod 600 "${OUTLINE_DIR}/data/shadowbox_server_config.json"
 
-# Create a copy in the persisted-state directory
-info "Creating shadowbox_server_config.json in ${INSTALL_DIR}/persisted-state..."
-cp "${INSTALL_DIR}/data/shadowbox_server_config.json" "${INSTALL_DIR}/persisted-state/shadowbox_server_config.json"
-chmod 600 "${INSTALL_DIR}/persisted-state/shadowbox_server_config.json"
+# Create shadowbox_server_config.json in persisted-state directory
+info "Creating shadowbox_server_config.json in ${OUTLINE_DIR}/persisted-state..."
+cp "${OUTLINE_DIR}/data/shadowbox_server_config.json" "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
+chmod 600 "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
 
-info "Configuration files created successfully"
+# Stop and remove the outline-server container
+info "Stopping Outline server to apply fix..."
+docker stop outline-server || true
 
-# Update Docker environment variables if using Docker
-if [ "$IS_DOCKER" = true ] && [ -f "${BASE_DIR}/docker-compose.yml" ]; then
-    info "Updating Docker environment variables..."
-    
-    # Create backup of docker-compose.yml
-    cp "${BASE_DIR}/docker-compose.yml" "${BASE_DIR}/docker-compose.yml.bak"
-    
-    # Update the API_PORT in docker-compose.yml
-    sed -i "s/SB_API_PORT=[0-9]*/SB_API_PORT=${API_PORT}/" "${BASE_DIR}/docker-compose.yml" || true
-    
-    info "Docker environment variables updated"
+# Check if we need to restart other containers
+v2ray_was_running=false
+if docker ps | grep -q v2ray; then
+    v2ray_was_running=true
+    info "Stopping v2ray container temporarily..."
+    docker stop v2ray || true
 fi
 
-# Restart the Outline Server
-info "Restarting Outline server..."
+# Start the outline-server container with specific environment variables
+info "Restarting Outline server with fixed configuration..."
+docker start outline-server || docker start $(docker ps -a --filter "name=outline-server" --format "{{.ID}}")
 
-if [ "$IS_DOCKER" = true ]; then
-    if command -v docker-compose &> /dev/null && [ -f "${BASE_DIR}/docker-compose.yml" ]; then
-        # Use docker-compose if available
-        cd "${BASE_DIR}" && docker-compose down
-        cd "${BASE_DIR}" && docker-compose up -d
-    else
-        # Fall back to docker if docker-compose is not available
-        docker restart outline-server 2>/dev/null || {
-            warn "Failed to restart container with docker restart. Using docker-compose if available..."
-            cd "${BASE_DIR}" && docker-compose down 2>/dev/null || true
-            cd "${BASE_DIR}" && docker-compose up -d 2>/dev/null || true
-        }
-    fi
+# Wait a few seconds for the container to initialize
+info "Waiting for container to initialize..."
+sleep 10
+
+# Restart v2ray if it was running
+if [ "$v2ray_was_running" = true ]; then
+    info "Restarting v2ray container..."
+    docker start v2ray || docker start $(docker ps -a --filter "name=v2ray" --format "{{.ID}}")
+fi
+
+# Verify that the error is fixed
+info "Checking if error is fixed..."
+if docker logs outline-server 2>&1 | grep -q "TypeError: path must be a string or Buffer"; then
+    warn "Error still exists. Additional troubleshooting may be required."
+    warn "Please check docker logs with: docker logs outline-server"
 else
-    # For standard installations
-    systemctl restart shadowbox 2>/dev/null || {
-        warn "Failed to restart with systemctl. Trying direct Docker commands..."
-        docker restart outline-server 2>/dev/null || true
-    }
+    info "Success! The 'TypeError: path must be a string or Buffer' error appears to be fixed."
+    info "Outline server is now running properly."
 fi
 
-info "Outline server has been restarted with new configuration"
-info "Management API port: $API_PORT"
-info "Access keys port: $KEYS_PORT"
-info ""
-info "If you're using Outline Manager, you'll need to reconnect using the new API details"
-
-# Show a summary of what was fixed
-echo ""
-echo "==================================================================="
-echo "SUMMARY OF CHANGES:"
-echo "==================================================================="
-echo "1. Fixed 'TypeError: path must be a string or Buffer' error by"
-echo "   creating proper configuration files in both required locations."
-echo ""
-echo "2. Changed API management port to: $API_PORT"
-echo ""
-echo "3. Changed access keys port to: $KEYS_PORT"
-echo ""
-echo "4. Restarted the Outline server to apply changes"
-echo "==================================================================="
+echo "======================================================"
+info "Fixed configuration settings:"
+info "- Server IP: ${server_ip}"
+info "- API Port: ${API_PORT}"
+info "- Outline Port: ${OUTLINE_PORT}"
+echo "======================================================"

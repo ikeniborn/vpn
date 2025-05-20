@@ -1267,9 +1267,11 @@ ensure_outline_config() {
     
     info "Using server IP address: $server_ip"
     
-    # Create directories if they don't exist
+    # Create directories if they don't exist with proper permissions
     mkdir -p "${OUTLINE_DIR}/data"
     mkdir -p "${OUTLINE_DIR}/persisted-state"
+    chmod 700 "${OUTLINE_DIR}/data"
+    chmod 700 "${OUTLINE_DIR}/persisted-state"
     
     # The "TypeError: path must be a string or Buffer" error occurs when
     # the server tries to read the configuration file but it's missing or invalid
@@ -1298,6 +1300,18 @@ EOF
     # Copy to persisted-state directory
     cp "${OUTLINE_DIR}/data/shadowbox_server_config.json" "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
     chmod 600 "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
+    
+    # Create an empty access.txt file if it doesn't exist (needed by some container configurations)
+    if [ ! -f "${OUTLINE_DIR}/data/access.txt" ]; then
+        touch "${OUTLINE_DIR}/data/access.txt"
+        chmod 600 "${OUTLINE_DIR}/data/access.txt"
+    fi
+    
+    # Create a persisted-state copy of access.txt if it doesn't exist
+    if [ ! -f "${OUTLINE_DIR}/persisted-state/access.txt" ]; then
+        cp "${OUTLINE_DIR}/data/access.txt" "${OUTLINE_DIR}/persisted-state/access.txt" 2>/dev/null || touch "${OUTLINE_DIR}/persisted-state/access.txt"
+        chmod 600 "${OUTLINE_DIR}/persisted-state/access.txt"
+    fi
     
     # Export the server IP for later use in docker-compose
     export SERVER_IP="${server_ip}"
@@ -1422,10 +1436,42 @@ main() {
     # Check for TypeError in docker logs and fix if needed
     if docker logs outline-server 2>&1 | grep -q "TypeError: path must be a string or Buffer"; then
         warn "Detected 'TypeError: path must be a string or Buffer' error. Applying fix..."
-        ensure_outline_config
+        
+        # This error occurs when the configuration file path is missing or invalid
+        # Creating both data and persisted-state directories and properly populating them
+        mkdir -p "${OUTLINE_DIR}/data"
+        mkdir -p "${OUTLINE_DIR}/persisted-state"
+        
+        # Get server IP address using multiple methods for reliability
+        local server_ip=$(hostname -I | awk '{print $1}' 2>/dev/null ||
+                        ip route get 1.2.3.4 | awk '{print $7}' 2>/dev/null ||
+                        echo "localhost")
+        
+        # Generate a random API prefix for security
+        local api_prefix=$(head -c 16 /dev/urandom | base64 | tr '/+' '_-' | tr -d '=' | head -c 8)
+        
+        # Create the config file in both locations to ensure the server can find it
+        cat > "${OUTLINE_DIR}/data/shadowbox_server_config.json" <<EOF
+{
+  "hostname": "${server_ip}",
+  "apiPort": ${API_PORT},
+  "apiPrefix": "${api_prefix}",
+  "portForNewAccessKeys": ${OUTLINE_PORT},
+  "accessKeyDataLimit": {},
+  "defaultDataLimit": null,
+  "unrestrictedAccessKeyDataLimit": {}
+}
+EOF
+        chmod 600 "${OUTLINE_DIR}/data/shadowbox_server_config.json"
+        
+        # Create an identical file in the persisted-state directory
+        cp "${OUTLINE_DIR}/data/shadowbox_server_config.json" "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
+        chmod 600 "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
+        
         # Restart the container to apply the fix
         docker restart outline-server
-        sleep 10
+        info "Applied fix for 'TypeError: path must be a string or Buffer'. Waiting for server to restart..."
+        sleep 15
     fi
     health_check
     display_summary
