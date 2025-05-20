@@ -390,13 +390,7 @@ function add_api_url_to_config() {
 }
 
 function check_firewall() {
-  # Make ACCESS_KEY_PORT available globally for configure_firewall function
-  ACCESS_KEY_PORT=$(curl --insecure -s ${LOCAL_API_URL}/access-keys |
-      docker exec -i shadowbox node -e '
-          const fs = require("fs");
-          const accessKeys = JSON.parse(fs.readFileSync(0, {encoding: "utf-8"}));
-          console.log(accessKeys["accessKeys"][0]["port"]);
-      ')
+  # ACCESS_KEY_PORT is now set in configure_firewall function
   if ! curl --max-time 5 --cacert "${SB_CERTIFICATE_FILE}" -s "${PUBLIC_API_URL}/access-keys" >/dev/null; then
      log_error "BLOCKED"
      FIREWALL_STATUS="\
@@ -420,6 +414,14 @@ Make sure to open the following ports on your firewall, router or cloud provider
 # Configure firewall rules
 function configure_firewall() {
   local V2RAY_PORT="${V2RAY_PORT:-443}"
+  
+  # Get ACCESS_KEY_PORT from Outline server and make it globally available for check_firewall
+  ACCESS_KEY_PORT=$(curl --insecure -s ${LOCAL_API_URL}/access-keys |
+      docker exec -i shadowbox node -e '
+          const fs = require("fs");
+          const accessKeys = JSON.parse(fs.readFileSync(0, {encoding: "utf-8"}));
+          console.log(accessKeys["accessKeys"][0]["port"]);
+      ')
   
   # Check if UFW is installed
   if ! command_exists ufw; then
