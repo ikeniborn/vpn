@@ -762,9 +762,7 @@ services:
       - no-new-privileges:false
     privileged: true
     platform: ${DOCKER_PLATFORM}
-    # Add additional security options to allow full access to root directory
-    security_opt:
-      - apparmor:unconfined
+    # Additional comments kept for documentation purposes
     volumes:
       - ./outline-server/config.json:/etc/shadowsocks-libev/config.json:Z
       - ./outline-server/access.json:/etc/shadowsocks-libev/access.json:Z
