@@ -335,6 +335,7 @@ create_directories() {
     info "Creating directory structure..."
     mkdir -p "${OUTLINE_DIR}/certs"
     mkdir -p "${OUTLINE_DIR}/data"
+    mkdir -p "${OUTLINE_DIR}/persisted-state/prometheus"
     mkdir -p "${V2RAY_DIR}"
     mkdir -p "${SCRIPT_DIR}"
     mkdir -p "${LOGS_DIR}/outline"
@@ -438,7 +439,36 @@ EOF
     chmod 600 "${OUTLINE_DIR}/data/shadowbox_server_config.json"
     
     # Create persisted-state directory specifically for Outline SB_STATE_DIR environment variable
-    mkdir -p "${OUTLINE_DIR}/persisted-state"
+    mkdir -p "${OUTLINE_DIR}/persisted-state/prometheus"
+    
+    # Copy the prometheus config.yml file to persisted-state
+    if [ -f "$(dirname "$0")/prometheus_config.yml" ]; then
+        cp "$(dirname "$0")/prometheus_config.yml" "${OUTLINE_DIR}/persisted-state/prometheus/config.yml"
+        chmod 644 "${OUTLINE_DIR}/persisted-state/prometheus/config.yml"
+        info "Prometheus configuration file copied successfully"
+    else
+        warn "Prometheus config file not found, creating default configuration"
+        cat > "${OUTLINE_DIR}/persisted-state/prometheus/config.yml" <<EOF
+# Basic Prometheus configuration for Outline server
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'outline'
+    static_configs:
+      - targets: ['127.0.0.1:9090']
+
+  - job_name: 'outline-node-metrics'
+    static_configs:
+      - targets: ['127.0.0.1:9091']
+
+  - job_name: 'outline-ss-server'
+    static_configs:
+      - targets: ['127.0.0.1:9092']
+EOF
+        chmod 644 "${OUTLINE_DIR}/persisted-state/prometheus/config.yml"
+    fi
     
     # Create a copy of the config in the persisted-state directory
     cp "${OUTLINE_DIR}/data/shadowbox_server_config.json" "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
@@ -705,7 +735,9 @@ services:
       - ./outline-server/config.json:/etc/shadowsocks-libev/config.json:Z
       - ./outline-server/access.json:/etc/shadowsocks-libev/access.json:Z
       - ./outline-server/data:/opt/outline/data:Z
-      - ./outline-server/data:/opt/outline/persisted-state:Z
+      - ./outline-server/persisted-state:/opt/outline/persisted-state:Z
+      # Add an explicit volume mount for the prometheus directory to ensure it's accessible
+      - ./outline-server/persisted-state/prometheus:/opt/outline/persisted-state/prometheus:Z
       - ./logs/outline:/var/log/shadowsocks:Z
     ports:
       - "${OUTLINE_PORT}:${OUTLINE_PORT}/tcp"
@@ -714,7 +746,10 @@ services:
       - SS_CONFIG=/etc/shadowsocks-libev/config.json
       - SB_PUBLIC_IP=${SERVER_IP:-localhost}
       - SB_API_PORT=${API_PORT}
+      # Explicitly define all necessary environment variables
       - SB_STATE_DIR=/opt/outline/persisted-state
+      - SB_METRICS_URL=https://prod.metrics.getoutline.org
+      - PROMETHEUS_CONFIG_PATH=/opt/outline/persisted-state/prometheus/config.yml
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
@@ -1269,7 +1304,7 @@ ensure_outline_config() {
     
     # Create directories if they don't exist with proper permissions
     mkdir -p "${OUTLINE_DIR}/data"
-    mkdir -p "${OUTLINE_DIR}/persisted-state"
+    mkdir -p "${OUTLINE_DIR}/persisted-state/prometheus"
     chmod 700 "${OUTLINE_DIR}/data"
     chmod 700 "${OUTLINE_DIR}/persisted-state"
     
@@ -1313,6 +1348,40 @@ EOF
         chmod 600 "${OUTLINE_DIR}/persisted-state/access.txt"
     fi
     
+    # Ensure all directories have proper permissions
+    info "Setting proper permissions on all configuration directories"
+    find "${OUTLINE_DIR}/persisted-state" -type d -exec chmod 755 {} \;
+    find "${OUTLINE_DIR}/data" -type d -exec chmod 755 {} \;
+    
+    # Ensure the prometheus directory exists and has the config file
+    if [ ! -d "${OUTLINE_DIR}/persisted-state/prometheus" ]; then
+        mkdir -p "${OUTLINE_DIR}/persisted-state/prometheus"
+        chmod 755 "${OUTLINE_DIR}/persisted-state/prometheus"
+    fi
+    
+    if [ ! -f "${OUTLINE_DIR}/persisted-state/prometheus/config.yml" ]; then
+        cat > "${OUTLINE_DIR}/persisted-state/prometheus/config.yml" <<EOF
+# Basic Prometheus configuration for Outline server
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'outline'
+    static_configs:
+      - targets: ['127.0.0.1:9090']
+
+  - job_name: 'outline-node-metrics'
+    static_configs:
+      - targets: ['127.0.0.1:9091']
+
+  - job_name: 'outline-ss-server'
+    static_configs:
+      - targets: ['127.0.0.1:9092']
+EOF
+        chmod 644 "${OUTLINE_DIR}/persisted-state/prometheus/config.yml"
+    fi
+    
     # Export the server IP for later use in docker-compose
     export SERVER_IP="${server_ip}"
     
@@ -1320,7 +1389,7 @@ EOF
     return 0
 }
 
-# Perform health check
+# Perform health check with additional file checks
 health_check() {
     info "Performing initial health check..."
     
@@ -1336,6 +1405,18 @@ health_check() {
     
     # Ensure Outline configuration is valid
     ensure_outline_config
+    
+    # Check critical files explicitly before checking containers
+    info "Checking critical configuration files..."
+    for file in "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json" "${OUTLINE_DIR}/persisted-state/prometheus/config.yml"; do
+        if [ ! -f "$file" ]; then
+            warn "Missing critical file: $file - recreating it now"
+            ensure_outline_config  # Run again to ensure files are created
+            sleep 2
+        else
+            info "Found critical file: $file"
+        fi
+    done
     
     # Check if containers are running
     if ! docker ps | grep -q "outline-server"; then
@@ -1431,8 +1512,10 @@ main() {
     create_security_audit_script
     create_alert_script
     setup_cron_jobs
-    start_services
+    # Fix any potential issues with the directory structure and configuration files
     ensure_outline_config
+    # Start services after ensuring configuration is correct
+    start_services
     # Check for TypeError in docker logs and fix if needed
     if docker logs outline-server 2>&1 | grep -q "TypeError: path must be a string or Buffer"; then
         warn "Detected 'TypeError: path must be a string or Buffer' error. Applying fix..."
@@ -1440,7 +1523,7 @@ main() {
         # This error occurs when the configuration file path is missing or invalid
         # Creating both data and persisted-state directories and properly populating them
         mkdir -p "${OUTLINE_DIR}/data"
-        mkdir -p "${OUTLINE_DIR}/persisted-state"
+        mkdir -p "${OUTLINE_DIR}/persisted-state/prometheus"
         
         # Get server IP address using multiple methods for reliability
         local server_ip=$(hostname -I | awk '{print $1}' 2>/dev/null ||
@@ -1472,6 +1555,10 @@ EOF
         docker restart outline-server
         info "Applied fix for 'TypeError: path must be a string or Buffer'. Waiting for server to restart..."
         sleep 15
+        
+        # Create empty files that might be accessed by the container
+        touch "${OUTLINE_DIR}/persisted-state/metrics_metadata"
+        chmod 644 "${OUTLINE_DIR}/persisted-state/metrics_metadata"
     fi
     health_check
     display_summary
