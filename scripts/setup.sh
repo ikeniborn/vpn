@@ -867,7 +867,13 @@ function stop_all_containers() {
   
   # More thorough port and process cleanup
   echo "Performing thorough cleanup of ports and processes..."
-  local ports_to_free=("7777" "8888" "443" "10000" "${API_PORT}" "${ACCESS_KEY_PORT}" "${V2RAY_PORT:-443}")
+  # Use defaults for variables that might not be set yet
+  local api_port=${API_PORT:-7777}
+  local access_key_port=${ACCESS_KEY_PORT:-8888}
+  local v2ray_port=${V2RAY_PORT:-443}
+  
+  # Define ports to free with default values to avoid unbound variable errors
+  local ports_to_free=("7777" "8888" "443" "10000" "$api_port" "$access_key_port" "$v2ray_port")
   
   # Make the array unique
   ports_to_free=($(echo "${ports_to_free[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
@@ -1508,6 +1514,12 @@ function parse_flags() {
 
 function main() {
   trap finish EXIT
+  
+  # Set default values for critical variables to prevent "unbound variable" errors
+  API_PORT=${API_PORT:-7777}
+  ACCESS_KEY_PORT=${ACCESS_KEY_PORT:-8888}
+  V2RAY_PORT=${V2RAY_PORT:-443}
+  
   parse_flags "$@"
   
   if [[ "$FLAGS_RESTORE_FIREWALL" == "true" ]]; then
