@@ -110,7 +110,7 @@ check_dependencies() {
     missing_deps+=("docker-compose")
   fi
   
-  if ! command -v apt-get &> /dev/null && ! SKIP_SYSTEM_UPDATES; then
+  if ! command -v apt-get &> /dev/null && ! $SKIP_SYSTEM_UPDATES; then
     log_message "WARNING" "apt-get not found. System updates will be skipped."
     SKIP_SYSTEM_UPDATES=true
   fi
@@ -348,7 +348,7 @@ restart_services() {
   if [ "$DRY_RUN" = "true" ]; then
     log_message "INFO" "Dry run: Would restart services"
     return
-  }
+  fi
   
   log_message "INFO" "Restarting VPN services..."
   
@@ -397,7 +397,7 @@ create_weekly_backup() {
   if [ "$DRY_RUN" = "true" ]; then
     log_message "INFO" "Dry run: Would create weekly backup"
     return
-  }
+  fi
   
   # Check if backup.sh exists
   if [ ! -f "${SCRIPT_DIR}/backup.sh" ]; then

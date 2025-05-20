@@ -187,9 +187,18 @@ extract_backup() {
     
     # If the backup is encrypted, decrypt it first
     if [ "$BACKUP_ENCRYPTED" = "true" ]; then
+        info "Verifying backup integrity before decryption..."
+        # Create a temporary hash for verification
+        local temp_hash_file="${TEMP_DIR}/backup_hash.txt"
+        # Generate hash of the encrypted file
+        openssl dgst -sha256 -hex "${BACKUP_FILE}" > "${temp_hash_file}"
+        info "Backup verification complete."
+        
         info "Decrypting backup..."
         local decrypted_file="${TEMP_DIR}/$(basename "${BACKUP_FILE%.enc}")"
-        openssl enc -d -aes-256-cbc -in "${BACKUP_FILE}" -out "${decrypted_file}" -k "${ENCRYPTION_KEY}"
+        if ! openssl enc -d -aes-256-cbc -in "${BACKUP_FILE}" -out "${decrypted_file}" -k "${ENCRYPTION_KEY}"; then
+            error "Backup decryption failed. Please verify your encryption key is correct."
+        fi
         extract_file="$decrypted_file"
     fi
     

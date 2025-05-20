@@ -25,8 +25,19 @@ MEM_THRESHOLD=80  # Memory usage percentage
 DISK_THRESHOLD=80 # Disk usage percentage
 CONN_THRESHOLD=500 # Connection count
 
-# Email for alerts (change to your email)
-ALERT_EMAIL="admin@example.com"
+# Email for alerts
+# Default value that will be overridden by environment variable or command line argument
+ALERT_EMAIL="${VPN_ADMIN_EMAIL:-admin@yourdomain.com}"
+
+# Allow overriding via command line
+for arg in "$@"; do
+  case $arg in
+    --email=*)
+      ALERT_EMAIL="${arg#*=}"
+      shift
+      ;;
+  esac
+done
 
 # Function to display and log messages
 log_message() {

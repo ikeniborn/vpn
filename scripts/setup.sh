@@ -186,12 +186,53 @@ update_system() {
     DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
 }
 
+# Check for required dependencies
+check_dependencies() {
+    info "Checking required dependencies..."
+    
+    local missing_deps=()
+    local required_deps=("curl" "wget" "jq" "ufw" "socat" "qrencode" "net-tools")
+    
+    # Check each required dependency
+    for dep in "${required_deps[@]}"; do
+        if ! command -v "$dep" &> /dev/null; then
+            missing_deps+=("$dep")
+        fi
+    done
+    
+    # If any dependencies are missing, inform the user
+    if [ ${#missing_deps[@]} -ne 0 ]; then
+        warn "Missing required dependencies: ${missing_deps[*]}"
+        info "Installing missing dependencies..."
+        apt-get update
+        DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_deps[@]}"
+        
+        # Verify installation
+        local still_missing=()
+        for dep in "${missing_deps[@]}"; do
+            if ! command -v "$dep" &> /dev/null; then
+                still_missing+=("$dep")
+            fi
+        done
+        
+        if [ ${#still_missing[@]} -ne 0 ]; then
+            error "Failed to install dependencies: ${still_missing[*]}"
+        fi
+    else
+        info "All required dependencies are installed"
+    fi
+}
+
 # Install dependencies
 install_dependencies() {
     info "Installing dependencies..."
+    
+    # First check required dependencies
+    check_dependencies
+    
+    # Install additional helpful packages
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        curl wget jq ufw socat qrencode net-tools ca-certificates gnupg lsb-release \
-        bc mailutils apt-transport-https software-properties-common
+        ca-certificates gnupg lsb-release bc mailutils apt-transport-https software-properties-common
 }
 
 # Install Docker if not already installed
@@ -254,7 +295,14 @@ configure_outline() {
     # Generate a strong random password
     local ss_password=$(openssl rand -base64 24)
     
-    # Create Shadowsocks config
+    # Create config files with secure permissions from the start
+    # Create empty files with proper permissions first
+    touch "${OUTLINE_DIR}/config.json"
+    touch "${OUTLINE_DIR}/access.json"
+    chmod 600 "${OUTLINE_DIR}/config.json"
+    chmod 600 "${OUTLINE_DIR}/access.json"
+    
+    # Now write the sensitive content to the properly secured files
     cat > "${OUTLINE_DIR}/config.json" <<EOF
 {
   "server": "0.0.0.0",
@@ -272,17 +320,13 @@ configure_outline() {
 }
 EOF
     
-    # Create access policy
+    # Create access policy with secure permissions
     cat > "${OUTLINE_DIR}/access.json" <<EOF
 {
-  "strategy": "allow", 
+  "strategy": "allow",
   "rules": []
 }
 EOF
-    
-    # Set secure permissions
-    chmod 600 "${OUTLINE_DIR}/config.json"
-    chmod 600 "${OUTLINE_DIR}/access.json"
 }
 
 # Configure v2ray with updated routing
@@ -859,6 +903,7 @@ main() {
     
     # Execute installation steps
     update_system
+    check_dependencies
     install_dependencies
     install_docker
     detect_architecture

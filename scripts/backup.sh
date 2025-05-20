@@ -302,10 +302,15 @@ encrypt_backup() {
     if [ -z "$ENCRYPTION_KEY" ]; then
         warn "No encryption key provided. Generating a random key."
         ENCRYPTION_KEY=$(openssl rand -base64 32)
-        echo "Encryption Key: ${ENCRYPTION_KEY}" > "${BACKUP_DIR}/encryption-key.txt"
-        chmod 600 "${BACKUP_DIR}/encryption-key.txt"
-        info "Encryption key saved to: ${BACKUP_DIR}/encryption-key.txt"
-        warn "IMPORTANT: Keep this key safe! You will need it to restore backups."
+        # Store a hash of the key instead of the plaintext key
+        KEY_HASH=$(echo "$ENCRYPTION_KEY" | sha256sum | awk '{print $1}')
+        echo "Encryption Key Hash: ${KEY_HASH}" > "${BACKUP_DIR}/encryption-key-hash.txt"
+        chmod 600 "${BACKUP_DIR}/encryption-key-hash.txt"
+        info "Encryption key hash saved to: ${BACKUP_DIR}/encryption-key-hash.txt"
+        warn "IMPORTANT: Keep your encryption key safe! The original key is NOT stored on the server."
+        # Display key once for the user to save
+        echo "YOUR ENCRYPTION KEY: ${ENCRYPTION_KEY}"
+        echo "STORE THIS KEY SECURELY, IT WILL NOT BE SHOWN AGAIN!"
     fi
     
     # Encrypt the archive

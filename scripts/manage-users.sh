@@ -139,15 +139,33 @@ function add_user() {
   # Create user-specific config in outline data directory
   mkdir -p "${OUTLINE_DIR}/data/$name"
   
+  # Validate Outline config file existence and structure
+  if [ ! -f "${OUTLINE_CONFIG}" ]; then
+    log_error "Outline configuration file not found: ${OUTLINE_CONFIG}"
+    exit 1
+  fi
+  
+  # Validate required fields exist in Outline config
+  if ! jq -e '.server_port' "${OUTLINE_CONFIG}" > /dev/null; then
+    log_error "Required field 'server_port' missing in Outline config"
+    exit 1
+  fi
+  
+  # Extract configuration values with fallbacks
+  local ss_port=$(jq -r '.server_port' "${OUTLINE_CONFIG}")
+  local ss_method=$(jq -r '.method // "chacha20-ietf-poly1305"' "${OUTLINE_CONFIG}")
+  local ss_plugin=$(jq -r '.plugin // "obfs-server"' "${OUTLINE_CONFIG}")
+  local ss_plugin_opts=$(jq -r '.plugin_opts // "obfs=http"' "${OUTLINE_CONFIG}")
+  
   # Create user's shadowsocks config
   cat > "${OUTLINE_DIR}/data/$name/config.json" <<EOF
 {
   "server": "0.0.0.0",
-  "server_port": $(jq -r '.server_port' "${OUTLINE_CONFIG}"),
+  "server_port": ${ss_port},
   "password": "$password",
-  "method": "$(jq -r '.method' "${OUTLINE_CONFIG}")",
-  "plugin": "$(jq -r '.plugin // "obfs-server"' "${OUTLINE_CONFIG}")",
-  "plugin_opts": "$(jq -r '.plugin_opts // "obfs=http"' "${OUTLINE_CONFIG}")",
+  "method": "${ss_method}",
+  "plugin": "${ss_plugin}",
+  "plugin_opts": "${ss_plugin_opts}",
   "remarks": "$name",
   "timeout": 300
 }

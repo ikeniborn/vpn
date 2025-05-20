@@ -28,8 +28,8 @@ PASSED_CHECKS=0
 # Output file for full report
 REPORT_FILE="${LOG_DIR}/security_audit_$(date +%Y%m%d).log"
 
-# Email to send reports to
-ADMIN_EMAIL="admin@example.com"
+# Email to send reports to - default can be overridden by environment variable or command line argument
+ADMIN_EMAIL="${VPN_ADMIN_EMAIL:-admin@yourdomain.com}"
 
 # Function to display and log messages
 log_message() {
