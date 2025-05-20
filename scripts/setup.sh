@@ -1770,11 +1770,41 @@ function setup_routing() {
     return 0
   fi
 
+  # Make sure SHADOWBOX_IP is set before using it
+  if [ -z "$SHADOWBOX_IP" ]; then
+    echo "SHADOWBOX_IP not set, attempting to determine from network..."
+    # Try to get IP from network configuration
+    if docker network inspect vpn-network --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}' >/dev/null 2>&1; then
+      local subnet=$(docker network inspect vpn-network --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}')
+      if [ -n "$subnet" ]; then
+        local prefix=$(echo ${subnet} | cut -d'/' -f1 | cut -d'.' -f1-3)
+        export SHADOWBOX_IP="${prefix}.2"
+        export V2RAY_IP="${prefix}.3"
+        echo "Determined SHADOWBOX_IP=${SHADOWBOX_IP} and V2RAY_IP=${V2RAY_IP} from network config"
+      else
+        log_error "Failed to get subnet from existing network"
+        export DOCKER_NETWORK_ISSUES=1
+        return 0
+      fi
+    else
+      log_error "Failed to inspect network, falling back to host networking"
+      export DOCKER_NETWORK_ISSUES=1
+      return 0
+    fi
+  fi
+
   # Connect containers to network if needed
   local need_reconnect=false
   
   # Check if shadowbox is connected to network
   if ! docker network inspect vpn-network 2>/dev/null | grep -q "shadowbox"; then
+    # Double check that SHADOWBOX_IP is set before using it
+    if [ -z "$SHADOWBOX_IP" ]; then
+      log_error "SHADOWBOX_IP still not set, cannot connect to network"
+      export DOCKER_NETWORK_ISSUES=1
+      return 0
+    fi
+    
     echo "Connecting shadowbox to vpn-network with IP ${SHADOWBOX_IP}..."
     if ! docker network connect --ip=${SHADOWBOX_IP} vpn-network shadowbox; then
       log_error "Failed to connect shadowbox to network"
@@ -1960,6 +1990,9 @@ function main() {
   API_PORT=${API_PORT:-0}  # Use 0 to trigger random port generation
   ACCESS_KEY_PORT=${ACCESS_KEY_PORT:-0}  # Use 0 to trigger random port generation
   V2RAY_PORT=${V2RAY_PORT:-443}
+  # Initialize network IPs with empty values
+  export SHADOWBOX_IP=""
+  export V2RAY_IP=""
   # Make subnet options globally available
   export subnets=("${SUBNET_OPTIONS[@]}")
   
