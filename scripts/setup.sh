@@ -56,6 +56,7 @@ Usage: install_server.sh [--hostname <hostname>] [--api-port <port>] [--keys-por
   --v2ray-port   The port number for v2ray VLESS protocol (default: 443)
   --dest-site    The destination site to mimic in Reality (default: www.microsoft.com:443)
   --fingerprint  The TLS fingerprint to use (default: chrome)
+  --restore-firewall  Restore firewall rules from the latest backup and exit
 EOF
 }
 
@@ -429,6 +430,12 @@ function configure_firewall() {
     return 0
   fi
   
+  # Backup existing UFW rules
+  local BACKUP_FILE="${SHADOWBOX_DIR}/ufw_rules_backup_$(date +%Y%m%d_%H%M%S).txt"
+  echo "# UFW Rules Backup from $(date)" > "$BACKUP_FILE"
+  ufw status numbered >> "$BACKUP_FILE" 2>/dev/null
+  echo "Backed up existing firewall rules to $BACKUP_FILE"
+  
   # Allow SSH port
   ufw allow 22/tcp
   
@@ -472,6 +479,10 @@ function configure_firewall() {
   if ! ufw status | grep -q "Status: active"; then
     echo "y" | ufw enable
   fi
+  
+  # Inform about backup and restoration
+  echo "Firewall rules have been configured and backed up."
+  echo "If you need to restore previous rules, you can use: $0 --restore-firewall"
 }
 
 install_shadowbox() {
@@ -901,12 +912,47 @@ function setup_routing() {
   fi
 }
 
+# Function to restore UFW rules from a backup
+function restore_ufw_rules() {
+  local BACKUP_DIR="${SHADOWBOX_DIR:-/opt/outline}"
+  local LATEST_BACKUP=$(ls -t ${BACKUP_DIR}/ufw_rules_backup_*.txt 2>/dev/null | head -1)
+  
+  if [[ -z "$LATEST_BACKUP" ]]; then
+    echo "No UFW rules backup found in ${BACKUP_DIR}"
+    return 1
+  fi
+  
+  echo "Restoring UFW rules from backup: $LATEST_BACKUP"
+  
+  # Reset UFW to default
+  ufw --force reset
+  
+  # Extract and apply rules from backup
+  grep -E "^\[[0-9]+\] " "$LATEST_BACKUP" | while read -r line; do
+    # Parse the rule from the backup format
+    rule=$(echo "$line" | sed -E 's/^\[[0-9]+\]\s+//' | awk '{print $1, $2, $3}')
+    if [[ -n "$rule" ]]; then
+      echo "Restoring rule: $rule"
+      ufw $rule
+    fi
+  done
+  
+  # Enable UFW if it was enabled in the backup
+  if grep -q "Status: active" "$LATEST_BACKUP"; then
+    echo "Enabling UFW"
+    echo "y" | ufw enable
+  fi
+  
+  echo "UFW rules restored from $LATEST_BACKUP"
+  return 0
+}
+
 function is_valid_port() {
   (( 0 < "$1" && "$1" <= 65535 ))
 }
 
 function parse_flags() {
-  params=$(getopt -o "" --longoptions hostname:,api-port:,keys-port:,v2ray-port:,dest-site:,fingerprint: -n $0 -- "$@")
+  params=$(getopt -o "" --longoptions hostname:,api-port:,keys-port:,v2ray-port:,dest-site:,fingerprint:,restore-firewall -n $0 -- "$@")
   [[ $? == 0 ]] || exit 1
   eval set -- $params
   declare -g FLAGS_HOSTNAME=""
@@ -915,6 +961,7 @@ function parse_flags() {
   declare -gi FLAGS_V2RAY_PORT=443
   declare -g FLAGS_DEST_SITE="www.microsoft.com:443"
   declare -g FLAGS_FINGERPRINT="chrome"
+  declare -g FLAGS_RESTORE_FIREWALL=false
 
   while [[ "$#" > 0 ]]; do
     local flag=$1
@@ -956,6 +1003,9 @@ function parse_flags() {
         FLAGS_FINGERPRINT=$1
         shift
         ;;
+      --restore-firewall)
+        FLAGS_RESTORE_FIREWALL=true
+        ;;
       --)
         break
         ;;
@@ -993,7 +1043,15 @@ function parse_flags() {
 function main() {
   trap finish EXIT
   parse_flags "$@"
-  install_shadowbox
+  
+  if [[ "$FLAGS_RESTORE_FIREWALL" == "true" ]]; then
+    # Just restore the firewall rules and exit
+    restore_ufw_rules
+    exit $?
+  else
+    # Normal installation
+    install_shadowbox
+  fi
 }
 
 # Already defined at the top of the script
