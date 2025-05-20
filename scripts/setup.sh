@@ -943,8 +943,8 @@ start_services() {
                     # Apply additional fix - pull images first with explicit disabling of user namespaces
                     docker pull --security-opt=no-new-privileges:false --security-opt=apparmor:unconfined ${SB_IMAGE}
                     docker pull --security-opt=no-new-privileges:false --security-opt=apparmor:unconfined ${V2RAY_IMAGE}
-                    # Explicitly specify platform for watchtower using the detected platform
-                    docker pull --platform ${DOCKER_PLATFORM} --security-opt=no-new-privileges:false --security-opt=apparmor:unconfined ${WATCHTOWER_IMAGE}
+                    # Pull watchtower without platform constraint to let Docker auto-select the correct architecture
+                    docker pull --security-opt=no-new-privileges:false --security-opt=apparmor:unconfined ${WATCHTOWER_IMAGE}
                     
                     # Remove failed containers
                     docker-compose down --remove-orphans

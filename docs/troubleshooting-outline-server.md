@@ -71,14 +71,18 @@ Using Docker images that do not match your system's architecture.
    ```
 
 2. Make sure the correct platform-specific images are being used in docker-compose.yml:
-   - For ARM64/aarch64: Use ken1029/shadowbox:latest and ken1029/watchtower:arm64
-   - For ARMv7: Use ken1029/shadowbox:latest and ken1029/watchtower:arm32
+   - For ARM64/aarch64: Use ken1029/shadowbox:latest and containrrr/watchtower:latest
+   - For ARMv7: Use ken1029/shadowbox:latest and containrrr/watchtower:latest
    - For x86_64: Use shadowsocks/shadowsocks-libev:latest and containrrr/watchtower:latest
+   
+   Note: Always use the official containrrr/watchtower:latest image for watchtower as it has multi-architecture support.
 
-3. Explicitly specify the platform in docker-compose.yml:
+3. When needed, explicitly specify the platform in docker-compose.yml, but remove platform constraints for multi-arch images like watchtower:
    ```yaml
-   platform: linux/arm64  # Or appropriate platform
+   platform: linux/arm64  # For architecture-specific images only
    ```
+   
+4. For multi-architecture images like containrrr/watchtower, remove platform specifications to let Docker automatically select the correct architecture.
 
 ## Verifying Correct Operation
 
