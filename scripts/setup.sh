@@ -510,7 +510,6 @@ install_shadowbox() {
   run_step "Generating TLS certificate" generate_certificate
   run_step "Generating SHA-256 certificate fingerprint" generate_certificate_fingerprint
   run_step "Writing config" write_config
-  run_step "Configuring firewall" configure_firewall
 
   # TODO(dborkan): if the script fails after docker run, it will continue to fail
   # as the names shadowbox and watchtower will already be in use.  Consider
@@ -528,6 +527,7 @@ install_shadowbox() {
 
   FIREWALL_STATUS=""
   run_step "Checking host firewall" check_firewall
+  run_step "Configuring firewall" configure_firewall
   
   # Configure and start v2ray after Outline is up and running
   run_step "Configuring v2ray" configure_v2ray
