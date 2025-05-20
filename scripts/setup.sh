@@ -156,13 +156,13 @@ detect_architecture() {
     case $ARCH in
         aarch64|arm64)
             SB_IMAGE="shadowsocks/shadowsocks-libev:v3.3.5"
-            WATCHTOWER_IMAGE="containrrr/watchtower:armhf"
+            WATCHTOWER_IMAGE="containrrr/watchtower:latest"  # Use latest, which supports multi-arch
             V2RAY_IMAGE="teddysun/v2ray:latest"
             info "ARM64 architecture detected, using ARM64-compatible images"
             ;;
         armv7l)
             SB_IMAGE="shadowsocks/shadowsocks-libev:v3.3.5"
-            WATCHTOWER_IMAGE="containrrr/watchtower:armhf"
+            WATCHTOWER_IMAGE="containrrr/watchtower:latest"  # Use latest, which supports multi-arch
             V2RAY_IMAGE="teddysun/v2ray:latest"
             info "ARMv7 architecture detected, using ARMv7-compatible images"
             ;;
@@ -634,7 +634,9 @@ services:
     # Disable user namespace remapping for this container
     userns_mode: "host"
     privileged: true
-    command: run -c /etc/v2ray/config.json
+    # For teddysun/v2ray image, the command is different
+    entrypoint: /usr/bin/v2ray
+    command: "-config=/etc/v2ray/config.json"
     volumes:
       - ./v2ray/config.json:/etc/v2ray/config.json:Z
       - ./logs/v2ray:/var/log/v2ray:Z
