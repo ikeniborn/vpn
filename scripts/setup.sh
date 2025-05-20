@@ -276,9 +276,17 @@ install_docker() {
         apt-get update
         DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io
         
-        # Enable and start Docker service
+        # Create or update daemon.json to disable user namespace remapping
+        mkdir -p /etc/docker
+        cat > /etc/docker/daemon.json <<EOF
+{
+  "userns-remap": "",
+  "storage-driver": "overlay2"
+}
+EOF
+        # Restart Docker with the new settings
+        systemctl restart docker
         systemctl enable docker
-        systemctl start docker
     else
         info "Docker is already installed: $(docker --version)"
     fi
@@ -587,6 +595,7 @@ create_docker_compose() {
     # based on architecture in the detect_architecture function
     info "Using Outline Server image: ${SB_IMAGE}"
     
+    # Create a custom docker-compose.yml file with simplified configuration
     cat > "${BASE_DIR}/docker-compose.yml" <<EOF
 version: '3'
 
@@ -595,13 +604,20 @@ services:
     image: ${SB_IMAGE}
     container_name: outline-server
     restart: always
-    # Use host networking mode which works better with the ken1029/shadowbox image
-    network_mode: "host"
+    # Force root user to avoid ID mapping issues
+    user: "0:0"
+    # Explicit security options to handle ID mapping issues
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
     volumes:
       - ./outline-server/config.json:/etc/shadowsocks-libev/config.json
       - ./outline-server/access.json:/etc/shadowsocks-libev/access.json
       - ./outline-server/data:/opt/outline/data
       - ./logs/outline:/var/log/shadowsocks
+    ports:
+      - "${OUTLINE_PORT}:${OUTLINE_PORT}/tcp"
+      - "${OUTLINE_PORT}:${OUTLINE_PORT}/udp"
     environment:
       - SS_CONFIG=/etc/shadowsocks-libev/config.json
     cap_add:
@@ -611,24 +627,44 @@ services:
     image: ${V2RAY_IMAGE}
     container_name: v2ray
     restart: always
-    network_mode: "host"
+    # Force root user to avoid ID mapping issues
+    user: "0:0"
+    # Explicit security options to handle ID mapping issues
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    ports:
+      - "${V2RAY_PORT}:${V2RAY_PORT}/tcp"
+      - "${V2RAY_PORT}:${V2RAY_PORT}/udp"
     volumes:
       - ./v2ray/config.json:/etc/v2ray/config.json
       - ./logs/v2ray:/var/log/v2ray
     command: run -c /etc/v2ray/config.json
     cap_add:
       - NET_ADMIN
+    depends_on:
+      - outline-server
 
   watchtower:
     image: ${WATCHTOWER_IMAGE}
     container_name: watchtower
     restart: always
+    # Force root user to avoid ID mapping issues
+    user: "0:0"
+    # Explicit security options to handle ID mapping issues
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     command: --cleanup --tlsverify --interval 3600
     depends_on:
       - outline-server
       - v2ray
+
+networks:
+  default:
+    driver: bridge
 EOF
 }
 
