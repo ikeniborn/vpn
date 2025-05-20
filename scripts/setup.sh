@@ -669,6 +669,10 @@ function start_shadowbox() {
   local SHADOWBOX_IP=""
   local V2RAY_IP=""
   
+  # Export variable with default values to prevent unbound variable errors
+  export SHADOWBOX_IP="${SHADOWBOX_IP:-}"
+  export V2RAY_IP="${V2RAY_IP:-}"
+  
   echo "Attempting to create Docker network with multiple subnet options"
   
   # Try each subnet
@@ -692,10 +696,13 @@ function start_shadowbox() {
       
       echo "Using: Network=${SELECTED_SUBNET}, Shadowbox IP=${SHADOWBOX_IP}, V2Ray IP=${V2RAY_IP}"
       
-      # Export these for use in other functions
-      export SHADOWBOX_IP
-      export V2RAY_IP
-      export SELECTED_SUBNET
+      # Export these for use in other functions - with clear values
+      export SHADOWBOX_IP="${prefix}.2"
+      export V2RAY_IP="${prefix}.3"
+      export SELECTED_SUBNET="${subnet}"
+      
+      # Log the network configuration for debugging
+      echo "NETWORK CONFIG: subnet=${SELECTED_SUBNET}, shadowbox=${SHADOWBOX_IP}, v2ray=${V2RAY_IP}"
       
       break
     else
@@ -1543,6 +1550,26 @@ EOF
 function start_v2ray() {
   V2RAY_DIR="${V2RAY_DIR:-$SHADOWBOX_DIR/v2ray}"
   local V2RAY_PORT="${V2RAY_PORT:-443}"
+
+  # Ensure we have a valid V2RAY_IP - if not set, retry network setup
+  if [ -z "${V2RAY_IP}" ] && [ -z "$DOCKER_NETWORK_ISSUES" ]; then
+    echo "V2RAY_IP not set, attempting to determine from network..."
+    # Check if network exists
+    if docker network ls | grep -q "vpn-network"; then
+      # Get subnet from existing network
+      local subnet=$(docker network inspect vpn-network --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null)
+      if [ -n "$subnet" ]; then
+        local prefix=$(echo ${subnet} | cut -d'/' -f1 | cut -d'.' -f1-3)
+        export V2RAY_IP="${prefix}.3"
+        echo "Determined V2RAY_IP=${V2RAY_IP} from existing network"
+      else
+        echo "Failed to get subnet from existing network"
+      fi
+    else
+      echo "Network vpn-network doesn't exist, will use host networking instead"
+      export DOCKER_NETWORK_ISSUES=1
+    fi
+  fi
   
   # Use the enhanced port availability function
   local v2ray_ports=("${V2RAY_PORT}" "10000")
@@ -1573,19 +1600,40 @@ function start_v2ray() {
     return 1
   }
   
-  # Start v2ray container
+  # Start v2ray container - check for network mode
   declare -a docker_v2ray_flags=(
     --name v2ray
     --restart=always
-    --network vpn-network
-    --ip ${V2RAY_IP:-172.19.0.3}
+  )
+  
+  # Determine network configuration
+  if [ -n "$DOCKER_NETWORK_ISSUES" ]; then
+    echo "Using host networking mode for v2ray container..."
+    docker_v2ray_flags+=(--network host)
+  elif [ -n "$V2RAY_IP" ]; then
+    echo "Using container networking with IP ${V2RAY_IP}..."
+    docker_v2ray_flags+=(--network vpn-network --ip ${V2RAY_IP})
+  else
+    echo "No valid IP address available for v2ray, falling back to host networking..."
+    docker_v2ray_flags+=(--network host)
+    export DOCKER_NETWORK_ISSUES=1
+  fi
+  
+  # Add common configuration
+  docker_v2ray_flags+=(
     -v "${V2RAY_DIR}/config.json:/etc/v2ray/config.json"
     -v "${V2RAY_DIR}/logs:/var/log/v2ray"
-    -p "${V2RAY_PORT}:${V2RAY_PORT}/tcp"
-    -p "${V2RAY_PORT}:${V2RAY_PORT}/udp"
-    -p "10000:10000/tcp"
-    -p "10000:10000/udp"
   )
+  
+  # Add port mappings only if not using host networking
+  if [ -z "$DOCKER_NETWORK_ISSUES" ]; then
+    docker_v2ray_flags+=(
+      -p "${V2RAY_PORT}:${V2RAY_PORT}/tcp"
+      -p "${V2RAY_PORT}:${V2RAY_PORT}/udp"
+      -p "10000:10000/tcp"
+      -p "10000:10000/udp"
+    )
+  fi
   
   local readonly STDERR_OUTPUT
   STDERR_OUTPUT=$(docker run -d "${docker_v2ray_flags[@]}" ${V2RAY_IMAGE:-v2fly/v2fly-core:latest} run -c /etc/v2ray/config.json 2>&1)
@@ -1636,8 +1684,8 @@ function setup_routing() {
     # Use the same subnet selection approach as in start_shadowbox
     local created=false
     
-    # Try multiple subnets
-    for subnet in "172.18.0.0/24" "172.19.0.0/24" "172.20.0.0/24" "172.21.0.0/24" "172.22.0.0/24" "10.10.0.0/24" "10.20.0.0/24" "192.168.90.0/24"; do
+    # Try multiple subnets - use the same subnet list as in the start_shadowbox function
+    for subnet in "${subnets[@]:-"172.18.0.0/24" "172.19.0.0/24" "172.20.0.0/24" "172.21.0.0/24" "172.22.0.0/24" "10.10.0.0/24" "10.20.0.0/24" "192.168.90.0/24"}"; do
       echo "Trying to create network with subnet ${subnet}"
       if docker network create --subnet=${subnet} vpn-network >/dev/null 2>&1; then
         echo "Network vpn-network created successfully with subnet ${subnet}"
@@ -1691,8 +1739,8 @@ function setup_routing() {
   
   # Check if v2ray is connected to network
   if ! docker network inspect vpn-network 2>/dev/null | grep -q "v2ray"; then
-    echo "Connecting v2ray to vpn-network with IP ${V2RAY_IP:-172.19.0.3}..."
-    if ! docker network connect --ip=${V2RAY_IP:-172.19.0.3} vpn-network v2ray; then
+    echo "Connecting v2ray to vpn-network with IP ${V2RAY_IP}..."
+    if ! docker network connect --ip=${V2RAY_IP} vpn-network v2ray; then
       log_error "Failed to connect v2ray to network"
       log_error "Falling back to host networking mode"
       export DOCKER_NETWORK_ISSUES=1
@@ -1840,6 +1888,18 @@ function parse_flags() {
   return 0
 }
 
+# Define global subnet list to ensure consistency across functions
+declare -a SUBNET_OPTIONS=(
+  "172.18.0.0/24"
+  "172.19.0.0/24"
+  "172.20.0.0/24"
+  "172.21.0.0/24"
+  "172.22.0.0/24"
+  "10.10.0.0/24"
+  "10.20.0.0/24"
+  "192.168.90.0/24"
+)
+
 function main() {
   trap finish EXIT
   
@@ -1847,6 +1907,8 @@ function main() {
   API_PORT=${API_PORT:-7777}
   ACCESS_KEY_PORT=${ACCESS_KEY_PORT:-8888}
   V2RAY_PORT=${V2RAY_PORT:-443}
+  # Make subnet options globally available
+  export subnets=("${SUBNET_OPTIONS[@]}")
   
   parse_flags "$@"
   
