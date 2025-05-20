@@ -154,7 +154,40 @@ function start_docker() {
 }
 
 function docker_container_exists() {
-  docker ps -a | grep -w $1 >/dev/null 2>&1
+  docker ps -a | grep -w "$1" >/dev/null 2>&1
+}
+
+# More robust container removal with force flag and verification
+function ensure_container_removed() {
+  local container_name="$1"
+  local max_attempts=3
+  local attempt=1
+  
+  while [ $attempt -le $max_attempts ]; do
+    # Try to force remove the container
+    echo "Attempting to force remove $container_name (attempt $attempt of $max_attempts)..."
+    docker rm -f "$container_name" >/dev/null 2>&1
+    
+    # Wait a moment for Docker to process the removal
+    sleep 1
+    
+    # Check if it's gone
+    if ! docker_container_exists "$container_name"; then
+      return 0
+    fi
+    
+    # If it still exists, try a more aggressive approach on subsequent attempts
+    if [ $attempt -gt 1 ]; then
+      echo "Container still exists after removal attempt. Trying stronger measures..."
+      docker kill "$container_name" >/dev/null 2>&1
+      sleep 2
+    fi
+    
+    attempt=$((attempt + 1))
+  done
+  
+  # If we got here, we couldn't remove the container
+  return 1
 }
 
 function remove_shadowbox_container() {
@@ -185,19 +218,14 @@ function handle_docker_container_conflict() {
     return 0
   fi
   
-  # Remove container and verify it's gone
-  if run_step "Removing $CONTAINER_NAME container" remove_"$CONTAINER_NAME"_container ; then
-    # Check if container is actually removed
-    if docker_container_exists $CONTAINER_NAME; then
-      log_error "Failed to remove container despite 'docker rm' reporting success"
-      return 1
-    fi
-    
-    # Container successfully removed, we'll let the calling function restart it
+  # Use our robust container removal function
+  if run_step "Removing $CONTAINER_NAME container" ensure_container_removed "$CONTAINER_NAME"; then
+    # Container successfully removed, let the calling function restart it
     return 0
   fi
   
-  # Failed to remove the container
+  # Failed to remove the container after multiple attempts
+  log_error "Failed to remove container $CONTAINER_NAME after multiple attempts"
   return 1
 }
 
@@ -339,7 +367,8 @@ function start_shadowbox() {
     done
   fi
   # By itself, local messes up the return code.
-  local readonly STDERR_OUTPUT
+  local STDERR_OUTPUT
+  local RET
   
   # First, make sure the container doesn't already exist
   if docker_container_exists shadowbox; then
@@ -348,11 +377,17 @@ function start_shadowbox() {
       log_error "Could not remove existing shadowbox container"
       return 1
     fi
+    
+    # Double check that container is gone
+    if docker_container_exists shadowbox; then
+      log_error "Container still exists after removal attempts"
+      return 1
+    fi
   fi
   
   # Now try to start the container
   STDERR_OUTPUT=$(docker run -d "${docker_shadowbox_flags[@]}" ${SB_IMAGE} 2>&1)
-  local readonly RET=$?
+  RET=$?
   if [[ $RET -eq 0 ]]; then
     return 0
   fi
