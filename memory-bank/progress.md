@@ -13,11 +13,13 @@ This file tracks the project's progress using a task list format.
 * Documented installation process in vless-reality-new-server-guide.md
 * Documented comparison between WebSocket+TLS and Reality in websocket-tls-vs-reality.md
 * Created comprehensive architecture plan for the integrated Shadowsocks/Outline Server + VLESS+Reality solution
+* Fixed platform compatibility issues in setup.sh for ARM64 systems
 
 ## Current Tasks
 
 * Memory Bank initialization and updates
 * Architecture planning for deployment scripts
+* Ensuring cross-platform compatibility for all Docker containers
 
 ## Next Steps
 

@@ -15,6 +15,7 @@ This file tracks the project's current status, including recent changes, current
 * Memory Bank initialization (2025-05-19)
 * Created productContext.md to document the high-level overview of the project
 * Clarified that we should focus on the integrated Shadowsocks/Outline Server + VLESS+Reality solution rather than the VLESS+Reality only approach described in the Memory Bank
+* 2025-05-20 14:31:52 - Fixed platform compatibility issues in setup.sh script for ARM64 systems
 
 ## Open Questions/Issues
 

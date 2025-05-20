@@ -159,6 +159,7 @@ detect_architecture() {
             SB_IMAGE="ken1029/shadowbox:latest"
             WATCHTOWER_IMAGE="ken1029/watchtower:arm64"
             V2RAY_IMAGE="v2fly/v2fly-core:latest"
+            DOCKER_PLATFORM="linux/arm64"
             info "ARM64 architecture detected, using ARM64-compatible images"
             ;;
         armv7l)
@@ -166,6 +167,7 @@ detect_architecture() {
             SB_IMAGE="ken1029/shadowbox:latest"
             WATCHTOWER_IMAGE="ken1029/watchtower:arm32"
             V2RAY_IMAGE="v2fly/v2fly-core:latest"
+            DOCKER_PLATFORM="linux/arm/v7"
             info "ARMv7 architecture detected, using ARMv7-compatible images"
             ;;
         x86_64|amd64)
@@ -173,6 +175,7 @@ detect_architecture() {
             SB_IMAGE="shadowsocks/shadowsocks-libev:latest"
             WATCHTOWER_IMAGE="containrrr/watchtower:latest"
             V2RAY_IMAGE="v2fly/v2fly-core:latest"
+            DOCKER_PLATFORM="linux/amd64"
             info "x86_64 architecture detected, using standard images"
             ;;
         *)
@@ -184,11 +187,13 @@ detect_architecture() {
     info "- Shadowsocks: ${SB_IMAGE}"
     info "- V2Ray: ${V2RAY_IMAGE}"
     info "- Watchtower: ${WATCHTOWER_IMAGE}"
+    info "- Platform: ${DOCKER_PLATFORM}"
     
     # Export variables for docker-compose
     export SB_IMAGE
     export WATCHTOWER_IMAGE
     export V2RAY_IMAGE
+    export DOCKER_PLATFORM
 }
 
 # Update system packages
@@ -625,6 +630,7 @@ services:
       - apparmor:unconfined
       - no-new-privileges:false
     privileged: true
+    platform: ${DOCKER_PLATFORM}
     volumes:
       - ./outline-server/config.json:/etc/shadowsocks-libev/config.json:Z
       - ./outline-server/access.json:/etc/shadowsocks-libev/access.json:Z
@@ -651,6 +657,7 @@ services:
       - apparmor:unconfined
       - no-new-privileges:false
     privileged: true
+    platform: ${DOCKER_PLATFORM}
     ports:
       - "${V2RAY_PORT}:${V2RAY_PORT}/tcp"
       - "${V2RAY_PORT}:${V2RAY_PORT}/udp"
@@ -676,6 +683,7 @@ services:
       - apparmor:unconfined
       - no-new-privileges:false
     privileged: true
+    platform: ${DOCKER_PLATFORM}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     command: --cleanup --tlsverify --interval 3600
@@ -911,7 +919,8 @@ start_services() {
                     # Apply additional fix - pull images first with explicit disabling of user namespaces
                     docker pull --security-opt=no-new-privileges:false --security-opt=apparmor:unconfined ${SB_IMAGE}
                     docker pull --security-opt=no-new-privileges:false --security-opt=apparmor:unconfined ${V2RAY_IMAGE}
-                    docker pull --security-opt=no-new-privileges:false --security-opt=apparmor:unconfined ${WATCHTOWER_IMAGE}
+                    # Explicitly specify platform for watchtower using the detected platform
+                    docker pull --platform ${DOCKER_PLATFORM} --security-opt=no-new-privileges:false --security-opt=apparmor:unconfined ${WATCHTOWER_IMAGE}
                     
                     # Remove failed containers
                     docker-compose down --remove-orphans
