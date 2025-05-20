@@ -648,31 +648,69 @@ function start_shadowbox() {
   fi
   sleep 3
   
-  # Create Docker network with more robust retry mechanism
+  # Create Docker network with multiple subnet options
   local network_attempts=5
   local network_attempt=1
   
-  while [ $network_attempt -le $network_attempts ]; do
-    if docker network create --subnet=172.18.0.0/24 vpn-network; then
-      echo "Docker network created successfully on attempt $network_attempt"
+  # Define a list of possible subnets to try
+  local subnets=(
+    "172.18.0.0/24"
+    "172.19.0.0/24"
+    "172.20.0.0/24"
+    "172.21.0.0/24"
+    "172.22.0.0/24"
+    "10.10.0.0/24"
+    "10.20.0.0/24"
+    "192.168.90.0/24"
+  )
+  
+  # Variables to store the selected subnet and IPs
+  local SELECTED_SUBNET=""
+  local SHADOWBOX_IP=""
+  local V2RAY_IP=""
+  
+  echo "Attempting to create Docker network with multiple subnet options"
+  
+  # Try each subnet
+  for subnet in "${subnets[@]}"; do
+    echo "Trying to create network with subnet ${subnet}"
+    
+    # Clean up any existing network first
+    docker network rm vpn-network >/dev/null 2>&1 || true
+    sleep 2
+    
+    # Try to create the network with this subnet
+    if docker network create --subnet=${subnet} vpn-network >/dev/null 2>&1; then
+      echo "Docker network created successfully with subnet ${subnet}"
+      SELECTED_SUBNET="${subnet}"
+      
+      # Calculate the IP addresses based on the selected subnet
+      # Extract the prefix part of the subnet (e.g., "172.18.0" from "172.18.0.0/24")
+      local prefix=$(echo ${subnet} | cut -d'/' -f1 | cut -d'.' -f1-3)
+      SHADOWBOX_IP="${prefix}.2"
+      V2RAY_IP="${prefix}.3"
+      
+      echo "Using: Network=${SELECTED_SUBNET}, Shadowbox IP=${SHADOWBOX_IP}, V2Ray IP=${V2RAY_IP}"
+      
+      # Export these for use in other functions
+      export SHADOWBOX_IP
+      export V2RAY_IP
+      export SELECTED_SUBNET
+      
       break
     else
-      if [ $network_attempt -eq $network_attempts ]; then
-        log_error "Failed to create Docker network after $network_attempts attempts"
-        log_for_sentry "Docker network creation failed"
-        return 1
-      else
-        echo "Docker network creation failed on attempt $network_attempt, retrying..."
-        # Cleanup any partial network that might exist
-        docker network rm vpn-network >/dev/null 2>&1 || true
-        # Wait longer between attempts
-        sleep_time=$((2 * network_attempt))
-        echo "Waiting $sleep_time seconds before retry..."
-        sleep $sleep_time
-        network_attempt=$((network_attempt + 1))
-      fi
+      echo "Failed to create network with subnet ${subnet}"
     fi
   done
+  
+  # If no subnet worked, try host networking
+  if [ -z "${SELECTED_SUBNET}" ]; then
+    log_error "Failed to create Docker network with any available subnet"
+    log_for_sentry "Docker network creation failed"
+    echo "Falling back to host networking mode..."
+    export DOCKER_NETWORK_ISSUES=1
+    return 0 # Don't fail, we'll use host networking instead
+  fi
   
   # TODO(fortuna): Write PUBLIC_HOSTNAME and API_PORT to config file,
   # rather than pass in the environment.
@@ -719,11 +757,19 @@ function start_shadowbox() {
     echo "All required ports are now available for container creation."
   fi
   
-  # Use the host network mode if we're still having issues
-  local network_mode="--network vpn-network --ip 172.18.0.2"
+  # Use the selected network or host network mode
+  local network_mode=""
   if [ -n "$DOCKER_NETWORK_ISSUES" ]; then
     echo "Using host network mode as fallback..."
     network_mode="--network host"
+  elif [ -n "$SELECTED_SUBNET" ]; then
+    echo "Using Docker network vpn-network with IP ${SHADOWBOX_IP}..."
+    network_mode="--network vpn-network --ip ${SHADOWBOX_IP}"
+  else
+    # This is a safeguard case, we should never get here
+    echo "WARNING: No network mode determined, falling back to host networking..."
+    network_mode="--network host"
+    export DOCKER_NETWORK_ISSUES=1
   fi
   
   declare -a docker_shadowbox_flags=(
@@ -768,8 +814,15 @@ function start_shadowbox() {
       docker network rm vpn-network >/dev/null 2>&1 || true
       sleep 2
       
-      # Create Docker network again
-      docker network create --subnet=172.18.0.0/24 vpn-network >/dev/null 2>&1 || true
+      # Create Docker network again with multiple subnet options
+      for subnet in "172.18.0.0/24" "172.19.0.0/24" "172.20.0.0/24" "172.21.0.0/24" "10.10.0.0/24" "192.168.90.0/24"; do
+        if docker network create --subnet=${subnet} vpn-network >/dev/null 2>&1; then
+          local prefix=$(echo ${subnet} | cut -d'/' -f1 | cut -d'.' -f1-3)
+          export SHADOWBOX_IP="${prefix}.2"
+          export V2RAY_IP="${prefix}.3"
+          break
+        fi
+      done
       sleep 2
       
       # Try container removal one more time
@@ -813,38 +866,35 @@ function start_shadowbox() {
       
       # Try with completely new random ports
       echo "Generating new random ports for retry..."
-      local orig_api_port="${API_PORT}"
-      local orig_access_port="${ACCESS_KEY_PORT}"
-      
       API_PORT=$(get_random_port)
       ACCESS_KEY_PORT=$(get_random_port)
       
       echo "New ports: API_PORT=${API_PORT}, ACCESS_KEY_PORT=${ACCESS_KEY_PORT}"
       
-      # Modify docker flags
-      # First, remove the existing port mappings
-      for i in "${!docker_shadowbox_flags[@]}"; do
-        if [[ "${docker_shadowbox_flags[i]}" == *"${orig_api_port}"* || "${docker_shadowbox_flags[i]}" == *"${orig_access_port}"* ]]; then
-          unset 'docker_shadowbox_flags[i]'
-        fi
-      done
+      # Create a completely new docker_shadowbox_flags array for host networking
+      # This avoids issues with string substitution that could corrupt the array
+      declare -a docker_shadowbox_flags=(
+        --name shadowbox
+        --restart=always
+        --network host
+        -v "${STATE_DIR}:${STATE_DIR}"
+        -e "SB_STATE_DIR=${STATE_DIR}"
+        -e "SB_PUBLIC_IP=${PUBLIC_HOSTNAME}"
+        -e "SB_API_PORT=${API_PORT}"
+        -e "SB_API_PREFIX=${SB_API_PREFIX}"
+        -e "SB_CERTIFICATE_FILE=${SB_CERTIFICATE_FILE}"
+        -e "SB_PRIVATE_KEY_FILE=${SB_PRIVATE_KEY_FILE}"
+        -e "SB_METRICS_URL=${SB_METRICS_URL:-}"
+        -e "SB_DEFAULT_SERVER_NAME=${SB_DEFAULT_SERVER_NAME:-}"
+      )
       
-      # Filter out empty elements
-      docker_shadowbox_flags=("${docker_shadowbox_flags[@]}")
+      # Add access port flag if set
+      if [[ $FLAGS_KEYS_PORT != 0 ]]; then
+        docker_shadowbox_flags+=(-p "${FLAGS_KEYS_PORT}:${FLAGS_KEYS_PORT}/tcp" -p "${FLAGS_KEYS_PORT}:${FLAGS_KEYS_PORT}/udp")
+      fi
       
-      # Add new port mappings
-      docker_shadowbox_flags+=(-p "${API_PORT}:${API_PORT}/tcp")
-      docker_shadowbox_flags+=(-p "${ACCESS_KEY_PORT}:${ACCESS_KEY_PORT}/tcp")
-      docker_shadowbox_flags+=(-p "${ACCESS_KEY_PORT}:${ACCESS_KEY_PORT}/udp")
-      
-      # Modify network flags to use host networking
-      docker_shadowbox_flags=("${docker_shadowbox_flags[@]/--network vpn-network --ip 172.18.0.2/--network host}")
-      
-      # Update environment variables with new ports
-      docker_shadowbox_flags+=(-e "SB_API_PORT=${API_PORT}")
-      
-      echo "Attempting to start with modified configuration..."
-      # Try starting again
+      echo "Attempting to start with host networking configuration..."
+      # Try starting again with the clean flags
       STDERR_OUTPUT=$(docker run -d "${docker_shadowbox_flags[@]}" ${SB_IMAGE} 2>&1)
       RET=$?
       if [[ $RET -eq 0 ]]; then
@@ -1497,7 +1547,24 @@ function start_v2ray() {
   # Use the enhanced port availability function
   local v2ray_ports=("${V2RAY_PORT}" "10000")
   if ! ensure_ports_available "${v2ray_ports[@]}"; then
-    return 1
+    echo "Standard v2ray port ${V2RAY_PORT} not available, trying alternative port..."
+    # Choose an alternative port if 443 is not available
+    V2RAY_PORT=$(get_random_port)
+    export V2RAY_PORT
+    echo "Using alternative V2RAY_PORT=${V2RAY_PORT}"
+    
+    # Update v2ray configuration with the new port
+    local config_file="${V2RAY_DIR}/config.json"
+    if [[ -f "$config_file" ]]; then
+      sed -i "s/\"port\": 443,/\"port\": ${V2RAY_PORT},/" "$config_file"
+      echo "Updated v2ray configuration with new port ${V2RAY_PORT}"
+    fi
+    
+    # Try again with the new port
+    local v2ray_ports=("${V2RAY_PORT}" "10000")
+    if ! ensure_ports_available "${v2ray_ports[@]}"; then
+      return 1
+    fi
   fi
   
   # Create log directory if it doesn't exist
@@ -1511,7 +1578,7 @@ function start_v2ray() {
     --name v2ray
     --restart=always
     --network vpn-network
-    --ip 172.18.0.3
+    --ip ${V2RAY_IP:-172.18.0.3}
     -v "${V2RAY_DIR}/config.json:/etc/v2ray/config.json"
     -v "${V2RAY_DIR}/logs:/var/log/v2ray"
     -p "${V2RAY_PORT}:${V2RAY_PORT}/tcp"
@@ -1543,11 +1610,32 @@ function setup_routing() {
   # Check if network exists
   if ! docker network ls | grep -q "vpn-network"; then
     log_error "vpn-network doesn't exist, attempting to create it now"
-    if ! docker network create --subnet=172.18.0.0/24 vpn-network; then
-      log_error "Failed to create vpn-network"
+    
+    # Use the same subnet selection approach as in start_shadowbox
+    local created=false
+    
+    # Try multiple subnets
+    for subnet in "172.18.0.0/24" "172.19.0.0/24" "172.20.0.0/24" "172.21.0.0/24" "172.22.0.0/24" "10.10.0.0/24" "10.20.0.0/24" "192.168.90.0/24"; do
+      echo "Trying to create network with subnet ${subnet}"
+      if docker network create --subnet=${subnet} vpn-network >/dev/null 2>&1; then
+        echo "Network vpn-network created successfully with subnet ${subnet}"
+        
+        # Calculate the IP addresses based on the selected subnet
+        local prefix=$(echo ${subnet} | cut -d'/' -f1 | cut -d'.' -f1-3)
+        export SHADOWBOX_IP="${prefix}.2"
+        export V2RAY_IP="${prefix}.3"
+        
+        created=true
+        break
+      fi
+    done
+    
+    if ! $created; then
+      log_error "Failed to create vpn-network with any subnet"
+      log_error "Falling back to host networking mode"
+      export DOCKER_NETWORK_ISSUES=1
       return 1
     fi
-    echo "Network vpn-network created successfully"
   fi
 
   # Check shadowbox container is running
@@ -1562,25 +1650,35 @@ function setup_routing() {
     return 1
   fi
   
+  # Check if we're using host networking mode (skip network connection if so)
+  if [ -n "$DOCKER_NETWORK_ISSUES" ]; then
+    echo "Using host networking mode, skipping container network connections"
+    return 0
+  fi
+
   # Connect containers to network if needed
   local need_reconnect=false
   
   # Check if shadowbox is connected to network
   if ! docker network inspect vpn-network 2>/dev/null | grep -q "shadowbox"; then
-    echo "Connecting shadowbox to vpn-network..."
-    if ! docker network connect --ip=172.18.0.2 vpn-network shadowbox; then
+    echo "Connecting shadowbox to vpn-network with IP ${SHADOWBOX_IP:-172.19.0.2}..."
+    if ! docker network connect --ip=${SHADOWBOX_IP:-172.19.0.2} vpn-network shadowbox; then
       log_error "Failed to connect shadowbox to network"
-      return 1
+      log_error "Falling back to host networking mode"
+      export DOCKER_NETWORK_ISSUES=1
+      return 0
     fi
     need_reconnect=true
   fi
   
   # Check if v2ray is connected to network
   if ! docker network inspect vpn-network 2>/dev/null | grep -q "v2ray"; then
-    echo "Connecting v2ray to vpn-network..."
-    if ! docker network connect --ip=172.18.0.3 vpn-network v2ray; then
+    echo "Connecting v2ray to vpn-network with IP ${V2RAY_IP:-172.19.0.3}..."
+    if ! docker network connect --ip=${V2RAY_IP:-172.19.0.3} vpn-network v2ray; then
       log_error "Failed to connect v2ray to network"
-      return 1
+      log_error "Falling back to host networking mode"
+      export DOCKER_NETWORK_ISSUES=1
+      return 0
     fi
     need_reconnect=true
   fi
