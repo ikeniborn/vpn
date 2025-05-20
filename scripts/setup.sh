@@ -27,6 +27,7 @@ METRICS_DIR="${BASE_DIR}/metrics"
 
 # Default values
 OUTLINE_PORT="8388"
+API_PORT="8388"  # By default, use the same port as Outline
 V2RAY_PORT="443"
 DEST_SITE="www.microsoft.com:443"
 FINGERPRINT="chrome"
@@ -55,13 +56,14 @@ and VLESS-Reality VPN solution.
 
 Options:
   --outline-port PORT     Port for Outline Server (default: 8388)
+  --api-port PORT         Port for Outline API management (default: same as outline-port)
   --v2ray-port PORT       Port for v2ray VLESS protocol (default: 443)
   --dest-site SITE        Destination site to mimic (default: www.microsoft.com:443)
   --fingerprint TYPE      TLS fingerprint to simulate (default: chrome)
   --help                  Display this help message
 
 Example:
-  $(basename "$0") --outline-port 8388 --v2ray-port 443
+  $(basename "$0") --outline-port 8388 --api-port 8389 --v2ray-port 443
 EOF
 }
 
@@ -71,6 +73,10 @@ parse_args() {
         case $1 in
             --outline-port)
                 OUTLINE_PORT="$2"
+                shift
+                ;;
+            --api-port)
+                API_PORT="$2"
                 shift
                 ;;
             --v2ray-port)
@@ -98,6 +104,7 @@ parse_args() {
 
     info "Configuration:"
     info "- Outline Server port: $OUTLINE_PORT"
+    info "- Outline API port: $API_PORT"
     info "- v2ray port: $V2RAY_PORT"
     info "- Destination site: $DEST_SITE"
     info "- TLS fingerprint: $FINGERPRINT"
@@ -414,9 +421,14 @@ EOF
     info "Using server IP address for configuration: ${server_ip}"
     mkdir -p "${OUTLINE_DIR}/data"
     
+    # Generate a random API prefix for security
+    local api_prefix=$(head -c 16 /dev/urandom | base64 | tr '/+' '_-' | tr -d '=' | head -c 8)
+    
     cat > "${OUTLINE_DIR}/data/shadowbox_server_config.json" <<EOF
 {
   "hostname": "${server_ip}",
+  "apiPort": ${API_PORT},
+  "apiPrefix": "${api_prefix}",
   "portForNewAccessKeys": ${OUTLINE_PORT},
   "accessKeyDataLimit": {},
   "defaultDataLimit": null,
@@ -701,7 +713,7 @@ services:
     environment:
       - SS_CONFIG=/etc/shadowsocks-libev/config.json
       - SB_PUBLIC_IP=${SERVER_IP:-localhost}
-      - SB_API_PORT=${OUTLINE_PORT}
+      - SB_API_PORT=${API_PORT}
       - SB_STATE_DIR=/opt/outline/persisted-state
     cap_add:
       - NET_ADMIN
@@ -794,6 +806,12 @@ configure_firewall() {
     # Allow Outline Server port
     ufw allow ${OUTLINE_PORT}/tcp
     ufw allow ${OUTLINE_PORT}/udp
+    
+    # Allow Outline API port if different from Outline port
+    if [ "${API_PORT}" != "${OUTLINE_PORT}" ]; then
+        ufw allow ${API_PORT}/tcp
+        ufw allow ${API_PORT}/udp
+    fi
     
     # Allow v2ray port
     ufw allow ${V2RAY_PORT}/tcp
@@ -1033,9 +1051,14 @@ start_services() {
                     
                     # Create or update the shadowbox_server_config.json file
                     mkdir -p "${OUTLINE_DIR}/data"
+                    # Generate a random API prefix for security
+                    local api_prefix=$(head -c 16 /dev/urandom | base64 | tr '/+' '_-' | tr -d '=' | head -c 8)
+                    
                     cat > "${OUTLINE_DIR}/data/shadowbox_server_config.json" <<EOF
 {
   "hostname": "${server_ip}",
+  "apiPort": ${API_PORT},
+  "apiPrefix": "${api_prefix}",
   "portForNewAccessKeys": ${OUTLINE_PORT},
   "accessKeyDataLimit": {},
   "defaultDataLimit": null,
@@ -1094,7 +1117,7 @@ display_summary() {
     echo "      - Obfuscation: HTTP"
     echo ""
     echo "  - VLESS+Reality Server:"
-    echo "      - Server: ${server_ip}" 
+    echo "      - Server: ${server_ip}"
     echo "      - Port: ${V2RAY_PORT}"
     echo "      - Destination Site: ${DEST_SITE}"
     echo "      - Fingerprint: ${FINGERPRINT}"
@@ -1117,6 +1140,68 @@ display_summary() {
     echo "To export client configurations, use:"
     echo "  ${SCRIPT_DIR}/manage-users.sh --export --uuid \"<USER_UUID>\""
     echo "=================================================="
+}
+
+# Generate Outline Management JSON for connecting to the server
+generate_outline_management_json() {
+    info "Generating Outline Management JSON..."
+    
+    local server_ip=$(hostname -I | awk '{print $1}')
+    local api_port="${API_PORT:-${OUTLINE_PORT}}"
+    local sb_api_prefix=""
+    
+    # Check if we have a persisted config with an API prefix
+    if [ -f "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json" ]; then
+        # Try to get the API prefix if one exists
+        sb_api_prefix=$(docker exec -i outline-server cat /opt/outline/persisted-state/shadowbox_server_config.json 2>/dev/null |
+            grep -o '"apiPrefix":[^,}]*' | cut -d'"' -f4 || echo "")
+    fi
+    
+    # If container isn't running or doesn't have apiPrefix, check if we can find it in the access.txt
+    if [ -z "$sb_api_prefix" ] && [ -f "${OUTLINE_DIR}/data/access.txt" ]; then
+        sb_api_prefix=$(grep -o 'apiUrl:[^"]*' "${OUTLINE_DIR}/data/access.txt" |
+            sed -E 's|apiUrl:https://[^:]+:[0-9]+/([^/]+).*|\1|' || echo "")
+    fi
+    
+    # If we still don't have a prefix, use 'access'
+    sb_api_prefix=${sb_api_prefix:-"access"}
+    
+    # Get or generate the certificate hash
+    local cert_sha256=""
+    if [ -f "${OUTLINE_DIR}/data/access.txt" ]; then
+        cert_sha256=$(grep "certSha256:" "${OUTLINE_DIR}/data/access.txt" | sed "s/certSha256://")
+    fi
+    
+    # If we couldn't find a cert hash, try to get it from the certificate file
+    if [ -z "$cert_sha256" ] && [ -f "${OUTLINE_DIR}/persisted-state/shadowbox-selfsigned.crt" ]; then
+        # Extract the SHA-256 fingerprint using openssl and format it correctly
+        local cert_fingerprint=$(openssl x509 -in "${OUTLINE_DIR}/persisted-state/shadowbox-selfsigned.crt" -noout -sha256 -fingerprint 2>/dev/null)
+        if [ ! -z "$cert_fingerprint" ]; then
+            cert_sha256=$(echo ${cert_fingerprint#*=} | tr --delete : | tr '[:upper:]' '[:lower:]')
+        fi
+    fi
+    
+    # If we still don't have a cert hash, generate a placeholder
+    if [ -z "$cert_sha256" ]; then
+        warn "Could not find certificate fingerprint. Using placeholder."
+        cert_sha256="<CERTIFICATE_NOT_AVAILABLE>"
+    fi
+    
+    # Construct the JSON
+    local api_url="https://${server_ip}:${api_port}/${sb_api_prefix}"
+    
+    echo ""
+    echo "CONGRATULATIONS! Your Outline server is up and running."
+    echo ""
+    echo "To manage your Outline server, please copy the following line (including curly"
+    echo "brackets) into Step 2 of the Outline Manager interface:"
+    echo ""
+    echo -e "\033[1;32m{\"apiUrl\":\"${api_url}\",\"certSha256\":\"${cert_sha256}\"}\033[0m"
+    echo ""
+    echo "Make sure the following ports are open in your firewall:"
+    echo "- Management port ${api_port}, for TCP"
+    echo "- Access keys port ${OUTLINE_PORT}, for TCP and UDP"
+    echo ""
 }
 
 # Check if scripts directory contains required files
@@ -1190,13 +1275,18 @@ ensure_outline_config() {
         mkdir -p "${OUTLINE_DIR}/data"
         
         # Create the shadowbox_server_config.json file
+        # Generate a random API prefix for security
+        local api_prefix=$(head -c 16 /dev/urandom | base64 | tr '/+' '_-' | tr -d '=' | head -c 8)
+        
         cat > "${OUTLINE_DIR}/data/shadowbox_server_config.json" <<EOF
 {
-  "hostname": "${server_ip}",
-  "portForNewAccessKeys": ${OUTLINE_PORT},
-  "accessKeyDataLimit": {},
-  "defaultDataLimit": null,
-  "unrestrictedAccessKeyDataLimit": {}
+"hostname": "${server_ip}",
+"apiPort": ${API_PORT},
+"apiPrefix": "${api_prefix}",
+"portForNewAccessKeys": ${OUTLINE_PORT},
+"accessKeyDataLimit": {},
+"defaultDataLimit": null,
+"unrestrictedAccessKeyDataLimit": {}
 }
 EOF
         chmod 600 "${OUTLINE_DIR}/data/shadowbox_server_config.json"
@@ -1264,6 +1354,13 @@ health_check() {
         return 1
     fi
     
+    # Check API port if different from Outline port
+    if [ "${API_PORT}" != "${OUTLINE_PORT}" ] && ! netstat -tuln | grep -q ":${API_PORT}"; then
+        warn "Outline API port ${API_PORT} is not listening"
+        docker logs outline-server
+        warn "API management functionality may not work correctly"
+    fi
+    
     # More lenient v2ray port check
     if netstat -tuln | grep -q ":${V2RAY_PORT}"; then
         info "v2ray port ${V2RAY_PORT} is listening"
@@ -1291,6 +1388,7 @@ main() {
     # Interactive confirmation
     echo "This script will set up the integrated VPN solution with the following settings:"
     echo "- Outline Server port: $OUTLINE_PORT"
+    echo "- Outline API port: $API_PORT"
     echo "- v2ray port: $V2RAY_PORT"
     echo "- Destination site: $DEST_SITE"
     echo "- TLS fingerprint: $FINGERPRINT"
@@ -1326,6 +1424,7 @@ main() {
     ensure_outline_config
     health_check
     display_summary
+    generate_outline_management_json
     
     info "Installation completed successfully!"
 }
