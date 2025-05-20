@@ -525,6 +525,9 @@ function ensure_ports_available() {
 }
 
 function start_shadowbox() {
+  # Initialize DOCKER_NETWORK_ISSUES variable to avoid unbound variable errors
+  DOCKER_NETWORK_ISSUES=${DOCKER_NETWORK_ISSUES:-""}
+  
   # Free up network resources even if container doesn't exist
   echo "Ensuring network ports are released..."
   
