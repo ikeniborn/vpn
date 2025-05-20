@@ -669,8 +669,9 @@ function start_shadowbox() {
   local SHADOWBOX_IP=""
   local V2RAY_IP=""
   
-  # Export variable with default values to prevent unbound variable errors
+  # Export variables with default values to prevent unbound variable errors
   export SHADOWBOX_IP="${SHADOWBOX_IP:-}"
+  export V2RAY_IP="${V2RAY_IP:-}"
   export V2RAY_IP="${V2RAY_IP:-}"
   
   echo "Attempting to create Docker network with multiple subnet options"
