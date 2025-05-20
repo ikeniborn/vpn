@@ -579,6 +579,10 @@ services:
     image: ${SB_IMAGE}
     container_name: outline-server
     restart: always
+    # Fix for user namespace issues
+    user: "0:0"
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - ./outline-server/config.json:/etc/shadowsocks-libev/config.json
       - ./outline-server/access.json:/etc/shadowsocks-libev/access.json
@@ -599,6 +603,10 @@ services:
     image: v2fly/v2fly-core:latest
     container_name: v2ray
     restart: always
+    # Fix for user namespace issues
+    user: "0:0"
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - ./v2ray/config.json:/etc/v2ray/config.json
       - ./logs/v2ray:/var/log/v2ray
@@ -617,6 +625,10 @@ services:
     image: ${WATCHTOWER_IMAGE}
     container_name: watchtower
     restart: always
+    # Fix for user namespace issues
+    user: "0:0"
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command: --cleanup --tlsverify --interval 3600
