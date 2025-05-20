@@ -1,1783 +1,540 @@
 #!/bin/bash
+# Copyright 2018 The Outline Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-# setup.sh - Combined setup script for Outline Server and VLESS-Reality
-# This script:
-# - Sets up Docker environment
-# - Configures Outline Server with Shadowsocks
-# - Configures VLESS+Reality server
-# - Sets up optimized routing
-# - Implements security measures
+# Script to install the Outline Server docker container, a watchtower docker container
+# (to automatically update the server), and to create a new Outline user.
+
+# You may set the following environment variables, overriding their defaults:
+# SB_IMAGE: The Outline Server Docker image to install, e.g. quay.io/outline/shadowbox:nightly
+# SHADOWBOX_DIR: Directory for persistent Outline Server state.
+# ACCESS_CONFIG: The location of the access config text file.
+# SB_DEFAULT_SERVER_NAME: Default name for this server, e.g. "Outline server New York".
+#     This name will be used for the server until the admins updates the name
+#     via the REST API.
+# SENTRY_LOG_FILE: File for writing logs which may be reported to Sentry, in case
+#     of an install error. No PII should be written to this file. Intended to be set
+#     only by do_install_server.sh.
+# WATCHTOWER_REFRESH_SECONDS: refresh interval in seconds to check for updates,
+#     defaults to 3600.
+#
+# Deprecated:
+# SB_PUBLIC_IP: Use the --hostname flag instead
+# SB_API_PORT: Use the --api-port flag instead
+
+# Requires curl and docker to be installed
 
 set -euo pipefail
 
-# Colors for output
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
+function display_usage() {
+  cat <<EOF
+Usage: install_server.sh [--hostname <hostname>] [--api-port <port>] [--keys-port <port>]
 
-# Base directories
-BASE_DIR="/opt/vpn"
-OUTLINE_DIR="${BASE_DIR}/outline-server"
-V2RAY_DIR="${BASE_DIR}/v2ray"
-SCRIPT_DIR="${BASE_DIR}/scripts"
-LOGS_DIR="${BASE_DIR}/logs"
-BACKUP_DIR="${BASE_DIR}/backups"
-METRICS_DIR="${BASE_DIR}/metrics"
-
-# Default values
-OUTLINE_PORT="8388"
-API_PORT="8989"  # Default API port different from Outline port
-V2RAY_PORT="443"
-DEST_SITE="www.microsoft.com:443"
-FINGERPRINT="chrome"
-
-# Function to display status messages
-info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+  --hostname   The hostname to be used to access the management API and access keys
+  --api-port   The port number for the management API
+  --keys-port  The port number for the access keys
+EOF
 }
 
-warn() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+readonly SENTRY_LOG_FILE=${SENTRY_LOG_FILE:-}
+
+function log_error() {
+  local -r ERROR_TEXT="\033[0;31m"  # red
+  local -r NO_COLOR="\033[0m"
+  >&2 printf "${ERROR_TEXT}${1}${NO_COLOR}\n"
 }
 
-error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+# Pretty prints text to stdout, and also writes to sentry log file if set.
+function log_start_step() {
+  log_for_sentry "$@"
+  str="> $@"
+  lineLength=47
+  echo -n "$str"
+  numDots=$(expr $lineLength - ${#str} - 1)
+  if [[ $numDots > 0 ]]; then
+    echo -n " "
+    for i in $(seq 1 "$numDots"); do echo -n .; done
+  fi
+  echo -n " "
+}
+
+function run_step() {
+  local -r msg=$1
+  log_start_step $msg
+  shift 1
+  if "$@"; then
+    echo "OK"
+  else
+    # Propagates the error code
+    return
+  fi
+}
+
+function confirm() {
+  echo -n "$1"
+  local RESPONSE
+  read RESPONSE
+  RESPONSE=$(echo "$RESPONSE" | tr '[A-Z]' '[a-z]')
+  if [[ -z "$RESPONSE" ]] || [[ "$RESPONSE" = "y" ]] || [[ "$RESPONSE" = "yes" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+function command_exists {
+  command -v "$@" > /dev/null 2>&1
+}
+
+function log_for_sentry() {
+  if [[ -n "$SENTRY_LOG_FILE" ]]; then
+    echo [$(date "+%Y-%m-%d@%H:%M:%S")] "install_server.sh" "$@" >>$SENTRY_LOG_FILE
+  fi
+}
+
+# Check to see if docker is installed.
+function verify_docker_installed() {
+  if command_exists docker; then
+    return 0
+  fi
+  log_error "NOT INSTALLED"
+  echo -n
+  if ! confirm "> Would you like to install Docker? This will run 'curl -sS https://get.docker.com/ | sh'. [Y/n] "; then
+    exit 0
+  fi
+  if ! run_step "Installing Docker" install_docker; then
+    log_error "Docker installation failed, please visit https://docs.docker.com/install for instructions."
     exit 1
+  fi
+  echo -n "> Verifying Docker installation................ "
+  command_exists docker
 }
 
-# Display usage information
-display_usage() {
-    cat <<EOF
-Usage: $(basename "$0") [OPTIONS]
-
-This script performs a complete setup of the integrated Outline Server (Shadowsocks)
-and VLESS-Reality VPN solution.
-
-Options:
-  --outline-port PORT     Port for Outline Server (default: 8388)
-  --api-port PORT         Port for Outline API management (default: 8989)
-  --v2ray-port PORT       Port for v2ray VLESS protocol (default: 443)
-  --dest-site SITE        Destination site to mimic (default: www.microsoft.com:443)
-  --fingerprint TYPE      TLS fingerprint to simulate (default: chrome)
-  --help                  Display this help message
-
-Example:
-  $(basename "$0") --outline-port 8388 --api-port 8989 --v2ray-port 443
-EOF
+function verify_docker_running() {
+  local readonly STDERR_OUTPUT
+  STDERR_OUTPUT=$(docker info 2>&1 >/dev/null)
+  local readonly RET=$?
+  if [[ $RET -eq 0 ]]; then
+    return 0
+  elif [[ $STDERR_OUTPUT = *"Is the docker daemon running"* ]]; then
+    start_docker
+  fi
 }
 
-# Parse command line arguments
-parse_args() {
-    while [[ "$#" -gt 0 ]]; do
-        case $1 in
-            --outline-port)
-                OUTLINE_PORT="$2"
-                shift
-                ;;
-            --api-port)
-                API_PORT="$2"
-                shift
-                ;;
-            --v2ray-port)
-                V2RAY_PORT="$2"
-                shift
-                ;;
-            --dest-site)
-                DEST_SITE="$2"
-                shift
-                ;;
-            --fingerprint)
-                FINGERPRINT="$2"
-                shift
-                ;;
-            --help)
-                display_usage
-                exit 0
-                ;;
-            *)
-                warn "Unknown parameter: $1"
-                ;;
-        esac
+function install_docker() {
+  curl -sS https://get.docker.com/ | sh > /dev/null 2>&1
+}
+
+function start_docker() {
+  systemctl start docker.service > /dev/null 2>&1
+  systemctl enable docker.service > /dev/null 2>&1
+}
+
+function docker_container_exists() {
+  docker ps | grep $1 >/dev/null 2>&1
+}
+
+function remove_shadowbox_container() {
+  remove_docker_container shadowbox
+}
+
+function remove_watchtower_container() {
+  remove_docker_container watchtower
+}
+
+function remove_docker_container() {
+  docker rm -f $1 > /dev/null
+}
+
+function handle_docker_container_conflict() {
+  local readonly CONTAINER_NAME=$1
+  local readonly EXIT_ON_NEGATIVE_USER_RESPONSE=$2
+  local PROMPT="> The container name \"$CONTAINER_NAME\" is already in use by another container. This may happen when running this script multiple times."
+  if $EXIT_ON_NEGATIVE_USER_RESPONSE; then
+    PROMPT="$PROMPT We will attempt to remove the existing container and restart it. Would you like to proceed? [Y/n] "
+  else
+    PROMPT="$PROMPT Would you like to replace this container? If you answer no, we will proceed with the remainder of the installation. [Y/n] "
+  fi
+  if ! confirm "$PROMPT"; then
+    if $EXIT_ON_NEGATIVE_USER_RESPONSE; then
+      exit 0
+    fi
+    return 0
+  fi
+  if run_step "Removing $CONTAINER_NAME container" remove_"$CONTAINER_NAME"_container ; then
+    echo -n "> Restarting $CONTAINER_NAME ........................ "
+    start_"$CONTAINER_NAME"
+    return $?
+  fi
+  return 1
+}
+
+# Set trap which publishes error tag only if there is an error.
+function finish {
+  EXIT_CODE=$?
+  if [[ $EXIT_CODE -ne 0 ]]
+  then
+    log_error "\nSorry! Something went wrong. If you can't figure this out, please copy and paste all this output into the Outline Manager screen, and send it to us, to see if we can help you."
+  fi
+}
+
+function get_random_port {
+  local num=0  # Init to an invalid value, to prevent "unbound variable" errors.
+  until (( 1024 <= num && num < 65536)); do
+    num=$(( $RANDOM + ($RANDOM % 2) * 32768 ));
+  done;
+  echo $num;
+}
+
+function create_persisted_state_dir() {
+  readonly STATE_DIR="$SHADOWBOX_DIR/persisted-state"
+  mkdir -p --mode=770 "${STATE_DIR}"
+  chmod g+s "${STATE_DIR}"
+}
+
+# Generate a secret key for access to the Management API and store it in a tag.
+# 16 bytes = 128 bits of entropy should be plenty for this use.
+function safe_base64() {
+  # Implements URL-safe base64 of stdin, stripping trailing = chars.
+  # Writes result to stdout.
+  # TODO: this gives the following errors on Mac:
+  #   base64: invalid option -- w
+  #   tr: illegal option -- -
+  local url_safe="$(base64 -w 0 - | tr '/+' '_-')"
+  echo -n "${url_safe%%=*}"  # Strip trailing = chars
+}
+
+function generate_secret_key() {
+  readonly SB_API_PREFIX=$(head -c 16 /dev/urandom | safe_base64)
+}
+
+function generate_certificate() {
+  # Generate self-signed cert and store it in the persistent state directory.
+  readonly CERTIFICATE_NAME="${STATE_DIR}/shadowbox-selfsigned"
+  readonly SB_CERTIFICATE_FILE="${CERTIFICATE_NAME}.crt"
+  readonly SB_PRIVATE_KEY_FILE="${CERTIFICATE_NAME}.key"
+  declare -a openssl_req_flags=(
+    -x509 -nodes -days 36500 -newkey rsa:2048
+    -subj "/CN=${PUBLIC_HOSTNAME}"
+    -keyout "${SB_PRIVATE_KEY_FILE}" -out "${SB_CERTIFICATE_FILE}"
+  )
+  openssl req "${openssl_req_flags[@]}" >/dev/null 2>&1
+}
+
+function generate_certificate_fingerprint() {
+  # Add a tag with the SHA-256 fingerprint of the certificate.
+  # (Electron uses SHA-256 fingerprints: https://github.com/electron/electron/blob/9624bc140353b3771bd07c55371f6db65fd1b67e/atom/common/native_mate_converters/net_converter.cc#L60)
+  # Example format: "SHA256 Fingerprint=BD:DB:C9:A4:39:5C:B3:4E:6E:CF:18:43:61:9F:07:A2:09:07:37:35:63:67"
+  CERT_OPENSSL_FINGERPRINT=$(openssl x509 -in "${SB_CERTIFICATE_FILE}" -noout -sha256 -fingerprint)
+  # Example format: "BDDBC9A4395CB34E6ECF1843619F07A2090737356367"
+  CERT_HEX_FINGERPRINT=$(echo ${CERT_OPENSSL_FINGERPRINT#*=} | tr --delete :)
+  output_config "certSha256:$CERT_HEX_FINGERPRINT"
+}
+
+function join() {
+  local IFS="$1"
+  shift
+  echo "$*"
+}
+
+function write_config() {
+  declare -a config=()
+  if [[ $FLAGS_KEYS_PORT != 0 ]]; then
+    config+=("\"portForNewAccessKeys\":$FLAGS_KEYS_PORT")
+  fi
+  if [[ ${#config[@]} > 0 ]]; then
+    echo "{"$(join , "${config[@]}")"}" > $STATE_DIR/shadowbox_server_config.json
+  fi
+}
+
+function start_shadowbox() {
+  # Detect architecture for proper image selection
+  ARCH=$(uname -m)
+  case $ARCH in
+    aarch64|arm64)
+      SB_IMAGE=${SB_IMAGE:-"ken1029/shadowbox:latest"}
+      ;;
+    armv7l)
+      SB_IMAGE=${SB_IMAGE:-"ken1029/shadowbox:latest"}
+      ;;
+    x86_64|amd64)
+      SB_IMAGE=${SB_IMAGE:-"quay.io/outline/shadowbox:stable"}
+      ;;
+    *)
+      log_error "Unsupported architecture: $ARCH"
+      exit 1
+      ;;
+  esac
+  
+  # TODO(fortuna): Write PUBLIC_HOSTNAME and API_PORT to config file,
+  # rather than pass in the environment.
+  declare -a docker_shadowbox_flags=(
+    --name shadowbox --restart=always --net=host
+    -v "${STATE_DIR}:${STATE_DIR}"
+    -e "SB_STATE_DIR=${STATE_DIR}"
+    -e "SB_PUBLIC_IP=${PUBLIC_HOSTNAME}"
+    -e "SB_API_PORT=${API_PORT}"
+    -e "SB_API_PREFIX=${SB_API_PREFIX}"
+    -e "SB_CERTIFICATE_FILE=${SB_CERTIFICATE_FILE}"
+    -e "SB_PRIVATE_KEY_FILE=${SB_PRIVATE_KEY_FILE}"
+    -e "SB_METRICS_URL=${SB_METRICS_URL:-}"
+    -e "SB_DEFAULT_SERVER_NAME=${SB_DEFAULT_SERVER_NAME:-}"
+  )
+  # By itself, local messes up the return code.
+  local readonly STDERR_OUTPUT
+  STDERR_OUTPUT=$(docker run -d "${docker_shadowbox_flags[@]}" ${SB_IMAGE} 2>&1 >/dev/null)
+  local readonly RET=$?
+  if [[ $RET -eq 0 ]]; then
+    return 0
+  fi
+  log_error "FAILED"
+  if docker_container_exists shadowbox; then
+    handle_docker_container_conflict shadowbox true
+  else
+    log_error "$STDERR_OUTPUT"
+    return 1
+  fi
+}
+
+function start_watchtower() {
+  # Start watchtower to automatically fetch docker image updates.
+  # Set watchtower to refresh every 30 seconds if a custom SB_IMAGE is used (for
+  # testing).  Otherwise refresh every hour.
+  local WATCHTOWER_REFRESH_SECONDS="${WATCHTOWER_REFRESH_SECONDS:-3600}"
+  
+  # Detect architecture for proper image selection
+  ARCH=$(uname -m)
+  case $ARCH in
+    aarch64|arm64)
+      WATCHTOWER_IMAGE=${WATCHTOWER_IMAGE:-"containrrr/watchtower:latest"}
+      ;;
+    armv7l)
+      WATCHTOWER_IMAGE=${WATCHTOWER_IMAGE:-"containrrr/watchtower:latest"}
+      ;;
+    x86_64|amd64)
+      WATCHTOWER_IMAGE=${WATCHTOWER_IMAGE:-"containrrr/watchtower:latest"}
+      ;;
+    *)
+      log_error "Unsupported architecture: $ARCH"
+      exit 1
+      ;;
+  esac
+  
+  declare -a docker_watchtower_flags=(--name watchtower --restart=always)
+  docker_watchtower_flags+=(-v /var/run/docker.sock:/var/run/docker.sock)
+  # By itself, local messes up the return code.
+  local readonly STDERR_OUTPUT
+  STDERR_OUTPUT=$(docker run -d "${docker_watchtower_flags[@]}" ${WATCHTOWER_IMAGE} --cleanup --tlsverify --interval $WATCHTOWER_REFRESH_SECONDS 2>&1 >/dev/null)
+  local readonly RET=$?
+  if [[ $RET -eq 0 ]]; then
+    return 0
+  fi
+  log_error "FAILED"
+  if docker_container_exists watchtower; then
+    handle_docker_container_conflict watchtower false
+  else
+    log_error "$STDERR_OUTPUT"
+    return 1
+  fi
+}
+
+# Waits for the service to be up and healthy
+function wait_shadowbox() {
+  # We use insecure connection because our threat model doesn't include localhost port
+  # interception and our certificate doesn't have localhost as a subject alternative name
+  until curl --insecure -s "${LOCAL_API_URL}/access-keys" >/dev/null; do sleep 1; done
+}
+
+function create_first_user() {
+  curl --insecure -X POST -s "${LOCAL_API_URL}/access-keys" >/dev/null
+}
+
+function output_config() {
+  echo "$@" >> $ACCESS_CONFIG
+}
+
+function add_api_url_to_config() {
+  output_config "apiUrl:${PUBLIC_API_URL}"
+}
+
+function check_firewall() {
+  local readonly ACCESS_KEY_PORT=$(curl --insecure -s ${LOCAL_API_URL}/access-keys | 
+      docker exec -i shadowbox node -e '
+          const fs = require("fs");
+          const accessKeys = JSON.parse(fs.readFileSync(0, {encoding: "utf-8"}));
+          console.log(accessKeys["accessKeys"][0]["port"]);
+      ')
+  if ! curl --max-time 5 --cacert "${SB_CERTIFICATE_FILE}" -s "${PUBLIC_API_URL}/access-keys" >/dev/null; then
+     log_error "BLOCKED"
+     FIREWALL_STATUS="\
+You won't be able to access it externally, despite your server being correctly
+set up, because there's a firewall (in this machine, your router or cloud
+provider) that is preventing incoming connections to ports ${API_PORT} and ${ACCESS_KEY_PORT}."
+  else
+    FIREWALL_STATUS="\
+If you have connection problems, it may be that your router or cloud provider
+blocks inbound connections, even though your machine seems to allow them."
+  fi
+  FIREWALL_STATUS="\
+$FIREWALL_STATUS
+
+Make sure to open the following ports on your firewall, router or cloud provider:
+- Management port ${API_PORT}, for TCP
+- Access key port ${ACCESS_KEY_PORT}, for TCP and UDP
+"
+}
+
+install_shadowbox() {
+  # Make sure we don't leak readable files to other users.
+  umask 0007
+
+  run_step "Verifying that Docker is installed" verify_docker_installed
+  run_step "Verifying that Docker daemon is running" verify_docker_running
+
+  log_for_sentry "Creating Outline directory"
+  export SHADOWBOX_DIR="${SHADOWBOX_DIR:-/opt/outline}"
+  mkdir -p --mode=770 $SHADOWBOX_DIR
+  chmod u+s $SHADOWBOX_DIR
+
+  log_for_sentry "Setting API port"
+  API_PORT="${FLAGS_API_PORT}"
+  if [[ $API_PORT == 0 ]]; then
+    API_PORT=${SB_API_PORT:-$(get_random_port)}
+  fi
+  readonly ACCESS_CONFIG=${ACCESS_CONFIG:-$SHADOWBOX_DIR/access.txt}
+  readonly SB_IMAGE=${SB_IMAGE:-quay.io/outline/shadowbox:stable}
+
+  log_for_sentry "Setting PUBLIC_HOSTNAME"
+  # TODO(fortuna): Make sure this is IPv4
+  PUBLIC_HOSTNAME=${FLAGS_HOSTNAME:-${SB_PUBLIC_IP:-$(curl -4s https://ipinfo.io/ip)}}
+
+  if [[ -z $PUBLIC_HOSTNAME ]]; then
+    local readonly MSG="Failed to determine the server's IP address."
+    log_error "$MSG"
+    log_for_sentry "$MSG"
+    exit 1
+  fi
+
+  # If $ACCESS_CONFIG already exists, copy it to backup then clear it.
+  # Note we can't do "mv" here as do_install_server.sh may already be tailing
+  # this file.
+  log_for_sentry "Initializing ACCESS_CONFIG"
+  [[ -f $ACCESS_CONFIG ]] && cp $ACCESS_CONFIG $ACCESS_CONFIG.bak && > $ACCESS_CONFIG
+
+  # Make a directory for persistent state
+  run_step "Creating persistent state dir" create_persisted_state_dir
+  run_step "Generating secret key" generate_secret_key
+  run_step "Generating TLS certificate" generate_certificate
+  run_step "Generating SHA-256 certificate fingerprint" generate_certificate_fingerprint
+  run_step "Writing config" write_config
+
+  # TODO(dborkan): if the script fails after docker run, it will continue to fail
+  # as the names shadowbox and watchtower will already be in use.  Consider
+  # deleting the container in the case of failure (e.g. using a trap, or
+  # deleting existing containers on each run).
+  run_step "Starting Shadowbox" start_shadowbox
+  # TODO(fortuna): Don't wait for Shadowbox to run this.
+  run_step "Starting Watchtower" start_watchtower
+
+  readonly PUBLIC_API_URL="https://${PUBLIC_HOSTNAME}:${API_PORT}/${SB_API_PREFIX}"
+  readonly LOCAL_API_URL="https://localhost:${API_PORT}/${SB_API_PREFIX}"
+  run_step "Waiting for Outline server to be healthy" wait_shadowbox
+  run_step "Creating first user" create_first_user
+  run_step "Adding API URL to config" add_api_url_to_config
+
+  FIREWALL_STATUS=""
+  run_step "Checking host firewall" check_firewall
+
+  # Echos the value of the specified field from ACCESS_CONFIG.
+  # e.g. if ACCESS_CONFIG contains the line "certSha256:1234",
+  # calling $(get_field_value certSha256) will echo 1234.
+  function get_field_value {
+    grep "$1" $ACCESS_CONFIG | sed "s/$1://"
+  }
+
+  # Output JSON.  This relies on apiUrl and certSha256 (hex characters) requiring
+  # no string escaping.  TODO: look for a way to generate JSON that doesn't
+  # require new dependencies.
+  cat <<END_OF_SERVER_OUTPUT
+
+CONGRATULATIONS! Your Outline server is up and running.
+
+To manage your Outline server, please copy the following line (including curly
+brackets) into Step 2 of the Outline Manager interface:
+
+$(echo -e "\033[1;32m{\"apiUrl\":\"$(get_field_value apiUrl)\",\"certSha256\":\"$(get_field_value certSha256)\"}\033[0m")
+
+${FIREWALL_STATUS}
+END_OF_SERVER_OUTPUT
+} # end of install_shadowbox
+
+function is_valid_port() {
+  (( 0 < "$1" && "$1" <= 65535 ))
+}
+
+function parse_flags() {
+  params=$(getopt --longoptions hostname:,api-port:,keys-port: -n $0 -- $0 "$@")
+  [[ $? == 0 ]] || exit 1
+  eval set -- $params
+  declare -g FLAGS_HOSTNAME=""
+  declare -gi FLAGS_API_PORT=0
+  declare -gi FLAGS_KEYS_PORT=0
+
+  while [[ "$#" > 0 ]]; do
+    local flag=$1
+    shift
+    case "$flag" in
+      --hostname)
+        FLAGS_HOSTNAME=${1}
         shift
-    done
-
-    info "Configuration:"
-    info "- Outline Server port: $OUTLINE_PORT"
-    info "- Outline API port: $API_PORT"
-    info "- v2ray port: $V2RAY_PORT"
-    info "- Destination site: $DEST_SITE"
-    info "- TLS fingerprint: $FINGERPRINT"
-}
-
-# Check if running as root
-check_root() {
-    if [ "$(id -u)" -ne 0 ]; then
-        error "This script must be run as root or with sudo privileges"
-    fi
-}
-
-# Check system requirements
-check_system_requirements() {
-    info "Checking system requirements..."
-    
-    # Check CPU cores
-    CPU_CORES=$(nproc)
-    if [ "$CPU_CORES" -lt 2 ]; then
-        warn "Low CPU core count detected: $CPU_CORES cores. Minimum recommended is 2 cores."
-    else
-        info "CPU cores: $CPU_CORES (OK)"
-    fi
-    
-    # Check RAM
-    TOTAL_RAM=$(free -m | awk '/^Mem:/{print $2}')
-    if [ "$TOTAL_RAM" -lt 1024 ]; then
-        warn "Low memory detected: $TOTAL_RAM MB. Minimum recommended is 1024 MB."
-    else
-        info "Memory: $TOTAL_RAM MB (OK)"
-    fi
-    
-    # Check disk space
-    DISK_SPACE=$(df -m / | awk '{if(NR==2) print $4}')
-    if [ "$DISK_SPACE" -lt 5120 ]; then 
-        warn "Low disk space detected: $DISK_SPACE MB free. Minimum recommended is 5120 MB."
-    else
-        info "Disk space: $DISK_SPACE MB (OK)"
-    fi
-    
-    # Check if ports are available
-    if lsof -i :"$OUTLINE_PORT" > /dev/null 2>&1; then
-        warn "Port $OUTLINE_PORT is already in use. Consider using a different port."
-    fi
-    
-    if lsof -i :"$V2RAY_PORT" > /dev/null 2>&1; then
-        warn "Port $V2RAY_PORT is already in use. Consider using a different port."
-    fi
-}
-
-# Detect architecture and set appropriate Docker images
-detect_architecture() {
-    info "Detecting system architecture..."
-    ARCH=$(uname -m)
-    
-    case $ARCH in
-        aarch64|arm64)
-            # Use the well-tested ARM64 images from the ericqmore project
-            SB_IMAGE="ken1029/shadowbox:latest"
-            # Use the official watchtower image which supports multiple architectures through Docker's manifest support
-            WATCHTOWER_IMAGE="containrrr/watchtower:latest"
-            V2RAY_IMAGE="v2fly/v2fly-core:latest"
-            DOCKER_PLATFORM="linux/arm64"
-            info "ARM64 architecture detected, using ARM64-compatible images"
-            ;;
-        armv7l)
-            # Use the well-tested ARMv7 images from the ericqmore project
-            SB_IMAGE="ken1029/shadowbox:latest"
-            # Use the official watchtower image which supports multiple architectures
-            WATCHTOWER_IMAGE="containrrr/watchtower:latest"
-            V2RAY_IMAGE="v2fly/v2fly-core:latest"
-            DOCKER_PLATFORM="linux/arm/v7"
-            info "ARMv7 architecture detected, using ARMv7-compatible images"
-            ;;
-        x86_64|amd64)
-            # For x86 architecture, use standard images
-            SB_IMAGE="shadowsocks/shadowsocks-libev:latest"
-            WATCHTOWER_IMAGE="containrrr/watchtower:latest"
-            V2RAY_IMAGE="v2fly/v2fly-core:latest"
-            DOCKER_PLATFORM="linux/amd64"
-            info "x86_64 architecture detected, using standard images"
-            ;;
-        *)
-            error "Unsupported architecture: $ARCH"
-            ;;
+        ;;
+      --api-port)
+        FLAGS_API_PORT=${1}
+        shift
+        if ! is_valid_port $FLAGS_API_PORT; then
+          log_error "Invalid value for $flag: $FLAGS_API_PORT"
+          exit 1
+        fi
+        ;;
+      --keys-port)
+        FLAGS_KEYS_PORT=$1
+        shift
+        if ! is_valid_port $FLAGS_KEYS_PORT; then
+          log_error "Invalid value for $flag: $FLAGS_KEYS_PORT"
+          exit 1
+        fi
+        ;;
+      --)
+        break
+        ;;
+      *) # This should not happen
+        log_error "Unsupported flag $flag"
+        display_usage
+        exit 1
+        ;;
     esac
-    
-    info "Using images:"
-    info "- Shadowsocks: ${SB_IMAGE}"
-    info "- V2Ray: ${V2RAY_IMAGE}"
-    info "- Watchtower: ${WATCHTOWER_IMAGE}"
-    info "- Platform: ${DOCKER_PLATFORM}"
-    
-    # Export variables for docker-compose
-    export SB_IMAGE
-    export WATCHTOWER_IMAGE
-    export V2RAY_IMAGE
-    export DOCKER_PLATFORM
+  done
+  if [[ $FLAGS_API_PORT != 0 && $FLAGS_API_PORT == $FLAGS_KEYS_PORT ]]; then
+    log_error "--api-port must be different from --keys-port"
+    exit 1
+  fi
+  return 0
 }
 
-# Update system packages
-update_system() {
-    info "Updating system packages..."
-    apt-get update
-    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
+function main() {
+  trap finish EXIT
+  parse_flags "$@"
+  install_shadowbox
 }
 
-# Check for required dependencies
-check_dependencies() {
-    info "Checking required dependencies..."
-    
-    local missing_deps=()
-    local required_deps=("curl" "wget" "jq" "ufw" "socat" "qrencode")
-    local required_packages=("net-tools")
-    
-    # Check each required command dependency
-    for dep in "${required_deps[@]}"; do
-        if ! command -v "$dep" &> /dev/null; then
-            missing_deps+=("$dep")
-        fi
-    done
-    
-    # Check for net-tools package specifically by checking for netstat command
-    if ! command -v "netstat" &> /dev/null; then
-        missing_deps+=("net-tools")
-    fi
-    
-    # If any dependencies are missing, inform the user
-    if [ ${#missing_deps[@]} -ne 0 ]; then
-        warn "Missing required dependencies: ${missing_deps[*]}"
-        info "Installing missing dependencies..."
-        apt-get update
-        DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_deps[@]}"
-        
-        # Verify installation
-        local still_missing=()
-        for dep in "${missing_deps[@]}"; do
-            # Special check for net-tools package using netstat command
-            if [ "$dep" = "net-tools" ]; then
-                if ! command -v "netstat" &> /dev/null; then
-                    still_missing+=("$dep")
-                fi
-            elif ! command -v "$dep" &> /dev/null; then
-                still_missing+=("$dep")
-            fi
-        done
-        
-        if [ ${#still_missing[@]} -ne 0 ]; then
-            error "Failed to install dependencies: ${still_missing[*]}"
-        fi
-    else
-        info "All required dependencies are installed"
-    fi
-}
-
-# Install dependencies
-install_dependencies() {
-    info "Installing dependencies..."
-    
-    # First check required dependencies
-    check_dependencies
-    
-    # Install additional helpful packages
-    DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        ca-certificates gnupg lsb-release bc mailutils apt-transport-https software-properties-common
-}
-
-# Install Docker if not already installed
-install_docker() {
-    info "Checking Docker installation..."
-    if ! command -v docker &> /dev/null; then
-        info "Installing Docker..."
-        
-        # Add Docker's official GPG key
-        mkdir -p /etc/apt/keyrings
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-        
-        # Set up the Docker repository
-        echo \
-          "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-          $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-        
-        apt-get update
-        DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io
-    else
-        info "Docker is already installed: $(docker --version)"
-    fi
-    
-    # Always configure Docker daemon settings regardless of whether Docker was just installed
-    # Create or update daemon.json to disable user namespace remapping
-    info "Configuring Docker daemon to disable user namespace remapping..."
-    mkdir -p /etc/docker
-    cat > /etc/docker/daemon.json <<EOF
-{
-  "userns-remap": "",
-  "storage-driver": "overlay2",
-  "userland-proxy": false
-}
-EOF
-    # Restart Docker with the new settings
-    systemctl restart docker
-    systemctl enable docker
-    
-    # Verify the settings were applied
-    info "Verifying Docker daemon configuration..."
-    sleep 5  # Wait for Docker to fully restart
-    if docker info 2>/dev/null | grep -q "userns-remap: true"; then
-        warn "Docker user namespace remapping is still enabled despite configuration!"
-        warn "This might cause container layer mapping issues."
-    else
-        info "Docker user namespace remapping is disabled correctly."
-    fi
-
-    # Check Docker Compose
-    if ! command -v docker-compose &> /dev/null; then
-        info "Installing Docker Compose..."
-        
-        # Install Docker Compose
-        curl -L "https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        chmod +x /usr/local/bin/docker-compose
-    else
-        info "Docker Compose is already installed: $(docker-compose --version)"
-    fi
-}
-
-# Create directory structure
-create_directories() {
-    info "Creating directory structure..."
-    mkdir -p "${OUTLINE_DIR}/certs"
-    mkdir -p "${OUTLINE_DIR}/data"
-    mkdir -p "${OUTLINE_DIR}/persisted-state/prometheus"
-    mkdir -p "${V2RAY_DIR}"
-    mkdir -p "${SCRIPT_DIR}"
-    mkdir -p "${LOGS_DIR}/outline"
-    mkdir -p "${LOGS_DIR}/v2ray"
-    mkdir -p "${BACKUP_DIR}"
-    mkdir -p "${METRICS_DIR}"
-    
-    # Set proper permissions
-    chmod 700 "${BACKUP_DIR}"
-}
-
-# Configure Outline Server
-configure_outline() {
-    info "Configuring Outline Server..."
-    
-    # Generate a strong random password
-    local ss_password=$(openssl rand -base64 24)
-    
-    # Create config files with secure permissions from the start
-    # Create empty files with proper permissions first
-    touch "${OUTLINE_DIR}/config.json"
-    touch "${OUTLINE_DIR}/access.json"
-    chmod 600 "${OUTLINE_DIR}/config.json"
-    chmod 600 "${OUTLINE_DIR}/access.json"
-    
-    # Now write the sensitive content to the properly secured files
-    cat > "${OUTLINE_DIR}/config.json" <<EOF
-{
-  "server": "0.0.0.0",
-  "server_port": ${OUTLINE_PORT},
-  "password": "${ss_password}",
-  "timeout": 300,
-  "method": "chacha20-ietf-poly1305",
-  "fast_open": true,
-  "reuse_port": true,
-  "no_delay": true,
-  "nameserver": "8.8.8.8",
-  "mode": "tcp_and_udp",
-  "plugin": "obfs-server",
-  "plugin_opts": "obfs=http;obfs-host=${DEST_SITE%%:*}"
-}
-EOF
-    
-    # Create access policy with secure permissions
-    cat > "${OUTLINE_DIR}/access.json" <<EOF
-{
-  "strategy": "allow",
-  "rules": []
-}
-EOF
-
-    # Create shadowbox_server_config.json file, which is required by ken1029/shadowbox image
-    info "Creating shadowbox_server_config.json file..."
-    
-    # Try multiple methods to get the server's IP address
-    # Using hostname -I as the primary method and avoiding potentially blocked external services
-    local server_ip=""
-    
-    # Method 1: Try hostname command (most reliable for local network)
-    server_ip=$(hostname -I | awk '{print $1}' 2>/dev/null)
-    
-    # Method 2: Try ip route command as fallback
-    if [ -z "$server_ip" ] || [ "$server_ip" = "127.0.0.1" ]; then
-        server_ip=$(ip route get 1.2.3.4 | awk '{print $7}' 2>/dev/null)
-        info "Using IP from ip route command: ${server_ip}"
-    fi
-    
-    # Method 3: Only try external services as last resort and only if we have connectivity
-    if [ -z "$server_ip" ] || [ "$server_ip" = "127.0.0.1" ]; then
-        # Check if we have internet connectivity before attempting external service
-        if ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
-            server_ip=$(curl -4 -s --connect-timeout 5 ifconfig.me 2>/dev/null ||
-                       curl -4 -s --connect-timeout 5 icanhazip.com 2>/dev/null)
-            info "Using IP from external service: ${server_ip}"
-        fi
-    fi
-    
-    # Final fallback if all methods fail
-    if [ -z "$server_ip" ]; then
-        warn "Could not determine server IP address. Using localhost as fallback."
-        server_ip="127.0.0.1"
-    fi
-    
-    info "Using server IP address for configuration: ${server_ip}"
-    mkdir -p "${OUTLINE_DIR}/data"
-    
-    # Generate a random API prefix for security
-    local api_prefix=$(head -c 16 /dev/urandom | base64 | tr '/+' '_-' | tr -d '=' | head -c 8)
-    
-    cat > "${OUTLINE_DIR}/data/shadowbox_server_config.json" <<EOF
-{
-  "hostname": "${server_ip}",
-  "apiPort": ${API_PORT},
-  "apiPrefix": "${api_prefix}",
-  "portForNewAccessKeys": ${OUTLINE_PORT},
-  "accessKeyDataLimit": {},
-  "defaultDataLimit": null,
-  "unrestrictedAccessKeyDataLimit": {}
-}
-EOF
-    chmod 600 "${OUTLINE_DIR}/data/shadowbox_server_config.json"
-    
-    # Create persisted-state directory specifically for Outline SB_STATE_DIR environment variable
-    mkdir -p "${OUTLINE_DIR}/persisted-state/prometheus"
-    mkdir -p "${OUTLINE_DIR}/persisted-state/shadowbox"
-    
-    # Copy the prometheus config.yml file to persisted-state
-    if [ -f "$(dirname "$0")/prometheus_config.yml" ]; then
-        cp "$(dirname "$0")/prometheus_config.yml" "${OUTLINE_DIR}/persisted-state/prometheus/config.yml"
-        chmod 644 "${OUTLINE_DIR}/persisted-state/prometheus/config.yml"
-        info "Prometheus configuration file copied successfully"
-    else
-        warn "Prometheus config file not found, creating default configuration"
-        cat > "${OUTLINE_DIR}/persisted-state/prometheus/config.yml" <<EOF
-# Basic Prometheus configuration for Outline server
-global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
-
-scrape_configs:
-  - job_name: 'outline'
-    static_configs:
-      - targets: ['127.0.0.1:9090']
-
-  - job_name: 'outline-node-metrics'
-    static_configs:
-      - targets: ['127.0.0.1:9091']
-
-  - job_name: 'outline-ss-server'
-    static_configs:
-      - targets: ['127.0.0.1:9092']
-EOF
-        chmod 644 "${OUTLINE_DIR}/persisted-state/prometheus/config.yml"
-    fi
-    
-    # Create additional files required by the main.js at line 163
-    # These files are likely accessed right after Prometheus initialization
-    # Create files with valid content structures
-    # metrics.json - empty JSON object
-    echo "{}" > "${OUTLINE_DIR}/persisted-state/shadowbox/metrics.json"
-    
-    # servers.json - empty JSON object
-    echo "{}" > "${OUTLINE_DIR}/persisted-state/shadowbox/servers.json"
-    
-    # access_keys.json - empty JSON array
-    echo "[]" > "${OUTLINE_DIR}/persisted-state/shadowbox/access_keys.json"
-    
-    # server.yml with basic structure
-    cat > "${OUTLINE_DIR}/persisted-state/shadowbox/server.yml" <<EOF
-# Outline Server configuration
-apiPort: ${API_PORT}
-portForNewAccessKeys: ${OUTLINE_PORT}
-hostname: ${server_ip}
-EOF
-    
-    # metrics_state with minimal valid content
-    echo "{\"lastUpdated\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > "${OUTLINE_DIR}/persisted-state/metrics_state"
-    
-    # Set proper permissions
-    chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox/server.yml"
-    chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox/metrics.json"
-    chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox/servers.json"
-    chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox/access_keys.json"
-    chmod 644 "${OUTLINE_DIR}/persisted-state/metrics_state"
-    
-    # Create a copy of the config in the persisted-state directory
-    cp "${OUTLINE_DIR}/data/shadowbox_server_config.json" "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
-    chmod 600 "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
-    
-    # Export the server IP for later use in docker-compose
-    export SERVER_IP="${server_ip}"
-}
-
-# Configure v2ray with updated routing
-configure_v2ray() {
-    info "Configuring v2ray with updated routing..."
-    
-    # Use existing key pair or generate a new one
-    local private_key=""
-    local public_key=""
-    local short_id=$(openssl rand -hex 8)
-    
-    if [ -f "${V2RAY_DIR}/reality_keypair.txt" ]; then
-        info "Using existing Reality key pair..."
-        private_key=$(grep "Private key:" "${V2RAY_DIR}/reality_keypair.txt" | cut -d ' ' -f3)
-        public_key=$(grep "Public key:" "${V2RAY_DIR}/reality_keypair.txt" | cut -d ' ' -f3)
-    else
-        info "Generating new Reality key pair..."
-        
-        # Try different commands to generate keypair
-        
-        # First attempt - try xray generate x25519
-        local key_output=""
-        key_output=$(docker run --rm v2fly/v2fly-core:latest xray x25519 2>/dev/null || true)
-        
-        # Check if we got keys from first attempt
-        if echo "$key_output" | grep -q "Private key:" && echo "$key_output" | grep -q "Public key:"; then
-            private_key=$(echo "$key_output" | grep "Private key:" | cut -d ' ' -f3)
-            public_key=$(echo "$key_output" | grep "Public key:" | cut -d ' ' -f3)
-            info "Successfully generated X25519 keypair with xray x25519 command"
-        else
-            # Second attempt - try v2ray x25519
-            key_output=$(docker run --rm v2fly/v2fly-core:latest v2ray x25519 2>/dev/null || true)
-            
-            # Check if we got keys from second attempt
-            if echo "$key_output" | grep -q "Private key:" && echo "$key_output" | grep -q "Public key:"; then
-                private_key=$(echo "$key_output" | grep "Private key:" | cut -d ' ' -f3)
-                public_key=$(echo "$key_output" | grep "Public key:" | cut -d ' ' -f3)
-                info "Successfully generated X25519 keypair with v2ray x25519 command"
-            else
-                # Fallback method - generate random keys
-                warn "Could not generate proper X25519 keypair using Docker container."
-                warn "Using a fallback method to generate random keys."
-                
-                # Generate private and public keys using openssl (these are just random values, not real X25519 keys)
-                private_key=$(openssl rand -hex 32)
-                public_key=$(openssl rand -hex 32)
-                
-                warn "IMPORTANT: The generated keys are NOT proper X25519 keys."
-                warn "You should manually generate proper keys and update the config."
-            fi
-        fi
-        
-        # Save key pair for reference
-        {
-            echo "Private key: $private_key"
-            echo "Public key: $public_key"
-        } > "${V2RAY_DIR}/reality_keypair.txt"
-        chmod 600 "${V2RAY_DIR}/reality_keypair.txt"
-    fi
-    
-    # Generate UUID for default user
-    local default_uuid=$(cat /proc/sys/kernel/random/uuid)
-    
-    # Extract server name from destination site
-    local server_name="${DEST_SITE%%:*}"
-    
-    # Create v2ray config with updated routing
-    cat > "${V2RAY_DIR}/config.json" <<EOF
-{
-  "log": {
-    "loglevel": "warning",
-    "access": "/var/log/v2ray/access.log",
-    "error": "/var/log/v2ray/error.log"
-  },
-  "inbounds": [
-    {
-      "port": ${V2RAY_PORT},
-      "protocol": "vless",
-      "settings": {
-        "clients": [
-          {
-            "id": "${default_uuid}",
-            "flow": "xtls-rprx-vision",
-            "level": 0,
-            "email": "default-user"
-          }
-        ],
-        "decryption": "none"
-      },
-      "streamSettings": {
-        "network": "tcp",
-        "security": "reality",
-        "realitySettings": {
-          "show": false,
-          "dest": "${DEST_SITE}",
-          "xver": 0,
-          "serverNames": [
-            "${server_name}"
-          ],
-          "privateKey": "${private_key}",
-          "minClientVer": "",
-          "maxClientVer": "",
-          "maxTimeDiff": 0,
-          "shortIds": [
-            "${short_id}"
-          ],
-          "fingerprint": "${FINGERPRINT}"
-        }
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["http", "tls"]
-      }
-    },
-    {
-      "listen": "172.16.238.3",
-      "port": ${V2RAY_PORT},
-      "protocol": "dokodemo-door",
-      "settings": {
-        "address": "0.0.0.0",
-        "network": "tcp,udp",
-        "followRedirect": true
-      },
-      "tag": "outline_in",
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["http", "tls"]
-      }
-    }
-  ],
-  "outbounds": [
-    {
-      "protocol": "freedom",
-      "tag": "direct",
-      "settings": {
-        "domainStrategy": "UseIPv4"
-      }
-    },
-    {
-      "protocol": "blackhole",
-      "tag": "blocked"
-    },
-    {
-      "protocol": "freedom",
-      "tag": "streaming_out",
-      "settings": {
-        "domainStrategy": "UseIPv4"
-      },
-      "streamSettings": {
-        "sockopt": {
-          "mark": 100,
-          "tcpFastOpen": true,
-          "tcpKeepAliveInterval": 25
-        }
-      }
-    },
-    {
-      "protocol": "freedom",
-      "tag": "browsing_out",
-      "settings": {
-        "domainStrategy": "UseIPv4"
-      },
-      "streamSettings": {
-        "sockopt": {
-          "tcpFastOpen": true
-        }
-      }
-    }
-  ],
-  "routing": {
-    "domainStrategy": "IPIfNonMatch",
-    "rules": [
-      {
-        "type": "field",
-        "inboundTag": ["outline_in"],
-        "outboundTag": "direct"
-      },
-      {
-        "type": "field",
-        "domain": ["geosite:category-ads"],
-        "outboundTag": "blocked"
-      },
-      {
-        "type": "field",
-        "domain": [
-          "youtube.com", "googlevideo.com", "*.googlevideo.com",
-          "netflix.com", "netflixdnstest.com", "*.nflxvideo.net",
-          "hulu.com", "hulustream.com",
-          "spotify.com", "*.spotifycdn.com",
-          "twitch.tv", "*.ttvnw.net", "*.jtvnw.net",
-          "amazon.com/Prime-Video", "primevideo.com", "aiv-cdn.net"
-        ],
-        "outboundTag": "streaming_out"
-      },
-      {
-        "type": "field",
-        "domain": [
-          "*.googleusercontent.com", "*.gstatic.com", 
-          "*.facebook.com", "*.fbcdn.net",
-          "*.twitter.com", "*.twimg.com",
-          "*.instagram.com", "*.cdninstagram.com"
-        ],
-        "outboundTag": "browsing_out"
-      },
-      {
-        "type": "field",
-        "protocol": ["bittorrent"],
-        "outboundTag": "direct"
-      },
-      {
-        "type": "field",
-        "ip": ["geoip:private"],
-        "outboundTag": "blocked"
-      }
-    ]
-  }
-}
-EOF
-    
-    # Set proper permissions
-    chmod 644 "${V2RAY_DIR}/config.json"
-    
-    # Create users database if it doesn't exist
-    if [ ! -f "${V2RAY_DIR}/users.db" ]; then
-        echo "${default_uuid}|default-user|$(date '+%Y-%m-%d %H:%M:%S')" > "${V2RAY_DIR}/users.db"
-        chmod 600 "${V2RAY_DIR}/users.db"
-    fi
-}
-
-# Create Docker Compose configuration
-create_docker_compose() {
-    info "Creating Docker Compose configuration..."
-    
-    # We'll use the SB_IMAGE variable directly, which has already been set
-    # based on architecture in the detect_architecture function
-    info "Using Outline Server image: ${SB_IMAGE}"
-    
-    # Create a custom docker-compose.yml file with simplified configuration
-    cat > "${BASE_DIR}/docker-compose.yml" <<EOF
-version: '3.8'
-
-services:
-  outline-server:
-    image: ${SB_IMAGE}
-    container_name: outline-server
-    restart: always
-    # Force root user to avoid ID mapping issues
-    user: "0:0"
-    # Explicit security options to handle ID mapping issues
-    security_opt:
-      - seccomp:unconfined
-      - apparmor:unconfined
-      - no-new-privileges:false
-    privileged: true
-    platform: ${DOCKER_PLATFORM}
-    # Additional comments kept for documentation purposes
-    volumes:
-      - ./outline-server/config.json:/etc/shadowsocks-libev/config.json:Z
-      - ./outline-server/access.json:/etc/shadowsocks-libev/access.json:Z
-      - ./outline-server/data:/opt/outline/data:Z
-      - ./outline-server/persisted-state:/opt/outline/persisted-state:Z
-      # Add explicit volume mounts for all subdirectories to ensure they're accessible
-      - ./outline-server/persisted-state/prometheus:/opt/outline/persisted-state/prometheus:Z
-      - ./outline-server/persisted-state/shadowbox:/opt/outline/persisted-state/shadowbox:Z
-      # Add a direct mount for the root directory structure to fix the TypeError issue
-      - ./outline-server/tmp_root:/root:Z
-      - ./logs/outline:/var/log/shadowsocks:Z
-    ports:
-      - "${OUTLINE_PORT}:${OUTLINE_PORT}/tcp"
-      - "${OUTLINE_PORT}:${OUTLINE_PORT}/udp"
-    environment:
-      - SS_CONFIG=/etc/shadowsocks-libev/config.json
-      - SB_PUBLIC_IP=${SERVER_IP:-localhost}
-      - SB_API_PORT=${API_PORT}
-      # Explicitly define all necessary environment variables
-      - SB_STATE_DIR=/opt/outline/persisted-state
-      - SB_METRICS_URL=https://prod.metrics.getoutline.org
-      - PROMETHEUS_CONFIG_PATH=/opt/outline/persisted-state/prometheus/config.yml
-      # Explicitly disable metrics reporting if causing issues
-      - SB_METRICS_URL_MANUAL_MODE=disable
-      # Add path to metrics file to prevent "path must be a string" error
-      - METRICS_PATH=/opt/outline/persisted-state/metrics_state
-    cap_add:
-      - NET_ADMIN
-      - SYS_ADMIN
-      
-  v2ray:
-    image: ${V2RAY_IMAGE}
-    container_name: v2ray
-    restart: always
-    # Force root user to avoid ID mapping issues
-    user: "0:0"
-    # Explicit security options to handle ID mapping issues
-    security_opt:
-      - seccomp:unconfined
-      - apparmor:unconfined
-      - no-new-privileges:false
-    privileged: true
-    platform: ${DOCKER_PLATFORM}
-    ports:
-      - "${V2RAY_PORT}:${V2RAY_PORT}/tcp"
-      - "${V2RAY_PORT}:${V2RAY_PORT}/udp"
-    volumes:
-      - ./v2ray/config.json:/etc/v2ray/config.json:Z
-      - ./logs/v2ray:/var/log/v2ray:Z
-    command: run -c /etc/v2ray/config.json
-    cap_add:
-      - NET_ADMIN
-      - SYS_ADMIN
-    depends_on:
-      - outline-server
-
-  watchtower:
-    image: ${WATCHTOWER_IMAGE}
-    container_name: watchtower
-    restart: always
-    # Force root user to avoid ID mapping issues
-    user: "0:0"
-    # Explicit security options to handle ID mapping issues
-    security_opt:
-      - seccomp:unconfined
-      - apparmor:unconfined
-      - no-new-privileges:false
-    privileged: true
-    # No platform specification for watchtower to allow Docker to automatically select the correct platform
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    command: --cleanup --tlsverify --interval 3600
-    depends_on:
-      - outline-server
-      - v2ray
-
-networks:
-  default:
-    driver: bridge
-    ipam:
-      driver: default
-      config:
-        - subnet: 172.16.238.0/24
-    driver_opts:
-      com.docker.network.bridge.name: vpn-network
-      com.docker.network.bridge.enable_icc: "true"
-      com.docker.network.bridge.enable_ip_masquerade: "true"
-EOF
-}
-
-# Configure firewall
-configure_firewall() {
-    info "Configuring firewall..."
-    
-    # Check if UFW is installed
-    if ! command -v ufw &> /dev/null; then
-        info "UFW not found. Installing UFW..."
-        apt-get update
-        DEBIAN_FRONTEND=noninteractive apt-get install -y ufw
-    fi
-    
-    # Configure UFW
-    info "Configuring UFW rules..."
-    
-    # Reset UFW to default state
-    ufw --force reset
-    
-    # Set default policies
-    ufw default deny incoming
-    ufw default allow outgoing
-    
-    # Allow SSH (port 22)
-    ufw allow 22/tcp
-    
-    # Allow Outline Server port
-    ufw allow ${OUTLINE_PORT}/tcp
-    ufw allow ${OUTLINE_PORT}/udp
-    
-    # Allow Outline API port if different from Outline port
-    if [ "${API_PORT}" != "${OUTLINE_PORT}" ]; then
-        ufw allow ${API_PORT}/tcp
-        ufw allow ${API_PORT}/udp
-    fi
-    
-    # Allow v2ray port
-    ufw allow ${V2RAY_PORT}/tcp
-    ufw allow ${V2RAY_PORT}/udp
-    
-    # Enable IP forwarding (required for VPN)
-    if grep -q "net.ipv4.ip_forward" /etc/sysctl.conf; then
-        sed -i 's/^#\?net.ipv4.ip_forward.*/net.ipv4.ip_forward=1/' /etc/sysctl.conf
-    else
-        echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
-    fi
-    
-    # Apply sysctl changes
-    sysctl -p
-    
-    # Configure UFW to allow forwarded packets
-    if ! grep -q "DEFAULT_FORWARD_POLICY=\"ACCEPT\"" /etc/default/ufw; then
-        sed -i 's/DEFAULT_FORWARD_POLICY="DROP"/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
-    fi
-    
-    # Enable UFW
-    echo "y" | ufw enable
-    
-    info "Firewall configured successfully"
-}
-
-# Create user management script
-create_user_management() {
-    info "Creating user management script..."
-    
-    # Copy the user management script to the scripts directory
-    cp "$(dirname "$0")/manage-users.sh" "${SCRIPT_DIR}/manage-users.sh"
-    chmod +x "${SCRIPT_DIR}/manage-users.sh"
-    
-    info "User management script created at ${SCRIPT_DIR}/manage-users.sh"
-}
-
-# Create monitoring script
-create_monitoring_script() {
-    info "Creating monitoring script..."
-    
-    # Copy the monitoring script to the scripts directory
-    cp "$(dirname "$0")/monitoring.sh" "${SCRIPT_DIR}/monitoring.sh"
-    chmod +x "${SCRIPT_DIR}/monitoring.sh"
-    
-    info "Monitoring script created at ${SCRIPT_DIR}/monitoring.sh"
-}
-
-# Create backup script
-create_backup_script() {
-    info "Creating backup script..."
-    
-    # Copy the backup script to the scripts directory
-    cp "$(dirname "$0")/backup.sh" "${SCRIPT_DIR}/backup.sh"
-    chmod +x "${SCRIPT_DIR}/backup.sh"
-    
-    info "Backup script created at ${SCRIPT_DIR}/backup.sh"
-}
-
-# Create restore script
-create_restore_script() {
-    info "Creating restore script..."
-    
-    # Copy the restore script to the scripts directory
-    cp "$(dirname "$0")/restore.sh" "${SCRIPT_DIR}/restore.sh"
-    chmod +x "${SCRIPT_DIR}/restore.sh"
-    
-    info "Restore script created at ${SCRIPT_DIR}/restore.sh"
-}
-
-# Create maintenance scripts
-create_maintenance_scripts() {
-    info "Creating maintenance scripts..."
-    
-    # Copy the daily maintenance script
-    cp "$(dirname "$0")/daily-maintenance.sh" "${SCRIPT_DIR}/daily-maintenance.sh"
-    chmod +x "${SCRIPT_DIR}/daily-maintenance.sh"
-    
-    # Copy the weekly maintenance script
-    cp "$(dirname "$0")/weekly-maintenance.sh" "${SCRIPT_DIR}/weekly-maintenance.sh"
-    chmod +x "${SCRIPT_DIR}/weekly-maintenance.sh"
-    
-    info "Maintenance scripts created"
-}
-
-# Create security audit script
-create_security_audit_script() {
-    info "Creating security audit script..."
-    
-    # Copy the security audit script
-    cp "$(dirname "$0")/security-audit.sh" "${SCRIPT_DIR}/security-audit.sh"
-    chmod +x "${SCRIPT_DIR}/security-audit.sh"
-    
-    info "Security audit script created at ${SCRIPT_DIR}/security-audit.sh"
-}
-
-# Create alert script
-create_alert_script() {
-    info "Creating alert script..."
-    
-    # Copy the alert script
-    cp "$(dirname "$0")/alert.sh" "${SCRIPT_DIR}/alert.sh"
-    chmod +x "${SCRIPT_DIR}/alert.sh"
-    
-    info "Alert script created at ${SCRIPT_DIR}/alert.sh"
-}
-
-# Setup cron jobs for maintenance and monitoring
-setup_cron_jobs() {
-    info "Setting up cron jobs..."
-    
-    # Create a temporary file for cron entries
-    local cron_file=$(mktemp)
-    
-    # Add cron entries
-    cat > "$cron_file" <<EOF
-# Run monitoring every 15 minutes
-*/15 * * * * root ${SCRIPT_DIR}/monitoring.sh > /dev/null 2>&1
-
-# Run daily backup at 1 AM
-0 1 * * * root ${SCRIPT_DIR}/backup.sh > /dev/null 2>&1
-
-# Run daily maintenance at 2 AM
-0 2 * * * root ${SCRIPT_DIR}/daily-maintenance.sh > /dev/null 2>&1
-
-# Run weekly maintenance at 3 AM on Sundays
-0 3 * * 0 root ${SCRIPT_DIR}/weekly-maintenance.sh > /dev/null 2>&1
-
-# Run security audit at 4 AM on the first day of each month
-0 4 1 * * root ${SCRIPT_DIR}/security-audit.sh > /dev/null 2>&1
-EOF
-    
-    # Install the cron file
-    install -m 644 "$cron_file" /etc/cron.d/vpn-maintenance
-    
-    # Remove the temporary file
-    rm "$cron_file"
-    
-    info "Cron jobs set up successfully"
-}
-
-# Start services
-start_services() {
-    info "Starting VPN services..."
-    
-    cd "${BASE_DIR}"
-
-    # Export SERVER_IP for Docker Compose environment variable substitution
-    # Try multiple methods to get a reliable server IP address
-    SERVER_IP=$(hostname -I | awk '{print $1}' 2>/dev/null ||
-                ip route get 1.1.1.1 | awk '{print $7}' 2>/dev/null ||
-                echo "localhost")
-    export SERVER_IP
-    
-    info "Using server IP for Docker Compose: ${SERVER_IP}"
-    
-    # First, ensure any old containers are properly removed
-    info "Cleaning up any old containers..."
-    docker-compose down --remove-orphans 2>/dev/null || true
-    docker rm -f outline-server v2ray watchtower 2>/dev/null || true
-    
-    # Check Docker system
-    info "Verifying Docker system status..."
-    docker system info >/dev/null || {
-        warn "Docker system issue detected. Attempting to restart Docker service..."
-        systemctl restart docker
-        sleep 10
-    }
-    
-    # Start services with retry mechanism
-    local max_attempts=3
-    local attempt=1
-    local success=false
-    
-    while [ $attempt -le $max_attempts ] && [ "$success" = "false" ]; do
-        info "Starting VPN services (attempt $attempt of $max_attempts)..."
-        
-        # Create any missing directories and files with valid content before starting
-        mkdir -p "${OUTLINE_DIR}/persisted-state/prometheus"
-        mkdir -p "${OUTLINE_DIR}/persisted-state/shadowbox"
-        
-        # Fill with valid content
-        echo "{}" > "${OUTLINE_DIR}/persisted-state/shadowbox/metrics.json"
-        echo "{}" > "${OUTLINE_DIR}/persisted-state/shadowbox/servers.json"
-        echo "[]" > "${OUTLINE_DIR}/persisted-state/shadowbox/access_keys.json"
-        
-        cat > "${OUTLINE_DIR}/persisted-state/shadowbox/server.yml" <<EOF
-# Outline Server configuration
-apiPort: ${API_PORT}
-portForNewAccessKeys: ${OUTLINE_PORT}
-hostname: ${SERVER_IP}
-EOF
-        
-        echo "{\"lastUpdated\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > "${OUTLINE_DIR}/persisted-state/metrics_state"
-        
-        # Ensure permissions are correct
-        find "${OUTLINE_DIR}/persisted-state" -type d -exec chmod 755 {} \;
-        find "${OUTLINE_DIR}/persisted-state" -type f -exec chmod 644 {} \;
-        
-        if docker-compose up -d; then
-            # Give services a moment to start
-            sleep 10
-            
-            # Check if services are running
-            if docker-compose ps | grep -q "Up"; then
-                info "VPN services started successfully on attempt $attempt"
-                success=true
-            else
-                warn "Services not running after docker-compose up. Checking container logs..."
-                docker-compose logs
-                
-                # Check for specific user namespace errors
-                if docker-compose logs 2>&1 | grep -q "cannot be mapped to a host ID"; then
-                    warn "User namespace mapping error detected. Applying fix..."
-                    
-                    # Apply additional fix - pull images first with explicit disabling of user namespaces
-                    docker pull --security-opt=no-new-privileges:false --security-opt=apparmor:unconfined ${SB_IMAGE}
-                    docker pull --security-opt=no-new-privileges:false --security-opt=apparmor:unconfined ${V2RAY_IMAGE}
-                    # Pull watchtower without platform constraint to let Docker auto-select the correct architecture
-                    docker pull --security-opt=no-new-privileges:false --security-opt=apparmor:unconfined ${WATCHTOWER_IMAGE}
-                    
-                    # Remove failed containers
-                    docker-compose down --remove-orphans
-                    sleep 5
-                # Check for Outline Server hostname configuration errors
-                elif docker-compose logs outline-server 2>&1 | grep -q "Need to specify hostname in shadowbox_server_config.json"; then
-                    warn "Outline Server hostname configuration error detected. Applying fix..."
-                    
-                    # Apply fix for Outline Server - ensure hostname is properly set
-                    # Using same improved IP detection logic as configure_outline function
-                    local server_ip=""
-                    
-                    # Method 1: Try hostname command (most reliable for local network)
-                    server_ip=$(hostname -I | awk '{print $1}' 2>/dev/null)
-                    
-                    # Method 2: Try ip route command as fallback
-                    if [ -z "$server_ip" ] || [ "$server_ip" = "127.0.0.1" ]; then
-                        server_ip=$(ip route get 1.2.3.4 | awk '{print $7}' 2>/dev/null)
-                        info "Using IP from ip route command: ${server_ip}"
-                    fi
-                    
-                    # Method 3: Only try external services as very last resort
-                    if [ -z "$server_ip" ] || [ "$server_ip" = "127.0.0.1" ]; then
-                        # Check if we have internet connectivity before attempting external service
-                        if ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
-                            server_ip=$(curl -4 -s --connect-timeout 5 ifconfig.me 2>/dev/null ||
-                                      curl -4 -s --connect-timeout 5 icanhazip.com 2>/dev/null)
-                            info "Using IP from external service: ${server_ip}"
-                        fi
-                    fi
-                    
-                    # Final fallback if all methods fail
-                    if [ -z "$server_ip" ]; then
-                        warn "Could not determine server IP address. Using localhost as fallback."
-                        server_ip="127.0.0.1"
-                    fi
-                    
-                    info "Using server IP address: $server_ip for Outline Server"
-                    
-                    # Create or update the shadowbox_server_config.json file
-                    mkdir -p "${OUTLINE_DIR}/data"
-                    # Generate a random API prefix for security
-                    local api_prefix=$(head -c 16 /dev/urandom | base64 | tr '/+' '_-' | tr -d '=' | head -c 8)
-                    
-                    cat > "${OUTLINE_DIR}/data/shadowbox_server_config.json" <<EOF
-{
-  "hostname": "${server_ip}",
-  "apiPort": ${API_PORT},
-  "apiPrefix": "${api_prefix}",
-  "portForNewAccessKeys": ${OUTLINE_PORT},
-  "accessKeyDataLimit": {},
-  "defaultDataLimit": null,
-  "unrestrictedAccessKeyDataLimit": {}
-}
-EOF
-                    chmod 600 "${OUTLINE_DIR}/data/shadowbox_server_config.json"
-                    
-                    # Create persisted-state directory specifically for Outline SB_STATE_DIR environment variable
-                    mkdir -p "${OUTLINE_DIR}/persisted-state"
-                    
-                    # Create a copy of the config in the persisted-state directory
-                    cp "${OUTLINE_DIR}/data/shadowbox_server_config.json" "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
-                    chmod 600 "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
-                    
-                    # Export updated server IP for docker-compose
-                    export SERVER_IP="${server_ip}"
-                    
-                    # Remove failed containers
-                    docker-compose down --remove-orphans
-                    sleep 5
-                fi
-            fi
-        else
-            warn "docker-compose up command failed"
-        fi
-        
-        if [ "$success" = "false" ]; then
-            warn "Attempt $attempt failed. Waiting before retry..."
-            sleep 10
-            attempt=$((attempt + 1))
-        fi
-    done
-    
-    # Final check after all attempts
-    if [ "$success" = "false" ]; then
-        error "Failed to start VPN services after $max_attempts attempts. Please check Docker configuration."
-    fi
-    
-    info "Container status:"
-    docker ps
-}
-
-# Display configuration summary
-display_summary() {
-    local server_ip=$(hostname -I | awk '{print $1}')
-    
-    echo "=================================================="
-    info "VPN Integration Setup Completed"
-    echo "=================================================="
-    echo "Configuration Summary:"
-    echo "  - Outline Server (Shadowsocks):"
-    echo "      - Server: ${server_ip}"
-    echo "      - Port: ${OUTLINE_PORT}"
-    echo "      - Method: chacha20-ietf-poly1305"
-    echo "      - Obfuscation: HTTP"
-    echo ""
-    echo "  - VLESS+Reality Server:"
-    echo "      - Server: ${server_ip}"
-    echo "      - Port: ${V2RAY_PORT}"
-    echo "      - Destination Site: ${DEST_SITE}"
-    echo "      - Fingerprint: ${FINGERPRINT}"
-    echo ""
-    echo "Default user created with UUID:"
-    grep -o "id\": \"[^\"]*" "${V2RAY_DIR}/config.json" | head -1 | cut -d'"' -f3
-    echo ""
-    echo "Management Scripts:"
-    echo "  - User Management: ${SCRIPT_DIR}/manage-users.sh"
-    echo "  - Monitoring: ${SCRIPT_DIR}/monitoring.sh"
-    echo "  - Backup: ${SCRIPT_DIR}/backup.sh"
-    echo "  - Restore: ${SCRIPT_DIR}/restore.sh"
-    echo "  - Daily Maintenance: ${SCRIPT_DIR}/daily-maintenance.sh"
-    echo "  - Weekly Maintenance: ${SCRIPT_DIR}/weekly-maintenance.sh"
-    echo "  - Security Audit: ${SCRIPT_DIR}/security-audit.sh"
-    echo ""
-    echo "To manage users, use:"
-    echo "  ${SCRIPT_DIR}/manage-users.sh"
-    echo ""
-    echo "To export client configurations, use:"
-    echo "  ${SCRIPT_DIR}/manage-users.sh --export --uuid \"<USER_UUID>\""
-    echo "=================================================="
-}
-
-# Generate Outline Management JSON for connecting to the server
-generate_outline_management_json() {
-    info "Generating Outline Management JSON..."
-    
-    local server_ip=$(hostname -I | awk '{print $1}')
-    local api_port="${API_PORT:-${OUTLINE_PORT}}"
-    local sb_api_prefix=""
-    
-    # Check if we have a persisted config with an API prefix
-    if [ -f "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json" ]; then
-        # Try to get the API prefix if one exists
-        sb_api_prefix=$(docker exec -i outline-server cat /opt/outline/persisted-state/shadowbox_server_config.json 2>/dev/null |
-            grep -o '"apiPrefix":[^,}]*' | cut -d'"' -f4 || echo "")
-    fi
-    
-    # If container isn't running or doesn't have apiPrefix, check if we can find it in the access.txt
-    if [ -z "$sb_api_prefix" ] && [ -f "${OUTLINE_DIR}/data/access.txt" ]; then
-        sb_api_prefix=$(grep -o 'apiUrl:[^"]*' "${OUTLINE_DIR}/data/access.txt" |
-            sed -E 's|apiUrl:https://[^:]+:[0-9]+/([^/]+).*|\1|' || echo "")
-    fi
-    
-    # If we still don't have a prefix, use 'access'
-    sb_api_prefix=${sb_api_prefix:-"access"}
-    
-    # Get or generate the certificate hash
-    local cert_sha256=""
-    if [ -f "${OUTLINE_DIR}/data/access.txt" ]; then
-        cert_sha256=$(grep "certSha256:" "${OUTLINE_DIR}/data/access.txt" | sed "s/certSha256://")
-    fi
-    
-    # If we couldn't find a cert hash, try to get it from the certificate file
-    if [ -z "$cert_sha256" ] && [ -f "${OUTLINE_DIR}/persisted-state/shadowbox-selfsigned.crt" ]; then
-        # Extract the SHA-256 fingerprint using openssl and format it correctly
-        local cert_fingerprint=$(openssl x509 -in "${OUTLINE_DIR}/persisted-state/shadowbox-selfsigned.crt" -noout -sha256 -fingerprint 2>/dev/null)
-        if [ ! -z "$cert_fingerprint" ]; then
-            cert_sha256=$(echo ${cert_fingerprint#*=} | tr --delete : | tr '[:upper:]' '[:lower:]')
-        fi
-    fi
-    
-    # If we still don't have a cert hash, generate a placeholder
-    if [ -z "$cert_sha256" ]; then
-        warn "Could not find certificate fingerprint. Using placeholder."
-        cert_sha256="<CERTIFICATE_NOT_AVAILABLE>"
-    fi
-    
-    # Construct the JSON
-    local api_url="https://${server_ip}:${api_port}/${sb_api_prefix}"
-    
-    echo ""
-    echo "CONGRATULATIONS! Your Outline server is up and running."
-    echo ""
-    echo "To manage your Outline server, please copy the following line (including curly"
-    echo "brackets) into Step 2 of the Outline Manager interface:"
-    echo ""
-    echo -e "\033[1;32m{\"apiUrl\":\"${api_url}\",\"certSha256\":\"${cert_sha256}\"}\033[0m"
-    echo ""
-    echo "Make sure the following ports are open in your firewall:"
-    echo "- Management port ${api_port}, for TCP"
-    echo "- Access keys port ${OUTLINE_PORT}, for TCP and UDP"
-    echo ""
-}
-
-# Check if scripts directory contains required files
-check_required_scripts() {
-    local missing_files=()
-    local required_files=(
-        "$(dirname "$0")/manage-users.sh"
-        "$(dirname "$0")/monitoring.sh"
-        "$(dirname "$0")/backup.sh"
-        "$(dirname "$0")/restore.sh"
-        "$(dirname "$0")/daily-maintenance.sh"
-        "$(dirname "$0")/weekly-maintenance.sh"
-        "$(dirname "$0")/security-audit.sh"
-        "$(dirname "$0")/alert.sh"
-    )
-    
-    for file in "${required_files[@]}"; do
-        if [ ! -f "$file" ]; then
-            missing_files+=("$file")
-        fi
-    done
-    
-    if [ ${#missing_files[@]} -ne 0 ]; then
-        warn "The following required script files are missing:"
-        for file in "${missing_files[@]}"; do
-            warn "  - $(basename "$file")"
-        done
-        warn "These files will be skipped during setup. You may need to create them manually."
-    fi
-}
-
-# Ensure Outline Server configuration is valid
-ensure_outline_config() {
-    info "Ensuring Outline Server configuration is valid..."
-    
-    # Get server hostname/IP using the improved detection logic
-    local server_ip=""
-    
-    # Method 1: Try hostname command (most reliable for local network)
-    server_ip=$(hostname -I | awk '{print $1}' 2>/dev/null)
-    
-    # Method 2: Try ip route command as fallback
-    if [ -z "$server_ip" ] || [ "$server_ip" = "127.0.0.1" ]; then
-        server_ip=$(ip route get 1.2.3.4 | awk '{print $7}' 2>/dev/null)
-        info "Using IP from ip route command: ${server_ip}"
-    fi
-    
-    # Method 3: Only try external services as very last resort
-    if [ -z "$server_ip" ] || [ "$server_ip" = "127.0.0.1" ]; then
-        # Check if we have internet connectivity before attempting external service
-        if ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
-            server_ip=$(curl -4 -s --connect-timeout 5 ifconfig.me 2>/dev/null ||
-                      curl -4 -s --connect-timeout 5 icanhazip.com 2>/dev/null)
-            info "Using IP from external service: ${server_ip}"
-        fi
-    fi
-    
-    # Final fallback if all methods fail
-    if [ -z "$server_ip" ]; then
-        warn "Could not determine server IP address. Using localhost as fallback."
-        server_ip="127.0.0.1"
-    fi
-    
-    info "Using server IP address: $server_ip"
-    
-    # Create directories if they don't exist with proper permissions
-    mkdir -p "${OUTLINE_DIR}/data"
-    mkdir -p "${OUTLINE_DIR}/persisted-state/prometheus"
-    chmod 700 "${OUTLINE_DIR}/data"
-    chmod 700 "${OUTLINE_DIR}/persisted-state"
-    
-    # The "TypeError: path must be a string or Buffer" error occurs when
-    # the server tries to read the configuration file but it's missing or invalid
-    
-    # Generate a random API prefix for security
-    local api_prefix=$(head -c 16 /dev/urandom | base64 | tr '/+' '_-' | tr -d '=' | head -c 8)
-    
-    # Create the shadowbox_server_config.json file in both locations
-    # to ensure it exists in both the data and persisted-state directories
-    info "Creating shadowbox_server_config.json in ${OUTLINE_DIR}/data and ${OUTLINE_DIR}/persisted-state"
-    
-    # Create the config file with apiPort parameter correctly set
-    cat > "${OUTLINE_DIR}/data/shadowbox_server_config.json" <<EOF
-{
-  "hostname": "${server_ip}",
-  "apiPort": ${API_PORT},
-  "apiPrefix": "${api_prefix}",
-  "portForNewAccessKeys": ${OUTLINE_PORT},
-  "accessKeyDataLimit": {},
-  "defaultDataLimit": null,
-  "unrestrictedAccessKeyDataLimit": {}
-}
-EOF
-    chmod 600 "${OUTLINE_DIR}/data/shadowbox_server_config.json"
-    
-    # Copy to persisted-state directory
-    cp "${OUTLINE_DIR}/data/shadowbox_server_config.json" "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
-    chmod 600 "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
-    
-    # Create an empty access.txt file if it doesn't exist (needed by some container configurations)
-    if [ ! -f "${OUTLINE_DIR}/data/access.txt" ]; then
-        touch "${OUTLINE_DIR}/data/access.txt"
-        chmod 600 "${OUTLINE_DIR}/data/access.txt"
-    fi
-    
-    # Create a persisted-state copy of access.txt if it doesn't exist
-    if [ ! -f "${OUTLINE_DIR}/persisted-state/access.txt" ]; then
-        cp "${OUTLINE_DIR}/data/access.txt" "${OUTLINE_DIR}/persisted-state/access.txt" 2>/dev/null || touch "${OUTLINE_DIR}/persisted-state/access.txt"
-        chmod 600 "${OUTLINE_DIR}/persisted-state/access.txt"
-    fi
-    
-    # Ensure all directories have proper permissions
-    info "Setting proper permissions on all configuration directories"
-    find "${OUTLINE_DIR}/persisted-state" -type d -exec chmod 755 {} \;
-    find "${OUTLINE_DIR}/data" -type d -exec chmod 755 {} \;
-    
-    # Ensure the prometheus directory exists and has the config file
-    if [ ! -d "${OUTLINE_DIR}/persisted-state/prometheus" ]; then
-        mkdir -p "${OUTLINE_DIR}/persisted-state/prometheus"
-        chmod 755 "${OUTLINE_DIR}/persisted-state/prometheus"
-    fi
-    
-    # Create files that main.js at line 163 might be trying to access
-    # These are additional files that might be needed based on the error message
-    mkdir -p "${OUTLINE_DIR}/persisted-state/shadowbox"
-    echo "{}" > "${OUTLINE_DIR}/persisted-state/metrics.json"
-    echo "{}" > "${OUTLINE_DIR}/persisted-state/shadowbox/metrics_transfer"
-    echo "{\"lastUpdated\":\"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > "${OUTLINE_DIR}/persisted-state/metrics_state"
-    echo "{\"version\":1}" > "${OUTLINE_DIR}/persisted-state/metrics_metadata"
-    
-    # Create metrics.json in multiple possible locations to ensure it's found
-    mkdir -p "${OUTLINE_DIR}/tmp_root/shadowbox/app/server"
-    echo "{\"metricsEnabled\": true, \"lastUpdated\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics.json"
-    echo "{\"metricsEnabled\": true, \"lastUpdated\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > "${OUTLINE_DIR}/persisted-state/metrics.json"
-    
-    # Give these files liberal permissions to ensure they can be read
-    chmod 666 "${OUTLINE_DIR}/persisted-state/metrics.json"
-    chmod 666 "${OUTLINE_DIR}/persisted-state/shadowbox/metrics_transfer"
-    chmod 666 "${OUTLINE_DIR}/persisted-state/metrics_state"
-    chmod 666 "${OUTLINE_DIR}/persisted-state/metrics_metadata"
-    chmod -R 777 "${OUTLINE_DIR}/tmp_root"
-    
-    if [ ! -f "${OUTLINE_DIR}/persisted-state/prometheus/config.yml" ]; then
-        cat > "${OUTLINE_DIR}/persisted-state/prometheus/config.yml" <<EOF
-# Basic Prometheus configuration for Outline server
-global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
-
-scrape_configs:
-  - job_name: 'outline'
-    static_configs:
-      - targets: ['127.0.0.1:9090']
-
-  - job_name: 'outline-node-metrics'
-    static_configs:
-      - targets: ['127.0.0.1:9091']
-
-  - job_name: 'outline-ss-server'
-    static_configs:
-      - targets: ['127.0.0.1:9092']
-EOF
-        chmod 644 "${OUTLINE_DIR}/persisted-state/prometheus/config.yml"
-    fi
-    
-    # Export the server IP for later use in docker-compose
-    export SERVER_IP="${server_ip}"
-    
-    info "Shadowbox configuration files created successfully"
-    return 0
-}
-
-# Perform health check with additional file checks
-health_check() {
-    info "Performing initial health check..."
-    
-    # Add a delay to allow services to fully start
-    info "Waiting 20 seconds for services to initialize..."
-    sleep 20
-    
-    # Check Docker service
-    if ! systemctl is-active --quiet docker; then
-        warn "Docker service is not running"
-        return 1
-    fi
-    
-    # Ensure Outline configuration is valid
-    ensure_outline_config
-    
-    # Check critical files explicitly before checking containers
-    info "Checking critical configuration files..."
-    for file in "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json" "${OUTLINE_DIR}/persisted-state/prometheus/config.yml"; do
-        if [ ! -f "$file" ]; then
-            warn "Missing critical file: $file - recreating it now"
-            ensure_outline_config  # Run again to ensure files are created
-            sleep 2
-        else
-            info "Found critical file: $file"
-        fi
-    done
-    
-    # Check if containers are running
-    if ! docker ps | grep -q "outline-server"; then
-        warn "Outline Server container is not running"
-        docker logs outline-server
-        return 1
-    fi
-    
-    # Special check for v2ray
-    local v2ray_running=false
-    if docker ps | grep -q "v2ray"; then
-        v2ray_running=true
-        info "v2ray container is running"
-    else
-        warn "v2ray container is not running"
-        docker logs v2ray || true
-        # Try to restart the container
-        info "Attempting to restart v2ray container..."
-        docker restart v2ray || true
-        sleep 10
-    fi
-    
-    # Check if ports are listening
-    if ! netstat -tuln | grep -q ":${OUTLINE_PORT}"; then
-        warn "Outline Server port ${OUTLINE_PORT} is not listening"
-        docker logs outline-server
-        return 1
-    fi
-    
-    # Check API port if different from Outline port
-    if [ "${API_PORT}" != "${OUTLINE_PORT}" ] && ! netstat -tuln | grep -q ":${API_PORT}"; then
-        warn "Outline API port ${API_PORT} is not listening"
-        docker logs outline-server
-        warn "API management functionality may not work correctly"
-    fi
-    
-    # More lenient v2ray port check
-    if netstat -tuln | grep -q ":${V2RAY_PORT}"; then
-        info "v2ray port ${V2RAY_PORT} is listening"
-    else
-        warn "v2ray port ${V2RAY_PORT} is not listening"
-        # Show v2ray logs but continue
-        docker logs v2ray || true
-        warn "v2ray may take longer to initialize or might need further configuration"
-        warn "You can manually check the status later with: docker logs v2ray"
-        warn "You may need to restart v2ray after installation: docker restart v2ray"
-    fi
-    
-    info "Health check completed"
-    # Always return success to allow script to complete
-    return 0
-}
-
-# Main function
-main() {
-    check_root
-    parse_args "$@"
-    check_system_requirements
-    check_required_scripts
-    
-    # Interactive confirmation
-    echo "This script will set up the integrated VPN solution with the following settings:"
-    echo "- Outline Server port: $OUTLINE_PORT"
-    echo "- Outline API port: $API_PORT"
-    echo "- v2ray port: $V2RAY_PORT"
-    echo "- Destination site: $DEST_SITE"
-    echo "- TLS fingerprint: $FINGERPRINT"
-    echo ""
-    echo -n "Proceed with installation? [Y/n] "
-    read -r RESPONSE
-    RESPONSE=$(echo "${RESPONSE}" | tr '[:upper:]' '[:lower:]')
-    if [[ -n "${RESPONSE}" && "${RESPONSE}" != "y" && "${RESPONSE}" != "yes" ]]; then
-        echo "Installation aborted by user"
-        exit 0
-    fi
-    
-    # Execute installation steps
-    update_system
-    check_dependencies
-    install_dependencies
-    install_docker
-    detect_architecture
-    create_directories
-    configure_outline
-    configure_v2ray
-    create_docker_compose
-    configure_firewall
-    create_user_management
-    create_monitoring_script
-    create_backup_script
-    create_restore_script
-    create_maintenance_scripts
-    create_security_audit_script
-    create_alert_script
-    setup_cron_jobs
-    # Fix any potential issues with the directory structure and configuration files
-    ensure_outline_config
-    
-    # Create explicit directory structure matching the error path in the container
-    # This is fixing the "must be a string or Buffer" error at line 163
-    info "Creating specific file structures for the container..."
-    mkdir -p "${OUTLINE_DIR}/tmp_root/shadowbox/app/server"
-    
-    # Create multiple potential files that might be accessed at line 163
-    echo '{"metricsEnabled": true}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics_config.json"
-    echo '{"lastUpdated": "2025-05-20T00:00:00Z"}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics_state.json"
-    echo '{}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics.json"
-    echo '{}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics_data.json"
-    
-    # Create the essential main.js file that's missing and causing the error
-    cat > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/main.js" <<EOF
-// Outline Server main.js - minimal implementation to prevent module not found error
-'use strict';
-
-// Basic required exports
-module.exports = {
-  server: {
-    start: function() {
-      console.log('Outline server module loaded');
-      return Promise.resolve();
-    },
-    stop: function() {
-      return Promise.resolve();
-    }
-  },
-  metrics: {
-    gauges: {},
-    counters: {}
-  }
-};
-EOF
-    
-    # Set very permissive permissions
-    chmod -R 777 "${OUTLINE_DIR}/tmp_root"
-    
-    # Start services after ensuring configuration is correct
-    start_services
-    # Check for TypeError in docker logs and fix if needed
-    if docker logs outline-server 2>&1 | grep -q "TypeError: path must be a string or Buffer"; then
-        warn "Detected 'TypeError: path must be a string or Buffer' error. Applying fix..."
-        
-        # This error occurs when the configuration file path is missing or invalid
-        # Creating both data and persisted-state directories and properly populating them
-        mkdir -p "${OUTLINE_DIR}/data"
-        mkdir -p "${OUTLINE_DIR}/persisted-state/prometheus"
-        
-        # Get server IP address using multiple methods for reliability
-        local server_ip=$(hostname -I | awk '{print $1}' 2>/dev/null ||
-                        ip route get 1.2.3.4 | awk '{print $7}' 2>/dev/null ||
-                        echo "localhost")
-        
-        # Generate a random API prefix for security
-        local api_prefix=$(head -c 16 /dev/urandom | base64 | tr '/+' '_-' | tr -d '=' | head -c 8)
-        
-        # Create the config file in both locations to ensure the server can find it
-        cat > "${OUTLINE_DIR}/data/shadowbox_server_config.json" <<EOF
-{
-  "hostname": "${server_ip}",
-  "apiPort": ${API_PORT},
-  "apiPrefix": "${api_prefix}",
-  "portForNewAccessKeys": ${OUTLINE_PORT},
-  "accessKeyDataLimit": {},
-  "defaultDataLimit": null,
-  "unrestrictedAccessKeyDataLimit": {}
-}
-EOF
-        chmod 600 "${OUTLINE_DIR}/data/shadowbox_server_config.json"
-        
-        # Create an identical file in the persisted-state directory
-        cp "${OUTLINE_DIR}/data/shadowbox_server_config.json" "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
-        chmod 600 "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
-        
-        # Restart the container to apply the fix
-        docker restart outline-server
-        info "Applied fix for 'TypeError: path must be a string or Buffer'. Waiting for server to restart..."
-        sleep 15
-        
-        # Create ALL possible files with valid content
-        mkdir -p "${OUTLINE_DIR}/persisted-state/shadowbox"
-        
-        # metrics_metadata with basic structure
-        echo "{\"version\":1}" > "${OUTLINE_DIR}/persisted-state/metrics_metadata"
-        
-        # metrics_state with timestamp
-        echo "{\"lastUpdated\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > "${OUTLINE_DIR}/persisted-state/metrics_state"
-        
-        # Files in shadowbox directory with valid JSON structures
-        echo "{}" > "${OUTLINE_DIR}/persisted-state/shadowbox/metrics.json"
-        echo "{}" > "${OUTLINE_DIR}/persisted-state/shadowbox/servers.json"
-        echo "[]" > "${OUTLINE_DIR}/persisted-state/shadowbox/access_keys.json"
-        
-        # server.yml with basic configuration
-        cat > "${OUTLINE_DIR}/persisted-state/shadowbox/server.yml" <<EOF
-# Outline Server configuration
-apiPort: ${API_PORT}
-portForNewAccessKeys: ${OUTLINE_PORT}
-hostname: ${server_ip}
-metricsEnabled: true
-metricsCollectionEnabled: true
-EOF
-        
-        # Set proper permissions
-        chmod 644 "${OUTLINE_DIR}/persisted-state/metrics_metadata"
-        chmod 644 "${OUTLINE_DIR}/persisted-state/metrics_state"
-        chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox/server.yml"
-        chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox/metrics.json"
-        chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox/servers.json"
-        chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox/access_keys.json"
-        
-        # Create the exact directory structure that matches the error path
-        info "Creating specific directory structure for the main.js error fix..."
-        mkdir -p "${OUTLINE_DIR}/tmp_root/shadowbox/app/server"
-        
-        # Create multiple potential files that might be accessed at line 163 of main.js
-        echo '{"metricsEnabled": false}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics_config.json"
-        echo '{"lastUpdated": "2025-05-20T00:00:00Z"}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics_state.json"
-        echo '{}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics.json"
-        echo '{}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics_data.json"
-        echo '{}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/serverconfig.json"
-        
-        # Ensure main.js exists in this location too
-        cat > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/main.js" <<EOF
-// Outline Server main.js - minimal implementation to prevent module not found error
-'use strict';
-
-// Basic required exports
-module.exports = {
-  server: {
-    start: function() {
-      console.log('Outline server module loaded');
-      return Promise.resolve();
-    },
-    stop: function() {
-      return Promise.resolve();
-    }
-  },
-  metrics: {
-    gauges: {},
-    counters: {}
-  }
-};
-EOF
-        
-        # Set permissive permissions
-        chmod -R 777 "${OUTLINE_DIR}/tmp_root"
-        
-        # Add a custom Docker run command with additional volume mount for the root directory
-        docker run -d --name outline-server \
-          --security-opt=no-new-privileges:false \
-          --security-opt=apparmor:unconfined \
-          -p ${OUTLINE_PORT}:${OUTLINE_PORT}/tcp \
-          -p ${OUTLINE_PORT}:${OUTLINE_PORT}/udp \
-          -v "${OUTLINE_DIR}/config.json:/etc/shadowsocks-libev/config.json:Z" \
-          -v "${OUTLINE_DIR}/access.json:/etc/shadowsocks-libev/access.json:Z" \
-          -v "${OUTLINE_DIR}/data:/opt/outline/data:Z" \
-          -v "${OUTLINE_DIR}/persisted-state:/opt/outline/persisted-state:Z" \
-          -v "${OUTLINE_DIR}/persisted-state/prometheus:/opt/outline/persisted-state/prometheus:Z" \
-          -v "${OUTLINE_DIR}/persisted-state/shadowbox:/opt/outline/persisted-state/shadowbox:Z" \
-          -v "${OUTLINE_DIR}/tmp_root:/root:Z" \
-          -v "${LOGS_DIR}/outline:/var/log/shadowsocks:Z" \
-          -e "SS_CONFIG=/etc/shadowsocks-libev/config.json" \
-          -e "SB_PUBLIC_IP=${SERVER_IP:-localhost}" \
-          -e "SB_API_PORT=${API_PORT}" \
-          -e "SB_STATE_DIR=/opt/outline/persisted-state" \
-          -e "SB_METRICS_URL=https://prod.metrics.getoutline.org" \
-          -e "PROMETHEUS_CONFIG_PATH=/opt/outline/persisted-state/prometheus/config.yml" \
-          -e "SB_METRICS_URL_MANUAL_MODE=disable" \
-          -e "METRICS_PATH=/opt/outline/persisted-state/metrics_state" \
-          --cap-add=NET_ADMIN --cap-add=SYS_ADMIN \
-          --restart=always \
-          ${SB_IMAGE}
-          
-        info "Started Outline server directly with Docker run to ensure proper volume mounting"
-    fi
-    health_check
-    display_summary
-    generate_outline_management_json
-    
-    info "Installation completed successfully!"
-}
-
-# Execute main function with all arguments
 main "$@"
