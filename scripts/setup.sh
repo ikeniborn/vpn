@@ -73,7 +73,7 @@ echo "Starting installation..."
 
 function display_usage() {
   cat <<EOF
-Usage: install_server.sh [--hostname <hostname>] [--api-port <port>] [--keys-port <port>]
+Usage: setup.sh [--hostname <hostname>] [--api-port <port>] [--keys-port <port>]
                          [--v2ray-port <port>] [--dest-site <site>] [--fingerprint <type>]
 
   --hostname     The hostname to be used to access the management API and access keys
@@ -1578,7 +1578,7 @@ function start_v2ray() {
     --name v2ray
     --restart=always
     --network vpn-network
-    --ip ${V2RAY_IP:-172.18.0.3}
+    --ip ${V2RAY_IP:-172.19.0.3}
     -v "${V2RAY_DIR}/config.json:/etc/v2ray/config.json"
     -v "${V2RAY_DIR}/logs:/var/log/v2ray"
     -p "${V2RAY_PORT}:${V2RAY_PORT}/tcp"
@@ -1604,6 +1604,28 @@ function start_v2ray() {
 
 # Setup routing between Outline and v2ray
 function setup_routing() {
+  # Add a delay to allow containers to fully initialize
+  echo "Setting up routing between Outline and v2ray"
+  echo "Waiting for containers to stabilize..."
+  sleep 10
+  
+  # Check if v2ray container is running and wait if necessary
+  echo "Checking v2ray container status..."
+  local v2ray_check_attempts=0
+  local max_v2ray_attempts=6
+  
+  while ! docker ps | grep -q "v2ray"; do
+    v2ray_check_attempts=$((v2ray_check_attempts + 1))
+    if [ $v2ray_check_attempts -ge $max_v2ray_attempts ]; then
+      log_error "v2ray container is not running after multiple attempts"
+      return 1
+    fi
+    echo "v2ray container not yet running, waiting 5 seconds (attempt $v2ray_check_attempts/$max_v2ray_attempts)..."
+    sleep 5
+  done
+  
+  echo "v2ray container is running"
+  
   # Debug information
   echo "Checking Docker network status..."
   
@@ -1644,11 +1666,7 @@ function setup_routing() {
     return 1
   fi
   
-  # Check v2ray container is running
-  if ! docker ps | grep -q "v2ray"; then
-    log_error "v2ray container is not running"
-    return 1
-  fi
+  # v2ray container already verified to be running above
   
   # Check if we're using host networking mode (skip network connection if so)
   if [ -n "$DOCKER_NETWORK_ISSUES" ]; then
