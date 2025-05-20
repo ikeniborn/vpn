@@ -550,8 +550,8 @@ install_shadowbox() {
   run_step "Adding API URL to config" add_api_url_to_config
 
   FIREWALL_STATUS=""
-  run_step "Checking host firewall" check_firewall
   run_step "Configuring firewall" configure_firewall
+  run_step "Checking host firewall" check_firewall
   
   # Configure and start v2ray after Outline is up and running
   run_step "Configuring v2ray" configure_v2ray
