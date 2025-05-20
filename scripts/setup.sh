@@ -376,6 +376,28 @@ EOF
   "rules": []
 }
 EOF
+
+    # Create shadowbox_server_config.json file, which is required by ken1029/shadowbox image
+    info "Creating shadowbox_server_config.json file..."
+    local server_ip=$(hostname -I | awk '{print $1}' || curl -4 -s ifconfig.me || curl -4 -s icanhazip.com)
+    
+    if [ -z "$server_ip" ]; then
+        warn "Could not determine server IP address. Using localhost as fallback."
+        server_ip="127.0.0.1"
+    fi
+    
+    mkdir -p "${OUTLINE_DIR}/data"
+    
+    cat > "${OUTLINE_DIR}/data/shadowbox_server_config.json" <<EOF
+{
+  "hostname": "${server_ip}",
+  "portForNewAccessKeys": ${OUTLINE_PORT},
+  "accessKeyDataLimit": {},
+  "defaultDataLimit": null,
+  "unrestrictedAccessKeyDataLimit": {}
+}
+EOF
+    chmod 600 "${OUTLINE_DIR}/data/shadowbox_server_config.json"
 }
 
 # Configure v2ray with updated routing
@@ -1033,8 +1055,21 @@ health_check() {
     # Check if containers are running
     if ! docker ps | grep -q "outline-server"; then
         warn "Outline Server container is not running"
+        
+        # Check if shadowbox_server_config.json is present
+        if [ ! -f "${OUTLINE_DIR}/data/shadowbox_server_config.json" ]; then
+            warn "Missing shadowbox_server_config.json file. This is required for the Outline Server."
+            warn "Run fix-outline.sh to create this file and restart containers."
+        fi
+        
         docker logs outline-server
         return 1
+    fi
+    
+    # Check for shadowbox_server_config.json file
+    if [ ! -f "${OUTLINE_DIR}/data/shadowbox_server_config.json" ]; then
+        warn "Missing shadowbox_server_config.json file. This is required for the Outline Server."
+        warn "Container may fail soon. Run fix-outline.sh if container restarts or fails."
     fi
     
     # Special check for v2ray
