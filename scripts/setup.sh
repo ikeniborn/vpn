@@ -115,6 +115,33 @@ function log_for_sentry() {
   fi
 }
 
+# Check if required utility is installed
+function ensure_required_tool() {
+  local tool_name=$1
+  if ! command_exists ${tool_name}; then
+    log_error "${tool_name} is not installed but is required for port checking"
+    echo -n
+    if confirm "> Would you like to install ${tool_name}? [Y/n] "; then
+      if [ -x "$(command -v apt-get)" ]; then
+        apt-get update && apt-get install -y ${tool_name}
+      elif [ -x "$(command -v yum)" ]; then
+        yum install -y ${tool_name}
+      elif [ -x "$(command -v dnf)" ]; then
+        dnf install -y ${tool_name}
+      elif [ -x "$(command -v pacman)" ]; then
+        pacman -Sy --noconfirm ${tool_name}
+      else
+        log_error "Could not install ${tool_name}. Please install it manually and try again."
+        return 1
+      fi
+    else
+      log_error "Installation cannot proceed without ${tool_name}."
+      return 1
+    fi
+  fi
+  return 0
+}
+
 # Check to see if docker is installed.
 function verify_docker_installed() {
   if command_exists docker; then
@@ -352,22 +379,80 @@ function write_config() {
 function start_shadowbox() {
   # Free up network resources even if container doesn't exist
   echo "Ensuring network ports are released..."
-  # Check and kill any process that might be using the API port or ACCESS_KEY_PORT
-  fuser -k ${API_PORT}/tcp ${ACCESS_KEY_PORT}/tcp >/dev/null 2>&1 || true
-  # Wait a moment for ports to be fully released
-  sleep 2
+  # Check and kill any process that might be using the API port or ACCESS_KEY_PORT (both TCP and UDP)
+  fuser -k ${API_PORT}/tcp ${API_PORT}/udp ${ACCESS_KEY_PORT}/tcp ${ACCESS_KEY_PORT}/udp >/dev/null 2>&1 || true
+  
+  # Wait for ports to be fully released with verification
+  echo "Waiting for ports to be released..."
+  local max_attempts=10
+  local attempt=1
+  
+  while [ $attempt -le $max_attempts ]; do
+    local ports_in_use=false
+    
+    # Check if API_PORT is still in use
+    if lsof -i:${API_PORT} >/dev/null 2>&1; then
+      echo "Port ${API_PORT} still in use (attempt $attempt/$max_attempts), waiting..."
+      ports_in_use=true
+    fi
+    
+    # Check if ACCESS_KEY_PORT is still in use
+    if lsof -i:${ACCESS_KEY_PORT} >/dev/null 2>&1; then
+      echo "Port ${ACCESS_KEY_PORT} still in use (attempt $attempt/$max_attempts), waiting..."
+      ports_in_use=true
+    fi
+    
+    # If no ports are in use, we can proceed
+    if [ "$ports_in_use" = false ]; then
+      echo "All required ports are now available."
+      break
+    fi
+    
+    # Kill processes again if still in use
+    fuser -k ${API_PORT}/tcp ${API_PORT}/udp ${ACCESS_KEY_PORT}/tcp ${ACCESS_KEY_PORT}/udp >/dev/null 2>&1 || true
+    
+    # Increment attempt counter and wait
+    attempt=$((attempt + 1))
+    sleep 3
+  done
+  
+  # Final check - if ports are still in use after max attempts, offer guidance
+  if lsof -i:${API_PORT} >/dev/null 2>&1 || lsof -i:${ACCESS_KEY_PORT} >/dev/null 2>&1; then
+    log_error "Could not free up required ports after multiple attempts."
+    echo "You may need to manually find and terminate processes using ports ${API_PORT} and ${ACCESS_KEY_PORT}:"
+    echo "  sudo netstat -tulpn | grep '${API_PORT}\\|${ACCESS_KEY_PORT}'"
+    echo "  sudo kill -9 <PID>"
+    echo "Then run this script again."
+    return 1
+  fi
   
   # Recreate Docker network from scratch instead of reusing
   echo "Recreating Docker network..."
   docker network rm vpn-network >/dev/null 2>&1 || true
   sleep 2
   
-  # Create Docker network
-  docker network create --subnet=172.18.0.0/24 vpn-network || {
-    log_error "Failed to create Docker network"
-    log_for_sentry "Docker network creation failed"
-    return 1
-  }
+  # Create Docker network with retry
+  local network_attempts=3
+  local network_attempt=1
+  
+  while [ $network_attempt -le $network_attempts ]; do
+    if docker network create --subnet=172.18.0.0/24 vpn-network; then
+      echo "Docker network created successfully on attempt $network_attempt"
+      break
+    else
+      if [ $network_attempt -eq $network_attempts ]; then
+        log_error "Failed to create Docker network after $network_attempts attempts"
+        log_for_sentry "Docker network creation failed"
+        return 1
+      else
+        echo "Docker network creation failed on attempt $network_attempt, retrying..."
+        # Cleanup any partial network that might exist
+        docker network rm vpn-network >/dev/null 2>&1 || true
+        sleep 2
+        network_attempt=$((network_attempt + 1))
+      fi
+    fi
+  done
   
   # TODO(fortuna): Write PUBLIC_HOSTNAME and API_PORT to config file,
   # rather than pass in the environment.
@@ -640,8 +725,16 @@ function stop_all_containers() {
   echo "Cleaning up Docker network..."
   docker network rm vpn-network >/dev/null 2>&1 || true
   
+  # Release all potentially used ports
+  echo "Releasing all used ports..."
+  local ports_to_free="7777 8888 443 10000"
+  for port in $ports_to_free; do
+    fuser -k ${port}/tcp ${port}/udp >/dev/null 2>&1 || true
+  done
+  
   # Wait for network resources to be fully released
-  sleep 3
+  echo "Waiting for network resources to be released..."
+  sleep 5
   
   return 0
 }
@@ -655,6 +748,9 @@ install_shadowbox() {
   
   run_step "Verifying that Docker is installed" verify_docker_installed
   run_step "Verifying that Docker daemon is running" verify_docker_running
+  
+  # Ensure lsof is installed for port checking
+  run_step "Checking for required utilities" ensure_required_tool "lsof"
 
   log_for_sentry "Creating Outline directory"
   export SHADOWBOX_DIR="${SHADOWBOX_DIR:-/opt/outline}"
@@ -1026,7 +1122,49 @@ function start_v2ray() {
   # Release v2ray ports before starting
   echo "Releasing v2ray ports..."
   fuser -k ${V2RAY_PORT}/tcp ${V2RAY_PORT}/udp 10000/tcp 10000/udp >/dev/null 2>&1 || true
-  sleep 2
+  
+  # Wait for ports to be released with verification
+  echo "Waiting for v2ray ports to be released..."
+  local max_attempts=10
+  local attempt=1
+  
+  while [ $attempt -le $max_attempts ]; do
+    local ports_in_use=false
+    
+    # Check if v2ray ports are still in use
+    if lsof -i:${V2RAY_PORT} >/dev/null 2>&1; then
+      echo "Port ${V2RAY_PORT} still in use (attempt $attempt/$max_attempts), waiting..."
+      ports_in_use=true
+    fi
+    
+    if lsof -i:10000 >/dev/null 2>&1; then
+      echo "Port 10000 still in use (attempt $attempt/$max_attempts), waiting..."
+      ports_in_use=true
+    fi
+    
+    # If no ports are in use, we can proceed
+    if [ "$ports_in_use" = false ]; then
+      echo "All v2ray ports are now available."
+      break
+    fi
+    
+    # Kill processes again if still in use
+    fuser -k ${V2RAY_PORT}/tcp ${V2RAY_PORT}/udp 10000/tcp 10000/udp >/dev/null 2>&1 || true
+    
+    # Increment attempt counter and wait
+    attempt=$((attempt + 1))
+    sleep 3
+  done
+  
+  # Final check - if ports are still in use after max attempts, offer guidance
+  if lsof -i:${V2RAY_PORT} >/dev/null 2>&1 || lsof -i:10000 >/dev/null 2>&1; then
+    log_error "Could not free up v2ray ports after multiple attempts."
+    echo "You may need to manually find and terminate processes using ports ${V2RAY_PORT} and 10000:"
+    echo "  sudo netstat -tulpn | grep '${V2RAY_PORT}\\|10000'"
+    echo "  sudo kill -9 <PID>"
+    echo "Then run this script again."
+    return 1
+  fi
   
   # Create log directory if it doesn't exist
   mkdir -p "${V2RAY_DIR}/logs" || {

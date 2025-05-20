@@ -17,6 +17,7 @@ This file tracks the project's progress using a task list format.
 * Fixed critical issue with missing shadowbox_server_config.json in Outline Server setup
 * Created fix-outline.sh script for troubleshooting Outline Server issues
 * Created troubleshooting documentation for common Outline Server problems
+* Fixed "address already in use" error in setup.sh by implementing robust container and network cleanup
 
 ## Current Tasks
 

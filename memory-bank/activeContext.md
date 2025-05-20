@@ -17,6 +17,7 @@ This file tracks the project's current status, including recent changes, current
 * Clarified that we should focus on the integrated Shadowsocks/Outline Server + VLESS+Reality solution rather than the VLESS+Reality only approach described in the Memory Bank
 * 2025-05-20 14:31:52 - Fixed platform compatibility issues in setup.sh script for ARM64 systems
 * 2025-05-20 14:37:00 - Fixed critical issue with Outline Server configuration by implementing missing shadowbox_server_config.json creation
+* 2025-05-20 17:43:00 - Fixed "address already in use" error by enhancing container cleanup and port release procedures in setup.sh
 
 ## Open Questions/Issues
 
