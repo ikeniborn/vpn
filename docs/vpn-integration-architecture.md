@@ -12,6 +12,7 @@ This document outlines the architecture, configuration, and implementation detai
 6. [Implementation Components](#implementation-components)
 7. [Deployment Guide](#deployment-guide)
 8. [Performance Benchmarks](#performance-benchmarks)
+9. [ARM64 Support](#arm64-support)
 
 ## Architecture Overview
 
@@ -291,6 +292,33 @@ Expected performance characteristics of the integrated solution:
 | CPU Usage | ~10-15% on mid-range server |
 | RAM Usage | ~200-300MB combined |
 
+## ARM64 Support
+
+The architecture supports deployment on ARM64 platforms, offering cost-effective alternatives to traditional x86-64 servers:
+
+### Supported ARM Platforms
+
+- **ARM64/aarch64**: AWS Graviton instances, Oracle Cloud ARM, Raspberry Pi 4 (64-bit OS)
+- **ARMv7**: Raspberry Pi 3 and other 32-bit ARM devices
+
+### Key ARM Integration Components
+
+1. **Specialized Docker Images**:
+   - Outline Server: `ken1029/shadowbox:latest` (supports both ARM64 and ARMv7)
+   - Watchtower: `ken1029/watchtower:arm64` or `ken1029/watchtower:arm32`
+   - v2ray: The official v2fly/v2fly-core image supports multiple architectures including ARM64
+
+2. **Deployment Optimizations**:
+   - Memory efficiency adjustments for resource-constrained devices
+   - Cipher selection optimized for ARM processors
+   - Storage I/O considerations for SD card-based systems
+
+3. **Performance Expectations**:
+   - ARM64 cloud instances: Performance comparable to x86-64
+   - Single-board computers: Suitable for small deployments (5-10 users)
+
+For detailed ARM64 deployment instructions, see the [ARM64 Deployment Guide](implementation-files/arm64-deployment.md).
+
 ---
 
-This architecture provides a robust, secure, and optimized VPN solution by integrating the best features of Shadowsocks and VLESS+Reality protocols. The dual-layer approach enhances security while intelligent routing ensures optimal performance for different types of traffic.
+This architecture provides a robust, secure, and optimized VPN solution by integrating the best features of Shadowsocks and VLESS+Reality protocols. The dual-layer approach enhances security while intelligent routing ensures optimal performance for different types of traffic. With support for both x86-64 and ARM64 platforms, the solution offers flexibility in deployment options from high-performance cloud servers to cost-effective single-board computers.

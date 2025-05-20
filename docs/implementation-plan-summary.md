@@ -119,12 +119,23 @@ Each component has been documented in detail:
 
 ### Minimum Hardware Requirements
 
-| Resource | Minimum | Recommended |
-|----------|---------|------------|
-| CPU | 2 cores | 4+ cores |
-| RAM | 2 GB | 4+ GB |
-| Disk | 20 GB | 40+ GB |
-| Network | 100 Mbps | 1 Gbps |
+| Resource | x86_64 | ARM64 | ARMv7 |
+|----------|--------|-------|-------|
+| CPU | 2+ cores | 2+ cores | 4+ cores |
+| RAM | 2 GB | 2 GB | 1 GB |
+| Disk | 20 GB | 16 GB | 8 GB |
+| Network | 100 Mbps | 100 Mbps | 100 Mbps |
+| Recommended | 4+ cores, 4+ GB RAM | 4+ cores, 4+ GB RAM | 4+ cores, 2+ GB RAM |
+
+### Platform Support
+
+This architecture supports deployment on:
+
+- **x86_64 (Intel/AMD)**: Traditional servers and VPS offerings
+- **ARM64/aarch64**: AWS Graviton, Oracle Cloud ARM, Raspberry Pi 4 (64-bit OS)
+- **ARMv7**: Raspberry Pi 3/4 (32-bit OS)
+
+ARM deployment offers cost advantages both in cloud environments and for self-hosted solutions on single-board computers.
 
 ### Software Requirements
 
@@ -139,11 +150,18 @@ Each component has been documented in detail:
 2. Clone the repository or copy implementation files
 3. Execute the setup script with appropriate parameters:
    ```bash
+   # For x86_64 architecture
+   sudo ./scripts/setup.sh
+   
+   # For ARM64 architecture
+   export SB_IMAGE=ken1029/shadowbox:latest
    sudo ./scripts/setup.sh
    ```
 4. Verify the deployment with health checks
 5. Set up monitoring and maintenance procedures
 6. Create initial users and test connections
+
+See [ARM64 Deployment Guide](implementation-files/arm64-deployment.md) for detailed instructions on deploying the solution on ARM-based platforms.
 
 ## Testing Plan
 
@@ -261,3 +279,4 @@ Future enhancements could include:
 1. Geographic distribution of servers
 2. Advanced analytics dashboard
 3. Automated scaling based on load
+4. Optimized ARM64 builds for all components

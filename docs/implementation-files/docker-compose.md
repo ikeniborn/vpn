@@ -14,7 +14,10 @@ version: '3'
 
 services:
   outline-server:
-    image: shadowsocks/shadowsocks-libev:latest
+    # Use architecture-specific image
+    # For x86_64: shadowsocks/shadowsocks-libev:latest
+    # For ARM64/ARMv7: ken1029/shadowbox:latest
+    image: ${SB_IMAGE:-shadowsocks/shadowsocks-libev:latest}
     container_name: outline-server
     restart: always
     volumes:
@@ -52,6 +55,19 @@ services:
       - outline-server
     cap_add:
       - NET_ADMIN
+
+  # Watchtower container for automatic updates
+  watchtower:
+    # Use architecture-specific image
+    # For x86_64: containrrr/watchtower:latest
+    # For ARM64: ken1029/watchtower:arm64
+    # For ARMv7: ken1029/watchtower:arm32
+    image: ${WATCHTOWER_IMAGE:-containrrr/watchtower:latest}
+    container_name: watchtower
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --cleanup --tlsverify --interval 3600
 
 networks:
   vpn-network:
@@ -103,3 +119,33 @@ To view the logs:
 
 ```bash
 docker-compose logs -f
+```
+
+## Detecting Architecture in Deployment Scripts
+
+Add this to your deployment scripts to automatically select the correct images:
+
+```bash
+# Detect architecture and set appropriate images
+ARCH=$(uname -m)
+case $ARCH in
+    aarch64|arm64)
+        export SB_IMAGE="ken1029/shadowbox:latest"
+        export WATCHTOWER_IMAGE="ken1029/watchtower:arm64"
+        echo "ARM64 architecture detected, using ARM64-compatible images"
+        ;;
+    armv7l)
+        export SB_IMAGE="ken1029/shadowbox:latest"
+        export WATCHTOWER_IMAGE="ken1029/watchtower:arm32"
+        echo "ARMv7 architecture detected, using ARMv7-compatible images"
+        ;;
+    x86_64|amd64)
+        export SB_IMAGE="shadowsocks/shadowsocks-libev:latest"
+        export WATCHTOWER_IMAGE="containrrr/watchtower:latest"
+        echo "x86_64 architecture detected, using standard images"
+        ;;
+    *)
+        echo "Unsupported architecture: $ARCH"
+        exit 1
+        ;;
+esac
