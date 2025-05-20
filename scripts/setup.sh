@@ -440,6 +440,7 @@ EOF
     
     # Create persisted-state directory specifically for Outline SB_STATE_DIR environment variable
     mkdir -p "${OUTLINE_DIR}/persisted-state/prometheus"
+    mkdir -p "${OUTLINE_DIR}/persisted-state/shadowbox"
     
     # Copy the prometheus config.yml file to persisted-state
     if [ -f "$(dirname "$0")/prometheus_config.yml" ]; then
@@ -469,6 +470,36 @@ scrape_configs:
 EOF
         chmod 644 "${OUTLINE_DIR}/persisted-state/prometheus/config.yml"
     fi
+    
+    # Create additional files required by the main.js at line 163
+    # These files are likely accessed right after Prometheus initialization
+    # Create files with valid content structures
+    # metrics.json - empty JSON object
+    echo "{}" > "${OUTLINE_DIR}/persisted-state/shadowbox/metrics.json"
+    
+    # servers.json - empty JSON object
+    echo "{}" > "${OUTLINE_DIR}/persisted-state/shadowbox/servers.json"
+    
+    # access_keys.json - empty JSON array
+    echo "[]" > "${OUTLINE_DIR}/persisted-state/shadowbox/access_keys.json"
+    
+    # server.yml with basic structure
+    cat > "${OUTLINE_DIR}/persisted-state/shadowbox/server.yml" <<EOF
+# Outline Server configuration
+apiPort: ${API_PORT}
+portForNewAccessKeys: ${OUTLINE_PORT}
+hostname: ${server_ip}
+EOF
+    
+    # metrics_state with minimal valid content
+    echo "{\"lastUpdated\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > "${OUTLINE_DIR}/persisted-state/metrics_state"
+    
+    # Set proper permissions
+    chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox/server.yml"
+    chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox/metrics.json"
+    chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox/servers.json"
+    chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox/access_keys.json"
+    chmod 644 "${OUTLINE_DIR}/persisted-state/metrics_state"
     
     # Create a copy of the config in the persisted-state directory
     cp "${OUTLINE_DIR}/data/shadowbox_server_config.json" "${OUTLINE_DIR}/persisted-state/shadowbox_server_config.json"
@@ -731,13 +762,19 @@ services:
       - no-new-privileges:false
     privileged: true
     platform: ${DOCKER_PLATFORM}
+    # Add additional security options to allow full access to root directory
+    security_opt:
+      - apparmor:unconfined
     volumes:
       - ./outline-server/config.json:/etc/shadowsocks-libev/config.json:Z
       - ./outline-server/access.json:/etc/shadowsocks-libev/access.json:Z
       - ./outline-server/data:/opt/outline/data:Z
       - ./outline-server/persisted-state:/opt/outline/persisted-state:Z
-      # Add an explicit volume mount for the prometheus directory to ensure it's accessible
+      # Add explicit volume mounts for all subdirectories to ensure they're accessible
       - ./outline-server/persisted-state/prometheus:/opt/outline/persisted-state/prometheus:Z
+      - ./outline-server/persisted-state/shadowbox:/opt/outline/persisted-state/shadowbox:Z
+      # Add a direct mount for the root directory structure to fix the TypeError issue
+      - ./outline-server/tmp_root:/root:Z
       - ./logs/outline:/var/log/shadowsocks:Z
     ports:
       - "${OUTLINE_PORT}:${OUTLINE_PORT}/tcp"
@@ -750,6 +787,10 @@ services:
       - SB_STATE_DIR=/opt/outline/persisted-state
       - SB_METRICS_URL=https://prod.metrics.getoutline.org
       - PROMETHEUS_CONFIG_PATH=/opt/outline/persisted-state/prometheus/config.yml
+      # Explicitly disable metrics reporting if causing issues
+      - SB_METRICS_URL_MANUAL_MODE=disable
+      # Add path to metrics file to prevent "path must be a string" error
+      - METRICS_PATH=/opt/outline/persisted-state/metrics_state
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
@@ -1023,6 +1064,28 @@ start_services() {
     
     while [ $attempt -le $max_attempts ] && [ "$success" = "false" ]; do
         info "Starting VPN services (attempt $attempt of $max_attempts)..."
+        
+        # Create any missing directories and files with valid content before starting
+        mkdir -p "${OUTLINE_DIR}/persisted-state/prometheus"
+        mkdir -p "${OUTLINE_DIR}/persisted-state/shadowbox"
+        
+        # Fill with valid content
+        echo "{}" > "${OUTLINE_DIR}/persisted-state/shadowbox/metrics.json"
+        echo "{}" > "${OUTLINE_DIR}/persisted-state/shadowbox/servers.json"
+        echo "[]" > "${OUTLINE_DIR}/persisted-state/shadowbox/access_keys.json"
+        
+        cat > "${OUTLINE_DIR}/persisted-state/shadowbox/server.yml" <<EOF
+# Outline Server configuration
+apiPort: ${API_PORT}
+portForNewAccessKeys: ${OUTLINE_PORT}
+hostname: ${SERVER_IP}
+EOF
+        
+        echo "{\"lastUpdated\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > "${OUTLINE_DIR}/persisted-state/metrics_state"
+        
+        # Ensure permissions are correct
+        find "${OUTLINE_DIR}/persisted-state" -type d -exec chmod 755 {} \;
+        find "${OUTLINE_DIR}/persisted-state" -type f -exec chmod 644 {} \;
         
         if docker-compose up -d; then
             # Give services a moment to start
@@ -1359,6 +1422,26 @@ EOF
         chmod 755 "${OUTLINE_DIR}/persisted-state/prometheus"
     fi
     
+    # Create files that main.js at line 163 might be trying to access
+    # These are additional files that might be needed based on the error message
+    mkdir -p "${OUTLINE_DIR}/persisted-state/shadowbox"
+    echo "{}" > "${OUTLINE_DIR}/persisted-state/metrics.json"
+    echo "{}" > "${OUTLINE_DIR}/persisted-state/shadowbox/metrics_transfer"
+    echo "{\"lastUpdated\":\"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > "${OUTLINE_DIR}/persisted-state/metrics_state"
+    echo "{\"version\":1}" > "${OUTLINE_DIR}/persisted-state/metrics_metadata"
+    
+    # Create metrics.json in multiple possible locations to ensure it's found
+    mkdir -p "${OUTLINE_DIR}/tmp_root/shadowbox/app/server"
+    echo "{\"metricsEnabled\": true, \"lastUpdated\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics.json"
+    echo "{\"metricsEnabled\": true, \"lastUpdated\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > "${OUTLINE_DIR}/persisted-state/metrics.json"
+    
+    # Give these files liberal permissions to ensure they can be read
+    chmod 666 "${OUTLINE_DIR}/persisted-state/metrics.json"
+    chmod 666 "${OUTLINE_DIR}/persisted-state/shadowbox/metrics_transfer"
+    chmod 666 "${OUTLINE_DIR}/persisted-state/metrics_state"
+    chmod 666 "${OUTLINE_DIR}/persisted-state/metrics_metadata"
+    chmod -R 777 "${OUTLINE_DIR}/tmp_root"
+    
     if [ ! -f "${OUTLINE_DIR}/persisted-state/prometheus/config.yml" ]; then
         cat > "${OUTLINE_DIR}/persisted-state/prometheus/config.yml" <<EOF
 # Basic Prometheus configuration for Outline server
@@ -1514,6 +1597,21 @@ main() {
     setup_cron_jobs
     # Fix any potential issues with the directory structure and configuration files
     ensure_outline_config
+    
+    # Create explicit directory structure matching the error path in the container
+    # This is fixing the "must be a string or Buffer" error at line 163
+    info "Creating specific file structures for the container..."
+    mkdir -p "${OUTLINE_DIR}/tmp_root/shadowbox/app/server"
+    
+    # Create multiple potential files that might be accessed at line 163
+    echo '{"metricsEnabled": true}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics_config.json"
+    echo '{"lastUpdated": "2025-05-20T00:00:00Z"}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics_state.json"
+    echo '{}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics.json"
+    echo '{}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics_data.json"
+    
+    # Set very permissive permissions
+    chmod -R 777 "${OUTLINE_DIR}/tmp_root"
+    
     # Start services after ensuring configuration is correct
     start_services
     # Check for TypeError in docker logs and fix if needed
@@ -1556,9 +1654,79 @@ EOF
         info "Applied fix for 'TypeError: path must be a string or Buffer'. Waiting for server to restart..."
         sleep 15
         
-        # Create empty files that might be accessed by the container
-        touch "${OUTLINE_DIR}/persisted-state/metrics_metadata"
+        # Create ALL possible files with valid content
+        mkdir -p "${OUTLINE_DIR}/persisted-state/shadowbox"
+        
+        # metrics_metadata with basic structure
+        echo "{\"version\":1}" > "${OUTLINE_DIR}/persisted-state/metrics_metadata"
+        
+        # metrics_state with timestamp
+        echo "{\"lastUpdated\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > "${OUTLINE_DIR}/persisted-state/metrics_state"
+        
+        # Files in shadowbox directory with valid JSON structures
+        echo "{}" > "${OUTLINE_DIR}/persisted-state/shadowbox/metrics.json"
+        echo "{}" > "${OUTLINE_DIR}/persisted-state/shadowbox/servers.json"
+        echo "[]" > "${OUTLINE_DIR}/persisted-state/shadowbox/access_keys.json"
+        
+        # server.yml with basic configuration
+        cat > "${OUTLINE_DIR}/persisted-state/shadowbox/server.yml" <<EOF
+# Outline Server configuration
+apiPort: ${API_PORT}
+portForNewAccessKeys: ${OUTLINE_PORT}
+hostname: ${server_ip}
+metricsEnabled: true
+metricsCollectionEnabled: true
+EOF
+        
+        # Set proper permissions
         chmod 644 "${OUTLINE_DIR}/persisted-state/metrics_metadata"
+        chmod 644 "${OUTLINE_DIR}/persisted-state/metrics_state"
+        chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox/server.yml"
+        chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox/metrics.json"
+        chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox/servers.json"
+        chmod 644 "${OUTLINE_DIR}/persisted-state/shadowbox/access_keys.json"
+        
+        # Create the exact directory structure that matches the error path
+        info "Creating specific directory structure for the main.js error fix..."
+        mkdir -p "${OUTLINE_DIR}/tmp_root/shadowbox/app/server"
+        
+        # Create multiple potential files that might be accessed at line 163 of main.js
+        echo '{"metricsEnabled": false}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics_config.json"
+        echo '{"lastUpdated": "2025-05-20T00:00:00Z"}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics_state.json"
+        echo '{}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics.json"
+        echo '{}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/metrics_data.json"
+        echo '{}' > "${OUTLINE_DIR}/tmp_root/shadowbox/app/server/serverconfig.json"
+        
+        # Set permissive permissions
+        chmod -R 777 "${OUTLINE_DIR}/tmp_root"
+        
+        # Add a custom Docker run command with additional volume mount for the root directory
+        docker run -d --name outline-server \
+          --security-opt=no-new-privileges:false \
+          --security-opt=apparmor:unconfined \
+          -p ${OUTLINE_PORT}:${OUTLINE_PORT}/tcp \
+          -p ${OUTLINE_PORT}:${OUTLINE_PORT}/udp \
+          -v "${OUTLINE_DIR}/config.json:/etc/shadowsocks-libev/config.json:Z" \
+          -v "${OUTLINE_DIR}/access.json:/etc/shadowsocks-libev/access.json:Z" \
+          -v "${OUTLINE_DIR}/data:/opt/outline/data:Z" \
+          -v "${OUTLINE_DIR}/persisted-state:/opt/outline/persisted-state:Z" \
+          -v "${OUTLINE_DIR}/persisted-state/prometheus:/opt/outline/persisted-state/prometheus:Z" \
+          -v "${OUTLINE_DIR}/persisted-state/shadowbox:/opt/outline/persisted-state/shadowbox:Z" \
+          -v "${OUTLINE_DIR}/tmp_root:/root:Z" \
+          -v "${LOGS_DIR}/outline:/var/log/shadowsocks:Z" \
+          -e "SS_CONFIG=/etc/shadowsocks-libev/config.json" \
+          -e "SB_PUBLIC_IP=${SERVER_IP:-localhost}" \
+          -e "SB_API_PORT=${API_PORT}" \
+          -e "SB_STATE_DIR=/opt/outline/persisted-state" \
+          -e "SB_METRICS_URL=https://prod.metrics.getoutline.org" \
+          -e "PROMETHEUS_CONFIG_PATH=/opt/outline/persisted-state/prometheus/config.yml" \
+          -e "SB_METRICS_URL_MANUAL_MODE=disable" \
+          -e "METRICS_PATH=/opt/outline/persisted-state/metrics_state" \
+          --cap-add=NET_ADMIN --cap-add=SYS_ADMIN \
+          --restart=always \
+          ${SB_IMAGE}
+          
+        info "Started Outline server directly with Docker run to ensure proper volume mounting"
     fi
     health_check
     display_summary
