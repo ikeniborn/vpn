@@ -275,20 +275,33 @@ install_docker() {
         
         apt-get update
         DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io
-        
-        # Create or update daemon.json to disable user namespace remapping
-        mkdir -p /etc/docker
-        cat > /etc/docker/daemon.json <<EOF
-{
-  "userns-remap": "",
-  "storage-driver": "overlay2"
-}
-EOF
-        # Restart Docker with the new settings
-        systemctl restart docker
-        systemctl enable docker
     else
         info "Docker is already installed: $(docker --version)"
+    fi
+    
+    # Always configure Docker daemon settings regardless of whether Docker was just installed
+    # Create or update daemon.json to disable user namespace remapping
+    info "Configuring Docker daemon to disable user namespace remapping..."
+    mkdir -p /etc/docker
+    cat > /etc/docker/daemon.json <<EOF
+{
+  "userns-remap": "",
+  "storage-driver": "overlay2",
+  "userland-proxy": false
+}
+EOF
+    # Restart Docker with the new settings
+    systemctl restart docker
+    systemctl enable docker
+    
+    # Verify the settings were applied
+    info "Verifying Docker daemon configuration..."
+    sleep 5  # Wait for Docker to fully restart
+    if docker info 2>/dev/null | grep -q "userns-remap: true"; then
+        warn "Docker user namespace remapping is still enabled despite configuration!"
+        warn "This might cause container layer mapping issues."
+    else
+        info "Docker user namespace remapping is disabled correctly."
     fi
 
     # Check Docker Compose
@@ -597,7 +610,7 @@ create_docker_compose() {
     
     # Create a custom docker-compose.yml file with simplified configuration
     cat > "${BASE_DIR}/docker-compose.yml" <<EOF
-version: '3'
+version: '3.8'
 
 services:
   outline-server:
@@ -610,11 +623,13 @@ services:
     security_opt:
       - seccomp:unconfined
       - apparmor:unconfined
+      - no-new-privileges:false
+    privileged: true
     volumes:
-      - ./outline-server/config.json:/etc/shadowsocks-libev/config.json
-      - ./outline-server/access.json:/etc/shadowsocks-libev/access.json
-      - ./outline-server/data:/opt/outline/data
-      - ./logs/outline:/var/log/shadowsocks
+      - ./outline-server/config.json:/etc/shadowsocks-libev/config.json:Z
+      - ./outline-server/access.json:/etc/shadowsocks-libev/access.json:Z
+      - ./outline-server/data:/opt/outline/data:Z
+      - ./logs/outline:/var/log/shadowsocks:Z
     ports:
       - "${OUTLINE_PORT}:${OUTLINE_PORT}/tcp"
       - "${OUTLINE_PORT}:${OUTLINE_PORT}/udp"
@@ -622,6 +637,7 @@ services:
       - SS_CONFIG=/etc/shadowsocks-libev/config.json
     cap_add:
       - NET_ADMIN
+      - SYS_ADMIN
       
   v2ray:
     image: ${V2RAY_IMAGE}
@@ -633,15 +649,18 @@ services:
     security_opt:
       - seccomp:unconfined
       - apparmor:unconfined
+      - no-new-privileges:false
+    privileged: true
     ports:
       - "${V2RAY_PORT}:${V2RAY_PORT}/tcp"
       - "${V2RAY_PORT}:${V2RAY_PORT}/udp"
     volumes:
-      - ./v2ray/config.json:/etc/v2ray/config.json
-      - ./logs/v2ray:/var/log/v2ray
+      - ./v2ray/config.json:/etc/v2ray/config.json:Z
+      - ./logs/v2ray:/var/log/v2ray:Z
     command: run -c /etc/v2ray/config.json
     cap_add:
       - NET_ADMIN
+      - SYS_ADMIN
     depends_on:
       - outline-server
 
@@ -655,6 +674,8 @@ services:
     security_opt:
       - seccomp:unconfined
       - apparmor:unconfined
+      - no-new-privileges:false
+    privileged: true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     command: --cleanup --tlsverify --interval 3600
@@ -665,6 +686,14 @@ services:
 networks:
   default:
     driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.16.238.0/24
+    driver_opts:
+      com.docker.network.bridge.name: vpn-network
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
 EOF
 }
 
@@ -841,14 +870,72 @@ start_services() {
     info "Starting VPN services..."
     
     cd "${BASE_DIR}"
-    docker-compose up -d
     
-    # Check if services are running
-    if docker-compose ps | grep -q "Up"; then
-        info "VPN services started successfully"
-    else
-        error "Failed to start VPN services"
+    # First, ensure any old containers are properly removed
+    info "Cleaning up any old containers..."
+    docker-compose down --remove-orphans 2>/dev/null || true
+    docker rm -f outline-server v2ray watchtower 2>/dev/null || true
+    
+    # Check Docker system
+    info "Verifying Docker system status..."
+    docker system info >/dev/null || {
+        warn "Docker system issue detected. Attempting to restart Docker service..."
+        systemctl restart docker
+        sleep 10
+    }
+    
+    # Start services with retry mechanism
+    local max_attempts=3
+    local attempt=1
+    local success=false
+    
+    while [ $attempt -le $max_attempts ] && [ "$success" = "false" ]; do
+        info "Starting VPN services (attempt $attempt of $max_attempts)..."
+        
+        if docker-compose up -d; then
+            # Give services a moment to start
+            sleep 10
+            
+            # Check if services are running
+            if docker-compose ps | grep -q "Up"; then
+                info "VPN services started successfully on attempt $attempt"
+                success=true
+            else
+                warn "Services not running after docker-compose up. Checking container logs..."
+                docker-compose logs
+                
+                # Check for specific user namespace errors
+                if docker-compose logs 2>&1 | grep -q "cannot be mapped to a host ID"; then
+                    warn "User namespace mapping error detected. Applying fix..."
+                    
+                    # Apply additional fix - pull images first with explicit disabling of user namespaces
+                    docker pull --security-opt=no-new-privileges:false --security-opt=apparmor:unconfined ${SB_IMAGE}
+                    docker pull --security-opt=no-new-privileges:false --security-opt=apparmor:unconfined ${V2RAY_IMAGE}
+                    docker pull --security-opt=no-new-privileges:false --security-opt=apparmor:unconfined ${WATCHTOWER_IMAGE}
+                    
+                    # Remove failed containers
+                    docker-compose down --remove-orphans
+                    sleep 5
+                fi
+            fi
+        else
+            warn "docker-compose up command failed"
+        fi
+        
+        if [ "$success" = "false" ]; then
+            warn "Attempt $attempt failed. Waiting before retry..."
+            sleep 10
+            attempt=$((attempt + 1))
+        fi
+    done
+    
+    # Final check after all attempts
+    if [ "$success" = "false" ]; then
+        error "Failed to start VPN services after $max_attempts attempts. Please check Docker configuration."
     fi
+    
+    info "Container status:"
+    docker ps
 }
 
 # Display configuration summary
