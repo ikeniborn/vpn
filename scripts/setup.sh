@@ -142,6 +142,27 @@ function ensure_required_tool() {
   return 0
 }
 
+# Check Docker permissions
+function check_docker_permissions() {
+  echo "Checking Docker socket permissions..."
+  if ! docker info >/dev/null 2>&1; then
+    if [ -e /var/run/docker.sock ]; then
+      if [ ! -w /var/run/docker.sock ]; then
+        echo "You don't have permission to access Docker socket."
+        echo "Try running the script with sudo or add your user to the docker group:"
+        echo "  sudo usermod -aG docker $USER"
+        echo "Then log out and log back in to apply the changes."
+        return 1
+      fi
+    fi
+    # If we get here, Docker socket exists and is writable, but Docker info failed
+    # This could be another issue with Docker
+    echo "Docker is installed but not responding properly."
+    return 1
+  fi
+  return 0
+}
+
 # Check to see if docker is installed.
 function verify_docker_installed() {
   if command_exists docker; then
@@ -376,63 +397,144 @@ function write_config() {
   fi
 }
 
+function ensure_ports_available() {
+  local ports=("$@")
+  local max_attempts=15
+  local attempt=1
+  local ports_in_use=false
+  
+  echo "Ensuring all required ports are available (${ports[*]})..."
+  
+  # First attempt - try to surgically find and kill processes using the ports
+  for port in "${ports[@]}"; do
+    echo "Freeing port $port..."
+    echo "Checking processes using port $port..."
+    # Try both netstat and fuser approaches
+    fuser -k ${port}/tcp ${port}/udp >/dev/null 2>&1 || true
+    
+    # Find processes using this port with netstat and kill them
+    if command_exists netstat; then
+      local pids
+      pids=$(netstat -tunlp 2>/dev/null | grep ":${port} " | awk '{print $7}' | cut -d'/' -f1)
+      for pid in $pids; do
+        if [ -n "$pid" ]; then
+          echo "Killing process $pid using port $port"
+          kill -9 "$pid" >/dev/null 2>&1 || true
+        fi
+      done
+    fi
+  done
+  
+  # Give ports a moment to be released
+  sleep 5
+  
+  # Now check and retry if needed
+  while [ $attempt -le $max_attempts ]; do
+    ports_in_use=false
+    
+    for port in "${ports[@]}"; do
+      if lsof -i:${port} >/dev/null 2>&1 || netstat -tunl 2>/dev/null | grep -q ":${port} "; then
+        echo "Port ${port} still in use (attempt $attempt/$max_attempts), waiting..."
+        ports_in_use=true
+      fi
+    done
+    
+    if [ "$ports_in_use" = false ]; then
+      echo "All required ports are now available."
+      return 0
+    fi
+    
+    # If still in use, try more aggressive methods
+    if [ $attempt -gt 5 ]; then
+      echo "Trying more aggressive port clearing (attempt $attempt)..."
+      for port in "${ports[@]}"; do
+        fuser -k -9 ${port}/tcp ${port}/udp >/dev/null 2>&1 || true
+        
+        if command_exists netstat; then
+          local pids
+          pids=$(netstat -tunlp 2>/dev/null | grep ":${port} " | awk '{print $7}' | cut -d'/' -f1)
+          for pid in $pids; do
+            if [ -n "$pid" ]; then
+              echo "Force killing process $pid using port $port"
+              kill -9 "$pid" >/dev/null 2>&1 || true
+            fi
+          done
+        fi
+      done
+    fi
+    
+    # Wait longer as attempts increase
+    sleep_time=$((3 + attempt / 2))
+    sleep $sleep_time
+    attempt=$((attempt + 1))
+  done
+  
+  # If we got here, we failed to free the ports
+  log_error "Could not free up required ports after multiple attempts."
+  echo "Current port usage:"
+  for port in "${ports[@]}"; do
+    echo "Port ${port}:"
+    netstat -tunlp 2>/dev/null | grep ":${port} " || echo "  No netstat info available"
+    lsof -i:${port} 2>/dev/null || echo "  No lsof info available"
+  done
+  
+  echo "You may need to restart Docker with: sudo systemctl restart docker"
+  echo "Or reboot your system before trying again."
+  return 1
+}
+
 function start_shadowbox() {
   # Free up network resources even if container doesn't exist
   echo "Ensuring network ports are released..."
-  # Check and kill any process that might be using the API port or ACCESS_KEY_PORT (both TCP and UDP)
+  
+  # Check Docker service status
+  if command_exists systemctl; then
+    echo "Checking Docker service status..."
+    systemctl status docker --no-pager || true
+  fi
+  
+  # First try to release with fuser
   fuser -k ${API_PORT}/tcp ${API_PORT}/udp ${ACCESS_KEY_PORT}/tcp ${ACCESS_KEY_PORT}/udp >/dev/null 2>&1 || true
+  sleep 2
   
-  # Wait for ports to be fully released with verification
-  echo "Waiting for ports to be released..."
-  local max_attempts=10
-  local attempt=1
-  
-  while [ $attempt -le $max_attempts ]; do
-    local ports_in_use=false
-    
-    # Check if API_PORT is still in use
-    if lsof -i:${API_PORT} >/dev/null 2>&1; then
-      echo "Port ${API_PORT} still in use (attempt $attempt/$max_attempts), waiting..."
-      ports_in_use=true
-    fi
-    
-    # Check if ACCESS_KEY_PORT is still in use
-    if lsof -i:${ACCESS_KEY_PORT} >/dev/null 2>&1; then
-      echo "Port ${ACCESS_KEY_PORT} still in use (attempt $attempt/$max_attempts), waiting..."
-      ports_in_use=true
-    fi
-    
-    # If no ports are in use, we can proceed
-    if [ "$ports_in_use" = false ]; then
-      echo "All required ports are now available."
-      break
-    fi
-    
-    # Kill processes again if still in use
-    fuser -k ${API_PORT}/tcp ${API_PORT}/udp ${ACCESS_KEY_PORT}/tcp ${ACCESS_KEY_PORT}/udp >/dev/null 2>&1 || true
-    
-    # Increment attempt counter and wait
-    attempt=$((attempt + 1))
-    sleep 3
-  done
-  
-  # Final check - if ports are still in use after max attempts, offer guidance
-  if lsof -i:${API_PORT} >/dev/null 2>&1 || lsof -i:${ACCESS_KEY_PORT} >/dev/null 2>&1; then
-    log_error "Could not free up required ports after multiple attempts."
-    echo "You may need to manually find and terminate processes using ports ${API_PORT} and ${ACCESS_KEY_PORT}:"
-    echo "  sudo netstat -tulpn | grep '${API_PORT}\\|${ACCESS_KEY_PORT}'"
-    echo "  sudo kill -9 <PID>"
-    echo "Then run this script again."
+  # Use enhanced port availability function for all required ports
+  local all_ports=("${API_PORT}" "${ACCESS_KEY_PORT}" "7777" "8888")
+  if ! ensure_ports_available "${all_ports[@]}"; then
     return 1
   fi
   
+  # Ensure Docker is running properly
+  echo "Checking Docker status..."
+  if ! docker info >/dev/null 2>&1; then
+    echo "Docker seems to be having issues. Attempting to restart..."
+    if command_exists systemctl; then
+      echo "Restarting Docker service..."
+      systemctl restart docker
+      sleep 5
+    else
+      log_error "Docker is not running properly and we can't restart it automatically."
+      return 1
+    fi
+  fi
+
   # Recreate Docker network from scratch instead of reusing
   echo "Recreating Docker network..."
   docker network rm vpn-network >/dev/null 2>&1 || true
-  sleep 2
+  sleep 4
   
-  # Create Docker network with retry
-  local network_attempts=3
+  # Ensure Docker networking is clean - more aggressive cleanup
+  echo "Cleaning Docker networks..."
+  docker network prune -f >/dev/null 2>&1 || true
+  
+  # Try to force remove docker proxy processes for our specific subnet
+  if command_exists ps && command_exists grep; then
+    echo "Cleaning up Docker proxy processes for subnet 172.18..."
+    ps aux | grep -E "docker-proxy.*172.18" | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null || true
+  fi
+  sleep 3
+  
+  # Create Docker network with more robust retry mechanism
+  local network_attempts=5
   local network_attempt=1
   
   while [ $network_attempt -le $network_attempts ]; do
@@ -448,7 +550,10 @@ function start_shadowbox() {
         echo "Docker network creation failed on attempt $network_attempt, retrying..."
         # Cleanup any partial network that might exist
         docker network rm vpn-network >/dev/null 2>&1 || true
-        sleep 2
+        # Wait longer between attempts
+        sleep_time=$((2 * network_attempt))
+        echo "Waiting $sleep_time seconds before retry..."
+        sleep $sleep_time
         network_attempt=$((network_attempt + 1))
       fi
     fi
@@ -462,11 +567,24 @@ function start_shadowbox() {
     ACCESS_PORT_FLAG="-p ${FLAGS_KEYS_PORT}:${FLAGS_KEYS_PORT}/tcp -p ${FLAGS_KEYS_PORT}:${FLAGS_KEYS_PORT}/udp"
   fi
   
+  # Try one final port check just before container creation
+  for port in "${API_PORT}" "${ACCESS_KEY_PORT}"; do
+    if lsof -i:${port} >/dev/null 2>&1 || netstat -tunl 2>/dev/null | grep -q ":${port} "; then
+      echo "WARNING: Port ${port} still appears to be in use. Attempting to proceed anyway..."
+    fi
+  done
+  
+  # Use the host network mode if we're still having issues
+  local network_mode="--network vpn-network --ip 172.18.0.2"
+  if [ -n "$DOCKER_NETWORK_ISSUES" ]; then
+    echo "Using host network mode as fallback..."
+    network_mode="--network host"
+  fi
+  
   declare -a docker_shadowbox_flags=(
     --name shadowbox
     --restart=always
-    --network vpn-network
-    --ip 172.18.0.2
+    ${network_mode}
     -v "${STATE_DIR}:${STATE_DIR}"
     -e "SB_STATE_DIR=${STATE_DIR}"
     -e "SB_PUBLIC_IP=${PUBLIC_HOSTNAME}"
@@ -531,10 +649,32 @@ function start_shadowbox() {
   fi
   
   # Now try to start the container
+  echo "Starting container with image: ${SB_IMAGE}"
   STDERR_OUTPUT=$(docker run -d "${docker_shadowbox_flags[@]}" ${SB_IMAGE} 2>&1)
   RET=$?
   if [[ $RET -eq 0 ]]; then
+    echo "Container started successfully!"
     return 0
+  fi
+  
+  # If the container didn't start, try host networking as a fallback
+  if [[ -z "$DOCKER_NETWORK_ISSUES" && $STDERR_OUTPUT == *"failed to listen on TCP socket: address already in use"* ]]; then
+    echo "Trying again with host networking mode..."
+    export DOCKER_NETWORK_ISSUES=1
+    
+    # Clean up failed container if it exists
+    docker rm -f shadowbox >/dev/null 2>&1 || true
+    
+    # Modify network flags to use host networking
+    docker_shadowbox_flags=("${docker_shadowbox_flags[@]/--network vpn-network --ip 172.18.0.2/--network host}")
+    
+    # Try starting again
+    STDERR_OUTPUT=$(docker run -d "${docker_shadowbox_flags[@]}" ${SB_IMAGE} 2>&1)
+    RET=$?
+    if [[ $RET -eq 0 ]]; then
+      echo "Container started successfully with host networking!"
+      return 0
+    fi
   fi
   
   # Starting container failed
@@ -725,16 +865,28 @@ function stop_all_containers() {
   echo "Cleaning up Docker network..."
   docker network rm vpn-network >/dev/null 2>&1 || true
   
-  # Release all potentially used ports
-  echo "Releasing all used ports..."
-  local ports_to_free="7777 8888 443 10000"
-  for port in $ports_to_free; do
-    fuser -k ${port}/tcp ${port}/udp >/dev/null 2>&1 || true
+  # More thorough port and process cleanup
+  echo "Performing thorough cleanup of ports and processes..."
+  local ports_to_free=("7777" "8888" "443" "10000" "${API_PORT}" "${ACCESS_KEY_PORT}" "${V2RAY_PORT:-443}")
+  
+  # Make the array unique
+  ports_to_free=($(echo "${ports_to_free[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+  
+  # First attempt with fuser
+  for port in "${ports_to_free[@]}"; do
+    fuser -k -9 ${port}/tcp ${port}/udp >/dev/null 2>&1 || true
   done
   
-  # Wait for network resources to be fully released
-  echo "Waiting for network resources to be released..."
-  sleep 5
+  # Wait longer for full cleanup
+  echo "Waiting for network resources to be fully released..."
+  sleep 8
+  
+  # Optional - restart Docker if system has systemctl
+  if command_exists systemctl; then
+    echo "Restarting Docker service to ensure clean state..."
+    systemctl restart docker >/dev/null 2>&1 || true
+    sleep 5
+  fi
   
   return 0
 }
@@ -748,9 +900,14 @@ install_shadowbox() {
   
   run_step "Verifying that Docker is installed" verify_docker_installed
   run_step "Verifying that Docker daemon is running" verify_docker_running
+  run_step "Checking Docker permissions" check_docker_permissions
   
-  # Ensure lsof is installed for port checking
+  # Ensure required utilities are installed
   run_step "Checking for required utilities" ensure_required_tool "lsof"
+  if command_exists apt-get; then
+    # Check for netstat too on systems where it might be available
+    ensure_required_tool "net-tools" >/dev/null 2>&1 || true
+  fi
 
   log_for_sentry "Creating Outline directory"
   export SHADOWBOX_DIR="${SHADOWBOX_DIR:-/opt/outline}"
@@ -1119,50 +1276,9 @@ function start_v2ray() {
   V2RAY_DIR="${V2RAY_DIR:-$SHADOWBOX_DIR/v2ray}"
   local V2RAY_PORT="${V2RAY_PORT:-443}"
   
-  # Release v2ray ports before starting
-  echo "Releasing v2ray ports..."
-  fuser -k ${V2RAY_PORT}/tcp ${V2RAY_PORT}/udp 10000/tcp 10000/udp >/dev/null 2>&1 || true
-  
-  # Wait for ports to be released with verification
-  echo "Waiting for v2ray ports to be released..."
-  local max_attempts=10
-  local attempt=1
-  
-  while [ $attempt -le $max_attempts ]; do
-    local ports_in_use=false
-    
-    # Check if v2ray ports are still in use
-    if lsof -i:${V2RAY_PORT} >/dev/null 2>&1; then
-      echo "Port ${V2RAY_PORT} still in use (attempt $attempt/$max_attempts), waiting..."
-      ports_in_use=true
-    fi
-    
-    if lsof -i:10000 >/dev/null 2>&1; then
-      echo "Port 10000 still in use (attempt $attempt/$max_attempts), waiting..."
-      ports_in_use=true
-    fi
-    
-    # If no ports are in use, we can proceed
-    if [ "$ports_in_use" = false ]; then
-      echo "All v2ray ports are now available."
-      break
-    fi
-    
-    # Kill processes again if still in use
-    fuser -k ${V2RAY_PORT}/tcp ${V2RAY_PORT}/udp 10000/tcp 10000/udp >/dev/null 2>&1 || true
-    
-    # Increment attempt counter and wait
-    attempt=$((attempt + 1))
-    sleep 3
-  done
-  
-  # Final check - if ports are still in use after max attempts, offer guidance
-  if lsof -i:${V2RAY_PORT} >/dev/null 2>&1 || lsof -i:10000 >/dev/null 2>&1; then
-    log_error "Could not free up v2ray ports after multiple attempts."
-    echo "You may need to manually find and terminate processes using ports ${V2RAY_PORT} and 10000:"
-    echo "  sudo netstat -tulpn | grep '${V2RAY_PORT}\\|10000'"
-    echo "  sudo kill -9 <PID>"
-    echo "Then run this script again."
+  # Use the enhanced port availability function
+  local v2ray_ports=("${V2RAY_PORT}" "10000")
+  if ! ensure_ports_available "${v2ray_ports[@]}"; then
     return 1
   fi
   
@@ -1400,7 +1516,37 @@ function main() {
     exit $?
   else
     # Normal installation
-    install_shadowbox
+    if ! install_shadowbox; then
+      # If installation failed, offer to restart Docker as a last resort
+      echo ""
+      echo "Installation failed. This may be due to lingering Docker resources or port conflicts."
+      
+      if command_exists systemctl; then
+        echo ""
+        echo "Do you want to try restarting Docker daemon as a last resort?"
+        if confirm "> This will restart the Docker daemon and try again. Would you like to proceed? [Y/n] "; then
+          echo "Restarting Docker daemon..."
+          systemctl restart docker
+          sleep 10
+          echo "Attempting installation again..."
+          
+          # Clear any network-specific variables in case they're causing issues
+          unset DOCKER_NETWORK_ISSUES
+          
+          # Try installation again
+          if ! install_shadowbox; then
+            log_error "Installation failed even after Docker restart. Please check the logs above for errors."
+            exit 1
+          fi
+        else
+          log_error "Installation aborted. You may want to restart Docker manually with: sudo systemctl restart docker"
+          exit 1
+        fi
+      else
+        log_error "Installation failed. You may want to restart Docker manually if available on your system."
+        exit 1
+      fi
+    fi
   fi
 }
 
