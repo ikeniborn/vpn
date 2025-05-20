@@ -300,6 +300,12 @@ function start_shadowbox() {
   
   # TODO(fortuna): Write PUBLIC_HOSTNAME and API_PORT to config file,
   # rather than pass in the environment.
+  # Figure out access key port if specified
+  local ACCESS_PORT_FLAG=""
+  if [[ $FLAGS_KEYS_PORT != 0 ]]; then
+    ACCESS_PORT_FLAG="-p ${FLAGS_KEYS_PORT}:${FLAGS_KEYS_PORT}/tcp -p ${FLAGS_KEYS_PORT}:${FLAGS_KEYS_PORT}/udp"
+  fi
+  
   declare -a docker_shadowbox_flags=(
     --name shadowbox
     --restart=always
@@ -308,15 +314,26 @@ function start_shadowbox() {
     -v "${STATE_DIR}:${STATE_DIR}"
     -e "SB_STATE_DIR=${STATE_DIR}"
     -e "SB_PUBLIC_IP=${PUBLIC_HOSTNAME}"
-    -e "SB_API_PORT=${API_PORT}"
+    -e "SB_API_PORT=${ACCESS_KEY_PORT}"
     -e "SB_API_PREFIX=${SB_API_PREFIX}"
     -e "SB_CERTIFICATE_FILE=${SB_CERTIFICATE_FILE}"
     -e "SB_PRIVATE_KEY_FILE=${SB_PRIVATE_KEY_FILE}"
     -e "SB_METRICS_URL=${SB_METRICS_URL:-}"
     -e "SB_DEFAULT_SERVER_NAME=${SB_DEFAULT_SERVER_NAME:-}"
     -p "${API_PORT}:${API_PORT}/tcp"
-    -p "${API_PORT}:${API_PORT}/udp"
+    -p "${ACCESS_KEY_PORT}:${ACCESS_KEY_PORT}/tcp"
+    -p "${ACCESS_KEY_PORT}:${ACCESS_KEY_PORT}/udp"
   )
+  
+  
+  # Add access port flag if set
+  if [[ -n "$ACCESS_PORT_FLAG" ]]; then
+    # Split the flag into an array and append it to docker_shadowbox_flags
+    read -ra access_port_args <<< "$ACCESS_PORT_FLAG"
+    for arg in "${access_port_args[@]}"; do
+      docker_shadowbox_flags+=("$arg")
+    done
+  fi
   # By itself, local messes up the return code.
   local readonly STDERR_OUTPUT
   STDERR_OUTPUT=$(docker run -d "${docker_shadowbox_flags[@]}" ${SB_IMAGE} 2>&1)
@@ -901,19 +918,61 @@ function start_v2ray() {
 
 # Setup routing between Outline and v2ray
 function setup_routing() {
-  # Verify that containers are on the network
-  if ! docker network inspect vpn-network | grep -q "shadowbox"; then
-    log_error "Shadowbox container not connected to vpn-network"
-    log_for_sentry "Shadowbox container not connected to network"
+  # Debug information
+  echo "Checking Docker network status..."
+  
+  # Check if network exists
+  if ! docker network ls | grep -q "vpn-network"; then
+    log_error "vpn-network doesn't exist, attempting to create it now"
+    if ! docker network create --subnet=172.18.0.0/24 vpn-network; then
+      log_error "Failed to create vpn-network"
+      return 1
+    fi
+    echo "Network vpn-network created successfully"
+  fi
+
+  # Check shadowbox container is running
+  if ! docker ps | grep -q "shadowbox"; then
+    log_error "shadowbox container is not running"
     return 1
   fi
   
-  if ! docker network inspect vpn-network | grep -q "v2ray"; then
-    log_error "v2ray container not connected to vpn-network"
-    log_for_sentry "v2ray container not connected to network"
+  # Check v2ray container is running
+  if ! docker ps | grep -q "v2ray"; then
+    log_error "v2ray container is not running"
     return 1
   fi
   
+  # Connect containers to network if needed
+  local need_reconnect=false
+  
+  # Check if shadowbox is connected to network
+  if ! docker network inspect vpn-network 2>/dev/null | grep -q "shadowbox"; then
+    echo "Connecting shadowbox to vpn-network..."
+    if ! docker network connect --ip=172.18.0.2 vpn-network shadowbox; then
+      log_error "Failed to connect shadowbox to network"
+      return 1
+    fi
+    need_reconnect=true
+  fi
+  
+  # Check if v2ray is connected to network
+  if ! docker network inspect vpn-network 2>/dev/null | grep -q "v2ray"; then
+    echo "Connecting v2ray to vpn-network..."
+    if ! docker network connect --ip=172.18.0.3 vpn-network v2ray; then
+      log_error "Failed to connect v2ray to network"
+      return 1
+    fi
+    need_reconnect=true
+  fi
+  
+  # Restart containers if needed
+  if [ "$need_reconnect" = true ]; then
+    echo "Network connections changed, restarting containers..."
+    docker restart shadowbox v2ray
+  fi
+  
+  echo "Routing setup complete. Both containers connected to vpn-network."
   log_for_sentry "Containers properly connected to vpn-network"
   return 0
 }
