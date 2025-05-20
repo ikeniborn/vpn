@@ -33,6 +33,13 @@
 # SB_PUBLIC_IP: Use the --hostname flag instead
 # SB_API_PORT: Use the --api-port flag instead
 
+# Environment variables for v2ray
+# V2RAY_PORT: Port for v2ray (default: 443)
+# V2RAY_IMAGE: The v2ray Docker image to install (default: v2fly/v2fly-core:latest)
+# V2RAY_DIR: Directory for persistent v2ray state (default: SHADOWBOX_DIR/v2ray)
+# DEST_SITE: Destination site to mimic in Reality (default: www.microsoft.com:443)
+# FINGERPRINT: TLS fingerprint to use (default: chrome)
+
 # Requires curl and docker to be installed
 
 set -euo pipefail
@@ -179,6 +186,10 @@ function handle_docker_container_conflict() {
   return 1
 }
 
+function remove_v2ray_container() {
+  remove_docker_container v2ray
+}
+
 # Set trap which publishes error tag only if there is an error.
 function finish {
   EXIT_CODE=$?
@@ -200,6 +211,11 @@ function create_persisted_state_dir() {
   readonly STATE_DIR="$SHADOWBOX_DIR/persisted-state"
   mkdir -p --mode=770 "${STATE_DIR}"
   chmod g+s "${STATE_DIR}"
+  
+  # Create v2ray directory if it doesn't exist
+  readonly V2RAY_STATE_DIR="${V2RAY_DIR:-$SHADOWBOX_DIR/v2ray}"
+  mkdir -p --mode=770 "${V2RAY_STATE_DIR}"
+  chmod g+s "${V2RAY_STATE_DIR}"
 }
 
 # Generate a secret key for access to the Management API and store it in a tag.
@@ -456,6 +472,11 @@ install_shadowbox() {
 
   FIREWALL_STATUS=""
   run_step "Checking host firewall" check_firewall
+  
+  # Configure and start v2ray after Outline is up and running
+  run_step "Configuring v2ray" configure_v2ray
+  run_step "Starting v2ray" start_v2ray
+  run_step "Setting up routing between Outline and v2ray" setup_routing
 
   # Echos the value of the specified field from ACCESS_CONFIG.
   # e.g. if ACCESS_CONFIG contains the line "certSha256:1234",
@@ -480,17 +501,279 @@ ${FIREWALL_STATUS}
 END_OF_SERVER_OUTPUT
 } # end of install_shadowbox
 
+# Generate v2ray configuration
+function configure_v2ray() {
+  # Create v2ray directory if it doesn't exist
+  V2RAY_DIR="${V2RAY_DIR:-$SHADOWBOX_DIR/v2ray}"
+  mkdir -p --mode=770 "${V2RAY_DIR}"
+  
+  # Default values
+  local V2RAY_PORT="${V2RAY_PORT:-443}"
+  local DEST_SITE="${DEST_SITE:-www.microsoft.com:443}"
+  local FINGERPRINT="${FINGERPRINT:-chrome}"
+  
+  # Generate Reality key pair if it doesn't exist
+  if [ ! -f "${V2RAY_DIR}/reality_keypair.txt" ]; then
+    log_for_sentry "Generating Reality key pair"
+    local key_output=$(docker run --rm ${V2RAY_IMAGE:-v2fly/v2fly-core:latest} xray x25519)
+    local private_key=$(echo "$key_output" | grep "Private key:" | cut -d ' ' -f3)
+    local public_key=$(echo "$key_output" | grep "Public key:" | cut -d ' ' -f3)
+    
+    # Save key pair for reference
+    {
+      echo "Private key: $private_key"
+      echo "Public key: $public_key"
+    } > "${V2RAY_DIR}/reality_keypair.txt"
+    chmod 600 "${V2RAY_DIR}/reality_keypair.txt"
+  else
+    log_for_sentry "Using existing Reality key pair"
+    local private_key=$(grep "Private key:" "${V2RAY_DIR}/reality_keypair.txt" | cut -d ' ' -f3)
+    local public_key=$(grep "Public key:" "${V2RAY_DIR}/reality_keypair.txt" | cut -d ' ' -f3)
+  fi
+  
+  # Generate UUID for default user
+  local default_uuid=$(cat /proc/sys/kernel/random/uuid)
+  
+  # Extract server name from destination site
+  local server_name="${DEST_SITE%%:*}"
+  local short_id=$(openssl rand -hex 8)
+  
+  # Create v2ray config with routing for Outline
+  log_for_sentry "Creating v2ray config"
+  cat > "${V2RAY_DIR}/config.json" <<EOF
+{
+  "log": {
+    "loglevel": "warning",
+    "access": "/var/log/v2ray/access.log",
+    "error": "/var/log/v2ray/error.log"
+  },
+  "inbounds": [
+    {
+      "port": ${V2RAY_PORT},
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "${default_uuid}",
+            "flow": "xtls-rprx-vision",
+            "level": 0,
+            "email": "default-user"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "dest": "${DEST_SITE}",
+          "xver": 0,
+          "serverNames": [
+            "${server_name}"
+          ],
+          "privateKey": "${private_key}",
+          "minClientVer": "",
+          "maxClientVer": "",
+          "maxTimeDiff": 0,
+          "shortIds": [
+            "${short_id}"
+          ],
+          "fingerprint": "${FINGERPRINT}"
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls"]
+      }
+    },
+    {
+      "listen": "0.0.0.0",
+      "port": 10000,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "0.0.0.0",
+        "network": "tcp,udp",
+        "followRedirect": true
+      },
+      "tag": "outline_in",
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls"]
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct",
+      "settings": {
+        "domainStrategy": "UseIPv4"
+      }
+    },
+    {
+      "protocol": "blackhole",
+      "tag": "blocked"
+    },
+    {
+      "protocol": "freedom",
+      "tag": "streaming_out",
+      "settings": {
+        "domainStrategy": "UseIPv4"
+      },
+      "streamSettings": {
+        "sockopt": {
+          "mark": 100,
+          "tcpFastOpen": true,
+          "tcpKeepAliveInterval": 25
+        }
+      }
+    },
+    {
+      "protocol": "freedom",
+      "tag": "browsing_out",
+      "settings": {
+        "domainStrategy": "UseIPv4"
+      },
+      "streamSettings": {
+        "sockopt": {
+          "tcpFastOpen": true
+        }
+      }
+    }
+  ],
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": ["outline_in"],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "domain": ["geosite:category-ads"],
+        "outboundTag": "blocked"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "youtube.com", "googlevideo.com", "*.googlevideo.com",
+          "netflix.com", "netflixdnstest.com", "*.nflxvideo.net",
+          "hulu.com", "hulustream.com",
+          "spotify.com", "*.spotifycdn.com",
+          "twitch.tv", "*.ttvnw.net", "*.jtvnw.net",
+          "amazon.com/Prime-Video", "primevideo.com", "aiv-cdn.net"
+        ],
+        "outboundTag": "streaming_out"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "*.googleusercontent.com", "*.gstatic.com",
+          "*.facebook.com", "*.fbcdn.net",
+          "*.twitter.com", "*.twimg.com",
+          "*.instagram.com", "*.cdninstagram.com"
+        ],
+        "outboundTag": "browsing_out"
+      },
+      {
+        "type": "field",
+        "protocol": ["bittorrent"],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "ip": ["geoip:private"],
+        "outboundTag": "blocked"
+      }
+    ]
+  }
+}
+EOF
+  chmod 644 "${V2RAY_DIR}/config.json"
+  
+  # Create users database if it doesn't exist
+  if [ ! -f "${V2RAY_DIR}/users.db" ]; then
+    echo "${default_uuid}|default-user|$(date '+%Y-%m-%d %H:%M:%S')" > "${V2RAY_DIR}/users.db"
+    chmod 600 "${V2RAY_DIR}/users.db"
+  fi
+  
+  # Output v2ray client info to access config
+  output_config "v2rayPublicKey:${public_key}"
+  output_config "v2rayDefaultID:${default_uuid}"
+  output_config "v2rayShortID:${short_id}"
+  output_config "v2rayFingerprint:${FINGERPRINT}"
+  output_config "v2rayServer:${server_name}"
+  output_config "v2rayPort:${V2RAY_PORT}"
+}
+
+# Start v2ray container
+function start_v2ray() {
+  V2RAY_DIR="${V2RAY_DIR:-$SHADOWBOX_DIR/v2ray}"
+  local V2RAY_PORT="${V2RAY_PORT:-443}"
+  
+  # Create log directory if it doesn't exist
+  mkdir -p "${V2RAY_DIR}/logs"
+  
+  # Start v2ray container
+  declare -a docker_v2ray_flags=(
+    --name v2ray
+    --restart=always
+    -v "${V2RAY_DIR}/config.json:/etc/v2ray/config.json"
+    -v "${V2RAY_DIR}/logs:/var/log/v2ray"
+    -p "${V2RAY_PORT}:${V2RAY_PORT}/tcp"
+    -p "${V2RAY_PORT}:${V2RAY_PORT}/udp"
+    -p "10000:10000/tcp"
+    -p "10000:10000/udp"
+  )
+  
+  local readonly STDERR_OUTPUT
+  STDERR_OUTPUT=$(docker run -d "${docker_v2ray_flags[@]}" ${V2RAY_IMAGE:-v2fly/v2fly-core:latest} 2>&1 >/dev/null)
+  local readonly RET=$?
+  if [[ $RET -eq 0 ]]; then
+    return 0
+  fi
+  log_error "FAILED"
+  if docker_container_exists v2ray; then
+    handle_docker_container_conflict v2ray false
+  else
+    log_error "$STDERR_OUTPUT"
+    return 1
+  fi
+}
+
+# Setup routing between Outline and v2ray
+function setup_routing() {
+  # Create Docker network if it doesn't exist
+  if ! docker network inspect vpn-network &>/dev/null; then
+    docker network create --subnet=172.16.238.0/24 vpn-network
+  fi
+  
+  # Connect containers to the network if they aren't already
+  if ! docker network inspect vpn-network | grep -q "shadowbox"; then
+    docker network connect --ip=172.16.238.2 vpn-network shadowbox
+  fi
+  
+  if ! docker network inspect vpn-network | grep -q "v2ray"; then
+    docker network connect --ip=172.16.238.3 vpn-network v2ray
+  fi
+}
+
 function is_valid_port() {
   (( 0 < "$1" && "$1" <= 65535 ))
 }
 
 function parse_flags() {
-  params=$(getopt --longoptions hostname:,api-port:,keys-port: -n $0 -- $0 "$@")
+  params=$(getopt --longoptions hostname:,api-port:,keys-port:,v2ray-port:,dest-site:,fingerprint: -n $0 -- $0 "$@")
   [[ $? == 0 ]] || exit 1
   eval set -- $params
   declare -g FLAGS_HOSTNAME=""
   declare -gi FLAGS_API_PORT=0
   declare -gi FLAGS_KEYS_PORT=0
+  declare -gi FLAGS_V2RAY_PORT=443
+  declare -g FLAGS_DEST_SITE="www.microsoft.com:443"
+  declare -g FLAGS_FINGERPRINT="chrome"
 
   while [[ "$#" > 0 ]]; do
     local flag=$1
@@ -516,6 +799,22 @@ function parse_flags() {
           exit 1
         fi
         ;;
+      --v2ray-port)
+        FLAGS_V2RAY_PORT=$1
+        shift
+        if ! is_valid_port $FLAGS_V2RAY_PORT; then
+          log_error "Invalid value for $flag: $FLAGS_V2RAY_PORT"
+          exit 1
+        fi
+        ;;
+      --dest-site)
+        FLAGS_DEST_SITE=$1
+        shift
+        ;;
+      --fingerprint)
+        FLAGS_FINGERPRINT=$1
+        shift
+        ;;
       --)
         break
         ;;
@@ -530,6 +829,12 @@ function parse_flags() {
     log_error "--api-port must be different from --keys-port"
     exit 1
   fi
+  
+  # Export v2ray-related flags as environment variables
+  export V2RAY_PORT="$FLAGS_V2RAY_PORT"
+  export DEST_SITE="$FLAGS_DEST_SITE"
+  export FINGERPRINT="$FLAGS_FINGERPRINT"
+  
   return 0
 }
 
@@ -537,6 +842,20 @@ function main() {
   trap finish EXIT
   parse_flags "$@"
   install_shadowbox
+}
+
+function display_usage() {
+  cat <<EOF
+Usage: install_server.sh [--hostname <hostname>] [--api-port <port>] [--keys-port <port>]
+                         [--v2ray-port <port>] [--dest-site <site>] [--fingerprint <type>]
+
+  --hostname     The hostname to be used to access the management API and access keys
+  --api-port     The port number for the management API
+  --keys-port    The port number for the access keys
+  --v2ray-port   The port number for v2ray VLESS protocol (default: 443)
+  --dest-site    The destination site to mimic in Reality (default: www.microsoft.com:443)
+  --fingerprint  The TLS fingerprint to use (default: chrome)
+EOF
 }
 
 main "$@"
