@@ -355,9 +355,40 @@ configure_v2ray() {
         public_key=$(grep "Public key:" "${V2RAY_DIR}/reality_keypair.txt" | cut -d ' ' -f3)
     else
         info "Generating new Reality key pair..."
-        local key_output=$(docker run --rm v2fly/v2fly-core:latest xray x25519)
-        private_key=$(echo "$key_output" | grep "Private key:" | cut -d ' ' -f3)
-        public_key=$(echo "$key_output" | grep "Public key:" | cut -d ' ' -f3)
+        
+        # Try different commands to generate keypair
+        
+        # First attempt - try xray generate x25519
+        local key_output=""
+        key_output=$(docker run --rm v2fly/v2fly-core:latest xray x25519 2>/dev/null || true)
+        
+        # Check if we got keys from first attempt
+        if echo "$key_output" | grep -q "Private key:" && echo "$key_output" | grep -q "Public key:"; then
+            private_key=$(echo "$key_output" | grep "Private key:" | cut -d ' ' -f3)
+            public_key=$(echo "$key_output" | grep "Public key:" | cut -d ' ' -f3)
+            info "Successfully generated X25519 keypair with xray x25519 command"
+        else
+            # Second attempt - try v2ray x25519
+            key_output=$(docker run --rm v2fly/v2fly-core:latest v2ray x25519 2>/dev/null || true)
+            
+            # Check if we got keys from second attempt
+            if echo "$key_output" | grep -q "Private key:" && echo "$key_output" | grep -q "Public key:"; then
+                private_key=$(echo "$key_output" | grep "Private key:" | cut -d ' ' -f3)
+                public_key=$(echo "$key_output" | grep "Public key:" | cut -d ' ' -f3)
+                info "Successfully generated X25519 keypair with v2ray x25519 command"
+            else
+                # Fallback method - generate random keys
+                warn "Could not generate proper X25519 keypair using Docker container."
+                warn "Using a fallback method to generate random keys."
+                
+                # Generate private and public keys using openssl (these are just random values, not real X25519 keys)
+                private_key=$(openssl rand -hex 32)
+                public_key=$(openssl rand -hex 32)
+                
+                warn "IMPORTANT: The generated keys are NOT proper X25519 keys."
+                warn "You should manually generate proper keys and update the config."
+            fi
+        fi
         
         # Save key pair for reference
         {
