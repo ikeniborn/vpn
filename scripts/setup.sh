@@ -351,7 +351,7 @@ function create_persisted_state_dir() {
     log_error "Failed to create v2ray state directory"
     echo "Please check if you have write permissions to $SHADOWBOX_DIR"
     return 1
-  }
+  fi
   
   echo "DEBUG: Setting permissions on ${V2RAY_STATE_DIR}"
   chmod g+s "${V2RAY_STATE_DIR}"
