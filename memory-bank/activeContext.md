@@ -2,17 +2,19 @@
 
 This file tracks the project's current status, including recent changes, current goals, and open questions.
 2025-05-19 11:04:37 - Initial Memory Bank creation.
+2025-05-20 10:05:12 - Updated focus to the integrated Shadowsocks/Outline Server + VLESS+Reality solution.
 
 ## Current Focus
 
-* Memory Bank initialization for the VPN project
-* Understand the capabilities and architecture of the VLESS-Reality VPN solution
-* Set up a foundation for tracking project development and decisions
+* Creating a comprehensive architecture plan for deployment scripts for the integrated Shadowsocks/Outline Server + VLESS+Reality VPN solution
+* Understanding the interaction between components and required scripts
+* Documenting security considerations and deployment procedures
 
 ## Recent Changes
 
 * Memory Bank initialization (2025-05-19)
 * Created productContext.md to document the high-level overview of the project
+* Clarified that we should focus on the integrated Shadowsocks/Outline Server + VLESS+Reality solution rather than the VLESS+Reality only approach described in the Memory Bank
 
 ## Open Questions/Issues
 
