@@ -157,36 +157,66 @@ function docker_container_exists() {
   docker ps -a | grep -w "$1" >/dev/null 2>&1
 }
 
-# More robust container removal with force flag and verification
+# Enhanced robust container removal with multiple fallback methods
 function ensure_container_removed() {
   local container_name="$1"
   local max_attempts=3
   local attempt=1
   
-  while [ $attempt -le $max_attempts ]; do
-    # Try to force remove the container
-    echo "Attempting to force remove $container_name (attempt $attempt of $max_attempts)..."
-    docker rm -f "$container_name" >/dev/null 2>&1
+  # First try: Standard container removal
+  echo "Attempting to force remove $container_name (attempt $attempt of $max_attempts)..."
+  docker rm -f "$container_name" >/dev/null 2>&1
+  sleep 2
+  
+  # Check if it's gone
+  if ! docker_container_exists "$container_name"; then
+    return 0
+  fi
+  
+  # Second try: Stop then remove
+  attempt=$((attempt + 1))
+  echo "Attempting to force remove $container_name (attempt $attempt of $max_attempts)..."
+  docker stop "$container_name" >/dev/null 2>&1
+  sleep 2
+  docker rm -f "$container_name" >/dev/null 2>&1
+  sleep 2
+  
+  # Check if it's gone
+  if ! docker_container_exists "$container_name"; then
+    return 0
+  fi
+  
+  # Third try: Kill with SIGKILL then remove
+  attempt=$((attempt + 1))
+  echo "Attempting to force remove $container_name (attempt $attempt of $max_attempts)..."
+  docker kill -s 9 "$container_name" >/dev/null 2>&1
+  sleep 3
+  docker rm -f "$container_name" >/dev/null 2>&1
+  sleep 2
+  
+  # Check if it's gone
+  if ! docker_container_exists "$container_name"; then
+    return 0
+  fi
+  
+  # Final attempt: Get container ID and use direct removal
+  echo "Container still exists after removal attempts. Trying container ID-based removal..."
+  local CONTAINER_ID=$(docker ps -a | grep "$container_name" | awk '{print $1}')
+  if [ -n "$CONTAINER_ID" ]; then
+    docker kill -s 9 "$CONTAINER_ID" >/dev/null 2>&1
+    sleep 3
+    docker rm -f "$CONTAINER_ID" >/dev/null 2>&1
+    sleep 2
     
-    # Wait a moment for Docker to process the removal
-    sleep 1
-    
-    # Check if it's gone
+    # Final check
     if ! docker_container_exists "$container_name"; then
       return 0
     fi
-    
-    # If it still exists, try a more aggressive approach on subsequent attempts
-    if [ $attempt -gt 1 ]; then
-      echo "Container still exists after removal attempt. Trying stronger measures..."
-      docker kill "$container_name" >/dev/null 2>&1
-      sleep 2
-    fi
-    
-    attempt=$((attempt + 1))
-  done
+  fi
   
   # If we got here, we couldn't remove the container
+  echo "WARNING: Container $container_name could not be removed after multiple attempts."
+  echo "You may need to restart the Docker daemon with: sudo systemctl restart docker"
   return 1
 }
 
@@ -375,7 +405,28 @@ function start_shadowbox() {
     # Try to remove the existing container
     if ! handle_docker_container_conflict shadowbox true; then
       log_error "Could not remove existing shadowbox container"
-      return 1
+      
+      # Additional fallback: try to reset Docker networking
+      echo "Attempting to reset Docker networking as a fallback..."
+      docker network rm vpn-network >/dev/null 2>&1 || true
+      sleep 2
+      
+      # Create Docker network again
+      docker network create --subnet=172.18.0.0/24 vpn-network >/dev/null 2>&1 || true
+      sleep 2
+      
+      # Try container removal one more time
+      if ! ensure_container_removed shadowbox; then
+        log_error "Container still exists after all removal attempts including network reset"
+        
+        # Last resort: suggest Docker daemon restart
+        log_error "------------------------------------------------------------------------"
+        log_error "The shadowbox container is completely stuck and cannot be removed."
+        log_error "Please try restarting the Docker daemon with: sudo systemctl restart docker"
+        log_error "Then run this script again."
+        log_error "------------------------------------------------------------------------"
+        return 1
+      fi
     fi
     
     # Double check that container is gone
