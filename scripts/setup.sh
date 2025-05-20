@@ -393,6 +393,61 @@ Make sure to open the following ports on your firewall, router or cloud provider
 "
 }
 
+# Configure firewall rules
+function configure_firewall() {
+  local V2RAY_PORT="${V2RAY_PORT:-443}"
+  
+  # Check if UFW is installed
+  if ! command_exists ufw; then
+    log_error "UFW not found, skipping firewall configuration"
+    return 0
+  fi
+  
+  # Allow SSH port
+  ufw allow 22/tcp
+  
+  # Allow Outline access port
+  ufw allow ${ACCESS_KEY_PORT}/tcp
+  
+  # Allow Outline Access Keys port
+  if [[ $FLAGS_KEYS_PORT != 0 ]]; then
+    ufw allow ${FLAGS_KEYS_PORT}/tcp
+    ufw allow ${FLAGS_KEYS_PORT}/udp
+  fi
+  
+  # Allow Outline default port
+  ufw allow ${API_PORT}/tcp
+  ufw allow ${API_PORT}/udp
+  
+  # Allow v2ray port
+  ufw allow ${V2RAY_PORT}/tcp
+  ufw allow ${V2RAY_PORT}/udp
+  
+  # Allow v2ray internal port
+  ufw allow 10000/tcp
+  ufw allow 10000/udp
+  
+  # Enable IP forwarding (required for VPN)
+  if grep -q "net.ipv4.ip_forward" /etc/sysctl.conf; then
+    sed -i 's/^#\?net.ipv4.ip_forward.*/net.ipv4.ip_forward=1/' /etc/sysctl.conf
+  else
+    echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+  fi
+  
+  # Apply sysctl changes
+  sysctl -p
+  
+  # Configure UFW to allow forwarded packets
+  if ! grep -q "DEFAULT_FORWARD_POLICY=\"ACCEPT\"" /etc/default/ufw; then
+    sed -i 's/DEFAULT_FORWARD_POLICY="DROP"/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
+  fi
+  
+  # Enable UFW if not already enabled
+  if ! ufw status | grep -q "Status: active"; then
+    echo "y" | ufw enable
+  fi
+}
+
 install_shadowbox() {
   # Make sure we don't leak readable files to other users.
   umask 0007
@@ -455,6 +510,7 @@ install_shadowbox() {
   run_step "Generating TLS certificate" generate_certificate
   run_step "Generating SHA-256 certificate fingerprint" generate_certificate_fingerprint
   run_step "Writing config" write_config
+  run_step "Configuring firewall" configure_firewall
 
   # TODO(dborkan): if the script fails after docker run, it will continue to fail
   # as the names shadowbox and watchtower will already be in use.  Consider
@@ -515,7 +571,7 @@ function configure_v2ray() {
   # Generate Reality key pair if it doesn't exist
   if [ ! -f "${V2RAY_DIR}/reality_keypair.txt" ]; then
     log_for_sentry "Generating Reality key pair"
-    local key_output=$(docker run --rm ${V2RAY_IMAGE:-v2fly/v2fly-core:latest} xray x25519)
+    local key_output=$(docker run --rm ${V2RAY_IMAGE:-v2fly/v2fly-core:latest} v2ray x25519)
     local private_key=$(echo "$key_output" | grep "Private key:" | cut -d ' ' -f3)
     local public_key=$(echo "$key_output" | grep "Public key:" | cut -d ' ' -f3)
     
