@@ -571,23 +571,41 @@ EOF
 create_docker_compose() {
     info "Creating Docker Compose configuration..."
     
+    # Determine a different image to use for the outline server based on architecture
+    local OUTLINE_IMAGE=""
+    case $ARCH in
+        aarch64|arm64)
+            OUTLINE_IMAGE="shadowsocks/shadowsocks-libev:v3.3.5"
+            ;;
+        armv7l)
+            OUTLINE_IMAGE="shadowsocks/shadowsocks-libev:v3.3.5"
+            ;;
+        x86_64|amd64)
+            OUTLINE_IMAGE="shadowsocks/shadowsocks-libev:v3.3.5"
+            ;;
+        *)
+            OUTLINE_IMAGE="shadowsocks/shadowsocks-libev:v3.3.5"
+            ;;
+    esac
+    
+    info "Using Outline Server image: ${OUTLINE_IMAGE}"
+    
     cat > "${BASE_DIR}/docker-compose.yml" <<EOF
 version: '3'
 
 services:
   outline-server:
-    image: ${SB_IMAGE}
+    image: ${OUTLINE_IMAGE}
     container_name: outline-server
     restart: always
-    # Fix for user namespace issues
-    user: "0:0"
-    security_opt:
-      - no-new-privileges:true
+    # Disable user namespace remapping for this container
+    userns_mode: "host"
+    privileged: true
     volumes:
-      - ./outline-server/config.json:/etc/shadowsocks-libev/config.json
-      - ./outline-server/access.json:/etc/shadowsocks-libev/access.json
-      - ./outline-server/data:/opt/outline/data
-      - ./logs/outline:/var/log/shadowsocks
+      - ./outline-server/config.json:/etc/shadowsocks-libev/config.json:Z
+      - ./outline-server/access.json:/etc/shadowsocks-libev/access.json:Z
+      - ./outline-server/data:/opt/outline/data:Z
+      - ./logs/outline:/var/log/shadowsocks:Z
     ports:
       - "${OUTLINE_PORT}:${OUTLINE_PORT}/tcp"
       - "${OUTLINE_PORT}:${OUTLINE_PORT}/udp"
@@ -598,18 +616,18 @@ services:
       - SS_CONFIG=/etc/shadowsocks-libev/config.json
     cap_add:
       - NET_ADMIN
+      - SYS_ADMIN
       
   v2ray:
     image: v2fly/v2fly-core:latest
     container_name: v2ray
     restart: always
-    # Fix for user namespace issues
-    user: "0:0"
-    security_opt:
-      - no-new-privileges:true
+    # Disable user namespace remapping for this container
+    userns_mode: "host"
+    privileged: true
     volumes:
-      - ./v2ray/config.json:/etc/v2ray/config.json
-      - ./logs/v2ray:/var/log/v2ray
+      - ./v2ray/config.json:/etc/v2ray/config.json:Z
+      - ./logs/v2ray:/var/log/v2ray:Z
     ports:
       - "${V2RAY_PORT}:${V2RAY_PORT}/tcp"
       - "${V2RAY_PORT}:${V2RAY_PORT}/udp"
@@ -620,17 +638,17 @@ services:
       - outline-server
     cap_add:
       - NET_ADMIN
+      - SYS_ADMIN
 
   watchtower:
     image: ${WATCHTOWER_IMAGE}
     container_name: watchtower
     restart: always
-    # Fix for user namespace issues
-    user: "0:0"
-    security_opt:
-      - no-new-privileges:true
+    # Disable user namespace remapping for this container
+    userns_mode: "host"
+    privileged: true
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:Z
     command: --cleanup --tlsverify --interval 3600
     depends_on:
       - outline-server
