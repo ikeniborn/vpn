@@ -289,10 +289,22 @@ function write_config() {
 
 function start_shadowbox() {
   
+  # Create Docker network if it doesn't exist
+  if ! docker network inspect vpn-network &>/dev/null; then
+    docker network create --subnet=172.18.0.0/24 vpn-network || {
+      log_error "Failed to create Docker network"
+      log_for_sentry "Docker network creation failed"
+      return 1
+    }
+  fi
+  
   # TODO(fortuna): Write PUBLIC_HOSTNAME and API_PORT to config file,
   # rather than pass in the environment.
   declare -a docker_shadowbox_flags=(
-    --name shadowbox --restart=always --net=host
+    --name shadowbox
+    --restart=always
+    --network vpn-network
+    --ip 172.18.0.2
     -v "${STATE_DIR}:${STATE_DIR}"
     -e "SB_STATE_DIR=${STATE_DIR}"
     -e "SB_PUBLIC_IP=${PUBLIC_HOSTNAME}"
@@ -302,6 +314,8 @@ function start_shadowbox() {
     -e "SB_PRIVATE_KEY_FILE=${SB_PRIVATE_KEY_FILE}"
     -e "SB_METRICS_URL=${SB_METRICS_URL:-}"
     -e "SB_DEFAULT_SERVER_NAME=${SB_DEFAULT_SERVER_NAME:-}"
+    -p "${API_PORT}:${API_PORT}/tcp"
+    -p "${API_PORT}:${API_PORT}/udp"
   )
   # By itself, local messes up the return code.
   local readonly STDERR_OUTPUT
@@ -860,6 +874,8 @@ function start_v2ray() {
   declare -a docker_v2ray_flags=(
     --name v2ray
     --restart=always
+    --network vpn-network
+    --ip 172.18.0.3
     -v "${V2RAY_DIR}/config.json:/etc/v2ray/config.json"
     -v "${V2RAY_DIR}/logs:/var/log/v2ray"
     -p "${V2RAY_PORT}:${V2RAY_PORT}/tcp"
@@ -885,31 +901,21 @@ function start_v2ray() {
 
 # Setup routing between Outline and v2ray
 function setup_routing() {
-  # Create Docker network if it doesn't exist
-  if ! docker network inspect vpn-network &>/dev/null; then
-    docker network create --subnet=172.16.238.0/24 vpn-network || {
-      log_error "Failed to create Docker network"
-      log_for_sentry "Docker network creation failed"
-      return 1
-    }
+  # Verify that containers are on the network
+  if ! docker network inspect vpn-network | grep -q "shadowbox"; then
+    log_error "Shadowbox container not connected to vpn-network"
+    log_for_sentry "Shadowbox container not connected to network"
+    return 1
   fi
   
-  # Connect containers to the network if they aren't already
-  if docker_container_exists shadowbox && ! docker network inspect vpn-network | grep -q "shadowbox"; then
-    docker network connect --ip=172.16.238.2 vpn-network shadowbox || {
-      log_error "Failed to connect shadowbox to network"
-      log_for_sentry "Docker network connection failed for shadowbox"
-      return 1
-    }
+  if ! docker network inspect vpn-network | grep -q "v2ray"; then
+    log_error "v2ray container not connected to vpn-network"
+    log_for_sentry "v2ray container not connected to network"
+    return 1
   fi
   
-  if docker_container_exists v2ray && ! docker network inspect vpn-network | grep -q "v2ray"; then
-    docker network connect --ip=172.16.238.3 vpn-network v2ray || {
-      log_error "Failed to connect v2ray to network"
-      log_for_sentry "Docker network connection failed for v2ray"
-      return 1
-    }
-  fi
+  log_for_sentry "Containers properly connected to vpn-network"
+  return 0
 }
 
 # Function to restore UFW rules from a backup
