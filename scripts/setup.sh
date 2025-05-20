@@ -191,14 +191,20 @@ check_dependencies() {
     info "Checking required dependencies..."
     
     local missing_deps=()
-    local required_deps=("curl" "wget" "jq" "ufw" "socat" "qrencode" "net-tools")
+    local required_deps=("curl" "wget" "jq" "ufw" "socat" "qrencode")
+    local required_packages=("net-tools")
     
-    # Check each required dependency
+    # Check each required command dependency
     for dep in "${required_deps[@]}"; do
         if ! command -v "$dep" &> /dev/null; then
             missing_deps+=("$dep")
         fi
     done
+    
+    # Check for net-tools package specifically by checking for netstat command
+    if ! command -v "netstat" &> /dev/null; then
+        missing_deps+=("net-tools")
+    fi
     
     # If any dependencies are missing, inform the user
     if [ ${#missing_deps[@]} -ne 0 ]; then
@@ -210,7 +216,12 @@ check_dependencies() {
         # Verify installation
         local still_missing=()
         for dep in "${missing_deps[@]}"; do
-            if ! command -v "$dep" &> /dev/null; then
+            # Special check for net-tools package using netstat command
+            if [ "$dep" = "net-tools" ]; then
+                if ! command -v "netstat" &> /dev/null; then
+                    still_missing+=("$dep")
+                fi
+            elif ! command -v "$dep" &> /dev/null; then
                 still_missing+=("$dep")
             fi
         done
