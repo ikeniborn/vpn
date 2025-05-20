@@ -904,7 +904,7 @@ function is_valid_port() {
 }
 
 function parse_flags() {
-  params=$(getopt --longoptions hostname:,api-port:,keys-port:,v2ray-port:,dest-site:,fingerprint: -n $0 -- "$@")
+  params=$(getopt -o "" --longoptions hostname:,api-port:,keys-port:,v2ray-port:,dest-site:,fingerprint: -n $0 -- "$@")
   [[ $? == 0 ]] || exit 1
   eval set -- $params
   declare -g FLAGS_HOSTNAME=""
