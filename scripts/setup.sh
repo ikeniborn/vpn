@@ -672,7 +672,6 @@ function start_shadowbox() {
   # Export variables with default values to prevent unbound variable errors
   export SHADOWBOX_IP="${SHADOWBOX_IP:-}"
   export V2RAY_IP="${V2RAY_IP:-}"
-  export V2RAY_IP="${V2RAY_IP:-}"
   
   echo "Attempting to create Docker network with multiple subnet options"
   
@@ -1551,6 +1550,10 @@ EOF
 function start_v2ray() {
   V2RAY_DIR="${V2RAY_DIR:-$SHADOWBOX_DIR/v2ray}"
   local V2RAY_PORT="${V2RAY_PORT:-443}"
+  
+  # Initialize variables with default values to prevent unbound variable errors
+  export V2RAY_IP="${V2RAY_IP:-}"
+  export DOCKER_NETWORK_ISSUES="${DOCKER_NETWORK_ISSUES:-}"
 
   # Ensure we have a valid V2RAY_IP - if not set, retry network setup
   if [ -z "${V2RAY_IP}" ] && [ -z "$DOCKER_NETWORK_ISSUES" ]; then
