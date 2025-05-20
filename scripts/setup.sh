@@ -184,16 +184,20 @@ function handle_docker_container_conflict() {
     fi
     return 0
   fi
+  
+  # Remove container and verify it's gone
   if run_step "Removing $CONTAINER_NAME container" remove_"$CONTAINER_NAME"_container ; then
-    echo -n "> Restarting $CONTAINER_NAME ........................ "
-    if [[ $(type -t "start_$CONTAINER_NAME") == function ]]; then
-      start_"$CONTAINER_NAME"
-      return $?
-    else
-      log_error "No function to restart $CONTAINER_NAME"
+    # Check if container is actually removed
+    if docker_container_exists $CONTAINER_NAME; then
+      log_error "Failed to remove container despite 'docker rm' reporting success"
       return 1
     fi
+    
+    # Container successfully removed, we'll let the calling function restart it
+    return 0
   fi
+  
+  # Failed to remove the container
   return 1
 }
 
@@ -336,18 +340,27 @@ function start_shadowbox() {
   fi
   # By itself, local messes up the return code.
   local readonly STDERR_OUTPUT
+  
+  # First, make sure the container doesn't already exist
+  if docker_container_exists shadowbox; then
+    # Try to remove the existing container
+    if ! handle_docker_container_conflict shadowbox true; then
+      log_error "Could not remove existing shadowbox container"
+      return 1
+    fi
+  fi
+  
+  # Now try to start the container
   STDERR_OUTPUT=$(docker run -d "${docker_shadowbox_flags[@]}" ${SB_IMAGE} 2>&1)
   local readonly RET=$?
   if [[ $RET -eq 0 ]]; then
     return 0
   fi
-  log_error "FAILED"
-  if docker_container_exists shadowbox; then
-    handle_docker_container_conflict shadowbox true
-  else
-    log_error "$STDERR_OUTPUT"
-    return 1
-  fi
+  
+  # Starting container failed
+  log_error "FAILED to start shadowbox container"
+  log_error "$STDERR_OUTPUT"
+  return 1
 }
 
 function start_watchtower() {
