@@ -869,7 +869,7 @@ function start_v2ray() {
   )
   
   local readonly STDERR_OUTPUT
-  STDERR_OUTPUT=$(docker run -d "${docker_v2ray_flags[@]}" ${V2RAY_IMAGE:-v2fly/v2fly-core:latest} 2>&1)
+  STDERR_OUTPUT=$(docker run -d "${docker_v2ray_flags[@]}" ${V2RAY_IMAGE:-v2fly/v2fly-core:latest} run -c /etc/v2ray/config.json 2>&1)
   local readonly RET=$?
   if [[ $RET -eq 0 ]]; then
     return 0
