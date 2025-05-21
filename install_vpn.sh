@@ -135,7 +135,8 @@ cat > "$WORK_DIR/config/config.json" <<EOL
             "email": "$USER_NAME"
           }
         ],
-        "decryption": "none"
+        "decryption": "none",
+        "version": "0"
       },
       "streamSettings": {
         "network": "tcp",

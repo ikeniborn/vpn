@@ -342,10 +342,28 @@ show_status() {
     # Проверка открытых портов
     log "Проверка портов:"
     PORT=$(jq '.inbounds[0].port' "$CONFIG_FILE")
-    if netstat -tuln | grep -q ":$PORT"; then
-        log "Порт $PORT открыт и слушает соединения."
+    
+    # Проверка доступных команд для проверки портов
+    if command -v netstat >/dev/null 2>&1; then
+        if netstat -tuln | grep -q ":$PORT"; then
+            log "Порт $PORT открыт и слушает соединения."
+        else
+            warning "Порт $PORT закрыт или не слушает соединения!"
+        fi
+    elif command -v ss >/dev/null 2>&1; then
+        if ss -tuln | grep -q ":$PORT"; then
+            log "Порт $PORT открыт и слушает соединения."
+        else
+            warning "Порт $PORT закрыт или не слушает соединения!"
+        fi
+    elif command -v lsof >/dev/null 2>&1; then
+        if lsof -i ":$PORT" -P -n | grep -q "LISTEN"; then
+            log "Порт $PORT открыт и слушает соединения."
+        else
+            warning "Порт $PORT закрыт или не слушает соединения!"
+        fi
     else
-        warning "Порт $PORT закрыт или не слушает соединения!"
+        warning "Не удалось проверить статус порта $PORT. Установите netstat, ss или lsof."
     fi
     
     # Вывод информации о сервере
