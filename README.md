@@ -33,7 +33,7 @@ The installation script will automatically install the following dependencies if
 - Docker
 - Docker Compose
 - UFW (Uncomplicated Firewall)
-- uuid-runtime
+- uuid
 - qrencode
 - jq
 
@@ -95,6 +95,62 @@ For each user, the system generates:
 - A text file with connection details (`/opt/v2ray/users/USERNAME.link`)
 - A PNG image with a QR code for mobile clients (`/opt/v2ray/users/USERNAME.png`)
 - A JSON file with user configuration (`/opt/v2ray/users/USERNAME.json`)
+
+## Client Setup
+
+### Compatible VPN Clients
+
+The VPN server uses the V2Ray VLESS protocol, which is supported by several client applications:
+
+**Windows**
+- [v2rayN](https://github.com/2dust/v2rayN)
+- [Qv2ray](https://github.com/Qv2ray/Qv2ray)
+
+**macOS**
+- [V2RayX](https://github.com/Cenmrev/V2RayX)
+- [ClashX](https://github.com/yichengchen/clashX)
+
+**Android**
+- [v2rayNG](https://github.com/2dust/v2rayNG)
+- [Kitsunebi](https://github.com/eycorsican/kitsunebi-android)
+
+**iOS**
+- [Shadowrocket](https://apps.apple.com/us/app/shadowrocket/id932747118)
+- [Quantumult X](https://apps.apple.com/us/app/quantumult-x/id1443988620)
+
+**Linux**
+- [Qv2ray](https://github.com/Qv2ray/Qv2ray)
+- Command line v2ray-core
+
+### Connection Setup
+
+1. **Using QR Code (Mobile Devices)**
+   - Open your compatible V2Ray client app
+   - Use the QR code scanner function
+   - Scan the QR code displayed in terminal or from `/opt/v2ray/users/USERNAME.png`
+   - Save and enable the connection
+
+2. **Using Connection Link**
+   - Copy the connection link from `/opt/v2ray/users/USERNAME.link`
+   - In your V2Ray client, import from clipboard or add a new server
+   - Paste the copied link
+   - Save and enable the connection
+
+3. **Manual Configuration**
+   - Add a new VLESS server in your client
+   - Enter the following details:
+     - Address: Your server IP
+     - Port: Your server port (default 443)
+     - UUID: Your user UUID
+     - Transport: TCP
+     - Encryption: none
+
+### Testing Your Connection
+
+After setting up the client:
+1. Connect to the VPN
+2. Visit a website like [whatismyip.com](https://whatismyip.com) to verify your IP address has changed
+3. If you encounter connection issues, verify that your firewall allows the VPN port
 
 ## Technical Details
 
