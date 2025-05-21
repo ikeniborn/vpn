@@ -118,6 +118,14 @@ get_server_info() {
                 PUBLIC_KEY="unknown"
             fi
             SHORT_ID=$(jq -r '.inbounds[0].streamSettings.realitySettings.shortIds[0]' "$CONFIG_FILE")
+            
+            # Проверка на пустые значения
+            if [ -z "$PUBLIC_KEY" ] || [ "$PUBLIC_KEY" = "null" ] || [ "$PUBLIC_KEY" = "unknown" ]; then
+                warning "Публичный ключ Reality недоступен. Возможны проблемы с подключением."
+            fi
+            if [ -z "$SHORT_ID" ] || [ "$SHORT_ID" = "null" ]; then
+                warning "Short ID Reality недоступен. Возможны проблемы с подключением."
+            fi
         else
             warning "Нет информации о ключах. Используйте скрипт установки или добавьте ключи вручную."
             PUBLIC_KEY="unknown"
@@ -195,6 +203,18 @@ EOL
     
     # Создание ссылки для подключения
     if [ "$USE_REALITY" = true ]; then
+        # Проверка наличия необходимых параметров
+        if [ -z "$PUBLIC_KEY" ] || [ "$PUBLIC_KEY" = "null" ] || [ "$PUBLIC_KEY" = "unknown" ]; then
+            warning "Публичный ключ Reality недоступен. Попытка получить из конфига..."
+            PUBLIC_KEY=$(jq -r '.inbounds[0].streamSettings.realitySettings.privateKey' "$CONFIG_FILE" | xxd -r -p | openssl ec -inform DER -outform PEM -pubin -pubout 2>/dev/null | tail -6 | head -5 | base64 | tr -d '\n')
+        fi
+        
+        if [ -z "$SHORT_ID" ] || [ "$SHORT_ID" = "null" ]; then
+            warning "Short ID Reality недоступен. Попытка получить из конфига..."
+            SHORT_ID=$(jq -r '.inbounds[0].streamSettings.realitySettings.shortIds[0]' "$CONFIG_FILE")
+        fi
+        
+        # Создание ссылки Reality, параметр flow должен быть пустым
         REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#$USER_NAME"
     else
         REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
@@ -393,6 +413,17 @@ EOL
         
         # Создание ссылки для подключения
         if [ "$USE_REALITY" = true ]; then
+            # Проверка наличия необходимых параметров
+            if [ -z "$PUBLIC_KEY" ] || [ "$PUBLIC_KEY" = "null" ] || [ "$PUBLIC_KEY" = "unknown" ]; then
+                warning "Публичный ключ Reality недоступен. Попытка получить из конфига..."
+                PUBLIC_KEY=$(jq -r '.inbounds[0].streamSettings.realitySettings.privateKey' "$CONFIG_FILE" | xxd -r -p | openssl ec -inform DER -outform PEM -pubin -pubout 2>/dev/null | tail -6 | head -5 | base64 | tr -d '\n')
+            fi
+            
+            if [ -z "$SHORT_ID" ] || [ "$SHORT_ID" = "null" ]; then
+                warning "Short ID Reality недоступен. Попытка получить из конфига..."
+                SHORT_ID=$(jq -r '.inbounds[0].streamSettings.realitySettings.shortIds[0]' "$CONFIG_FILE")
+            fi
+            
             REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#$USER_NAME"
         else
             REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
@@ -415,6 +446,17 @@ EOL
         
         # Обновление ссылки для подключения
         if [ "$USE_REALITY" = true ]; then
+            # Проверка наличия необходимых параметров
+            if [ -z "$PUBLIC_KEY" ] || [ "$PUBLIC_KEY" = "null" ] || [ "$PUBLIC_KEY" = "unknown" ]; then
+                warning "Публичный ключ Reality недоступен. Попытка получить из конфига..."
+                PUBLIC_KEY=$(jq -r '.inbounds[0].streamSettings.realitySettings.privateKey' "$CONFIG_FILE" | xxd -r -p | openssl ec -inform DER -outform PEM -pubin -pubout 2>/dev/null | tail -6 | head -5 | base64 | tr -d '\n')
+            fi
+            
+            if [ -z "$SHORT_ID" ] || [ "$SHORT_ID" = "null" ]; then
+                warning "Short ID Reality недоступен. Попытка получить из конфига..."
+                SHORT_ID=$(jq -r '.inbounds[0].streamSettings.realitySettings.shortIds[0]' "$CONFIG_FILE")
+            fi
+            
             REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#$USER_NAME"
         else
             REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"

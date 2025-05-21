@@ -268,7 +268,9 @@ docker-compose up -d
 
 # Сохраняем информацию о пользователе
 mkdir -p "$WORK_DIR/users"
-cat > "$WORK_DIR/users/$USER_NAME.json" <<EOL
+
+if [ "$USE_REALITY" = true ]; then
+    cat > "$WORK_DIR/users/$USER_NAME.json" <<EOL
 {
   "name": "$USER_NAME",
   "uuid": "$USER_UUID",
@@ -276,9 +278,25 @@ cat > "$WORK_DIR/users/$USER_NAME.json" <<EOL
   "server": "$SERVER_IP",
   "sni": "$SERVER_SNI",
   "private_key": "$PRIVATE_KEY",
-  "public_key": "$PUBLIC_KEY"
+  "public_key": "$PUBLIC_KEY",
+  "short_id": "$SHORT_ID",
+  "protocol": "$PROTOCOL"
 }
 EOL
+else
+    cat > "$WORK_DIR/users/$USER_NAME.json" <<EOL
+{
+  "name": "$USER_NAME",
+  "uuid": "$USER_UUID",
+  "port": $SERVER_PORT,
+  "server": "$SERVER_IP",
+  "sni": "$SERVER_SNI",
+  "private_key": "$PRIVATE_KEY",
+  "public_key": "$PUBLIC_KEY",
+  "protocol": "$PROTOCOL"
+}
+EOL
+fi
 
 # Создание ссылки для подключения
 if [ "$USE_REALITY" = true ]; then
