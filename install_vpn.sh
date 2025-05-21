@@ -250,7 +250,7 @@ case $SNI_CHOICE in
         while true; do
             read -p "Введите домен для SNI: " SERVER_SNI
             log "Проверка домена $SERVER_SNI (это может занять до 20 секунд)..."
-            if timeout 20 bash -c "check_sni_domain '$SERVER_SNI'"; then
+            if check_sni_domain "$SERVER_SNI"; then
                 break
             else
                 warning "Домен $SERVER_SNI не прошел проверку или произошел таймаут."
@@ -275,7 +275,7 @@ case $SNI_CHOICE in
         
         for domain in "${CANDIDATES[@]}"; do
             log "Проверка $domain..."
-            if timeout 15 bash -c "check_sni_domain '$domain'"; then
+            if check_sni_domain "$domain"; then
                 SERVER_SNI="$domain"
                 log "✓ Автоматически выбран домен: $SERVER_SNI"
                 break
@@ -299,7 +299,7 @@ esac
 # Финальная проверка выбранного домена (только для вариантов 1-3)
 if [ "$SNI_CHOICE" -ge 1 ] && [ "$SNI_CHOICE" -le 3 ]; then
     log "Финальная проверка домена $SERVER_SNI (максимум 15 секунд)..."
-    if ! timeout 15 bash -c "check_sni_domain '$SERVER_SNI'"; then
+    if ! check_sni_domain "$SERVER_SNI"; then
         warning "Выбранный домен $SERVER_SNI не прошел проверку или произошел таймаут"
         read -p "Продолжить с этим доменом? (y/n) [y]: " continue_choice
         if [ "$continue_choice" = "n" ]; then
@@ -531,6 +531,9 @@ EOL
 fi
 
 # Создание docker-compose.yml
+log "Создание конфигурации Docker..."
+
+# Сначала пробуем основной вариант
 cat > "$WORK_DIR/docker-compose.yml" <<EOL
 version: '3'
 services:
@@ -544,8 +547,28 @@ services:
       - ./logs:/var/log/xray
     environment:
       - TZ=Europe/Moscow
+    command: ["xray", "run", "-c", "/etc/xray/config.json"]
+EOL
+
+# Создаем резервный docker-compose для случая проблем
+cat > "$WORK_DIR/docker-compose.backup.yml" <<EOL
+version: '3'
+services:
+  xray:
+    image: teddysun/xray:latest
+    container_name: xray
+    restart: always
+    network_mode: host
+    volumes:
+      - ./config:/etc/xray
+      - ./logs:/var/log/xray
+    environment:
+      - TZ=Europe/Moscow
+    entrypoint: ["/usr/bin/xray"]
     command: ["run", "-c", "/etc/xray/config.json"]
 EOL
+
+log "Docker конфигурация создана"
 
 # Настройка брандмауэра
 log "Настройка брандмауэра..."
@@ -556,7 +579,47 @@ ufw --force enable
 # Запуск сервера
 log "Запуск VPN сервера..."
 cd "$WORK_DIR"
-docker-compose up -d
+
+# Проверяем конфигурацию перед запуском
+if [ ! -f "config/config.json" ]; then
+    error "Конфигурационный файл не найден!"
+fi
+
+# Запускаем с детальным логированием
+log "Запуск Docker контейнера..."
+if ! docker-compose up -d; then
+    warning "Основная конфигурация не сработала, пробуем резервную..."
+    
+    # Останавливаем неудачный запуск
+    docker-compose down 2>/dev/null || true
+    
+    # Заменяем на резервную конфигурацию
+    cp "$WORK_DIR/docker-compose.backup.yml" "$WORK_DIR/docker-compose.yml"
+    
+    # Пробуем запустить с резервной конфигурацией
+    if ! docker-compose up -d; then
+        error "Не удалось запустить Docker контейнер даже с резервной конфигурацией"
+    else
+        log "✓ Контейнер запущен с резервной конфигурацией"
+    fi
+fi
+
+# Проверяем статус контейнера
+sleep 3
+if docker ps | grep -q "xray"; then
+    log "✓ Контейнер Xray успешно запущен и работает"
+else
+    warning "Контейнер не запущен. Проверяем логи..."
+    log "Логи контейнера:"
+    docker-compose logs --tail 20
+    
+    # Попытка диагностики
+    log "Диагностика проблемы..."
+    log "Проверка образа:"
+    docker run --rm teddysun/xray:latest xray version 2>/dev/null || log "Проблема с образом или командой xray"
+    
+    error "Установка прервана из-за ошибки запуска контейнера"
+fi
 
 # Сохраняем информацию о пользователе
 mkdir -p "$WORK_DIR/users"
