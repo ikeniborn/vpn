@@ -143,7 +143,7 @@ cat > "$WORK_DIR/config/config.json" <<EOL
         "realitySettings": {
           "show": false,
           "dest": "$SERVER_SNI:443",
-          "xver": 0,
+          "xver": 1,
           "serverNames": [
             "$SERVER_SNI"
           ],
