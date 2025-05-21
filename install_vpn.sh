@@ -131,14 +131,24 @@ cat > "$WORK_DIR/config/config.json" <<EOL
         "clients": [
           {
             "id": "$USER_UUID",
-            "flow": ""
+            "flow": "",
+            "email": "$USER_NAME"
           }
         ],
         "decryption": "none"
       },
       "streamSettings": {
         "network": "tcp",
-        "security": "none"
+        "security": "none",
+        "tcpSettings": {
+          "header": {
+            "type": "none"
+          }
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls"]
       }
     }
   ],
@@ -194,6 +204,9 @@ EOL
 # Создание ссылки для подключения
 REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
 echo "$REALITY_LINK" > "$WORK_DIR/users/$USER_NAME.link"
+
+# Сохраняем SNI информацию для использования в manage_users.sh
+echo "$SERVER_SNI" > "$WORK_DIR/config/sni.txt"
 
 log "========================================================"
 log "Установка VPN сервера успешно завершена!"

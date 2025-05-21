@@ -64,18 +64,24 @@ SERVER_IP=$(curl -s https://api.ipify.org)
 get_server_info() {
     if [ -f "$CONFIG_FILE" ]; then
         SERVER_PORT=$(jq '.inbounds[0].port' "$CONFIG_FILE")
-        SERVER_SNI=$(jq -r '.inbounds[0].streamSettings.realitySettings.serverNames[0]' "$CONFIG_FILE")
-        PRIVATE_KEY=$(jq -r '.inbounds[0].streamSettings.realitySettings.privateKey' "$CONFIG_FILE")
-        SHORT_ID=$(jq -r '.inbounds[0].streamSettings.realitySettings.shortIds[0]' "$CONFIG_FILE")
+        
+        # Чтение SNI из файла, если он существует
+        if [ -f "$WORK_DIR/config/sni.txt" ]; then
+            SERVER_SNI=$(cat "$WORK_DIR/config/sni.txt")
+        else
+            SERVER_SNI="www.microsoft.com"
+        fi
         
         # Получение публичного ключа из файла любого пользователя, если он существует
         local first_user_file=$(ls -1 "$USERS_DIR"/*.json 2>/dev/null | head -1)
         if [ -n "$first_user_file" ]; then
             PUBLIC_KEY=$(jq -r '.public_key' "$first_user_file")
+            PRIVATE_KEY=$(jq -r '.private_key' "$first_user_file")
         else
-            # Если файлов пользователей нет, генерируем публичный ключ (можно дополнить логикой)
-            warning "Нет информации о публичном ключе. Используйте скрипт установки или добавьте ключ вручную."
+            # Если файлов пользователей нет, используем значения по умолчанию
+            warning "Нет информации о ключах. Используйте скрипт установки или добавьте ключи вручную."
             PUBLIC_KEY="unknown"
+            PRIVATE_KEY="unknown"
         fi
     else
         error "Файл конфигурации не найден: $CONFIG_FILE"
@@ -113,7 +119,7 @@ add_user() {
     USER_UUID=${INPUT_UUID:-$USER_UUID}
     
     # Добавление пользователя в конфигурацию
-    jq ".inbounds[0].settings.clients += [{\"id\": \"$USER_UUID\", \"flow\": \"\"}]" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
+    jq ".inbounds[0].settings.clients += [{\"id\": \"$USER_UUID\", \"flow\": \"\", \"email\": \"$USER_NAME\"}]" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
     mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
     
     # Создание файла с информацией о пользователе
@@ -206,7 +212,7 @@ edit_user() {
     jq "del(.inbounds[0].settings.clients[] | select(.email == \"$USER_NAME\"))" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
     
     # Добавляем нового пользователя
-    jq ".inbounds[0].settings.clients += [{\"id\": \"$NEW_UUID\", \"flow\": \"\"}]" "$CONFIG_FILE.tmp" > "$CONFIG_FILE"
+    jq ".inbounds[0].settings.clients += [{\"id\": \"$NEW_UUID\", \"flow\": \"\", \"email\": \"$NEW_USER_NAME\"}]" "$CONFIG_FILE.tmp" > "$CONFIG_FILE"
     rm "$CONFIG_FILE.tmp"
     
     # Удаление старых файлов и создание новых
@@ -372,6 +378,11 @@ show_status() {
     log "IP адрес: $SERVER_IP"
     log "Порт: $SERVER_PORT"
     log "SNI: $SERVER_SNI"
+
+    # Если SNI пустой или "null", отобразим соответствующее сообщение
+    if [ "$SERVER_SNI" = "null" ] || [ -z "$SERVER_SNI" ]; then
+        log "Используется базовый протокол VLESS без SNI"
+    fi
     
     # Количество пользователей
     USERS_COUNT=$(jq '.inbounds[0].settings.clients | length' "$CONFIG_FILE")
