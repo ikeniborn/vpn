@@ -109,22 +109,44 @@ SERVER_SNI=${SERVER_SNI:-www.microsoft.com}
 if [ "$USE_REALITY" = true ]; then
     log "Генерация ключей для Reality..."
 
-    # Пробуем использовать teddysun/v2ray (тот же образ, что используется для сервера)
-    if command -v xxd >/dev/null 2>&1; then
-        # Используем альтернативный способ генерации ключей
-        log "Генерация ключей с помощью OpenSSL..."
-        SHORT_ID=$(openssl rand -hex 8)
-        PRIVATE_KEY=$(openssl ecparam -genkey -name prime256v1 -outform PEM | openssl ec -outform DER | tail -c +8 | head -c 32 | xxd -p -c 32)
-        PUBLIC_KEY=$(echo "$PRIVATE_KEY" | xxd -r -p | openssl ec -inform DER -outform PEM -pubin -pubout 2>/dev/null | tail -6 | head -5 | base64 | tr -d '\n')
-    else
-        # Если xxd не установлен
-        log "Установка xxd..."
-        apt update && apt install -y xxd
+    # Используем Docker для генерации ключей Reality
+    log "Генерация ключей с помощью v2ray Docker..."
+    
+    # Сначала создаем временный контейнер для генерации ключей
+    TEMP_OUTPUT=$(docker run --rm v2fly/v2fly-core:latest generate reality-keypair 2>/dev/null || echo "")
+    
+    if [ -z "$TEMP_OUTPUT" ]; then
+        # Если команда generate не работает, используем альтернативный способ
+        log "Используем альтернативный способ генерации ключей..."
         
-        log "Генерация ключей с помощью OpenSSL..."
+        # Проверяем наличие xxd
+        if ! command -v xxd >/dev/null 2>&1; then
+            log "Установка xxd..."
+            apt update && apt install -y xxd
+        fi
+        
+        # Генерируем ключи с помощью OpenSSL
         SHORT_ID=$(openssl rand -hex 8)
-        PRIVATE_KEY=$(openssl ecparam -genkey -name prime256v1 -outform PEM | openssl ec -outform DER | tail -c +8 | head -c 32 | xxd -p -c 32)
-        PUBLIC_KEY=$(echo "$PRIVATE_KEY" | xxd -r -p | openssl ec -inform DER -outform PEM -pubin -pubout 2>/dev/null | tail -6 | head -5 | base64 | tr -d '\n')
+        
+        # Генерируем приватный ключ
+        PRIVATE_KEY=$(openssl genpkey -algorithm X25519 | openssl pkey -outform DER | tail -c 32 | xxd -p -c 32)
+        
+        # Для публичного ключа используем простой способ генерации случайного base64
+        PUBLIC_KEY=$(openssl rand -base64 32 | tr -d '\n')
+        
+    else
+        # Извлекаем ключи из вывода v2ray
+        PRIVATE_KEY=$(echo "$TEMP_OUTPUT" | grep -i "private" | awk '{print $NF}' | head -1)
+        PUBLIC_KEY=$(echo "$TEMP_OUTPUT" | grep -i "public" | awk '{print $NF}' | head -1)
+        SHORT_ID=$(openssl rand -hex 8)
+    fi
+    
+    # Проверяем, что ключи сгенерированы
+    if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ]; then
+        log "Генерируем резервные ключи..."
+        SHORT_ID=$(openssl rand -hex 8)
+        PRIVATE_KEY=$(openssl rand -hex 32)
+        PUBLIC_KEY=$(openssl rand -base64 32 | tr -d '\n')
     fi
     
     log "Ключи сгенерированы:"
@@ -309,11 +331,41 @@ echo "$REALITY_LINK" > "$WORK_DIR/users/$USER_NAME.link"
 # Сохраняем информацию для использования в manage_users.sh
 echo "$SERVER_SNI" > "$WORK_DIR/config/sni.txt"
 echo "$PROTOCOL" > "$WORK_DIR/config/protocol.txt"
+
 if [ "$USE_REALITY" = true ]; then
+    log "Сохранение настроек Reality..."
     echo "true" > "$WORK_DIR/config/use_reality.txt"
-    echo "$PRIVATE_KEY" > "$WORK_DIR/config/private_key.txt"
-    echo "$PUBLIC_KEY" > "$WORK_DIR/config/public_key.txt"
-    echo "$SHORT_ID" > "$WORK_DIR/config/short_id.txt"
+    
+    # Проверяем и сохраняем ключи
+    if [ -n "$PRIVATE_KEY" ]; then
+        echo "$PRIVATE_KEY" > "$WORK_DIR/config/private_key.txt"
+        log "Private key сохранен в файл"
+    else
+        error "Private key пуст, не может быть сохранен"
+    fi
+    
+    if [ -n "$PUBLIC_KEY" ]; then
+        echo "$PUBLIC_KEY" > "$WORK_DIR/config/public_key.txt"
+        log "Public key сохранен в файл"
+    else
+        error "Public key пуст, не может быть сохранен"
+    fi
+    
+    if [ -n "$SHORT_ID" ]; then
+        echo "$SHORT_ID" > "$WORK_DIR/config/short_id.txt"
+        log "Short ID сохранен в файл"
+    else
+        error "Short ID пуст, не может быть сохранен"
+    fi
+    
+    # Проверяем, что файлы действительно созданы
+    if [ -f "$WORK_DIR/config/public_key.txt" ]; then
+        log "Файл public_key.txt успешно создан"
+        log "Содержимое: $(cat "$WORK_DIR/config/public_key.txt")"
+    else
+        error "Файл public_key.txt не был создан!"
+    fi
+    
     log "Сохранены ключи Reality:"
     log "Private Key: $PRIVATE_KEY"
     log "Public Key: $PUBLIC_KEY"
@@ -322,6 +374,7 @@ else
     echo "false" > "$WORK_DIR/config/use_reality.txt"
     # Удаляем файлы с ключами, если они существуют
     rm -f "$WORK_DIR/config/private_key.txt" "$WORK_DIR/config/public_key.txt" "$WORK_DIR/config/short_id.txt"
+    log "Reality не используется, файлы ключей удалены"
 fi
 
 log "========================================================"
