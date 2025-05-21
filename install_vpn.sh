@@ -311,8 +311,17 @@ echo "$SERVER_SNI" > "$WORK_DIR/config/sni.txt"
 echo "$PROTOCOL" > "$WORK_DIR/config/protocol.txt"
 if [ "$USE_REALITY" = true ]; then
     echo "true" > "$WORK_DIR/config/use_reality.txt"
+    echo "$PRIVATE_KEY" > "$WORK_DIR/config/private_key.txt"
+    echo "$PUBLIC_KEY" > "$WORK_DIR/config/public_key.txt"
+    echo "$SHORT_ID" > "$WORK_DIR/config/short_id.txt"
+    log "Сохранены ключи Reality:"
+    log "Private Key: $PRIVATE_KEY"
+    log "Public Key: $PUBLIC_KEY"
+    log "Short ID: $SHORT_ID"
 else
     echo "false" > "$WORK_DIR/config/use_reality.txt"
+    # Удаляем файлы с ключами, если они существуют
+    rm -f "$WORK_DIR/config/private_key.txt" "$WORK_DIR/config/public_key.txt" "$WORK_DIR/config/short_id.txt"
 fi
 
 log "========================================================"
