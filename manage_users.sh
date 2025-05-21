@@ -112,7 +112,7 @@ add_user() {
     USER_UUID=${INPUT_UUID:-$USER_UUID}
     
     # Добавление пользователя в конфигурацию
-    jq ".inbounds[0].settings.clients += [{\"id\": \"$USER_UUID\", \"flow\": \"xtls-rprx-vision\", \"email\": \"$USER_NAME\"}]" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
+    jq ".inbounds[0].settings.clients += [{\"id\": \"$USER_UUID\", \"flow\": \"xtls-rprx-splice\", \"email\": \"$USER_NAME\"}]" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
     mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
     
     # Создание файла с информацией о пользователе
@@ -129,7 +129,7 @@ add_user() {
 EOL
     
     # Создание ссылки для подключения
-    REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$USER_NAME"
+    REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-splice&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$USER_NAME"
     echo "$REALITY_LINK" > "$USERS_DIR/$USER_NAME.link"
     
     # Генерация QR-кода
@@ -205,7 +205,7 @@ edit_user() {
     jq "del(.inbounds[0].settings.clients[] | select(.email == \"$USER_NAME\"))" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
     
     # Добавляем нового пользователя
-    jq ".inbounds[0].settings.clients += [{\"id\": \"$NEW_UUID\", \"flow\": \"xtls-rprx-vision\", \"email\": \"$NEW_USER_NAME\"}]" "$CONFIG_FILE.tmp" > "$CONFIG_FILE"
+    jq ".inbounds[0].settings.clients += [{\"id\": \"$NEW_UUID\", \"flow\": \"xtls-rprx-splice\", \"email\": \"$NEW_USER_NAME\"}]" "$CONFIG_FILE.tmp" > "$CONFIG_FILE"
     rm "$CONFIG_FILE.tmp"
     
     # Удаление старых файлов и создание новых
@@ -228,7 +228,7 @@ edit_user() {
 EOL
     
     # Создание ссылки для подключения
-    REALITY_LINK="vless://$NEW_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$NEW_USER_NAME"
+    REALITY_LINK="vless://$NEW_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-splice&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$NEW_USER_NAME"
     echo "$REALITY_LINK" > "$USERS_DIR/$NEW_USER_NAME.link"
     
     # Генерация QR-кода
@@ -285,7 +285,7 @@ show_user() {
 EOL
         
         # Создание ссылки для подключения
-        REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$USER_NAME"
+        REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-splice&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$USER_NAME"
         echo "$REALITY_LINK" > "$USERS_DIR/$USER_NAME.link"
         
         # Генерация QR-кода
@@ -303,7 +303,7 @@ EOL
         mv "$USERS_DIR/$USER_NAME.json.tmp" "$USERS_DIR/$USER_NAME.json"
         
         # Обновление ссылки для подключения
-        REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$USER_NAME"
+        REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-splice&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$USER_NAME"
         echo "$REALITY_LINK" > "$USERS_DIR/$USER_NAME.link"
         
         # Обновление QR-кода
