@@ -56,7 +56,7 @@ command -v ufw >/dev/null 2>&1 || {
 command -v uuid >/dev/null 2>&1 || {
     log "UUID не установлен. Установка uuid-runtime..."
     apt update
-    apt install -y uuid-runtime
+    apt install -y uuid
 }
 
 # Создание рабочей директории
@@ -91,13 +91,20 @@ SERVER_SNI=${SERVER_SNI:-www.microsoft.com}
 
 # Генерация приватного ключа и публичного ключа для reality
 log "Генерация ключей для reality..."
-REALITY_KEYS=$(docker run --rm -it gists/v2ray v2ctl uuid -i "$USER_UUID")
-PRIVATE_KEY=$(echo "$REALITY_KEYS" | grep "privateKey" | cut -d: -f2 | tr -d " ")
-PUBLIC_KEY=$(echo "$REALITY_KEYS" | grep "publicKey" | cut -d: -f2 | tr -d " ")
 
-if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ]; then
-    # Альтернативный способ генерации ключей
-    log "Альтернативная генерация ключей для reality..."
+# Пробуем использовать teddysun/v2ray (тот же образ, что используется для сервера)
+if command -v xxd >/dev/null 2>&1; then
+    # Используем альтернативный способ генерации ключей
+    log "Генерация ключей с помощью OpenSSL..."
+    SHORT_ID=$(openssl rand -hex 8)
+    PRIVATE_KEY=$(openssl ecparam -genkey -name prime256v1 -outform PEM | openssl ec -outform DER | tail -c +8 | head -c 32 | xxd -p -c 32)
+    PUBLIC_KEY=$(echo "$PRIVATE_KEY" | xxd -r -p | openssl ec -inform DER -outform PEM -pubin -pubout 2>/dev/null | tail -6 | head -5 | base64 | tr -d '\n')
+else
+    # Если xxd не установлен
+    log "Установка xxd..."
+    apt update && apt install -y xxd
+    
+    log "Генерация ключей с помощью OpenSSL..."
     SHORT_ID=$(openssl rand -hex 8)
     PRIVATE_KEY=$(openssl ecparam -genkey -name prime256v1 -outform PEM | openssl ec -outform DER | tail -c +8 | head -c 32 | xxd -p -c 32)
     PUBLIC_KEY=$(echo "$PRIVATE_KEY" | xxd -r -p | openssl ec -inform DER -outform PEM -pubin -pubout 2>/dev/null | tail -6 | head -5 | base64 | tr -d '\n')
@@ -200,6 +207,7 @@ services:
       - ./config:/etc/v2ray
     environment:
       - TZ=Europe/Moscow
+    command: ["v2ray", "-config", "/etc/v2ray/config.json"]
 EOL
 
 # Настройка брандмауэра
