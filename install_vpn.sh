@@ -343,13 +343,13 @@ if [ "$USE_REALITY" = true ]; then
         # Генерируем X25519 ключи для Reality
         TEMP_PRIVATE=$(openssl genpkey -algorithm X25519 2>/dev/null)
         if [ $? -eq 0 ] && [ -n "$TEMP_PRIVATE" ]; then
-            # Извлекаем приватный ключ из PEM формата
-            PRIVATE_KEY=$(echo "$TEMP_PRIVATE" | openssl pkey -outform DER 2>/dev/null | tail -c 32 | xxd -p -c 32)
+            # Извлекаем приватный ключ из PEM формата в base64
+            PRIVATE_KEY=$(echo "$TEMP_PRIVATE" | openssl pkey -outform DER 2>/dev/null | tail -c 32 | base64 | tr -d '\n')
             # Генерируем соответствующий публичный ключ
             PUBLIC_KEY=$(echo "$TEMP_PRIVATE" | openssl pkey -pubout -outform DER 2>/dev/null | tail -c 32 | base64 | tr -d '\n')
         else
-            # Фоллбэк к случайной генерации
-            PRIVATE_KEY=$(openssl rand -hex 32)
+            # Фоллбэк к случайной base64 генерации
+            PRIVATE_KEY=$(openssl rand -base64 32 | tr -d '\n')
             PUBLIC_KEY=$(openssl rand -base64 32 | tr -d '\n')
         fi
         log "Ключи сгенерированы с помощью OpenSSL"
@@ -359,7 +359,7 @@ if [ "$USE_REALITY" = true ]; then
     if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ] || [ -z "$SHORT_ID" ]; then
         log "Генерируем резервные ключи..."
         SHORT_ID=$(openssl rand -hex 8)
-        PRIVATE_KEY=$(openssl rand -hex 32)
+        PRIVATE_KEY=$(openssl rand -base64 32 | tr -d '\n')
         PUBLIC_KEY=$(openssl rand -base64 32 | tr -d '\n')
     fi
     
