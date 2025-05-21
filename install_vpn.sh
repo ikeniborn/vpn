@@ -237,7 +237,7 @@ cat > "$WORK_DIR/users/$USER_NAME.json" <<EOL
 EOL
 
 # Создание ссылки для подключения
-REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$USER_NAME"
+REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?version=0&encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$USER_NAME"
 echo "$REALITY_LINK" > "$WORK_DIR/users/$USER_NAME.link"
 
 log "========================================================"

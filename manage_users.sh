@@ -129,7 +129,7 @@ add_user() {
 EOL
     
     # Создание ссылки для подключения
-    REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$USER_NAME"
+    REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?version=0&encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$USER_NAME"
     echo "$REALITY_LINK" > "$USERS_DIR/$USER_NAME.link"
     
     # Генерация QR-кода
@@ -228,7 +228,7 @@ edit_user() {
 EOL
     
     # Создание ссылки для подключения
-    REALITY_LINK="vless://$NEW_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$NEW_USER_NAME"
+    REALITY_LINK="vless://$NEW_UUID@$SERVER_IP:$SERVER_PORT?version=0&encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$NEW_USER_NAME"
     echo "$REALITY_LINK" > "$USERS_DIR/$NEW_USER_NAME.link"
     
     # Генерация QR-кода
@@ -285,7 +285,7 @@ show_user() {
 EOL
         
         # Создание ссылки для подключения
-        REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$USER_NAME"
+        REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?version=0&encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$USER_NAME"
         echo "$REALITY_LINK" > "$USERS_DIR/$USER_NAME.link"
         
         # Генерация QR-кода
@@ -303,7 +303,7 @@ EOL
         mv "$USERS_DIR/$USER_NAME.json.tmp" "$USERS_DIR/$USER_NAME.json"
         
         # Обновление ссылки для подключения
-        REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$USER_NAME"
+        REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?version=0&encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$USER_NAME"
         echo "$REALITY_LINK" > "$USERS_DIR/$USER_NAME.link"
         
         # Обновление QR-кода
