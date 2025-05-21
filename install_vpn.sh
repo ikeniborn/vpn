@@ -207,7 +207,7 @@ services:
       - ./config:/etc/v2ray
     environment:
       - TZ=Europe/Moscow
-    command: ["v2ray", "-config", "/etc/v2ray/config.json"]
+    command: ["v2ray", "run", "-c", "/etc/v2ray/config.json"]
 EOL
 
 # Настройка брандмауэра
