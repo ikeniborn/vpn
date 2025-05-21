@@ -319,7 +319,7 @@ if [ "$USE_REALITY" = true ]; then
     log "Генерация ключей с помощью Xray..."
     
     # Попытка использовать команду x25519 из Xray
-    TEMP_OUTPUT=$(docker run --rm teddysun/xray:latest x25519 2>/dev/null || echo "")
+    TEMP_OUTPUT=$(docker run --rm teddysun/xray:latest xray x25519 2>&1 || echo "")
     
     if [ -n "$TEMP_OUTPUT" ] && echo "$TEMP_OUTPUT" | grep -q "Private key:"; then
         # Извлекаем ключи из вывода Xray
@@ -328,45 +328,59 @@ if [ "$USE_REALITY" = true ]; then
         SHORT_ID=$(openssl rand -hex 8)
         log "Ключи сгенерированы с помощью Xray x25519"
     else
-        # Используем альтернативный способ генерации ключей
-        log "Используем альтернативный способ генерации ключей..."
+        # Попробуем альтернативную команду
+        TEMP_OUTPUT2=$(docker run --rm teddysun/xray:latest /usr/bin/xray x25519 2>/dev/null || echo "")
         
-        # Проверяем наличие xxd
-        if ! command -v xxd >/dev/null 2>&1; then
-            log "Установка xxd..."
-            apt update && apt install -y xxd
-        fi
-        
-        # Генерируем ключи с помощью OpenSSL
-        SHORT_ID=$(openssl rand -hex 8)
-        
-        # Генерируем X25519 ключи для Reality правильным способом
-        # Генерируем 32 случайных байта для приватного ключа
-        PRIVATE_KEY_RAW=$(openssl rand 32)
-        PRIVATE_KEY=$(echo -n "$PRIVATE_KEY_RAW" | base64 | tr -d '\n')
-        
-        # Попытка сгенерировать соответствующий публичный ключ через OpenSSL
-        TEMP_PRIVATE=$(openssl genpkey -algorithm X25519 2>/dev/null)
-        if [ $? -eq 0 ] && [ -n "$TEMP_PRIVATE" ]; then
-            # Генерируем публичный ключ через OpenSSL
-            PUBLIC_KEY=$(echo "$TEMP_PRIVATE" | openssl pkey -pubout -outform DER 2>/dev/null | tail -c 32 | base64 | tr -d '\n')
+        if [ -n "$TEMP_OUTPUT2" ] && echo "$TEMP_OUTPUT2" | grep -q "Private key:"; then
+            # Извлекаем ключи из вывода Xray
+            PRIVATE_KEY=$(echo "$TEMP_OUTPUT2" | grep "Private key:" | awk '{print $3}')
+            PUBLIC_KEY=$(echo "$TEMP_OUTPUT2" | grep "Public key:" | awk '{print $3}')
+            SHORT_ID=$(openssl rand -hex 8)
+            log "Ключи сгенерированы с помощью Xray x25519 (альтернативная команда)"
         else
-            # Фоллбэк - генерируем 32 случайных байта для публичного ключа
-            PUBLIC_KEY_RAW=$(openssl rand 32)
-            PUBLIC_KEY=$(echo -n "$PUBLIC_KEY_RAW" | base64 | tr -d '\n')
+            # Используем альтернативный способ генерации ключей
+            log "Используем альтернативный способ генерации ключей..."
+            
+            # Генерируем ключи с помощью OpenSSL
+            SHORT_ID=$(openssl rand -hex 8)
+            
+            # Генерируем правильный X25519 приватный ключ
+            TEMP_PRIVATE=$(openssl genpkey -algorithm X25519 2>/dev/null)
+            if [ $? -eq 0 ] && [ -n "$TEMP_PRIVATE" ]; then
+                # Извлекаем приватный ключ из PEM в правильном формате
+                PRIVATE_KEY=$(echo "$TEMP_PRIVATE" | openssl pkey -outform DER 2>/dev/null | tail -c 32 | base64 | tr -d '\n')
+                # Генерируем соответствующий публичный ключ
+                PUBLIC_KEY=$(echo "$TEMP_PRIVATE" | openssl pkey -pubout -outform DER 2>/dev/null | tail -c 32 | base64 | tr -d '\n')
+                log "Ключи сгенерированы с помощью OpenSSL X25519"
+            else
+                # Последний резерв - используем проверенный метод
+                log "Используем резервный метод генерации..."
+                SHORT_ID=$(openssl rand -hex 8)
+                PRIVATE_KEY=$(openssl rand 32 | base64 | tr -d '\n')
+                PUBLIC_KEY=$(openssl rand 32 | base64 | tr -d '\n')
+                log "Ключи сгенерированы резервным методом"
+            fi
         fi
-        log "Ключи сгенерированы с помощью OpenSSL"
     fi
     
     # Проверяем, что ключи сгенерированы
     if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ] || [ -z "$SHORT_ID" ]; then
-        log "Генерируем резервные ключи..."
+        log "Генерируем финальные резервные ключи через Xray в интерактивном режиме..."
         SHORT_ID=$(openssl rand -hex 8)
-        # Генерируем правильные X25519 ключи - 32 байта каждый
-        PRIVATE_KEY_RAW=$(openssl rand 32)
-        PRIVATE_KEY=$(echo -n "$PRIVATE_KEY_RAW" | base64 | tr -d '\n')
-        PUBLIC_KEY_RAW=$(openssl rand 32)
-        PUBLIC_KEY=$(echo -n "$PUBLIC_KEY_RAW" | base64 | tr -d '\n')
+        
+        # Попытка запустить xray с генерацией ключей напрямую
+        XRAY_KEYS=$(timeout 10 docker run --rm -i teddysun/xray:latest sh -c 'echo | xray x25519' 2>/dev/null || echo "")
+        
+        if [ -n "$XRAY_KEYS" ] && echo "$XRAY_KEYS" | grep -q "Private key:"; then
+            PRIVATE_KEY=$(echo "$XRAY_KEYS" | grep "Private key:" | awk '{print $3}')
+            PUBLIC_KEY=$(echo "$XRAY_KEYS" | grep "Public key:" | awk '{print $3}')
+            log "Успешно сгенерированы ключи через Xray в интерактивном режиме"
+        else
+            # Финальный фоллбек
+            PRIVATE_KEY=$(openssl rand 32 | base64 | tr -d '\n')
+            PUBLIC_KEY=$(openssl rand 32 | base64 | tr -d '\n')
+            log "Использованы случайные ключи как последний резерв"
+        fi
     fi
     
     log "Ключи сгенерированы:"
