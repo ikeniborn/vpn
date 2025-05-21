@@ -74,8 +74,8 @@ read -p "Введите IP-адрес сервера [$DEFAULT_IP]: " SERVER_IP
 SERVER_IP=${SERVER_IP:-$DEFAULT_IP}
 
 # Порт для VPN сервера
-read -p "Введите порт для VPN сервера [443]: " SERVER_PORT
-SERVER_PORT=${SERVER_PORT:-443}
+read -p "Введите порт для VPN сервера [10443]: " SERVER_PORT
+SERVER_PORT=${SERVER_PORT:-10443}
 
 # Выбор протокола
 echo "Выберите протокол:"
