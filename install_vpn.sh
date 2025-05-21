@@ -131,7 +131,6 @@ cat > "$WORK_DIR/config/config.json" <<EOL
         "clients": [
           {
             "id": "$USER_UUID",
-            "flow": "xtls-rprx-vision",
             "email": "$USER_NAME"
           }
         ],
@@ -199,7 +198,7 @@ cat > "$WORK_DIR/docker-compose.yml" <<EOL
 version: '3'
 services:
   v2ray:
-    image: teddysun/v2ray
+    image: v2fly/v2fly-core:v5.3.0
     container_name: v2ray
     restart: always
     network_mode: host
@@ -207,7 +206,7 @@ services:
       - ./config:/etc/v2ray
     environment:
       - TZ=Europe/Moscow
-    command: ["v2ray", "run", "-c", "/etc/v2ray/config.json"]
+    command: ["run", "-c", "/etc/v2ray/config.json"]
 EOL
 
 # Настройка брандмауэра
@@ -236,7 +235,7 @@ cat > "$WORK_DIR/users/$USER_NAME.json" <<EOL
 EOL
 
 # Создание ссылки для подключения
-REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp&headerType=none#$USER_NAME"
+REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp&headerType=none#$USER_NAME"
 echo "$REALITY_LINK" > "$WORK_DIR/users/$USER_NAME.link"
 
 log "========================================================"
