@@ -89,15 +89,33 @@ get_server_info() {
         fi
         
         # Проверка использования Reality
+        log "Проверка использования Reality..."
         if [ -f "$WORK_DIR/config/use_reality.txt" ]; then
-            USE_REALITY=$(cat "$WORK_DIR/config/use_reality.txt")
-        else
-            # Если файл не существует, проверяем конфигурацию
-            SECURITY=$(jq -r '.inbounds[0].streamSettings.security' "$CONFIG_FILE")
-            if [ "$SECURITY" = "reality" ]; then
+            USE_REALITY_FILE=$(cat "$WORK_DIR/config/use_reality.txt")
+            log "Найден файл use_reality.txt с значением: $USE_REALITY_FILE"
+            # Преобразуем строковое значение в булево
+            if [ "$USE_REALITY_FILE" = "true" ]; then
                 USE_REALITY=true
+                log "Установлено использование Reality"
             else
                 USE_REALITY=false
+                log "Использование Reality отключено"
+            fi
+        else
+            # Если файл не существует, проверяем конфигурацию
+            log "Файл use_reality.txt не найден, проверяем конфигурацию"
+            SECURITY=$(jq -r '.inbounds[0].streamSettings.security' "$CONFIG_FILE")
+            log "Найдена настройка security: $SECURITY"
+            if [ "$SECURITY" = "reality" ]; then
+                USE_REALITY=true
+                log "Установлено использование Reality из конфигурации"
+                # Автоматически создаем файл для будущих вызовов
+                echo "true" > "$WORK_DIR/config/use_reality.txt"
+            else
+                USE_REALITY=false
+                log "Использование Reality отключено из конфигурации"
+                # Автоматически создаем файл для будущих вызовов
+                echo "false" > "$WORK_DIR/config/use_reality.txt"
             fi
         fi
         
