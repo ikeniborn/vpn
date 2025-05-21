@@ -131,7 +131,7 @@ cat > "$WORK_DIR/config/config.json" <<EOL
         "clients": [
           {
             "id": "$USER_UUID",
-            "flow": "xtls-rprx-splice",
+            "flow": "xtls-rprx-vision",
             "email": "$USER_NAME"
           }
         ],
@@ -149,7 +149,7 @@ cat > "$WORK_DIR/config/config.json" <<EOL
           ],
           "privateKey": "$PRIVATE_KEY",
           "shortIds": [
-            ""
+            "$SHORT_ID"
           ]
         }
       },
@@ -236,7 +236,7 @@ cat > "$WORK_DIR/users/$USER_NAME.json" <<EOL
 EOL
 
 # Создание ссылки для подключения
-REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-splice&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&type=tcp&headerType=none#$USER_NAME"
+REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp&headerType=none#$USER_NAME"
 echo "$REALITY_LINK" > "$WORK_DIR/users/$USER_NAME.link"
 
 log "========================================================"
