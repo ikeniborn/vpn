@@ -340,17 +340,20 @@ if [ "$USE_REALITY" = true ]; then
         # Генерируем ключи с помощью OpenSSL
         SHORT_ID=$(openssl rand -hex 8)
         
-        # Генерируем X25519 ключи для Reality
+        # Генерируем X25519 ключи для Reality правильным способом
+        # Генерируем 32 случайных байта для приватного ключа
+        PRIVATE_KEY_RAW=$(openssl rand 32)
+        PRIVATE_KEY=$(echo -n "$PRIVATE_KEY_RAW" | base64 | tr -d '\n')
+        
+        # Попытка сгенерировать соответствующий публичный ключ через OpenSSL
         TEMP_PRIVATE=$(openssl genpkey -algorithm X25519 2>/dev/null)
         if [ $? -eq 0 ] && [ -n "$TEMP_PRIVATE" ]; then
-            # Извлекаем приватный ключ из PEM формата в base64
-            PRIVATE_KEY=$(echo "$TEMP_PRIVATE" | openssl pkey -outform DER 2>/dev/null | tail -c 32 | base64 | tr -d '\n')
-            # Генерируем соответствующий публичный ключ
+            # Генерируем публичный ключ через OpenSSL
             PUBLIC_KEY=$(echo "$TEMP_PRIVATE" | openssl pkey -pubout -outform DER 2>/dev/null | tail -c 32 | base64 | tr -d '\n')
         else
-            # Фоллбэк к случайной base64 генерации
-            PRIVATE_KEY=$(openssl rand -base64 32 | tr -d '\n')
-            PUBLIC_KEY=$(openssl rand -base64 32 | tr -d '\n')
+            # Фоллбэк - генерируем 32 случайных байта для публичного ключа
+            PUBLIC_KEY_RAW=$(openssl rand 32)
+            PUBLIC_KEY=$(echo -n "$PUBLIC_KEY_RAW" | base64 | tr -d '\n')
         fi
         log "Ключи сгенерированы с помощью OpenSSL"
     fi
@@ -359,8 +362,11 @@ if [ "$USE_REALITY" = true ]; then
     if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ] || [ -z "$SHORT_ID" ]; then
         log "Генерируем резервные ключи..."
         SHORT_ID=$(openssl rand -hex 8)
-        PRIVATE_KEY=$(openssl rand -base64 32 | tr -d '\n')
-        PUBLIC_KEY=$(openssl rand -base64 32 | tr -d '\n')
+        # Генерируем правильные X25519 ключи - 32 байта каждый
+        PRIVATE_KEY_RAW=$(openssl rand 32)
+        PRIVATE_KEY=$(echo -n "$PRIVATE_KEY_RAW" | base64 | tr -d '\n')
+        PUBLIC_KEY_RAW=$(openssl rand 32)
+        PUBLIC_KEY=$(echo -n "$PUBLIC_KEY_RAW" | base64 | tr -d '\n')
     fi
     
     log "Ключи сгенерированы:"
