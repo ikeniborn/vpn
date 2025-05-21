@@ -284,7 +284,8 @@ edit_user() {
     get_server_info
     
     # Создание файла с информацией о пользователе
-    cat > "$USERS_DIR/$NEW_USER_NAME.json" <<EOL
+    if [ "$USE_REALITY" = true ]; then
+        cat > "$USERS_DIR/$NEW_USER_NAME.json" <<EOL
 {
   "name": "$NEW_USER_NAME",
   "uuid": "$NEW_UUID",
@@ -292,12 +293,32 @@ edit_user() {
   "server": "$SERVER_IP",
   "sni": "$SERVER_SNI",
   "private_key": "$PRIVATE_KEY",
-  "public_key": "$PUBLIC_KEY"
+  "public_key": "$PUBLIC_KEY",
+  "short_id": "$SHORT_ID",
+  "protocol": "$PROTOCOL"
 }
 EOL
+    else
+        cat > "$USERS_DIR/$NEW_USER_NAME.json" <<EOL
+{
+  "name": "$NEW_USER_NAME",
+  "uuid": "$NEW_UUID",
+  "port": $SERVER_PORT,
+  "server": "$SERVER_IP",
+  "sni": "$SERVER_SNI",
+  "private_key": "$PRIVATE_KEY",
+  "public_key": "$PUBLIC_KEY",
+  "protocol": "$PROTOCOL"
+}
+EOL
+    fi
     
     # Создание ссылки для подключения
-    REALITY_LINK="vless://$NEW_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$NEW_USER_NAME"
+    if [ "$USE_REALITY" = true ]; then
+        REALITY_LINK="vless://$NEW_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#$NEW_USER_NAME"
+    else
+        REALITY_LINK="vless://$NEW_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$NEW_USER_NAME"
+    fi
     echo "$REALITY_LINK" > "$USERS_DIR/$NEW_USER_NAME.link"
     
     # Генерация QR-кода
