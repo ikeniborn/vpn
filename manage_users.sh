@@ -644,6 +644,219 @@ uninstall_vpn() {
     exit 0
 }
 
+# Ротация Reality ключей
+rotate_reality_keys() {
+    if [ ! -f "$WORK_DIR/config/use_reality.txt" ] || [ "$(cat "$WORK_DIR/config/use_reality.txt")" != "true" ]; then
+        error "Reality не используется на этом сервере"
+        return 1
+    fi
+    
+    log "Начинаем ротацию Reality ключей..."
+    
+    # Создаем резервную копию текущей конфигурации
+    log "Создание резервной копии..."
+    cp "$CONFIG_FILE" "$CONFIG_FILE.backup.$(date +%Y%m%d_%H%M%S)"
+    
+    # Генерируем новые ключи
+    log "Генерация новых ключей..."
+    TEMP_OUTPUT=$(docker run --rm teddysun/xray:latest x25519 2>/dev/null || echo "")
+    
+    if [ -n "$TEMP_OUTPUT" ] && echo "$TEMP_OUTPUT" | grep -q "Private key:"; then
+        NEW_PRIVATE_KEY=$(echo "$TEMP_OUTPUT" | grep "Private key:" | awk '{print $3}')
+        NEW_PUBLIC_KEY=$(echo "$TEMP_OUTPUT" | grep "Public key:" | awk '{print $3}')
+        log "Новые ключи сгенерированы с помощью Xray"
+    else
+        # Альтернативный способ
+        if ! command -v xxd >/dev/null 2>&1; then
+            apt update && apt install -y xxd
+        fi
+        
+        TEMP_PRIVATE=$(openssl genpkey -algorithm X25519 2>/dev/null)
+        if [ $? -eq 0 ] && [ -n "$TEMP_PRIVATE" ]; then
+            NEW_PRIVATE_KEY=$(echo "$TEMP_PRIVATE" | openssl pkey -outform DER 2>/dev/null | tail -c 32 | xxd -p -c 32)
+            NEW_PUBLIC_KEY=$(echo "$TEMP_PRIVATE" | openssl pkey -pubout -outform DER 2>/dev/null | tail -c 32 | base64 | tr -d '\n')
+        else
+            NEW_PRIVATE_KEY=$(openssl rand -hex 32)
+            NEW_PUBLIC_KEY=$(openssl rand -base64 32 | tr -d '\n')
+        fi
+        log "Новые ключи сгенерированы с помощью OpenSSL"
+    fi
+    
+    # Обновляем конфигурацию сервера
+    log "Обновление конфигурации сервера..."
+    jq ".inbounds[0].streamSettings.realitySettings.privateKey = \"$NEW_PRIVATE_KEY\"" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
+    mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    
+    # Сохраняем новые ключи в файлы
+    echo "$NEW_PRIVATE_KEY" > "$WORK_DIR/config/private_key.txt"
+    echo "$NEW_PUBLIC_KEY" > "$WORK_DIR/config/public_key.txt"
+    
+    log "Новые ключи сохранены:"
+    log "Private Key: $NEW_PRIVATE_KEY"
+    log "Public Key: $NEW_PUBLIC_KEY"
+    
+    # Обновляем файлы всех пользователей
+    log "Обновление данных пользователей..."
+    if [ -d "$USERS_DIR" ]; then
+        for user_file in "$USERS_DIR"/*.json; do
+            if [ -f "$user_file" ]; then
+                local user_name=$(basename "$user_file" .json)
+                log "Обновление пользователя: $user_name"
+                
+                # Обновляем ключи в файле пользователя
+                jq ".private_key = \"$NEW_PRIVATE_KEY\" | .public_key = \"$NEW_PUBLIC_KEY\"" "$user_file" > "$user_file.tmp"
+                mv "$user_file.tmp" "$user_file"
+                
+                # Получаем данные пользователя для пересоздания ссылки
+                USER_UUID=$(jq -r '.uuid' "$user_file")
+                USER_SHORT_ID=$(jq -r '.short_id' "$user_file")
+                SERVER_PORT=$(jq -r '.port' "$user_file")
+                SERVER_SNI=$(jq -r '.sni' "$user_file")
+                SERVER_IP=$(curl -s https://api.ipify.org)
+                
+                # Пересоздаем ссылку с новыми ключами
+                NEW_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$NEW_PUBLIC_KEY&sid=$USER_SHORT_ID&type=tcp&headerType=none#$user_name"
+                echo "$NEW_LINK" > "$USERS_DIR/$user_name.link"
+                
+                # Обновляем QR-код
+                if command -v qrencode >/dev/null 2>&1; then
+                    qrencode -t PNG -o "$USERS_DIR/$user_name.png" "$NEW_LINK"
+                fi
+                
+                log "✓ Пользователь $user_name обновлен"
+            fi
+        done
+    fi
+    
+    # Перезапускаем сервер для применения изменений
+    log "Перезапуск сервера..."
+    restart_server
+    
+    log "========================================================"
+    log "Ротация ключей Reality успешно завершена!"
+    log "Все пользователи получили новые ключи и ссылки."
+    log "Резервная копия сохранена в $CONFIG_FILE.backup.*"
+    log "========================================================"
+}
+
+# Статистика использования трафика
+show_traffic_stats() {
+    log "Статистика использования VPN сервера"
+    echo -e "${BLUE}======================================${NC}"
+    
+    # Статистика Docker контейнера
+    log "Статистика Docker контейнера:"
+    if docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -q "xray\|v2ray"; then
+        docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}\t{{.BlockIO}}" | grep -E "xray|v2ray"
+    else
+        warning "VPN контейнер не запущен"
+    fi
+    
+    echo ""
+    
+    # Статистика по пользователям из логов
+    log "Статистика подключений по пользователям:"
+    if [ -f "/var/log/syslog" ]; then
+        # Ищем записи о подключениях в системных логах
+        echo -e "${BLUE}Последние подключения:${NC}"
+        grep -i "xray\|v2ray" /var/log/syslog 2>/dev/null | tail -10 | while read line; do
+            echo "  $line"
+        done
+    fi
+    
+    echo ""
+    
+    # Статистика сетевого интерфейса
+    log "Статистика сетевого трафика:"
+    if command -v vnstat >/dev/null 2>&1; then
+        vnstat -i eth0 --json | jq -r '.interfaces[0].stats.day[] | select(.date == now.date) | "Сегодня: \(.rx.bytes) bytes входящих, \(.tx.bytes) bytes исходящих"' 2>/dev/null || {
+            echo "Установите vnstat для детальной статистики: apt install vnstat"
+        }
+    else
+        echo "Общий трафик интерфейса (приблизительно):"
+        cat /proc/net/dev | grep -E "eth0|ens|enp" | head -1 | awk '{print "  RX: " $2 " bytes, TX: " $10 " bytes"}'
+    fi
+    
+    echo ""
+    
+    # Статистика по портам
+    log "Статистика активных соединений:"
+    if [ -f "$CONFIG_FILE" ]; then
+        VPN_PORT=$(jq -r '.inbounds[0].port' "$CONFIG_FILE" 2>/dev/null)
+        if [ "$VPN_PORT" != "null" ]; then
+            CONNECTIONS=$(netstat -an 2>/dev/null | grep ":$VPN_PORT " | wc -l)
+            echo "  Активных соединений на порту $VPN_PORT: $CONNECTIONS"
+            
+            # Показать активные соединения
+            echo "  Активные соединения:"
+            netstat -an 2>/dev/null | grep ":$VPN_PORT " | head -5 | while read line; do
+                echo "    $line"
+            done
+        fi
+    fi
+    
+    echo ""
+    
+    # Статистика по времени работы
+    log "Время работы сервера:"
+    if command -v docker >/dev/null 2>&1; then
+        CONTAINER_ID=$(docker ps --filter "name=xray" --filter "name=v2ray" --format "{{.ID}}" | head -1)
+        if [ -n "$CONTAINER_ID" ]; then
+            UPTIME=$(docker inspect --format='{{.State.StartedAt}}' "$CONTAINER_ID" 2>/dev/null)
+            if [ -n "$UPTIME" ]; then
+                echo "  Контейнер запущен: $UPTIME"
+                
+                # Вычисляем время работы
+                if command -v python3 >/dev/null 2>&1; then
+                    RUNTIME=$(python3 -c "
+from datetime import datetime
+import sys
+try:
+    start_time = datetime.fromisoformat('$UPTIME'.replace('Z', '+00:00'))
+    now = datetime.now(start_time.tzinfo)
+    uptime = now - start_time
+    days = uptime.days
+    hours, remainder = divmod(uptime.seconds, 3600)
+    minutes, _ = divmod(remainder, 60)
+    print(f'  Время работы: {days} дней, {hours} часов, {minutes} минут')
+except:
+    print('  Время работы: неизвестно')
+")
+                    echo "$RUNTIME"
+                fi
+            fi
+        fi
+    fi
+    
+    echo ""
+    
+    # Статистика по файлам пользователей
+    log "Статистика пользователей:"
+    if [ -d "$USERS_DIR" ]; then
+        TOTAL_USERS=$(ls -1 "$USERS_DIR"/*.json 2>/dev/null | wc -l)
+        echo "  Всего пользователей: $TOTAL_USERS"
+        
+        echo "  Последние созданные пользователи:"
+        ls -lt "$USERS_DIR"/*.json 2>/dev/null | head -3 | while read line; do
+            filename=$(echo "$line" | awk '{print $9}')
+            user_name=$(basename "$filename" .json)
+            mod_time=$(echo "$line" | awk '{print $6, $7, $8}')
+            echo "    $user_name (создан: $mod_time)"
+        done
+    fi
+    
+    echo ""
+    
+    # Рекомендации по мониторингу
+    log "Рекомендации по улучшению мониторинга:"
+    echo "  1. Установите vnstat для детальной статистики трафика: apt install vnstat"
+    echo "  2. Настройте логирование в Xray для отслеживания пользователей"
+    echo "  3. Используйте мониторинг системы (htop, iotop) для анализа производительности"
+    echo "  4. Настройте автоматические отчеты через cron"
+    
+    echo -e "${BLUE}======================================${NC}"
+}
+
 # Отображение меню
 show_menu() {
     clear
@@ -657,11 +870,13 @@ show_menu() {
     echo -e "${BLUE}= 5. Показать данные пользователя         =${NC}"
     echo -e "${BLUE}= 6. Статус сервера                       =${NC}"
     echo -e "${BLUE}= 7. Перезапустить сервер                 =${NC}"
-    echo -e "${BLUE}= 8. Удалить VPN сервер                   =${NC}"
+    echo -e "${BLUE}= 8. Ротация Reality ключей               =${NC}"
+    echo -e "${BLUE}= 9. Статистика использования             =${NC}"
+    echo -e "${BLUE}= 10. Удалить VPN сервер                  =${NC}"
     echo -e "${BLUE}= 0. Выход                                =${NC}"
     echo -e "${BLUE}============================================${NC}"
     echo ""
-    read -p "Выберите действие [0-8]: " choice
+    read -p "Выберите действие [0-10]: " choice
     
     case $choice in
         1) list_users; press_enter ;;
@@ -671,7 +886,9 @@ show_menu() {
         5) show_user; press_enter ;;
         6) show_status; press_enter ;;
         7) restart_server; press_enter ;;
-        8) uninstall_vpn; press_enter ;;
+        8) rotate_reality_keys; press_enter ;;
+        9) show_traffic_stats; press_enter ;;
+        10) uninstall_vpn; press_enter ;;
         0) exit 0 ;;
         *) error "Некорректный выбор! Попробуйте снова." ;;
     esac

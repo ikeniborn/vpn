@@ -73,9 +73,98 @@ DEFAULT_IP=$(curl -s https://api.ipify.org)
 read -p "Введите IP-адрес сервера [$DEFAULT_IP]: " SERVER_IP
 SERVER_IP=${SERVER_IP:-$DEFAULT_IP}
 
+# Функция проверки свободного порта
+check_port_available() {
+    local port=$1
+    if command -v netstat >/dev/null 2>&1; then
+        ! netstat -tuln | grep -q ":$port "
+    elif command -v ss >/dev/null 2>&1; then
+        ! ss -tuln | grep -q ":$port "
+    else
+        # Попытка подключения к порту как проверка
+        ! timeout 1 bash -c "</dev/tcp/127.0.0.1/$port" 2>/dev/null
+    fi
+}
+
+# Генерация случайного свободного порта
+generate_random_port() {
+    local attempts=0
+    local max_attempts=20
+    
+    while [ $attempts -lt $max_attempts ]; do
+        # Генерируем случайный порт в диапазоне 10000-65000
+        local port=$(shuf -i 10000-65000 -n 1)
+        
+        if check_port_available $port; then
+            echo $port
+            return 0
+        fi
+        
+        attempts=$((attempts + 1))
+    done
+    
+    # Если не удалось найти свободный порт, возвращаем стандартный
+    echo 10443
+    return 1
+}
+
 # Порт для VPN сервера
-read -p "Введите порт для VPN сервера [10443]: " SERVER_PORT
-SERVER_PORT=${SERVER_PORT:-10443}
+echo "Выберите метод назначения порта:"
+echo "1. Случайный свободный порт (рекомендуется)"
+echo "2. Указать порт вручную"
+echo "3. Использовать стандартный порт (10443)"
+read -p "Ваш выбор [1]: " PORT_CHOICE
+PORT_CHOICE=${PORT_CHOICE:-1}
+
+case $PORT_CHOICE in
+    1)
+        log "Поиск свободного порта..."
+        SERVER_PORT=$(generate_random_port)
+        if [ $? -eq 0 ]; then
+            log "✓ Найден свободный порт: $SERVER_PORT"
+        else
+            warning "Не удалось найти свободный случайный порт, используется стандартный"
+            SERVER_PORT=10443
+        fi
+        ;;
+    2)
+        while true; do
+            read -p "Введите порт для VPN сервера [10443]: " SERVER_PORT
+            SERVER_PORT=${SERVER_PORT:-10443}
+            
+            # Проверка корректности порта
+            if ! [[ "$SERVER_PORT" =~ ^[0-9]+$ ]] || [ "$SERVER_PORT" -lt 1 ] || [ "$SERVER_PORT" -gt 65535 ]; then
+                error "Некорректный порт. Введите число от 1 до 65535."
+                continue
+            fi
+            
+            # Проверка доступности порта
+            if check_port_available $SERVER_PORT; then
+                log "✓ Порт $SERVER_PORT свободен"
+                break
+            else
+                warning "Порт $SERVER_PORT уже используется!"
+                read -p "Использовать занятый порт? (y/n): " use_busy_port
+                if [ "$use_busy_port" = "y" ]; then
+                    warning "Внимание: порт $SERVER_PORT может конфликтовать с другими службами"
+                    break
+                fi
+            fi
+        done
+        ;;
+    3)
+        SERVER_PORT=10443
+        if ! check_port_available $SERVER_PORT; then
+            warning "Стандартный порт $SERVER_PORT занят, но будет использован"
+        fi
+        ;;
+    *)
+        SERVER_PORT=$(generate_random_port)
+        log "Использован случайный порт: $SERVER_PORT"
+        ;;
+esac
+
+log "Выбран порт: $SERVER_PORT"
 
 # Выбор протокола
 echo "Выберите протокол:"
@@ -101,12 +190,43 @@ USER_UUID=${USER_UUID:-$DEFAULT_UUID}
 read -p "Введите имя первого пользователя [user1]: " USER_NAME
 USER_NAME=${USER_NAME:-user1}
 
+# Функция проверки доступности SNI домена
+check_sni_domain() {
+    local domain=$1
+    local timeout=10
+    
+    log "Проверка доступности домена $domain..."
+    
+    # Проверка DNS резолюции
+    if ! nslookup "$domain" >/dev/null 2>&1; then
+        warning "Домен $domain не резолвится в DNS"
+        return 1
+    fi
+    
+    # Проверка HTTPS доступности
+    if ! curl -s --connect-timeout $timeout --max-time $timeout "https://$domain" >/dev/null 2>&1; then
+        warning "Домен $domain недоступен по HTTPS"
+        return 1
+    fi
+    
+    # Проверка поддержки TLS 1.3
+    local tls_check=$(echo | openssl s_client -connect "$domain:443" -tls1_3 -quiet 2>/dev/null | grep "TLSv1.3")
+    if [ -z "$tls_check" ]; then
+        warning "Домен $domain не поддерживает TLS 1.3"
+        return 1
+    fi
+    
+    log "✓ Домен $domain прошел все проверки"
+    return 0
+}
+
 # Выбор сайта для SNI
 echo "Выберите сайт для маскировки Reality:"
 echo "1. addons.mozilla.org (рекомендуется)"
 echo "2. www.lovelive-anime.jp"
 echo "3. www.swift.org"
 echo "4. Ввести свой домен"
+echo "5. Автоматический выбор лучшего домена"
 read -p "Ваш выбор [1]: " SNI_CHOICE
 SNI_CHOICE=${SNI_CHOICE:-1}
 
@@ -114,11 +234,54 @@ case $SNI_CHOICE in
     1) SERVER_SNI="addons.mozilla.org";;
     2) SERVER_SNI="www.lovelive-anime.jp";;
     3) SERVER_SNI="www.swift.org";;
-    4) read -p "Введите домен для SNI: " SERVER_SNI;;
+    4) 
+        while true; do
+            read -p "Введите домен для SNI: " SERVER_SNI
+            if check_sni_domain "$SERVER_SNI"; then
+                break
+            else
+                error "Домен $SERVER_SNI не подходит для использования. Попробуйте другой."
+                read -p "Попробовать еще раз? (y/n): " retry
+                if [ "$retry" != "y" ]; then
+                    SERVER_SNI="addons.mozilla.org"
+                    log "Использован домен по умолчанию: $SERVER_SNI"
+                    break
+                fi
+            fi
+        done
+        ;;
+    5)
+        log "Автоматический выбор лучшего домена..."
+        CANDIDATES=("addons.mozilla.org" "www.lovelive-anime.jp" "www.swift.org" "www.kernel.org" "gitlab.com")
+        SERVER_SNI=""
+        
+        for domain in "${CANDIDATES[@]}"; do
+            if check_sni_domain "$domain"; then
+                SERVER_SNI="$domain"
+                log "✓ Автоматически выбран домен: $SERVER_SNI"
+                break
+            fi
+        done
+        
+        if [ -z "$SERVER_SNI" ]; then
+            warning "Ни один из кандидатов не прошел проверку. Используется домен по умолчанию."
+            SERVER_SNI="addons.mozilla.org"
+        fi
+        ;;
     *) SERVER_SNI="addons.mozilla.org";;
 esac
 
-log "Выбран SNI: $SERVER_SNI"
+# Финальная проверка выбранного домена
+if ! check_sni_domain "$SERVER_SNI"; then
+    warning "Выбранный домен $SERVER_SNI может работать нестабильно"
+    read -p "Продолжить с этим доменом? (y/n) [y]: " continue_choice
+    if [ "$continue_choice" = "n" ]; then
+        SERVER_SNI="addons.mozilla.org"
+        log "Использован резервный домен: $SERVER_SNI"
+    fi
+fi
+
+log "Итоговый выбор SNI: $SERVER_SNI"
 
 # Генерация приватного ключа и публичного ключа для reality (если используется)
 if [ "$USE_REALITY" = true ]; then
@@ -185,8 +348,9 @@ fi
 
 # Для случая если мы уже вышли из блока, где генерируются ключи
 
-# Создание директории для конфигурации
+# Создание директорий для конфигурации и логов
 mkdir -p "$WORK_DIR/config"
+mkdir -p "$WORK_DIR/logs"
 
 # Создание конфигурации Xray
 if [ "$USE_REALITY" = true ]; then
@@ -194,7 +358,24 @@ if [ "$USE_REALITY" = true ]; then
     cat > "$WORK_DIR/config/config.json" <<EOL
 {
   "log": {
-    "loglevel": "warning"
+    "loglevel": "info",
+    "access": "/var/log/xray/access.log",
+    "error": "/var/log/xray/error.log"
+  },
+  "stats": {},
+  "api": {
+    "tag": "api",
+    "services": [
+      "StatsService"
+    ]
+  },
+  "policy": {
+    "system": {
+      "statsInboundUplink": true,
+      "statsInboundDownlink": true,
+      "statsOutboundUplink": true,
+      "statsOutboundDownlink": true
+    }
   },
   "inbounds": [
     {
@@ -325,16 +506,17 @@ fi
 cat > "$WORK_DIR/docker-compose.yml" <<EOL
 version: '3'
 services:
-  v2ray:
-    image: v2fly/v2fly-core:latest
-    container_name: v2ray
+  xray:
+    image: teddysun/xray:latest
+    container_name: xray
     restart: always
     network_mode: host
     volumes:
-      - ./config:/etc/v2ray
+      - ./config:/etc/xray
+      - ./logs:/var/log/xray
     environment:
       - TZ=Europe/Moscow
-    command: ["run", "-c", "/etc/v2ray/config.json"]
+    command: ["run", "-c", "/etc/xray/config.json"]
 EOL
 
 # Настройка брандмауэра
