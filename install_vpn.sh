@@ -125,72 +125,28 @@ cat > "$WORK_DIR/config/config.json" <<EOL
   },
   "inbounds": [
     {
-      "tag": "vless-in",
       "port": $SERVER_PORT,
       "protocol": "vless",
       "settings": {
         "clients": [
           {
             "id": "$USER_UUID",
-            "email": "$USER_NAME",
-            "level": 0
+            "flow": ""
           }
         ],
         "decryption": "none"
       },
       "streamSettings": {
         "network": "tcp",
-        "security": "reality",
-        "realitySettings": {
-          "show": false,
-          "dest": "$SERVER_SNI:443",
-          "xver": 0,
-          "serverNames": [
-            "$SERVER_SNI"
-          ],
-          "privateKey": "$PRIVATE_KEY",
-          "shortIds": [
-            "$SHORT_ID"
-          ]
-        }
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": [
-          "http",
-          "tls",
-          "quic"
-        ]
+        "security": "none"
       }
     }
   ],
   "outbounds": [
     {
-      "tag": "direct",
-      "protocol": "freedom",
-      "settings": {}
-    },
-    {
-      "tag": "block",
-      "protocol": "blackhole",
-      "settings": {}
+      "protocol": "freedom"
     }
-  ],
-  "routing": {
-    "domainStrategy": "IPIfNonMatch",
-    "rules": [
-      {
-        "type": "field",
-        "ip": ["geoip:private"],
-        "outboundTag": "block"
-      },
-      {
-        "type": "field",
-        "domain": ["geosite:category-ads-all"],
-        "outboundTag": "block"
-      }
-    ]
-  }
+  ]
 }
 EOL
 
@@ -199,7 +155,7 @@ cat > "$WORK_DIR/docker-compose.yml" <<EOL
 version: '3'
 services:
   v2ray:
-    image: teddysun/v2ray
+    image: v2fly/v2fly-core:latest
     container_name: v2ray
     restart: always
     network_mode: host
@@ -207,7 +163,7 @@ services:
       - ./config:/etc/v2ray
     environment:
       - TZ=Europe/Moscow
-    command: ["v2ray", "run", "-c", "/etc/v2ray/config.json"]
+    command: ["run", "-c", "/etc/v2ray/config.json"]
 EOL
 
 # Настройка брандмауэра
@@ -236,7 +192,7 @@ cat > "$WORK_DIR/users/$USER_NAME.json" <<EOL
 EOL
 
 # Создание ссылки для подключения
-REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=firefox&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#$USER_NAME"
+REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
 echo "$REALITY_LINK" > "$WORK_DIR/users/$USER_NAME.link"
 
 log "========================================================"
