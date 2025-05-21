@@ -77,6 +77,21 @@ SERVER_IP=${SERVER_IP:-$DEFAULT_IP}
 read -p "Введите порт для VPN сервера [443]: " SERVER_PORT
 SERVER_PORT=${SERVER_PORT:-443}
 
+# Выбор протокола
+echo "Выберите протокол:"
+echo "1. VLESS (базовый)"
+echo "2. VLESS+Reality (рекомендуется)"
+read -p "Ваш выбор [2]: " PROTOCOL_CHOICE
+PROTOCOL_CHOICE=${PROTOCOL_CHOICE:-2}
+
+case $PROTOCOL_CHOICE in
+    1) PROTOCOL="vless"; USE_REALITY=false;;
+    2) PROTOCOL="vless+reality"; USE_REALITY=true;;
+    *) error "Неверный выбор протокола";;
+esac
+
+log "Выбран протокол: $PROTOCOL"
+
 # Генерация UUID для первого пользователя
 DEFAULT_UUID=$(uuid -v 4)
 read -p "Введите UUID для первого пользователя [$DEFAULT_UUID]: " USER_UUID
@@ -90,36 +105,98 @@ USER_NAME=${USER_NAME:-user1}
 read -p "Введите сайт для SNI [www.microsoft.com]: " SERVER_SNI
 SERVER_SNI=${SERVER_SNI:-www.microsoft.com}
 
-# Генерация приватного ключа и публичного ключа для reality
-log "Генерация ключей для reality..."
+# Генерация приватного ключа и публичного ключа для reality (если используется)
+if [ "$USE_REALITY" = true ]; then
+    log "Генерация ключей для Reality..."
 
-# Пробуем использовать teddysun/v2ray (тот же образ, что используется для сервера)
-if command -v xxd >/dev/null 2>&1; then
-    # Используем альтернативный способ генерации ключей
-    log "Генерация ключей с помощью OpenSSL..."
-    SHORT_ID=$(openssl rand -hex 8)
-    PRIVATE_KEY=$(openssl ecparam -genkey -name prime256v1 -outform PEM | openssl ec -outform DER | tail -c +8 | head -c 32 | xxd -p -c 32)
-    PUBLIC_KEY=$(echo "$PRIVATE_KEY" | xxd -r -p | openssl ec -inform DER -outform PEM -pubin -pubout 2>/dev/null | tail -6 | head -5 | base64 | tr -d '\n')
-else
-    # Если xxd не установлен
-    log "Установка xxd..."
-    apt update && apt install -y xxd
+    # Пробуем использовать teddysun/v2ray (тот же образ, что используется для сервера)
+    if command -v xxd >/dev/null 2>&1; then
+        # Используем альтернативный способ генерации ключей
+        log "Генерация ключей с помощью OpenSSL..."
+        SHORT_ID=$(openssl rand -hex 8)
+        PRIVATE_KEY=$(openssl ecparam -genkey -name prime256v1 -outform PEM | openssl ec -outform DER | tail -c +8 | head -c 32 | xxd -p -c 32)
+        PUBLIC_KEY=$(echo "$PRIVATE_KEY" | xxd -r -p | openssl ec -inform DER -outform PEM -pubin -pubout 2>/dev/null | tail -6 | head -5 | base64 | tr -d '\n')
+    else
+        # Если xxd не установлен
+        log "Установка xxd..."
+        apt update && apt install -y xxd
+        
+        log "Генерация ключей с помощью OpenSSL..."
+        SHORT_ID=$(openssl rand -hex 8)
+        PRIVATE_KEY=$(openssl ecparam -genkey -name prime256v1 -outform PEM | openssl ec -outform DER | tail -c +8 | head -c 32 | xxd -p -c 32)
+        PUBLIC_KEY=$(echo "$PRIVATE_KEY" | xxd -r -p | openssl ec -inform DER -outform PEM -pubin -pubout 2>/dev/null | tail -6 | head -5 | base64 | tr -d '\n')
+    fi
     
-    log "Генерация ключей с помощью OpenSSL..."
-    SHORT_ID=$(openssl rand -hex 8)
-    PRIVATE_KEY=$(openssl ecparam -genkey -name prime256v1 -outform PEM | openssl ec -outform DER | tail -c +8 | head -c 32 | xxd -p -c 32)
-    PUBLIC_KEY=$(echo "$PRIVATE_KEY" | xxd -r -p | openssl ec -inform DER -outform PEM -pubin -pubout 2>/dev/null | tail -6 | head -5 | base64 | tr -d '\n')
+    log "Ключи сгенерированы:"
+    log "Private Key: $PRIVATE_KEY"
+    log "Public Key: $PUBLIC_KEY"
+    log "Short ID: $SHORT_ID"
+else
+    # Если Reality не используется, устанавливаем пустые значения
+    PRIVATE_KEY=""
+    PUBLIC_KEY=""
+    SHORT_ID=""
 fi
 
-log "Ключи сгенерированы:"
-log "Private Key: $PRIVATE_KEY"
-log "Public Key: $PUBLIC_KEY"
+# Для случая если мы уже вышли из блока, где генерируются ключи
 
 # Создание директории для конфигурации
 mkdir -p "$WORK_DIR/config"
 
 # Создание конфигурации v2ray
-cat > "$WORK_DIR/config/config.json" <<EOL
+if [ "$USE_REALITY" = true ]; then
+    # Конфигурация для VLESS+Reality
+    cat > "$WORK_DIR/config/config.json" <<EOL
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "inbounds": [
+    {
+      "port": $SERVER_PORT,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "$USER_UUID",
+            "flow": "",
+            "email": "$USER_NAME"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "dest": "$SERVER_SNI:443",
+          "xver": 0,
+          "serverNames": [
+            "$SERVER_SNI"
+          ],
+          "privateKey": "$PRIVATE_KEY",
+          "shortIds": [
+            "$SHORT_ID"
+          ]
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls"]
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom"
+    }
+  ]
+}
+EOL
+else
+    # Конфигурация для базового VLESS
+    cat > "$WORK_DIR/config/config.json" <<EOL
 {
   "log": {
     "loglevel": "warning"
@@ -160,6 +237,7 @@ cat > "$WORK_DIR/config/config.json" <<EOL
   ]
 }
 EOL
+fi
 
 # Создание docker-compose.yml
 cat > "$WORK_DIR/docker-compose.yml" <<EOL
@@ -203,18 +281,28 @@ cat > "$WORK_DIR/users/$USER_NAME.json" <<EOL
 EOL
 
 # Создание ссылки для подключения
-REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
+if [ "$USE_REALITY" = true ]; then
+    REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#$USER_NAME"
+else
+    REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
+fi
 echo "$REALITY_LINK" > "$WORK_DIR/users/$USER_NAME.link"
 
-# Сохраняем SNI информацию для использования в manage_users.sh
+# Сохраняем информацию для использования в manage_users.sh
 echo "$SERVER_SNI" > "$WORK_DIR/config/sni.txt"
+echo "$PROTOCOL" > "$WORK_DIR/config/protocol.txt"
+if [ "$USE_REALITY" = true ]; then
+    echo "true" > "$WORK_DIR/config/use_reality.txt"
+else
+    echo "false" > "$WORK_DIR/config/use_reality.txt"
+fi
 
 log "========================================================"
 log "Установка VPN сервера успешно завершена!"
 log "Информация о сервере:"
 log "IP адрес: $SERVER_IP"
 log "Порт: $SERVER_PORT"
-log "Протокол: vless+reality"
+log "Протокол: $PROTOCOL"
 log "SNI: $SERVER_SNI"
 log "========================================================"
 log "Информация о первом пользователе:"

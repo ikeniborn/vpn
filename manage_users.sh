@@ -73,16 +73,56 @@ get_server_info() {
             SERVER_SNI="www.microsoft.com"
         fi
         
-        # Получение публичного ключа из файла любого пользователя, если он существует
+        # Определение используемого протокола
+        if [ -f "$WORK_DIR/config/protocol.txt" ]; then
+            PROTOCOL=$(cat "$WORK_DIR/config/protocol.txt")
+        else
+            # Проверяем настройки безопасности в конфиге
+            SECURITY=$(jq -r '.inbounds[0].streamSettings.security' "$CONFIG_FILE")
+            if [ "$SECURITY" = "reality" ]; then
+                PROTOCOL="vless+reality"
+                USE_REALITY=true
+            else
+                PROTOCOL="vless"
+                USE_REALITY=false
+            fi
+        fi
+        
+        # Проверка использования Reality
+        if [ -f "$WORK_DIR/config/use_reality.txt" ]; then
+            USE_REALITY=$(cat "$WORK_DIR/config/use_reality.txt")
+        else
+            # Если файл не существует, проверяем конфигурацию
+            SECURITY=$(jq -r '.inbounds[0].streamSettings.security' "$CONFIG_FILE")
+            if [ "$SECURITY" = "reality" ]; then
+                USE_REALITY=true
+            else
+                USE_REALITY=false
+            fi
+        fi
+        
+        # Получение публичного ключа и короткого ID из файла любого пользователя или из конфига
         local first_user_file=$(ls -1 "$USERS_DIR"/*.json 2>/dev/null | head -1)
         if [ -n "$first_user_file" ]; then
             PUBLIC_KEY=$(jq -r '.public_key' "$first_user_file")
             PRIVATE_KEY=$(jq -r '.private_key' "$first_user_file")
+            SHORT_ID=$(jq -r '.short_id // ""' "$first_user_file")
+        elif [ "$USE_REALITY" = true ]; then
+            # Пытаемся получить ключи из конфигурации
+            PRIVATE_KEY=$(jq -r '.inbounds[0].streamSettings.realitySettings.privateKey' "$CONFIG_FILE")
+            # Для получения публичного ключа нужен xxd и openssl
+            if command -v xxd >/dev/null 2>&1; then
+                PUBLIC_KEY=$(echo "$PRIVATE_KEY" | xxd -r -p | openssl ec -inform DER -outform PEM -pubin -pubout 2>/dev/null | tail -6 | head -5 | base64 | tr -d '\n')
+            else
+                warning "xxd не установлен. Невозможно получить публичный ключ из приватного."
+                PUBLIC_KEY="unknown"
+            fi
+            SHORT_ID=$(jq -r '.inbounds[0].streamSettings.realitySettings.shortIds[0]' "$CONFIG_FILE")
         else
-            # Если файлов пользователей нет, используем значения по умолчанию
             warning "Нет информации о ключах. Используйте скрипт установки или добавьте ключи вручную."
             PUBLIC_KEY="unknown"
             PRIVATE_KEY="unknown"
+            SHORT_ID=""
         fi
     else
         error "Файл конфигурации не найден: $CONFIG_FILE"
@@ -124,7 +164,8 @@ add_user() {
     mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
     
     # Создание файла с информацией о пользователе
-    cat > "$USERS_DIR/$USER_NAME.json" <<EOL
+    if [ "$USE_REALITY" = true ]; then
+        cat > "$USERS_DIR/$USER_NAME.json" <<EOL
 {
   "name": "$USER_NAME",
   "uuid": "$USER_UUID",
@@ -132,12 +173,32 @@ add_user() {
   "server": "$SERVER_IP",
   "sni": "$SERVER_SNI",
   "private_key": "$PRIVATE_KEY",
-  "public_key": "$PUBLIC_KEY"
+  "public_key": "$PUBLIC_KEY",
+  "short_id": "$SHORT_ID",
+  "protocol": "$PROTOCOL"
 }
 EOL
+    else
+        cat > "$USERS_DIR/$USER_NAME.json" <<EOL
+{
+  "name": "$USER_NAME",
+  "uuid": "$USER_UUID",
+  "port": $SERVER_PORT,
+  "server": "$SERVER_IP",
+  "sni": "$SERVER_SNI",
+  "private_key": "$PRIVATE_KEY",
+  "public_key": "$PUBLIC_KEY",
+  "protocol": "$PROTOCOL"
+}
+EOL
+    fi
     
     # Создание ссылки для подключения
-    REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
+    if [ "$USE_REALITY" = true ]; then
+        REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#$USER_NAME"
+    else
+        REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
+    fi
     echo "$REALITY_LINK" > "$USERS_DIR/$USER_NAME.link"
     
     # Генерация QR-кода
@@ -280,7 +341,8 @@ show_user() {
         USER_UUID=$(jq -r ".inbounds[0].settings.clients[] | select(.email == \"$USER_NAME\") | .id" "$CONFIG_FILE")
         
         # Создание файла с информацией о пользователе
-        cat > "$USERS_DIR/$USER_NAME.json" <<EOL
+        if [ "$USE_REALITY" = true ]; then
+            cat > "$USERS_DIR/$USER_NAME.json" <<EOL
 {
   "name": "$USER_NAME",
   "uuid": "$USER_UUID",
@@ -288,12 +350,32 @@ show_user() {
   "server": "$SERVER_IP",
   "sni": "$SERVER_SNI",
   "private_key": "$PRIVATE_KEY",
-  "public_key": "$PUBLIC_KEY"
+  "public_key": "$PUBLIC_KEY",
+  "short_id": "$SHORT_ID",
+  "protocol": "$PROTOCOL"
 }
 EOL
+        else
+            cat > "$USERS_DIR/$USER_NAME.json" <<EOL
+{
+  "name": "$USER_NAME",
+  "uuid": "$USER_UUID",
+  "port": $SERVER_PORT,
+  "server": "$SERVER_IP",
+  "sni": "$SERVER_SNI",
+  "private_key": "$PRIVATE_KEY",
+  "public_key": "$PUBLIC_KEY",
+  "protocol": "$PROTOCOL"
+}
+EOL
+        fi
         
         # Создание ссылки для подключения
-        REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
+        if [ "$USE_REALITY" = true ]; then
+            REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#$USER_NAME"
+        else
+            REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
+        fi
         echo "$REALITY_LINK" > "$USERS_DIR/$USER_NAME.link"
         
         # Генерация QR-кода
@@ -311,7 +393,11 @@ EOL
         mv "$USERS_DIR/$USER_NAME.json.tmp" "$USERS_DIR/$USER_NAME.json"
         
         # Обновление ссылки для подключения
-        REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
+        if [ "$USE_REALITY" = true ]; then
+            REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#$USER_NAME"
+        else
+            REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
+        fi
         echo "$REALITY_LINK" > "$USERS_DIR/$USER_NAME.link"
         
         # Обновление QR-кода
@@ -322,6 +408,7 @@ EOL
     log "UUID: $USER_UUID"
     log "IP сервера: $SERVER_IP"
     log "Порт: $SERVER_PORT"
+    log "Протокол: $PROTOCOL"
     log "SNI: $SERVER_SNI"
     log "Ссылка для подключения сохранена в: $USERS_DIR/$USER_NAME.link"
     log "QR-код сохранен в: $USERS_DIR/$USER_NAME.png"
@@ -378,11 +465,19 @@ show_status() {
     get_server_info
     log "IP адрес: $SERVER_IP"
     log "Порт: $SERVER_PORT"
+    log "Протокол: $PROTOCOL"
     log "SNI: $SERVER_SNI"
+
+    # Выводим дополнительную информацию о Reality, если используется
+    if [ "$USE_REALITY" = true ]; then
+        log "Reality активен"
+    else
+        log "Reality не используется"
+    fi
 
     # Если SNI пустой или "null", отобразим соответствующее сообщение
     if [ "$SERVER_SNI" = "null" ] || [ -z "$SERVER_SNI" ]; then
-        log "Используется базовый протокол VLESS без SNI"
+        log "SNI не задан"
     fi
     
     # Количество пользователей
