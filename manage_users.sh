@@ -73,50 +73,29 @@ get_server_info() {
             SERVER_SNI="www.microsoft.com"
         fi
         
-        # Определение используемого протокола
-        if [ -f "$WORK_DIR/config/protocol.txt" ]; then
-            PROTOCOL=$(cat "$WORK_DIR/config/protocol.txt")
+        # Определение использования Reality - приоритет конфигурации JSON
+        log "Проверка использования Reality..."
+        SECURITY=$(jq -r '.inbounds[0].streamSettings.security' "$CONFIG_FILE")
+        log "Найдена настройка security в конфиге: $SECURITY"
+        
+        if [ "$SECURITY" = "reality" ]; then
+            USE_REALITY=true
+            PROTOCOL="vless+reality"
+            log "Установлено использование Reality из конфигурации"
+            log "USE_REALITY = $USE_REALITY, PROTOCOL = $PROTOCOL"
         else
-            # Проверяем настройки безопасности в конфиге
-            SECURITY=$(jq -r '.inbounds[0].streamSettings.security' "$CONFIG_FILE")
-            if [ "$SECURITY" = "reality" ]; then
-                PROTOCOL="vless+reality"
-                USE_REALITY=true
-            else
-                PROTOCOL="vless"
-                USE_REALITY=false
-            fi
+            USE_REALITY=false
+            PROTOCOL="vless"
+            log "Использование Reality отключено из конфигурации"
+            log "USE_REALITY = $USE_REALITY, PROTOCOL = $PROTOCOL"
         fi
         
-        # Проверка использования Reality
-        log "Проверка использования Reality..."
-        if [ -f "$WORK_DIR/config/use_reality.txt" ]; then
-            USE_REALITY_FILE=$(cat "$WORK_DIR/config/use_reality.txt")
-            log "Найден файл use_reality.txt с значением: $USE_REALITY_FILE"
-            # Преобразуем строковое значение в булево
-            if [ "$USE_REALITY_FILE" = "true" ]; then
-                USE_REALITY=true
-                log "Установлено использование Reality"
-            else
-                USE_REALITY=false
-                log "Использование Reality отключено"
-            fi
+        # Обновляем или создаем файлы с настройками для консистентности
+        echo "$PROTOCOL" > "$WORK_DIR/config/protocol.txt"
+        if [ "$USE_REALITY" = true ]; then
+            echo "true" > "$WORK_DIR/config/use_reality.txt"
         else
-            # Если файл не существует, проверяем конфигурацию
-            log "Файл use_reality.txt не найден, проверяем конфигурацию"
-            SECURITY=$(jq -r '.inbounds[0].streamSettings.security' "$CONFIG_FILE")
-            log "Найдена настройка security: $SECURITY"
-            if [ "$SECURITY" = "reality" ]; then
-                USE_REALITY=true
-                log "Установлено использование Reality из конфигурации"
-                # Автоматически создаем файл для будущих вызовов
-                echo "true" > "$WORK_DIR/config/use_reality.txt"
-            else
-                USE_REALITY=false
-                log "Использование Reality отключено из конфигурации"
-                # Автоматически создаем файл для будущих вызовов
-                echo "false" > "$WORK_DIR/config/use_reality.txt"
-            fi
+            echo "false" > "$WORK_DIR/config/use_reality.txt"
         fi
         
         # Получение публичного ключа и короткого ID сначала из отдельных файлов, затем из конфига
@@ -251,6 +230,7 @@ EOL
     fi
     
     # Создание ссылки для подключения
+    log "Создание ссылки для подключения. USE_REALITY = $USE_REALITY"
     if [ "$USE_REALITY" = true ]; then
         # Проверка наличия необходимых параметров
         if [ -z "$PUBLIC_KEY" ] || [ "$PUBLIC_KEY" = "null" ] || [ "$PUBLIC_KEY" = "unknown" ]; then
@@ -266,8 +246,10 @@ EOL
         
         # Создание ссылки Reality, параметр flow должен быть пустым
         REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#$USER_NAME"
+        log "Создана ссылка Reality: $REALITY_LINK"
     else
         REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
+        log "Создана обычная VLESS ссылка: $REALITY_LINK"
     fi
     echo "$REALITY_LINK" > "$USERS_DIR/$USER_NAME.link"
     
@@ -421,12 +403,12 @@ show_user() {
         error "Пользователь с именем '$USER_NAME' не найден."
     fi
     
+    # ВСЕГДА получаем информацию о сервере в начале
+    get_server_info
+    
     # Проверка наличия файла с данными пользователя
     if [ ! -f "$USERS_DIR/$USER_NAME.json" ]; then
         warning "Файл с данными пользователя не найден. Создаем новый файл."
-        
-        # Получаем информацию о сервере
-        get_server_info
         
         # Получаем UUID пользователя
         USER_UUID=$(jq -r ".inbounds[0].settings.clients[] | select(.email == \"$USER_NAME\") | .id" "$CONFIG_FILE")
@@ -463,17 +445,6 @@ EOL
         
         # Создание ссылки для подключения
         if [ "$USE_REALITY" = true ]; then
-            # Проверка наличия необходимых параметров
-            if [ -z "$PUBLIC_KEY" ] || [ "$PUBLIC_KEY" = "null" ] || [ "$PUBLIC_KEY" = "unknown" ]; then
-                warning "Публичный ключ Reality недоступен. Попытка получить из конфига..."
-                PUBLIC_KEY=$(jq -r '.inbounds[0].streamSettings.realitySettings.privateKey' "$CONFIG_FILE" | xxd -r -p | openssl ec -inform DER -outform PEM -pubin -pubout 2>/dev/null | tail -6 | head -5 | base64 | tr -d '\n')
-            fi
-            
-            if [ -z "$SHORT_ID" ] || [ "$SHORT_ID" = "null" ]; then
-                warning "Short ID Reality недоступен. Попытка получить из конфига..."
-                SHORT_ID=$(jq -r '.inbounds[0].streamSettings.realitySettings.shortIds[0]' "$CONFIG_FILE")
-            fi
-            
             REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#$USER_NAME"
         else
             REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
@@ -496,17 +467,6 @@ EOL
         
         # Обновление ссылки для подключения
         if [ "$USE_REALITY" = true ]; then
-            # Проверка наличия необходимых параметров
-            if [ -z "$PUBLIC_KEY" ] || [ "$PUBLIC_KEY" = "null" ] || [ "$PUBLIC_KEY" = "unknown" ]; then
-                log "Публичный ключ Reality недоступен. Устанавливаем фиксированный ключ."
-                PUBLIC_KEY="YEeEMaiyHISSdUKXD5s08OnZ6KQIyDmtlDfK-XmU-hc"
-            fi
-            
-            if [ -z "$SHORT_ID" ] || [ "$SHORT_ID" = "null" ]; then
-                log "Short ID Reality недоступен. Устанавливаем фиксированный ID."
-                SHORT_ID="0453245bd68b99ae"
-            fi
-            
             REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#$USER_NAME"
         else
             REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
@@ -598,6 +558,69 @@ show_status() {
     log "Количество пользователей: $USERS_COUNT"
 }
 
+# Остановка сервера и удаление всех данных
+uninstall_vpn() {
+    echo -e "${RED}ВНИМАНИЕ: Эта операция полностью удалит VPN сервер и все данные!${NC}"
+    echo -e "${RED}Все пользователи будут удалены, и их данные будут потеряны безвозвратно.${NC}"
+    echo ""
+    read -p "Вы уверены, что хотите продолжить? (yes/no): " confirmation
+    
+    if [ "$confirmation" != "yes" ]; then
+        log "Операция отменена."
+        return
+    fi
+    
+    echo ""
+    read -p "Введите 'DELETE' для подтверждения удаления: " final_confirmation
+    
+    if [ "$final_confirmation" != "DELETE" ]; then
+        log "Операция отменена."
+        return
+    fi
+    
+    log "Начинаем удаление VPN сервера..."
+    
+    # Остановка и удаление Docker контейнера
+    log "Остановка Docker контейнера..."
+    cd "$WORK_DIR" 2>/dev/null || true
+    docker-compose down 2>/dev/null || true
+    
+    # Удаление Docker образа
+    log "Удаление Docker образа..."
+    docker rmi v2fly/v2fly-core:latest 2>/dev/null || true
+    
+    # Удаление рабочего каталога
+    log "Удаление рабочего каталога $WORK_DIR..."
+    rm -rf "$WORK_DIR"
+    
+    # Удаление ссылки на скрипт управления
+    log "Удаление ссылки на скрипт управления..."
+    rm -f /usr/local/bin/v2ray-manage
+    
+    # Закрытие портов в брандмауэре (опционально)
+    if command -v ufw >/dev/null 2>&1; then
+        log "Закрытие портов в брандмауэре..."
+        # Получаем порт из конфига, если он еще существует
+        if [ -f "$CONFIG_FILE" ]; then
+            PORT=$(jq '.inbounds[0].port' "$CONFIG_FILE" 2>/dev/null || echo "")
+            if [ -n "$PORT" ] && [ "$PORT" != "null" ]; then
+                ufw delete allow "$PORT/tcp" 2>/dev/null || true
+            fi
+        fi
+        # Пытаемся закрыть стандартные порты
+        ufw delete allow 10443/tcp 2>/dev/null || true
+        ufw delete allow 443/tcp 2>/dev/null || true
+    fi
+    
+    log "========================================================"
+    log "VPN сервер успешно удален!"
+    log "Все файлы конфигурации и данные пользователей удалены."
+    log "Docker контейнер остановлен и удален."
+    log "========================================================"
+    
+    exit 0
+}
+
 # Отображение меню
 show_menu() {
     clear
@@ -611,10 +634,11 @@ show_menu() {
     echo -e "${BLUE}= 5. Показать данные пользователя         =${NC}"
     echo -e "${BLUE}= 6. Статус сервера                       =${NC}"
     echo -e "${BLUE}= 7. Перезапустить сервер                 =${NC}"
+    echo -e "${BLUE}= 8. Удалить VPN сервер                   =${NC}"
     echo -e "${BLUE}= 0. Выход                                =${NC}"
     echo -e "${BLUE}============================================${NC}"
     echo ""
-    read -p "Выберите действие [0-7]: " choice
+    read -p "Выберите действие [0-8]: " choice
     
     case $choice in
         1) list_users; press_enter ;;
@@ -624,6 +648,7 @@ show_menu() {
         5) show_user; press_enter ;;
         6) show_status; press_enter ;;
         7) restart_server; press_enter ;;
+        8) uninstall_vpn; press_enter ;;
         0) exit 0 ;;
         *) error "Некорректный выбор! Попробуйте снова." ;;
     esac
