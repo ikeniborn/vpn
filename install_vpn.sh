@@ -102,21 +102,42 @@ read -p "Введите имя первого пользователя [user1]: 
 USER_NAME=${USER_NAME:-user1}
 
 # Выбор сайта для SNI
-read -p "Введите сайт для SNI [www.microsoft.com]: " SERVER_SNI
-SERVER_SNI=${SERVER_SNI:-www.microsoft.com}
+echo "Выберите сайт для маскировки Reality:"
+echo "1. addons.mozilla.org (рекомендуется)"
+echo "2. www.lovelive-anime.jp"
+echo "3. www.swift.org"
+echo "4. Ввести свой домен"
+read -p "Ваш выбор [1]: " SNI_CHOICE
+SNI_CHOICE=${SNI_CHOICE:-1}
+
+case $SNI_CHOICE in
+    1) SERVER_SNI="addons.mozilla.org";;
+    2) SERVER_SNI="www.lovelive-anime.jp";;
+    3) SERVER_SNI="www.swift.org";;
+    4) read -p "Введите домен для SNI: " SERVER_SNI;;
+    *) SERVER_SNI="addons.mozilla.org";;
+esac
+
+log "Выбран SNI: $SERVER_SNI"
 
 # Генерация приватного ключа и публичного ключа для reality (если используется)
 if [ "$USE_REALITY" = true ]; then
     log "Генерация ключей для Reality..."
 
-    # Используем Docker для генерации ключей Reality
-    log "Генерация ключей с помощью v2ray Docker..."
+    # Используем Docker Xray для генерации ключей Reality
+    log "Генерация ключей с помощью Xray..."
     
-    # Сначала создаем временный контейнер для генерации ключей
-    TEMP_OUTPUT=$(docker run --rm v2fly/v2fly-core:latest generate reality-keypair 2>/dev/null || echo "")
+    # Попытка использовать команду x25519 из Xray
+    TEMP_OUTPUT=$(docker run --rm teddysun/xray:latest x25519 2>/dev/null || echo "")
     
-    if [ -z "$TEMP_OUTPUT" ]; then
-        # Если команда generate не работает, используем альтернативный способ
+    if [ -n "$TEMP_OUTPUT" ] && echo "$TEMP_OUTPUT" | grep -q "Private key:"; then
+        # Извлекаем ключи из вывода Xray
+        PRIVATE_KEY=$(echo "$TEMP_OUTPUT" | grep "Private key:" | awk '{print $3}')
+        PUBLIC_KEY=$(echo "$TEMP_OUTPUT" | grep "Public key:" | awk '{print $3}')
+        SHORT_ID=$(openssl rand -hex 8)
+        log "Ключи сгенерированы с помощью Xray x25519"
+    else
+        # Используем альтернативный способ генерации ключей
         log "Используем альтернативный способ генерации ключей..."
         
         # Проверяем наличие xxd
@@ -128,21 +149,23 @@ if [ "$USE_REALITY" = true ]; then
         # Генерируем ключи с помощью OpenSSL
         SHORT_ID=$(openssl rand -hex 8)
         
-        # Генерируем приватный ключ
-        PRIVATE_KEY=$(openssl genpkey -algorithm X25519 | openssl pkey -outform DER | tail -c 32 | xxd -p -c 32)
-        
-        # Для публичного ключа используем простой способ генерации случайного base64
-        PUBLIC_KEY=$(openssl rand -base64 32 | tr -d '\n')
-        
-    else
-        # Извлекаем ключи из вывода v2ray
-        PRIVATE_KEY=$(echo "$TEMP_OUTPUT" | grep -i "private" | awk '{print $NF}' | head -1)
-        PUBLIC_KEY=$(echo "$TEMP_OUTPUT" | grep -i "public" | awk '{print $NF}' | head -1)
-        SHORT_ID=$(openssl rand -hex 8)
+        # Генерируем X25519 ключи для Reality
+        TEMP_PRIVATE=$(openssl genpkey -algorithm X25519 2>/dev/null)
+        if [ $? -eq 0 ] && [ -n "$TEMP_PRIVATE" ]; then
+            # Извлекаем приватный ключ из PEM формата
+            PRIVATE_KEY=$(echo "$TEMP_PRIVATE" | openssl pkey -outform DER 2>/dev/null | tail -c 32 | xxd -p -c 32)
+            # Генерируем соответствующий публичный ключ
+            PUBLIC_KEY=$(echo "$TEMP_PRIVATE" | openssl pkey -pubout -outform DER 2>/dev/null | tail -c 32 | base64 | tr -d '\n')
+        else
+            # Фоллбэк к случайной генерации
+            PRIVATE_KEY=$(openssl rand -hex 32)
+            PUBLIC_KEY=$(openssl rand -base64 32 | tr -d '\n')
+        fi
+        log "Ключи сгенерированы с помощью OpenSSL"
     fi
     
     # Проверяем, что ключи сгенерированы
-    if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ]; then
+    if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ] || [ -z "$SHORT_ID" ]; then
         log "Генерируем резервные ключи..."
         SHORT_ID=$(openssl rand -hex 8)
         PRIVATE_KEY=$(openssl rand -hex 32)
@@ -165,9 +188,9 @@ fi
 # Создание директории для конфигурации
 mkdir -p "$WORK_DIR/config"
 
-# Создание конфигурации v2ray
+# Создание конфигурации Xray
 if [ "$USE_REALITY" = true ]; then
-    # Конфигурация для VLESS+Reality
+    # Конфигурация для VLESS+Reality по стандартам XTLS/Xray-core
     cat > "$WORK_DIR/config/config.json" <<EOL
 {
   "log": {
@@ -181,7 +204,7 @@ if [ "$USE_REALITY" = true ]; then
         "clients": [
           {
             "id": "$USER_UUID",
-            "flow": "",
+            "flow": "xtls-rprx-vision",
             "email": "$USER_NAME"
           }
         ],
@@ -198,6 +221,9 @@ if [ "$USE_REALITY" = true ]; then
             "$SERVER_SNI"
           ],
           "privateKey": "$PRIVATE_KEY",
+          "minClientVer": "",
+          "maxClientVer": "",
+          "maxTimeDiff": 60000,
           "shortIds": [
             "$SHORT_ID"
           ]
@@ -205,15 +231,49 @@ if [ "$USE_REALITY" = true ]; then
       },
       "sniffing": {
         "enabled": true,
-        "destOverride": ["http", "tls"]
+        "destOverride": ["http", "tls", "quic", "fakedns"]
       }
     }
   ],
   "outbounds": [
     {
-      "protocol": "freedom"
+      "protocol": "freedom",
+      "settings": {
+        "domainStrategy": "UseIPv4"
+      }
+    },
+    {
+      "tag": "blocked",
+      "protocol": "blackhole",
+      "settings": {}
     }
-  ]
+  ],
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {
+        "type": "field",
+        "ip": [
+          "0.0.0.0/8",
+          "10.0.0.0/8",
+          "100.64.0.0/10",
+          "127.0.0.0/8",
+          "169.254.0.0/16",
+          "172.16.0.0/12",
+          "192.0.0.0/24",
+          "192.0.2.0/24",
+          "192.168.0.0/16",
+          "198.18.0.0/15",
+          "198.51.100.0/24",
+          "203.0.113.0/24",
+          "::1/128",
+          "fc00::/7",
+          "fe80::/10"
+        ],
+        "outboundTag": "blocked"
+      }
+    ]
+  }
 }
 EOL
 else
@@ -322,7 +382,8 @@ fi
 
 # Создание ссылки для подключения
 if [ "$USE_REALITY" = true ]; then
-    REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#$USER_NAME"
+    # VLESS+Reality ссылка с поддержкой XTLS Vision и правильным fingerprint
+    REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp&headerType=none#$USER_NAME"
 else
     REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
 fi

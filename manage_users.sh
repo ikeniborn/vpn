@@ -195,9 +195,25 @@ add_user() {
     read -p "Введите UUID для пользователя [$USER_UUID]: " INPUT_UUID
     USER_UUID=${INPUT_UUID:-$USER_UUID}
     
+    # Генерация уникального shortId для каждого пользователя
+    if [ "$USE_REALITY" = true ]; then
+        USER_SHORT_ID=$(openssl rand -hex 8)
+        log "Сгенерирован уникальный Short ID для пользователя: $USER_SHORT_ID"
+    fi
+    
     # Добавление пользователя в конфигурацию
-    jq ".inbounds[0].settings.clients += [{\"id\": \"$USER_UUID\", \"flow\": \"\", \"email\": \"$USER_NAME\"}]" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
-    mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    if [ "$USE_REALITY" = true ]; then
+        # Для Reality используем flow xtls-rprx-vision
+        jq ".inbounds[0].settings.clients += [{\"id\": \"$USER_UUID\", \"flow\": \"xtls-rprx-vision\", \"email\": \"$USER_NAME\"}]" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
+        
+        # Добавляем новый shortId в массив shortIds если его там нет
+        jq ".inbounds[0].streamSettings.realitySettings.shortIds |= (. + [\"$USER_SHORT_ID\"] | unique)" "$CONFIG_FILE.tmp" > "$CONFIG_FILE"
+        rm "$CONFIG_FILE.tmp"
+    else
+        # Для обычного VLESS flow пустой
+        jq ".inbounds[0].settings.clients += [{\"id\": \"$USER_UUID\", \"flow\": \"\", \"email\": \"$USER_NAME\"}]" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
+        mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    fi
     
     # Создание файла с информацией о пользователе
     if [ "$USE_REALITY" = true ]; then
@@ -210,7 +226,7 @@ add_user() {
   "sni": "$SERVER_SNI",
   "private_key": "$PRIVATE_KEY",
   "public_key": "$PUBLIC_KEY",
-  "short_id": "$SHORT_ID",
+  "short_id": "$USER_SHORT_ID",
   "protocol": "$PROTOCOL"
 }
 EOL
@@ -244,8 +260,9 @@ EOL
             SHORT_ID="0453245bd68b99ae"
         fi
         
-        # Создание ссылки Reality, параметр flow должен быть пустым
-        REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#$USER_NAME"
+        # Создание ссылки Reality с поддержкой XTLS Vision и уникальным shortId
+        USED_SHORT_ID=${USER_SHORT_ID:-$SHORT_ID}
+        REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$USED_SHORT_ID&type=tcp&headerType=none#$USER_NAME"
         log "Создана ссылка Reality: $REALITY_LINK"
     else
         REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
@@ -325,8 +342,14 @@ edit_user() {
     # Удаляем старого пользователя
     jq "del(.inbounds[0].settings.clients[] | select(.email == \"$USER_NAME\"))" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
     
-    # Добавляем нового пользователя
-    jq ".inbounds[0].settings.clients += [{\"id\": \"$NEW_UUID\", \"flow\": \"\", \"email\": \"$NEW_USER_NAME\"}]" "$CONFIG_FILE.tmp" > "$CONFIG_FILE"
+    # Добавляем нового пользователя  
+    if [ "$USE_REALITY" = true ]; then
+        # Для Reality используем flow xtls-rprx-vision
+        jq ".inbounds[0].settings.clients += [{\"id\": \"$NEW_UUID\", \"flow\": \"xtls-rprx-vision\", \"email\": \"$NEW_USER_NAME\"}]" "$CONFIG_FILE.tmp" > "$CONFIG_FILE"
+    else
+        # Для обычного VLESS flow пустой
+        jq ".inbounds[0].settings.clients += [{\"id\": \"$NEW_UUID\", \"flow\": \"\", \"email\": \"$NEW_USER_NAME\"}]" "$CONFIG_FILE.tmp" > "$CONFIG_FILE"
+    fi
     rm "$CONFIG_FILE.tmp"
     
     # Удаление старых файлов и создание новых
@@ -367,7 +390,7 @@ EOL
     
     # Создание ссылки для подключения
     if [ "$USE_REALITY" = true ]; then
-        REALITY_LINK="vless://$NEW_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#$NEW_USER_NAME"
+        REALITY_LINK="vless://$NEW_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp&headerType=none#$NEW_USER_NAME"
     else
         REALITY_LINK="vless://$NEW_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$NEW_USER_NAME"
     fi
@@ -445,7 +468,7 @@ EOL
         
         # Создание ссылки для подключения
         if [ "$USE_REALITY" = true ]; then
-            REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#$USER_NAME"
+            REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp&headerType=none#$USER_NAME"
         else
             REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
         fi
@@ -467,7 +490,7 @@ EOL
         
         # Обновление ссылки для подключения
         if [ "$USE_REALITY" = true ]; then
-            REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#$USER_NAME"
+            REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp&headerType=none#$USER_NAME"
         else
             REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
         fi
