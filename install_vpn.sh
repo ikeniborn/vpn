@@ -193,40 +193,52 @@ USER_NAME=${USER_NAME:-user1}
 # Функция проверки доступности SNI домена
 check_sni_domain() {
     local domain=$1
-    local timeout=10
+    local timeout=5
     
     log "Проверка доступности домена $domain..."
     
-    # Проверка DNS резолюции
-    if ! nslookup "$domain" >/dev/null 2>&1; then
-        warning "Домен $domain не резолвится в DNS"
+    # Проверка DNS резолюции с таймаутом
+    if ! timeout 5 nslookup "$domain" >/dev/null 2>&1; then
+        warning "Домен $domain не резолвится в DNS или таймаут"
         return 1
     fi
     
-    # Проверка HTTPS доступности
-    if ! curl -s --connect-timeout $timeout --max-time $timeout "https://$domain" >/dev/null 2>&1; then
+    # Проверка HTTPS доступности с коротким таймаутом
+    if ! curl -s --connect-timeout $timeout --max-time $timeout --fail "https://$domain" >/dev/null 2>&1; then
         warning "Домен $domain недоступен по HTTPS"
         return 1
     fi
     
-    # Проверка поддержки TLS 1.3
-    local tls_check=$(echo | openssl s_client -connect "$domain:443" -tls1_3 -quiet 2>/dev/null | grep "TLSv1.3")
+    # Проверка поддержки TLS 1.3 с таймаутом
+    local tls_check=$(timeout 10 bash -c "echo | openssl s_client -connect '$domain:443' -tls1_3 -quiet 2>/dev/null" | grep "TLSv1.3" || echo "")
     if [ -z "$tls_check" ]; then
-        warning "Домен $domain не поддерживает TLS 1.3"
-        return 1
+        # Более мягкая проверка - проверяем хотя бы TLS соединение
+        local tls_any=$(timeout 5 bash -c "echo | openssl s_client -connect '$domain:443' -quiet 2>/dev/null" | grep "Protocol" || echo "")
+        if [ -z "$tls_any" ]; then
+            warning "Домен $domain не поддерживает безопасное TLS соединение"
+            return 1
+        else
+            warning "Домен $domain поддерживает TLS, но TLS 1.3 не подтвержден"
+            # Не возвращаем ошибку, так как домен все еще может работать
+        fi
     fi
     
-    log "✓ Домен $domain прошел все проверки"
+    log "✓ Домен $domain прошел основные проверки"
     return 0
 }
 
 # Выбор сайта для SNI
+echo ""
+log "Настройка домена для маскировки Reality..."
+warning "Проверка доменов может занять время. Для быстрой установки выберите вариант 6."
+echo ""
 echo "Выберите сайт для маскировки Reality:"
 echo "1. addons.mozilla.org (рекомендуется)"
 echo "2. www.lovelive-anime.jp"
 echo "3. www.swift.org"
 echo "4. Ввести свой домен"
 echo "5. Автоматический выбор лучшего домена"
+echo "6. Пропустить проверку домена (быстрая установка)"
 read -p "Ваш выбор [1]: " SNI_CHOICE
 SNI_CHOICE=${SNI_CHOICE:-1}
 
@@ -237,11 +249,17 @@ case $SNI_CHOICE in
     4) 
         while true; do
             read -p "Введите домен для SNI: " SERVER_SNI
-            if check_sni_domain "$SERVER_SNI"; then
+            log "Проверка домена $SERVER_SNI (это может занять до 20 секунд)..."
+            if timeout 20 bash -c "check_sni_domain '$SERVER_SNI'"; then
                 break
             else
-                error "Домен $SERVER_SNI не подходит для использования. Попробуйте другой."
-                read -p "Попробовать еще раз? (y/n): " retry
+                warning "Домен $SERVER_SNI не прошел проверку или произошел таймаут."
+                read -p "Использовать этот домен без проверки? (y/n): " use_anyway
+                if [ "$use_anyway" = "y" ]; then
+                    warning "Внимание: домен $SERVER_SNI будет использован без проверки"
+                    break
+                fi
+                read -p "Попробовать другой домен? (y/n): " retry
                 if [ "$retry" != "y" ]; then
                     SERVER_SNI="addons.mozilla.org"
                     log "Использован домен по умолчанию: $SERVER_SNI"
@@ -251,15 +269,18 @@ case $SNI_CHOICE in
         done
         ;;
     5)
-        log "Автоматический выбор лучшего домена..."
+        log "Автоматический выбор лучшего домена (максимум 60 секунд)..."
         CANDIDATES=("addons.mozilla.org" "www.lovelive-anime.jp" "www.swift.org" "www.kernel.org" "gitlab.com")
         SERVER_SNI=""
         
         for domain in "${CANDIDATES[@]}"; do
-            if check_sni_domain "$domain"; then
+            log "Проверка $domain..."
+            if timeout 15 bash -c "check_sni_domain '$domain'"; then
                 SERVER_SNI="$domain"
                 log "✓ Автоматически выбран домен: $SERVER_SNI"
                 break
+            else
+                log "Домен $domain не прошел проверку, пробуем следующий..."
             fi
         done
         
@@ -268,16 +289,23 @@ case $SNI_CHOICE in
             SERVER_SNI="addons.mozilla.org"
         fi
         ;;
+    6)
+        log "Быстрая установка: проверка доменов пропущена"
+        SERVER_SNI="addons.mozilla.org"
+        ;;
     *) SERVER_SNI="addons.mozilla.org";;
 esac
 
-# Финальная проверка выбранного домена
-if ! check_sni_domain "$SERVER_SNI"; then
-    warning "Выбранный домен $SERVER_SNI может работать нестабильно"
-    read -p "Продолжить с этим доменом? (y/n) [y]: " continue_choice
-    if [ "$continue_choice" = "n" ]; then
-        SERVER_SNI="addons.mozilla.org"
-        log "Использован резервный домен: $SERVER_SNI"
+# Финальная проверка выбранного домена (только для вариантов 1-3)
+if [ "$SNI_CHOICE" -ge 1 ] && [ "$SNI_CHOICE" -le 3 ]; then
+    log "Финальная проверка домена $SERVER_SNI (максимум 15 секунд)..."
+    if ! timeout 15 bash -c "check_sni_domain '$SERVER_SNI'"; then
+        warning "Выбранный домен $SERVER_SNI не прошел проверку или произошел таймаут"
+        read -p "Продолжить с этим доменом? (y/n) [y]: " continue_choice
+        if [ "$continue_choice" = "n" ]; then
+            SERVER_SNI="addons.mozilla.org"
+            log "Использован резервный домен: $SERVER_SNI"
+        fi
     fi
 fi
 
