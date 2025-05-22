@@ -1,21 +1,47 @@
-# Xray VPN Server with VLESS+Reality
+# Universal VPN Server: Xray & Outline
 
 ## 📋 Overview
 
-This project provides a professional-grade VPN solution using **Xray-core** with **VLESS+Reality** protocol. Built with Docker for easy deployment and management, it offers enterprise-level security with advanced features like automatic port selection, SNI quality monitoring, key rotation, and traffic statistics.
+This project provides a comprehensive VPN solution with **dual VPN support**: **Xray-core (VLESS+Reality)** for advanced circumvention and **Outline VPN (Shadowsocks)** for easy management. Built with Docker for seamless deployment, it offers enterprise-level security with intelligent port selection, optimized domain validation, key rotation, and comprehensive traffic analytics.
+
+### 🔀 **Choose Your VPN Solution**
+
+**🔐 Xray VPN (VLESS+Reality)** - *Advanced Circumvention*
+- State-of-the-art protocol with TLS 1.3 masquerading
+- Perfect for bypassing sophisticated censorship
+- Advanced anti-detection technology
+- Command-line management interface
+
+**🎯 Outline VPN (Shadowsocks)** - *Simplified Management*  
+- User-friendly Outline Manager GUI application
+- Easy client distribution and management
+- Cross-platform compatibility
+- Ideal for team/organization deployments
 
 ## ✨ Key Features
 
-### 🔒 **Advanced Security**
+### 🔀 **Dual VPN Support**
+- **Universal Installation**: Single script supports both Xray and Outline VPN
+- **VPN Type Selection**: Choose your preferred VPN solution during installation
+- **Optimized Port Generation**: Intelligent port allocation with conflict avoidance
+- **Unified Management**: Consistent configuration and monitoring across both platforms
+
+### 🔒 **Advanced Security (Xray)**
 - **VLESS+Reality Protocol**: State-of-the-art protocol with TLS 1.3 masquerading
 - **XTLS Vision Flow**: Enhanced performance with minimal processing overhead
 - **Automatic Key Rotation**: Built-in security key rotation functionality
 - **Unique Short IDs**: Each user gets a unique identification for better security
 
+### 🎯 **Simplified Management (Outline)**
+- **GUI-based Management**: User-friendly Outline Manager application
+- **Multi-architecture Support**: Works on x86-64, ARM64, and ARMv7 systems
+- **Automatic Updates**: Built-in Watchtower for container updates
+- **Team Collaboration**: Easy access key sharing and management
+
 ### 🚀 **Smart Installation**
-- **SNI Domain Validation**: Automatic checking of domain availability and TLS 1.3 support
-- **Intelligent Port Selection**: Random port assignment with conflict detection
-- **One-click Setup**: Fully automated installation process
+- **Improved SNI Validation**: Enhanced domain checking with faster timeouts
+- **Intelligent Port Selection**: Optimized random port assignment with conflict detection
+- **One-click Setup**: Fully automated installation process for both VPN types
 - **Docker-based**: Containerized deployment for better isolation
 
 ### 📊 **Monitoring & Statistics**
@@ -34,15 +60,29 @@ This project provides a professional-grade VPN solution using **Xray-core** with
 
 ## 🔧 Technical Specifications
 
-### **Supported Protocols**
+### **Supported VPN Solutions**
+
+**🔐 Xray VPN Protocols:**
 - **VLESS+Reality** (Recommended): Enhanced security with TLS 1.3 masquerading
 - **VLESS Basic**: Standard VLESS protocol for basic scenarios
 
+**🎯 Outline VPN Protocols:**
+- **Shadowsocks**: Industry-standard protocol with AEAD encryption
+- **Multi-platform Support**: Native clients for all major platforms
+
 ### **Core Technologies**
+
+**Xray VPN Stack:**
 - **Xray-core**: Latest XTLS/Xray-core implementation
-- **Docker**: Containerized deployment with teddysun/xray image
-- **Reality Protocol**: Advanced anti-detection technology
+- **Reality Protocol**: Advanced anti-detection technology  
 - **X25519 Cryptography**: Military-grade key generation
+- **Docker**: teddysun/xray container image
+
+**Outline VPN Stack:**
+- **Shadowbox**: Official Outline server implementation
+- **Watchtower**: Automatic container updates
+- **TLS Certificates**: Self-signed certificates for API security
+- **Docker**: quay.io/outline/shadowbox container image
 
 ## 📦 Requirements
 
@@ -53,8 +93,9 @@ This project provides a professional-grade VPN solution using **Xray-core** with
 
 **Auto-installed Dependencies:**
 - Docker & Docker Compose
-- UFW Firewall
-- OpenSSL, jq, qrencode, uuid-runtime
+- UFW Firewall  
+- OpenSSL, dnsutils, uuid-runtime
+- qrencode (for QR code generation)
 
 ## 🚀 Quick Installation
 
@@ -64,32 +105,61 @@ wget -O install_vpn.sh https://raw.githubusercontent.com/your-repo/install_vpn.s
 chmod +x install_vpn.sh
 ```
 
-### 2. Run Installation
+### 2. Run Universal Installation
 ```bash
 sudo ./install_vpn.sh
 ```
 
-### 3. Configuration Options
+### 3. Choose Your VPN Type
 
-**Port Selection:**
+**VPN Selection Menu:**
+```
+1. Xray VPN (VLESS+Reality) - рекомендуется для обхода блокировок
+2. Outline VPN (Shadowsocks) - простота управления через приложение
+```
+
+## 🔐 Xray VPN Configuration
+
+### **Port Selection:**
 - **Option 1**: Random free port (10000-65000) - Recommended
 - **Option 2**: Manual port specification with validation
 - **Option 3**: Standard port (10443)
 
-**SNI Domain Options:**
+### **SNI Domain Options:**
 - **Option 1**: addons.mozilla.org (Recommended)
 - **Option 2**: www.lovelive-anime.jp
 - **Option 3**: www.swift.org
-- **Option 4**: Custom domain with validation
+- **Option 4**: Custom domain with enhanced validation
 - **Option 5**: Automatic best domain selection
+- **Option 6**: Skip domain validation (fast installation)
 
-**Protocol Selection:**
+### **Protocol Selection:**
 - **VLESS+Reality**: Enhanced security (Recommended)
 - **VLESS Basic**: Standard protocol
 
+## 🎯 Outline VPN Configuration
+
+### **Hostname/IP Setup:**
+- **Auto-detection**: Uses your public IP automatically
+- **Custom hostname**: Specify your own domain or IP
+
+### **Port Configuration:**
+- **API Port**: For Outline Manager (8000-9999 range)
+  - Random generation or manual specification
+- **Access Keys Port**: For client connections (10000-15999 range)
+  - Random generation or manual specification
+  - Automatically avoids conflicts with API port
+
+### **Architecture Support:**
+- **x86-64**: Standard servers and VPS
+- **ARM64**: ARM-based servers and Raspberry Pi 4
+- **ARMv7**: Older ARM devices and Raspberry Pi 3
+
 ## 🛠️ User Management
 
-### Access Management Interface
+## 🔐 Xray VPN Management
+
+### Command Line Interface
 ```bash
 sudo v2ray-manage
 ```
@@ -110,6 +180,35 @@ sudo v2ray-manage
 | 10 | **🔧 Configure Logging** | Setup Xray logging with multiple levels |
 | 11 | **📋 View User Logs** | Analyze connection logs and user activity |
 | 12 | Uninstall Server | Complete removal with cleanup |
+
+## 🎯 Outline VPN Management
+
+### Outline Manager Application
+
+1. **Download Outline Manager:**
+   - **Windows/macOS/Linux**: [getoutline.org](https://getoutline.org/)
+   - Available for all major desktop platforms
+
+2. **Server Setup:**
+   - Copy the server configuration JSON from installation output
+   - Paste into Outline Manager "Add Server" dialog
+   - Server will be automatically configured and connected
+
+3. **Access Key Management:**
+   - **Create Keys**: Click "Add Key" in Outline Manager
+   - **Share Keys**: Generate shareable links or QR codes
+   - **Rename Keys**: Assign meaningful names to users
+   - **Delete Keys**: Remove access for specific users
+   - **Monitor Usage**: View data usage per key
+
+### Server Configuration Location
+```bash
+# Outline server files
+/opt/outline/
+├── access.txt              # Server access configuration
+├── persisted-state/        # Shadowbox state directory
+└── backup/                 # UFW backup files
+```
 
 ### 🔄 Advanced Features
 
@@ -138,15 +237,15 @@ sudo v2ray-manage
 
 ## 📱 Client Setup
 
+## 🔐 Xray VPN Clients
+
 ### **Recommended Clients**
 
 | Platform | Client | Download |
 |----------|--------|----------|
-| **Android** | v2rayNG | [Google Play](https://play.google.com/store/apps/details?id=com.v2ray.ang) |
+| **Android** | v2RayTun | [Google Play](https://play.google.com/store/apps/details?id=com.v2raytun.android) |
 | **iOS** | Shadowrocket | [App Store](https://apps.apple.com/app/shadowrocket/id932747118) |
-| **Windows** | v2rayN | [GitHub](https://github.com/2dust/v2rayN) |
-| **macOS** | V2RayXS | [GitHub](https://github.com/tzmax/V2RayXS) |
-| **Linux** | Qv2ray | [GitHub](https://github.com/Qv2ray/Qv2ray) |
+| **iOS** | v2RayTun | [App Store](https://apps.apple.com/app/v2raytun/id6476628951) |
 
 ### **Connection Methods**
 
@@ -176,6 +275,37 @@ sudo v2ray-manage
 - **Fingerprint**: chrome
 - **Public Key**: From user configuration
 - **Short ID**: Unique per user
+
+## 🎯 Outline VPN Clients
+
+### **Official Outline Clients**
+
+| Platform | Client | Download |
+|----------|--------|----------|
+| **Android** | Outline | [Google Play](https://play.google.com/store/apps/details?id=org.outline.android.client) |
+| **iOS** | Outline | [App Store](https://apps.apple.com/app/outline-app/id1356177741) |
+| **Windows** | Outline | [getoutline.org](https://getoutline.org/get-started/#step-3) |
+| **macOS** | Outline | [getoutline.org](https://getoutline.org/get-started/#step-3) |
+| **Linux** | Outline | [getoutline.org](https://getoutline.org/get-started/#step-3) |
+| **ChromeOS** | Outline | [Chrome Web Store](https://chrome.google.com/webstore/detail/outline/npeedaltgbjfenbhbijllbenamckbghl) |
+
+### **Connection Methods**
+
+#### **Method 1: Access Key URL (Recommended)**
+1. Open Outline client
+2. Tap "Add Server" or "+"
+3. Paste the access key URL from Outline Manager
+4. Connect automatically
+
+#### **Method 2: QR Code**
+1. Generate QR code in Outline Manager
+2. Scan with Outline client
+3. Server added automatically
+
+#### **Method 3: Manual Import**
+1. Export access key from Outline Manager
+2. Share via email, messaging apps, or file
+3. Import in Outline client
 
 ## 📊 Monitoring & Analytics
 
@@ -221,6 +351,8 @@ vnstat -i eth0
 ## 🔧 Advanced Configuration
 
 ### **Directory Structure**
+
+**Xray VPN Files:**
 ```
 /opt/v2ray/
 ├── config/
@@ -240,9 +372,23 @@ vnstat -i eth0
 └── docker-compose.yml      # Container configuration
 ```
 
+**Outline VPN Files:**
+```
+/opt/outline/
+├── access.txt              # Server access configuration
+├── persisted-state/        # Shadowbox persistent data
+│   ├── shadowbox-selfsigned.crt  # TLS certificate
+│   ├── shadowbox-selfsigned.key  # TLS private key
+│   └── shadowbox_server_config.json  # Server settings
+└── backup/
+    └── ufw_rules_backup.txt # Firewall backup
+```
+
 ### **Manual Docker Operations**
+
+**Xray VPN:**
 ```bash
-# Navigate to working directory
+# Navigate to Xray directory
 cd /opt/v2ray
 
 # Start services
@@ -259,6 +405,26 @@ docker-compose logs -f
 
 # Check status
 docker-compose ps
+```
+
+**Outline VPN:**
+```bash
+# Check Outline containers
+docker ps | grep -E "(shadowbox|watchtower)"
+
+# View Outline logs
+docker logs shadowbox
+docker logs watchtower
+
+# Restart Outline services
+docker restart shadowbox
+docker restart watchtower
+
+# Stop Outline services
+docker stop shadowbox watchtower
+
+# Start Outline services
+docker start shadowbox watchtower
 ```
 
 ## 🔐 Security Best Practices
@@ -384,7 +550,18 @@ This project is released under the MIT License. See LICENSE file for details.
 
 ## 🎯 Changelog
 
-### **v2.1.0** - Latest Release
+### **v3.0.0** - Latest Release (Universal VPN Support)
+- 🔀 **Dual VPN Support**: Added Outline VPN alongside existing Xray VPN
+- ✅ **Universal Installation Script**: Single script supports both VPN types
+- ✅ **VPN Type Selection Menu**: Choose between Xray and Outline during installation
+- ✅ **Optimized Port Generation**: Unified port generation with intelligent conflict avoidance
+- ✅ **Enhanced SNI Validation**: Improved domain checking with faster timeouts and better reliability
+- ✅ **Multi-architecture Support**: Outline VPN works on x86-64, ARM64, and ARMv7
+- ✅ **Outline Manager Integration**: GUI-based management for Outline VPN
+- ✅ **Automatic Updates**: Watchtower integration for Outline container updates
+- ✅ **Improved Documentation**: Comprehensive guides for both VPN solutions
+
+### **v2.1.0** - Previous Release
 - ✅ **Advanced Logging System**: Configurable Xray logging with multiple levels
 - ✅ **Enhanced Statistics**: vnstat integration with automatic installation
 - ✅ **Log Analysis Tools**: Built-in log viewer with filtering and search
@@ -392,7 +569,7 @@ This project is released under the MIT License. See LICENSE file for details.
 - ✅ **Improved Error Handling**: Better error messages and troubleshooting
 - ✅ **Real-time Monitoring**: Live log streaming and connection tracking
 
-### **v2.0.0** - Previous Release
+### **v2.0.0** - Major Update
 - ✅ Migrated to Xray-core from V2Ray
 - ✅ Added XTLS Vision flow support
 - ✅ Implemented automatic key rotation
@@ -409,4 +586,4 @@ This project is released under the MIT License. See LICENSE file for details.
 
 ---
 
-**⚡ Ready to deploy enterprise-grade VPN infrastructure with cutting-edge technology!**
+**⚡ Ready to deploy enterprise-grade VPN infrastructure with dual-protocol support and cutting-edge technology!**

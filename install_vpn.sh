@@ -130,15 +130,6 @@ setup_outline_firewall() {
     log "Брандмауэр настроен успешно"
 }
 
-# Функция генерации случайного порта для Outline (альтернативная реализация)
-get_outline_random_port() {
-    local num=0
-    until (( 1024 <= num && num < 65535 )); do
-        num=$(( RANDOM + (RANDOM % 2) * 32768 ))
-    done
-    echo $num
-}
-
 # Функция создания safe base64 строки
 safe_base64() {
     base64 -w 0 | tr '/+' '_-' | tr -d '='
@@ -173,7 +164,7 @@ install_outline_vpn() {
     
     case $API_PORT_CHOICE in
         1)
-            OUTLINE_API_PORT=$(get_outline_random_port)
+            OUTLINE_API_PORT=$(generate_free_port 8000 9999 true 20 8080)
             log "✓ Сгенерирован API порт: $OUTLINE_API_PORT"
             ;;
         2)
@@ -199,7 +190,7 @@ install_outline_vpn() {
             done
             ;;
         *)
-            OUTLINE_API_PORT=$(get_outline_random_port)
+            OUTLINE_API_PORT=$(generate_free_port 8000 9999 true 20 8080)
             ;;
     esac
     
@@ -213,10 +204,10 @@ install_outline_vpn() {
     
     case $KEYS_PORT_CHOICE in
         1)
-            OUTLINE_KEYS_PORT=$(get_outline_random_port)
+            OUTLINE_KEYS_PORT=$(generate_free_port 10000 15999 true 20 9000)
             # Убеждаемся что порты разные
             while [ "$OUTLINE_KEYS_PORT" = "$OUTLINE_API_PORT" ]; do
-                OUTLINE_KEYS_PORT=$(get_outline_random_port)
+                OUTLINE_KEYS_PORT=$(generate_free_port 10000 15999 true 20 9000)
             done
             log "✓ Сгенерирован порт для ключей: $OUTLINE_KEYS_PORT"
             ;;
@@ -248,9 +239,9 @@ install_outline_vpn() {
             done
             ;;
         *)
-            OUTLINE_KEYS_PORT=$(get_outline_random_port)
+            OUTLINE_KEYS_PORT=$(generate_free_port 10000 15999 true 20 9000)
             while [ "$OUTLINE_KEYS_PORT" = "$OUTLINE_API_PORT" ]; do
-                OUTLINE_KEYS_PORT=$(get_outline_random_port)
+                OUTLINE_KEYS_PORT=$(generate_free_port 10000 15999 true 20 9000)
             done
             ;;
     esac
@@ -442,16 +433,34 @@ check_port_available() {
     fi
 }
 
-# Генерация случайного свободного порта
-generate_random_port() {
+# Унифицированная функция генерации случайного свободного порта
+generate_free_port() {
+    local min_port=${1:-10000}      # Минимальный порт (по умолчанию 10000)
+    local max_port=${2:-65000}      # Максимальный порт (по умолчанию 65000)
+    local check_availability=${3:-true}  # Проверять доступность (по умолчанию true)
+    local max_attempts=${4:-20}     # Максимум попыток (по умолчанию 20)
+    local fallback_port=${5:-10443} # Резервный порт (по умолчанию 10443)
+    
     local attempts=0
-    local max_attempts=20
     
     while [ $attempts -lt $max_attempts ]; do
-        # Генерируем случайный порт в диапазоне 10000-65000
-        local port=$(shuf -i 10000-65000 -n 1)
+        # Генерируем случайный порт в указанном диапазоне
+        local port
+        if command -v shuf >/dev/null 2>&1; then
+            port=$(shuf -i $min_port-$max_port -n 1)
+        else
+            # Альтернативный метод если shuf недоступен
+            local range=$((max_port - min_port + 1))
+            port=$(( (RANDOM % range) + min_port ))
+        fi
         
-        if check_port_available $port; then
+        # Проверяем доступность порта если требуется
+        if [ "$check_availability" = "true" ]; then
+            if check_port_available $port; then
+                echo $port
+                return 0
+            fi
+        else
             echo $port
             return 0
         fi
@@ -459,10 +468,11 @@ generate_random_port() {
         attempts=$((attempts + 1))
     done
     
-    # Если не удалось найти свободный порт, возвращаем стандартный
-    echo 10443
+    # Если не удалось найти свободный порт, возвращаем резервный
+    echo $fallback_port
     return 1
 }
+
 
 # Порт для VPN сервера
 echo "Выберите метод назначения порта:"
@@ -475,7 +485,7 @@ PORT_CHOICE=${PORT_CHOICE:-1}
 case $PORT_CHOICE in
     1)
         log "Поиск свободного порта..."
-        SERVER_PORT=$(generate_random_port)
+        SERVER_PORT=$(generate_free_port 10000 65000 true 20 10443)
         if [ $? -eq 0 ]; then
             log "✓ Найден свободный порт: $SERVER_PORT"
         else
@@ -515,7 +525,7 @@ case $PORT_CHOICE in
         fi
         ;;
     *)
-        SERVER_PORT=$(generate_random_port)
+        SERVER_PORT=$(generate_free_port 10000 65000 true 20 10443)
         log "Использован случайный порт: $SERVER_PORT"
         ;;
 esac
