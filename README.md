@@ -19,10 +19,12 @@ This project provides a professional-grade VPN solution using **Xray-core** with
 - **Docker-based**: Containerized deployment for better isolation
 
 ### 📊 **Monitoring & Statistics**
-- **Traffic Analytics**: Comprehensive usage statistics and monitoring
-- **Connection Tracking**: Real-time connection monitoring
+- **Traffic Analytics**: Comprehensive usage statistics with vnstat integration
+- **Connection Tracking**: Real-time connection monitoring with detailed logs
 - **Performance Metrics**: Docker container and system resource usage
-- **User Activity**: Individual user connection history
+- **User Activity**: Individual user connection history and per-user analytics
+- **Advanced Logging**: Configurable Xray logging with multiple levels
+- **Log Analysis**: Built-in log viewer with filtering and search capabilities
 
 ### 👥 **User Management**
 - **Multi-user Support**: Add unlimited users with unique configurations
@@ -105,7 +107,9 @@ sudo v2ray-manage
 | 7 | Restart Server | Apply configuration changes |
 | 8 | **🔄 Key Rotation** | Rotate Reality encryption keys |
 | 9 | **📊 Usage Statistics** | Traffic and performance analytics |
-| 10 | Uninstall Server | Complete removal with cleanup |
+| 10 | **🔧 Configure Logging** | Setup Xray logging with multiple levels |
+| 11 | **📋 View User Logs** | Analyze connection logs and user activity |
+| 12 | Uninstall Server | Complete removal with cleanup |
 
 ### 🔄 Advanced Features
 
@@ -118,10 +122,19 @@ sudo v2ray-manage
 
 #### **Traffic Statistics**
 - Docker container resource usage
-- Network interface statistics
+- Network interface statistics with vnstat integration
 - Active connection monitoring
-- User activity tracking
+- User activity tracking with detailed logs
 - Performance recommendations
+- Automatic vnstat installation and configuration
+
+#### **Advanced Logging**
+- **Configurable Log Levels**: none, error, warning, info, debug
+- **Separate Log Files**: access.log and error.log
+- **Real-time Monitoring**: Live log streaming and filtering
+- **User Activity Analysis**: Per-user connection statistics
+- **Log Search & Filter**: Find specific user activities
+- **Connection Statistics**: Detailed connection metrics per user
 
 ## 📱 Client Setup
 
@@ -169,13 +182,17 @@ sudo v2ray-manage
 ### **Built-in Statistics**
 - **Container Metrics**: CPU, Memory, Network I/O
 - **Connection Stats**: Active connections, bandwidth usage
-- **User Analytics**: Connection history, traffic patterns
+- **User Analytics**: Connection history, traffic patterns per user
 - **System Health**: Uptime, resource utilization
+- **Network Traffic**: vnstat integration for detailed bandwidth statistics
+- **Connection Tracking**: Real-time monitoring with filtering capabilities
 
-### **Log Files**
-- **Access Logs**: `/opt/v2ray/logs/access.log`
-- **Error Logs**: `/opt/v2ray/logs/error.log`
-- **Container Logs**: `docker logs xray`
+### **Comprehensive Logging System**
+- **Access Logs**: `/opt/v2ray/logs/access.log` - All connection attempts and user activity
+- **Error Logs**: `/opt/v2ray/logs/error.log` - System errors and debugging information
+- **Container Logs**: `docker logs xray` - Docker container output
+- **Log Management**: Built-in log viewer with search and filtering options
+- **User Tracking**: Individual user activity analysis and statistics
 
 ### **Performance Monitoring**
 ```bash
@@ -187,6 +204,18 @@ docker logs --tail 50 xray
 
 # Network connections
 sudo netstat -tulnp | grep :YOUR_PORT
+
+# Access management interface for detailed monitoring
+sudo v2ray-manage
+# Select option 9 for statistics
+# Select option 11 for log analysis
+
+# View specific log files
+tail -f /opt/v2ray/logs/access.log
+tail -f /opt/v2ray/logs/error.log
+
+# Network traffic statistics (if vnstat is installed)
+vnstat -i eth0
 ```
 
 ## 🔧 Advanced Configuration
@@ -297,9 +326,33 @@ docker-compose restart
 # Install monitoring tools
 sudo apt install vnstat htop
 
+# Configure Xray logging through management interface
+sudo v2ray-manage
+# Select option 10 to configure logging
+
 # Check log files
 tail -f /opt/v2ray/logs/access.log
 tail -f /opt/v2ray/logs/error.log
+
+# If logs don't exist, logging may not be configured
+# Use the management interface to set up logging
+```
+
+#### **Logging Issues**
+```bash
+# Check if logging is configured
+sudo v2ray-manage
+# Select option 11 to view logs
+
+# If logs are empty or missing:
+# 1. Configure logging (option 10)
+# 2. Restart server (option 7)
+# 3. Check logs again (option 11)
+
+# Manual log file creation (if needed)
+sudo mkdir -p /opt/v2ray/logs
+sudo touch /opt/v2ray/logs/access.log /opt/v2ray/logs/error.log
+sudo chmod 644 /opt/v2ray/logs/*.log
 ```
 
 ### **Performance Issues**
@@ -331,7 +384,15 @@ This project is released under the MIT License. See LICENSE file for details.
 
 ## 🎯 Changelog
 
-### **v2.0.0** - Latest Release
+### **v2.1.0** - Latest Release
+- ✅ **Advanced Logging System**: Configurable Xray logging with multiple levels
+- ✅ **Enhanced Statistics**: vnstat integration with automatic installation
+- ✅ **Log Analysis Tools**: Built-in log viewer with filtering and search
+- ✅ **User Activity Tracking**: Per-user connection statistics and monitoring
+- ✅ **Improved Error Handling**: Better error messages and troubleshooting
+- ✅ **Real-time Monitoring**: Live log streaming and connection tracking
+
+### **v2.0.0** - Previous Release
 - ✅ Migrated to Xray-core from V2Ray
 - ✅ Added XTLS Vision flow support
 - ✅ Implemented automatic key rotation

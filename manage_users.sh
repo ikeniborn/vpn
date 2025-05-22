@@ -739,6 +739,166 @@ rotate_reality_keys() {
     log "========================================================"
 }
 
+# Настройка логирования в Xray
+configure_xray_logging() {
+    log "Настройка логирования Xray для отслеживания пользователей..."
+    
+    # Создаем директорию для логов
+    mkdir -p "$WORK_DIR/logs"
+    
+    # Проверяем, есть ли уже секция логирования в конфиге
+    if jq -e '.log' "$CONFIG_FILE" >/dev/null 2>&1; then
+        log "Логирование уже настроено в конфигурации"
+        
+        # Проверяем текущие настройки
+        ACCESS_LOG=$(jq -r '.log.access // "не настроен"' "$CONFIG_FILE")
+        ERROR_LOG=$(jq -r '.log.error // "не настроен"' "$CONFIG_FILE")
+        LOG_LEVEL=$(jq -r '.log.loglevel // "warning"' "$CONFIG_FILE")
+        
+        echo "  Текущие настройки логирования:"
+        echo "    Access log: $ACCESS_LOG"
+        echo "    Error log: $ERROR_LOG"  
+        echo "    Log level: $LOG_LEVEL"
+        echo ""
+        
+        read -p "Обновить настройки логирования? (y/n): " update_logging
+        if [ "$update_logging" != "y" ] && [ "$update_logging" != "Y" ]; then
+            return
+        fi
+    fi
+    
+    # Настройки логирования
+    ACCESS_LOG_PATH="$WORK_DIR/logs/access.log"
+    ERROR_LOG_PATH="$WORK_DIR/logs/error.log"
+    
+    echo "Выберите уровень логирования:"
+    echo "1. none - без логов"
+    echo "2. error - только ошибки"
+    echo "3. warning - предупреждения и ошибки (рекомендуется)"
+    echo "4. info - информационные сообщения"
+    echo "5. debug - подробные логи (только для отладки)"
+    read -p "Выберите уровень [1-5, по умолчанию 3]: " log_level_choice
+    
+    case ${log_level_choice:-3} in
+        1) LOG_LEVEL="none" ;;
+        2) LOG_LEVEL="error" ;;
+        3) LOG_LEVEL="warning" ;;
+        4) LOG_LEVEL="info" ;;
+        5) LOG_LEVEL="debug" ;;
+        *) LOG_LEVEL="warning" ;;
+    esac
+    
+    log "Настройка логирования с уровнем: $LOG_LEVEL"
+    
+    # Добавляем секцию логирования в конфигурацию
+    jq ".log = {
+        \"access\": \"$ACCESS_LOG_PATH\",
+        \"error\": \"$ERROR_LOG_PATH\",
+        \"loglevel\": \"$LOG_LEVEL\"
+    }" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
+    
+    if [ $? -eq 0 ]; then
+        mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+        log "Конфигурация логирования успешно добавлена"
+        
+        # Создаем файлы логов с правильными правами
+        touch "$ACCESS_LOG_PATH" "$ERROR_LOG_PATH"
+        chmod 644 "$ACCESS_LOG_PATH" "$ERROR_LOG_PATH"
+        
+        # Перезапускаем сервер для применения изменений
+        log "Перезапуск сервера для применения настроек логирования..."
+        restart_server
+        
+        log "========================================================"
+        log "Логирование Xray успешно настроено!"
+        log "Access log: $ACCESS_LOG_PATH"
+        log "Error log: $ERROR_LOG_PATH"
+        log "Log level: $LOG_LEVEL"
+        log "========================================================"
+        
+        # Показываем как просматривать логи
+        echo ""
+        log "Команды для просмотра логов:"
+        echo "  tail -f $ACCESS_LOG_PATH  # Мониторинг подключений"
+        echo "  tail -f $ERROR_LOG_PATH   # Мониторинг ошибок"
+        echo "  grep \"user@email\" $ACCESS_LOG_PATH  # Поиск активности пользователя"
+        
+    else
+        rm -f "$CONFIG_FILE.tmp"
+        error "Ошибка при обновлении конфигурации логирования"
+    fi
+}
+
+# Просмотр логов пользователей
+view_user_logs() {
+    log "Просмотр логов пользователей"
+    
+    ACCESS_LOG_PATH="$WORK_DIR/logs/access.log"
+    ERROR_LOG_PATH="$WORK_DIR/logs/error.log"
+    
+    if [ ! -f "$ACCESS_LOG_PATH" ]; then
+        warning "Файл логов доступа не найден: $ACCESS_LOG_PATH"
+        echo "Настройте логирование с помощью пункта меню или выполните: configure_xray_logging"
+        return
+    fi
+    
+    echo "Выберите действие:"
+    echo "1. Показать последние подключения (tail -20)"
+    echo "2. Показать логи конкретного пользователя"
+    echo "3. Показать статистику подключений по пользователям"
+    echo "4. Показать ошибки (error.log)"
+    echo "5. Непрерывный мониторинг логов"
+    read -p "Выберите действие [1-5]: " log_action
+    
+    case $log_action in
+        1)
+            log "Последние 20 подключений:"
+            tail -20 "$ACCESS_LOG_PATH" | while read line; do
+                echo "  $line"
+            done
+            ;;
+        2)
+            list_users
+            read -p "Введите имя пользователя для поиска в логах: " username
+            if [ -n "$username" ]; then
+                log "Активность пользователя '$username':"
+                grep -i "$username" "$ACCESS_LOG_PATH" | tail -10 | while read line; do
+                    echo "  $line"
+                done
+            fi
+            ;;
+        3)
+            log "Статистика подключений по пользователям:"
+            if [ -s "$ACCESS_LOG_PATH" ]; then
+                # Извлекаем email'ы пользователей из логов и считаем подключения
+                grep -o 'email:.*' "$ACCESS_LOG_PATH" 2>/dev/null | sort | uniq -c | sort -nr | head -10 | while read count email; do
+                    echo "  $email: $count подключений"
+                done
+            else
+                echo "  Логи подключений пусты"
+            fi
+            ;;
+        4)
+            if [ -f "$ERROR_LOG_PATH" ] && [ -s "$ERROR_LOG_PATH" ]; then
+                log "Последние ошибки:"
+                tail -20 "$ERROR_LOG_PATH" | while read line; do
+                    echo "  $line"
+                done
+            else
+                echo "  Файл ошибок пуст или не существует"
+            fi
+            ;;
+        5)
+            log "Запуск непрерывного мониторинга (Ctrl+C для выхода):"
+            echo "Мониторинг $ACCESS_LOG_PATH"
+            tail -f "$ACCESS_LOG_PATH"
+            ;;
+        *)
+            warning "Некорректный выбор"
+            ;;
+    esac
+}
+
 # Статистика использования трафика
 show_traffic_stats() {
     log "Статистика использования VPN сервера"
@@ -757,11 +917,17 @@ show_traffic_stats() {
     # Статистика по пользователям из логов
     log "Статистика подключений по пользователям:"
     if [ -f "/var/log/syslog" ]; then
-        # Ищем записи о подключениях в системных логах
+        # Ищем записи о подключениях в системных логах, исключая Docker prune сообщения
         echo -e "${BLUE}Последние подключения:${NC}"
-        grep -i "xray\|v2ray" /var/log/syslog 2>/dev/null | tail -10 | while read line; do
+        grep -i "xray\|v2ray" /var/log/syslog 2>/dev/null | grep -v "prune\|failed to prune" | tail -10 | while read line; do
             echo "  $line"
         done
+        
+        # Если нет записей о подключениях, показываем соответствующее сообщение
+        if ! grep -i "xray\|v2ray" /var/log/syslog 2>/dev/null | grep -v "prune\|failed to prune" | grep -q .; then
+            echo "  Записи о подключениях не найдены в системных логах"
+            echo "  Рекомендуется настроить логирование в Xray для отслеживания пользователей"
+        fi
     fi
     
     echo ""
@@ -769,12 +935,41 @@ show_traffic_stats() {
     # Статистика сетевого интерфейса
     log "Статистика сетевого трафика:"
     if command -v vnstat >/dev/null 2>&1; then
-        vnstat -i eth0 --json | jq -r '.interfaces[0].stats.day[] | select(.date == now.date) | "Сегодня: \(.rx.bytes) bytes входящих, \(.tx.bytes) bytes исходящих"' 2>/dev/null || {
-            echo "Установите vnstat для детальной статистики: apt install vnstat"
+        # Получаем список доступных интерфейсов
+        INTERFACE=$(ip route show default | awk '/default/ { print $5 }' | head -1)
+        if [ -z "$INTERFACE" ]; then
+            INTERFACE="eth0"
+        fi
+        
+        echo "  Статистика интерфейса $INTERFACE:"
+        vnstat -i "$INTERFACE" --json 2>/dev/null | jq -r '.interfaces[0].stats.day[] | select(.date == (.date | split("-") | join("-"))) | "  Сегодня: \(.rx.bytes) bytes входящих, \(.tx.bytes) bytes исходящих"' 2>/dev/null || {
+            # Fallback к простому выводу vnstat
+            vnstat -i "$INTERFACE" | grep -E "today|сегодня" | head -1 | sed 's/^/  /'
         }
+        
+        echo "  Общая статистика за месяц:"
+        vnstat -i "$INTERFACE" -m | tail -3 | head -1 | sed 's/^/  /'
     else
-        echo "Общий трафик интерфейса (приблизительно):"
+        echo "  vnstat не установлен. Показываем базовую статистику:"
         cat /proc/net/dev | grep -E "eth0|ens|enp" | head -1 | awk '{print "  RX: " $2 " bytes, TX: " $10 " bytes"}'
+        echo ""
+        read -p "  Установить vnstat для детальной статистики трафика? (y/n): " install_vnstat
+        if [ "$install_vnstat" = "y" ] || [ "$install_vnstat" = "Y" ]; then
+            log "Установка vnstat..."
+            if apt update && apt install -y vnstat; then
+                log "vnstat успешно установлен!"
+                # Инициализация базы данных vnstat
+                INTERFACE=$(ip route show default | awk '/default/ { print $5 }' | head -1)
+                if [ -n "$INTERFACE" ]; then
+                    vnstat -u -i "$INTERFACE"
+                    systemctl enable vnstat
+                    systemctl start vnstat
+                    log "vnstat настроен для интерфейса $INTERFACE"
+                fi
+            else
+                error "Ошибка при установке vnstat"
+            fi
+        fi
     fi
     
     echo ""
@@ -849,10 +1044,23 @@ except:
     
     # Рекомендации по мониторингу
     log "Рекомендации по улучшению мониторинга:"
-    echo "  1. Установите vnstat для детальной статистики трафика: apt install vnstat"
-    echo "  2. Настройте логирование в Xray для отслеживания пользователей"
+    
+    # Проверяем что уже настроено
+    if ! command -v vnstat >/dev/null 2>&1; then
+        echo "  1. ✗ vnstat не установлен - установите для детальной статистики трафика"
+    else
+        echo "  1. ✓ vnstat установлен и готов к использованию"
+    fi
+    
+    if ! jq -e '.log' "$CONFIG_FILE" >/dev/null 2>&1; then
+        echo "  2. ✗ Логирование Xray не настроено - используйте пункт меню 10"
+    else
+        echo "  2. ✓ Логирование Xray настроено"
+    fi
+    
     echo "  3. Используйте мониторинг системы (htop, iotop) для анализа производительности"
     echo "  4. Настройте автоматические отчеты через cron"
+    echo "  5. Просматривайте логи пользователей через пункт меню 11"
     
     echo -e "${BLUE}======================================${NC}"
 }
@@ -872,11 +1080,13 @@ show_menu() {
     echo -e "${BLUE}= 7. Перезапустить сервер                 =${NC}"
     echo -e "${BLUE}= 8. Ротация Reality ключей               =${NC}"
     echo -e "${BLUE}= 9. Статистика использования             =${NC}"
-    echo -e "${BLUE}= 10. Удалить VPN сервер                  =${NC}"
+    echo -e "${BLUE}= 10. Настройка логирования Xray          =${NC}"
+    echo -e "${BLUE}= 11. Просмотр логов пользователей        =${NC}"
+    echo -e "${BLUE}= 12. Удалить VPN сервер                  =${NC}"
     echo -e "${BLUE}= 0. Выход                                =${NC}"
     echo -e "${BLUE}============================================${NC}"
     echo ""
-    read -p "Выберите действие [0-10]: " choice
+    read -p "Выберите действие [0-12]: " choice
     
     case $choice in
         1) list_users; press_enter ;;
@@ -888,7 +1098,9 @@ show_menu() {
         7) restart_server; press_enter ;;
         8) rotate_reality_keys; press_enter ;;
         9) show_traffic_stats; press_enter ;;
-        10) uninstall_vpn; press_enter ;;
+        10) configure_xray_logging; press_enter ;;
+        11) view_user_logs; press_enter ;;
+        12) uninstall_vpn; press_enter ;;
         0) exit 0 ;;
         *) error "Некорректный выбор! Попробуйте снова." ;;
     esac
