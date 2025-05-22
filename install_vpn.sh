@@ -73,13 +73,356 @@ if ! command -v openssl >/dev/null 2>&1; then
     apt install -y openssl
 fi
 
-# Создание рабочей директории
-WORK_DIR="/opt/v2ray"
-mkdir -p "$WORK_DIR"
-cd "$WORK_DIR"
+# ========================= OUTLINE VPN FUNCTIONS =========================
 
-# Запрос параметров
-log "Настройка параметров сервера..."
+# Функция определения архитектуры для Outline
+detect_architecture() {
+    local arch=$(uname -m)
+    
+    case "$arch" in
+        x86_64)
+            log "Detected x86-64 architecture"
+            export ARCHITECTURE="amd64"
+            export WATCHTOWER_IMAGE="containrrr/watchtower:latest"
+            export SB_IMAGE="quay.io/outline/shadowbox:stable"
+            ;;
+        aarch64|arm64)
+            log "Detected ARM64 architecture"
+            export ARCHITECTURE="arm64"
+            export WATCHTOWER_IMAGE="ken1029/watchtower:arm64"
+            export SB_IMAGE="ken1029/shadowbox:latest"
+            ;;
+        armv7*|armv8*|armhf)
+            log "Detected ARMv7 architecture"
+            export ARCHITECTURE="armv7"
+            export WATCHTOWER_IMAGE="ken1029/watchtower:arm32"
+            export SB_IMAGE="ken1029/shadowbox:latest"
+            ;;
+        *)
+            error "Unsupported architecture: $arch"
+            ;;
+    esac
+}
+
+# Функция настройки файрвола для Outline
+setup_outline_firewall() {
+    local api_port="$1"
+    local access_key_port="$2"
+    
+    log "Настройка брандмауэра для Outline VPN..."
+    
+    # Backup current UFW rules
+    mkdir -p /opt/outline/backup
+    ufw status verbose > /opt/outline/backup/ufw_rules_backup.txt 2>/dev/null || true
+    
+    # Configure UFW
+    ufw allow ssh
+    ufw allow "$api_port"/tcp
+    ufw allow "$access_key_port"/tcp
+    ufw allow "$access_key_port"/udp
+    
+    # Enable UFW if not already enabled
+    if ! ufw status | grep -q "Status: active"; then
+        log "Включение UFW брандмауэра"
+        ufw --force enable
+    fi
+    
+    log "Брандмауэр настроен успешно"
+}
+
+# Функция генерации случайного порта для Outline (альтернативная реализация)
+get_outline_random_port() {
+    local num=0
+    until (( 1024 <= num && num < 65535 )); do
+        num=$(( RANDOM + (RANDOM % 2) * 32768 ))
+    done
+    echo $num
+}
+
+# Функция создания safe base64 строки
+safe_base64() {
+    base64 -w 0 | tr '/+' '_-' | tr -d '='
+}
+
+# Основная функция установки Outline VPN
+install_outline_vpn() {
+    log "========================================================"
+    log "Начало установки Outline VPN сервера"
+    log "========================================================"
+    
+    # Определяем архитектуру
+    detect_architecture
+    
+    # Запрос параметров для Outline VPN
+    log "Настройка параметров Outline VPN сервера..."
+    
+    # Получение hostname
+    DEFAULT_IP=$(curl -s https://api.ipify.org)
+    echo ""
+    echo "Настройка hostname/IP адреса:"
+    read -p "Введите hostname или IP-адрес сервера [$DEFAULT_IP]: " OUTLINE_HOSTNAME
+    OUTLINE_HOSTNAME=${OUTLINE_HOSTNAME:-$DEFAULT_IP}
+    
+    # Настройка API порта
+    echo ""
+    echo "Настройка API порта (для управления через Outline Manager):"
+    echo "1. Случайный свободный порт (рекомендуется)"
+    echo "2. Указать порт вручную"
+    read -p "Ваш выбор [1]: " API_PORT_CHOICE
+    API_PORT_CHOICE=${API_PORT_CHOICE:-1}
+    
+    case $API_PORT_CHOICE in
+        1)
+            OUTLINE_API_PORT=$(get_outline_random_port)
+            log "✓ Сгенерирован API порт: $OUTLINE_API_PORT"
+            ;;
+        2)
+            while true; do
+                read -p "Введите API порт [8080]: " OUTLINE_API_PORT
+                OUTLINE_API_PORT=${OUTLINE_API_PORT:-8080}
+                
+                if ! [[ "$OUTLINE_API_PORT" =~ ^[0-9]+$ ]] || [ "$OUTLINE_API_PORT" -lt 1024 ] || [ "$OUTLINE_API_PORT" -gt 65535 ]; then
+                    warning "Некорректный порт. Введите число от 1024 до 65535."
+                    continue
+                fi
+                
+                if check_port_available $OUTLINE_API_PORT; then
+                    log "✓ API порт $OUTLINE_API_PORT свободен"
+                    break
+                else
+                    warning "Порт $OUTLINE_API_PORT уже используется!"
+                    read -p "Использовать занятый порт? (y/n): " use_busy_port
+                    if [ "$use_busy_port" = "y" ]; then
+                        break
+                    fi
+                fi
+            done
+            ;;
+        *)
+            OUTLINE_API_PORT=$(get_outline_random_port)
+            ;;
+    esac
+    
+    # Настройка порта для ключей доступа
+    echo ""
+    echo "Настройка порта для ключей доступа (клиентские подключения):"
+    echo "1. Случайный свободный порт (рекомендуется)"
+    echo "2. Указать порт вручную"
+    read -p "Ваш выбор [1]: " KEYS_PORT_CHOICE
+    KEYS_PORT_CHOICE=${KEYS_PORT_CHOICE:-1}
+    
+    case $KEYS_PORT_CHOICE in
+        1)
+            OUTLINE_KEYS_PORT=$(get_outline_random_port)
+            # Убеждаемся что порты разные
+            while [ "$OUTLINE_KEYS_PORT" = "$OUTLINE_API_PORT" ]; do
+                OUTLINE_KEYS_PORT=$(get_outline_random_port)
+            done
+            log "✓ Сгенерирован порт для ключей: $OUTLINE_KEYS_PORT"
+            ;;
+        2)
+            while true; do
+                read -p "Введите порт для ключей доступа [9000]: " OUTLINE_KEYS_PORT
+                OUTLINE_KEYS_PORT=${OUTLINE_KEYS_PORT:-9000}
+                
+                if ! [[ "$OUTLINE_KEYS_PORT" =~ ^[0-9]+$ ]] || [ "$OUTLINE_KEYS_PORT" -lt 1024 ] || [ "$OUTLINE_KEYS_PORT" -gt 65535 ]; then
+                    warning "Некорректный порт. Введите число от 1024 до 65535."
+                    continue
+                fi
+                
+                if [ "$OUTLINE_KEYS_PORT" = "$OUTLINE_API_PORT" ]; then
+                    warning "Порт для ключей должен отличаться от API порта!"
+                    continue
+                fi
+                
+                if check_port_available $OUTLINE_KEYS_PORT; then
+                    log "✓ Порт для ключей $OUTLINE_KEYS_PORT свободен"
+                    break
+                else
+                    warning "Порт $OUTLINE_KEYS_PORT уже используется!"
+                    read -p "Использовать занятый порт? (y/n): " use_busy_port
+                    if [ "$use_busy_port" = "y" ]; then
+                        break
+                    fi
+                fi
+            done
+            ;;
+        *)
+            OUTLINE_KEYS_PORT=$(get_outline_random_port)
+            while [ "$OUTLINE_KEYS_PORT" = "$OUTLINE_API_PORT" ]; do
+                OUTLINE_KEYS_PORT=$(get_outline_random_port)
+            done
+            ;;
+    esac
+    
+    # Создание рабочей директории для Outline
+    export SHADOWBOX_DIR="/opt/outline"
+    log "Создание директории Outline по адресу $SHADOWBOX_DIR"
+    mkdir -p --mode=770 "$SHADOWBOX_DIR"
+    
+    # Создание конфигурационного файла
+    readonly ACCESS_CONFIG="$SHADOWBOX_DIR/access.txt"
+    
+    # Создание директории состояния
+    log "Создание директории постоянного состояния"
+    readonly STATE_DIR="$SHADOWBOX_DIR/persisted-state"
+    mkdir -p --mode=770 "${STATE_DIR}"
+    chmod g+s "${STATE_DIR}"
+    
+    # Генерация API ключа
+    log "Генерация секретного ключа API"
+    readonly SB_API_PREFIX=$(head -c 16 /dev/urandom | safe_base64)
+    
+    # Генерация TLS сертификата
+    log "Генерация TLS сертификата"
+    readonly CERTIFICATE_NAME="${STATE_DIR}/shadowbox-selfsigned"
+    readonly SB_CERTIFICATE_FILE="${CERTIFICATE_NAME}.crt"
+    readonly SB_PRIVATE_KEY_FILE="${CERTIFICATE_NAME}.key"
+    
+    openssl req -x509 -nodes -days 36500 -newkey rsa:2048 \
+        -subj "/CN=${OUTLINE_HOSTNAME}" \
+        -keyout "${SB_PRIVATE_KEY_FILE}" -out "${SB_CERTIFICATE_FILE}" >/dev/null 2>&1
+    
+    # Генерация отпечатка сертификата
+    log "Генерация отпечатка сертификата"
+    CERT_OPENSSL_FINGERPRINT=$(openssl x509 -in "${SB_CERTIFICATE_FILE}" -noout -sha256 -fingerprint)
+    CERT_HEX_FINGERPRINT=$(echo ${CERT_OPENSSL_FINGERPRINT#*=} | tr --delete :)
+    echo "certSha256:$CERT_HEX_FINGERPRINT" >> $ACCESS_CONFIG
+    
+    # Запись конфигурации если указан порт для ключей
+    if [ -n "$OUTLINE_KEYS_PORT" ]; then
+        log "Запись конфигурации сервера"
+        echo "{\"portForNewAccessKeys\":$OUTLINE_KEYS_PORT}" > $STATE_DIR/shadowbox_server_config.json
+    fi
+    
+    # Запуск контейнера Shadowbox
+    log "Запуск контейнера Shadowbox"
+    docker run -d \
+        --name shadowbox \
+        --restart=always \
+        --net=host \
+        -v "${STATE_DIR}:${STATE_DIR}" \
+        -e "SB_STATE_DIR=${STATE_DIR}" \
+        -e "SB_PUBLIC_IP=${OUTLINE_HOSTNAME}" \
+        -e "SB_API_PORT=${OUTLINE_API_PORT}" \
+        -e "SB_API_PREFIX=${SB_API_PREFIX}" \
+        -e "SB_CERTIFICATE_FILE=${SB_CERTIFICATE_FILE}" \
+        -e "SB_PRIVATE_KEY_FILE=${SB_PRIVATE_KEY_FILE}" \
+        ${SB_IMAGE} >/dev/null
+    
+    # Запуск Watchtower для автоматических обновлений
+    log "Запуск Watchtower для автоматических обновлений"
+    docker run -d \
+        --name watchtower \
+        --restart=always \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        ${WATCHTOWER_IMAGE} \
+        --cleanup --tlsverify --interval 3600 >/dev/null
+    
+    # Установка URL-ов API
+    readonly PUBLIC_API_URL="https://${OUTLINE_HOSTNAME}:${OUTLINE_API_PORT}/${SB_API_PREFIX}"
+    readonly LOCAL_API_URL="https://localhost:${OUTLINE_API_PORT}/${SB_API_PREFIX}"
+    
+    # Ожидание готовности сервиса
+    log "Ожидание готовности Outline сервера"
+    until curl --insecure -s "${LOCAL_API_URL}/access-keys" >/dev/null; do 
+        sleep 1
+    done
+    
+    # Создание первого ключа доступа
+    log "Создание первого ключа доступа"
+    curl --insecure -X POST -s "${LOCAL_API_URL}/access-keys" >/dev/null
+    
+    # Добавление URL API в конфигурацию
+    log "Добавление URL API в конфигурацию"
+    echo "apiUrl:${PUBLIC_API_URL}" >> $ACCESS_CONFIG
+    
+    # Получение порта ключа доступа
+    log "Получение порта ключа доступа"
+    local ACCESS_KEY_PORT=$(curl --insecure -s ${LOCAL_API_URL}/access-keys | 
+        docker exec -i shadowbox node -e '
+            const fs = require("fs");
+            const accessKeys = JSON.parse(fs.readFileSync(0, {encoding: "utf-8"}));
+            console.log(accessKeys["accessKeys"][0]["port"]);
+        ')
+    
+    # Настройка брандмауэра
+    setup_outline_firewall "$OUTLINE_API_PORT" "$ACCESS_KEY_PORT"
+    
+    # Получение информации о сервере
+    log "Получение информации о сервере"
+    local API_URL=$(grep "apiUrl" $ACCESS_CONFIG | sed "s/apiUrl://")
+    local CERT_SHA256=$(grep "certSha256" $ACCESS_CONFIG | sed "s/certSha256://")
+    
+    # Создание ссылки на скрипт управления
+    if [ -f "/home/ikeniborn/Documents/Project/vpn/manage_users.sh" ]; then
+        ln -sf "/home/ikeniborn/Documents/Project/vpn/manage_users.sh" /usr/local/bin/outline-manage 2>/dev/null || true
+    fi
+    
+    # Отображение сообщения об успехе
+    cat <<EOF
+
+${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}
+${GREEN}║         ПОЗДРАВЛЯЕМ! OUTLINE VPN СЕРВЕР ГОТОВ К РАБОТЕ        ║${NC}
+${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}
+
+${BLUE}Информация о сервере:${NC}
+• IP/Hostname сервера: ${OUTLINE_HOSTNAME}
+• API порт: ${OUTLINE_API_PORT}
+• Порт ключей доступа: ${ACCESS_KEY_PORT}
+
+${BLUE}Для управления вашим Outline сервером:${NC}
+1. Установите Outline Manager с https://getoutline.org/
+2. Скопируйте следующую строку (включая фигурные скобки) в Outline Manager:
+
+${GREEN}{"apiUrl":"${API_URL}","certSha256":"${CERT_SHA256}"}${NC}
+
+${BLUE}Настройка брандмауэра:${NC}
+• Порт управления ${OUTLINE_API_PORT} (TCP) открыт
+• Порт ключей доступа ${ACCESS_KEY_PORT} (TCP/UDP) открыт
+
+${YELLOW}Примечание:${NC} Если есть проблемы с подключением, убедитесь что ваш облачный 
+провайдер или роутер разрешает эти порты. Файлы конфигурации хранятся в ${SHADOWBOX_DIR}.
+
+EOF
+}
+
+# Выбор типа VPN сервера
+echo ""
+log "Выберите тип VPN сервера для установки:"
+echo "1. Xray VPN (VLESS+Reality) - рекомендуется для обхода блокировок"
+echo "2. Outline VPN (Shadowsocks) - простота управления через приложение"
+read -p "Ваш выбор [1]: " VPN_TYPE_CHOICE
+VPN_TYPE_CHOICE=${VPN_TYPE_CHOICE:-1}
+
+case $VPN_TYPE_CHOICE in
+    1) 
+        VPN_TYPE="xray"
+        log "Выбран Xray VPN (VLESS+Reality)"
+        ;;
+    2) 
+        VPN_TYPE="outline"
+        log "Выбран Outline VPN (Shadowsocks)"
+        ;;
+    *) 
+        VPN_TYPE="xray"
+        log "Использован Xray VPN по умолчанию"
+        ;;
+esac
+
+if [ "$VPN_TYPE" = "xray" ]; then
+    # Создание рабочей директории для Xray
+    WORK_DIR="/opt/v2ray"
+    mkdir -p "$WORK_DIR"
+    cd "$WORK_DIR"
+
+    # Запрос параметров для Xray
+    log "Настройка параметров Xray сервера..."
+else
+    # Для Outline VPN запускаем соответствующую функцию
+    install_outline_vpn
+    exit 0
+fi
 
 # Получение внешнего IP-адреса, если не указан другой
 DEFAULT_IP=$(curl -s https://api.ipify.org)
