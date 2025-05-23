@@ -36,17 +36,14 @@ fi
 command -v docker >/dev/null 2>&1 || error "Docker не установлен."
 command -v uuid >/dev/null 2>&1 || {
     log "uuid не установлен. Установка uuid..."
-    apt update
     apt install -y uuid
 }
 command -v qrencode >/dev/null 2>&1 || {
     log "qrencode не установлен. Установка qrencode..."
-    apt update
     apt install -y qrencode
 }
 command -v jq >/dev/null 2>&1 || {
     log "jq не установлен. Установка jq..."
-    apt update
     apt install -y jq
 }
 
@@ -681,7 +678,7 @@ rotate_reality_keys() {
     else
         # Альтернативный способ
         if ! command -v xxd >/dev/null 2>&1; then
-            apt update && apt install -y xxd
+            apt install -y xxd
         fi
         
         TEMP_PRIVATE=$(openssl genpkey -algorithm X25519 2>/dev/null)
@@ -969,7 +966,7 @@ show_traffic_stats() {
         read -p "  Установить vnstat для детальной статистики трафика? (y/n): " install_vnstat
         if [ "$install_vnstat" = "y" ] || [ "$install_vnstat" = "Y" ]; then
             log "Установка vnstat..."
-            if apt update && apt install -y vnstat; then
+            if apt install -y vnstat; then
                 log "vnstat успешно установлен!"
                 # Инициализация базы данных vnstat
                 INTERFACE=$(ip route show default | awk '/default/ { print $5 }' | head -1)
