@@ -34,7 +34,7 @@ fi
 
 # Проверка наличия необходимых инструментов
 command -v docker >/dev/null 2>&1 || error "Docker не установлен."
-command -v uuid >/dev/null 2>&1 || {
+command -v uuidgen >/dev/null 2>&1 || {
     log "uuid-runtime не установлен. Установка uuid-runtime..."
     apt update
     apt install -y uuid-runtime
@@ -195,7 +195,7 @@ add_user() {
     fi
     
     # Генерация UUID
-    USER_UUID=$(uuid -v 4)
+    USER_UUID=$(uuidgen)
     read -p "Введите UUID для пользователя [$USER_UUID]: " INPUT_UUID
     USER_UUID=${INPUT_UUID:-$USER_UUID}
     
@@ -965,9 +965,19 @@ show_traffic_stats() {
                 # Инициализация базы данных vnstat
                 INTERFACE=$(ip route show default | awk '/default/ { print $5 }' | head -1)
                 if [ -n "$INTERFACE" ]; then
-                    vnstat -u -i "$INTERFACE"
+                    # Создаем конфигурацию для интерфейса (современный способ)
+                    if ! vnstat -i "$INTERFACE" --json >/dev/null 2>&1; then
+                        log "Инициализация базы данных vnstat для $INTERFACE..."
+                        # В новых версиях vnstat автоматически создает БД при первом запуске
+                        vnstat -i "$INTERFACE" --add >/dev/null 2>&1 || {
+                            # Если --add не поддерживается, просто запускаем службу
+                            log "Используется автоматическая инициализация vnstat"
+                        }
+                    fi
                     systemctl enable vnstat
                     systemctl start vnstat
+                    # Ждем немного для инициализации
+                    sleep 2
                     log "vnstat настроен для интерфейса $INTERFACE"
                 fi
             else

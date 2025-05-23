@@ -55,7 +55,7 @@ command -v ufw >/dev/null 2>&1 || {
 }
 
 command -v uuidgen >/dev/null 2>&1 || {
-    log "uuidgen не установлен. Установка..."
+    log "uuid-runtime не установлен. Установка uuid-runtime..."
     apt update
     apt install -y uuid-runtime
 }
@@ -171,7 +171,13 @@ setup_outline_firewall() {
     ufw status verbose > /opt/outline/backup/ufw_rules_backup.txt 2>/dev/null || true
     
     # Configure UFW
-    ufw allow ssh
+    # Check if SSH rule already exists
+    if ! ufw status | grep -q "22/tcp\|OpenSSH\|ssh"; then
+        ufw allow ssh
+        log "SSH правило добавлено"
+    else
+        log "SSH правило уже существует"
+    fi
     ufw allow "$api_port"/tcp
     ufw allow "$access_key_port"/tcp
     ufw allow "$access_key_port"/udp
@@ -1031,7 +1037,13 @@ log "Docker конфигурация создана"
 
 # Настройка брандмауэра
 log "Настройка брандмауэра..."
-ufw allow ssh
+# Check if SSH rule already exists
+if ! ufw status | grep -q "22/tcp\|OpenSSH\|ssh"; then
+    ufw allow ssh
+    log "SSH правило добавлено"
+else
+    log "SSH правило уже существует"
+fi
 ufw allow $SERVER_PORT/tcp
 ufw --force enable
 
