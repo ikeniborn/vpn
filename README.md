@@ -94,7 +94,7 @@ This project provides a comprehensive VPN solution with **dual VPN support**: **
 **Auto-installed Dependencies:**
 - Docker & Docker Compose
 - UFW Firewall  
-- OpenSSL, dnsutils, uuid-runtime
+- OpenSSL, dnsutils, uuid
 - qrencode (for QR code generation)
 
 ## 🚀 Quick Installation

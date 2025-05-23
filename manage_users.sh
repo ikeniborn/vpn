@@ -34,10 +34,10 @@ fi
 
 # Проверка наличия необходимых инструментов
 command -v docker >/dev/null 2>&1 || error "Docker не установлен."
-command -v uuidgen >/dev/null 2>&1 || {
-    log "uuid-runtime не установлен. Установка uuid-runtime..."
+command -v uuid >/dev/null 2>&1 || {
+    log "uuid не установлен. Установка uuid..."
     apt update
-    apt install -y uuid-runtime
+    apt install -y uuid
 }
 command -v qrencode >/dev/null 2>&1 || {
     log "qrencode не установлен. Установка qrencode..."
@@ -195,7 +195,7 @@ add_user() {
     fi
     
     # Генерация UUID
-    USER_UUID=$(uuidgen)
+    USER_UUID=$(uuid -v 4)
     read -p "Введите UUID для пользователя [$USER_UUID]: " INPUT_UUID
     USER_UUID=${INPUT_UUID:-$USER_UUID}
     
@@ -290,6 +290,9 @@ EOL
     echo "$REALITY_LINK"
     echo "QR-код:"
     qrencode -t ANSIUTF8 "$REALITY_LINK"
+    
+    # Показать информацию о клиентах
+    show_client_info
 }
 
 # Удаление пользователя
@@ -417,6 +420,9 @@ EOL
     echo "$REALITY_LINK"
     echo "QR-код:"
     qrencode -t ANSIUTF8 "$REALITY_LINK"
+    
+    # Показать информацию о клиентах
+    show_client_info
 }
 
 # Показать данные пользователя
@@ -518,6 +524,9 @@ EOL
     echo "$REALITY_LINK"
     echo "QR-код:"
     qrencode -t ANSIUTF8 "$REALITY_LINK"
+    
+    # Показать информацию о клиентах
+    show_client_info
 }
 
 # Перезапуск v2ray сервера
@@ -1118,6 +1127,24 @@ show_menu() {
         0) exit 0 ;;
         *) error "Некорректный выбор! Попробуйте снова." ;;
     esac
+}
+
+# Функция вывода информации о клиентах для Xray
+show_client_info() {
+    echo ""
+    echo -e "${BLUE}📱 Рекомендуемые клиенты для Xray VPN:${NC}"
+    echo -e "${GREEN}Android:${NC}"
+    echo "  • v2RayTun - https://play.google.com/store/apps/details?id=com.v2raytun.android"
+    echo ""
+    echo -e "${GREEN}iOS:${NC}"
+    echo "  • Shadowrocket - https://apps.apple.com/app/shadowrocket/id932747118"
+    echo "  • v2RayTun - https://apps.apple.com/app/v2raytun/id6476628951"
+    echo ""
+    echo -e "${GREEN}Подключение:${NC}"
+    echo "  1. QR-код (рекомендуется) - отсканируйте QR-код выше"
+    echo "  2. Импорт ссылки - скопируйте ссылку для подключения"
+    echo "  3. Ручная настройка - введите параметры сервера вручную"
+    echo ""
 }
 
 # Функция ожидания нажатия Enter

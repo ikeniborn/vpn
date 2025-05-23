@@ -54,10 +54,10 @@ command -v ufw >/dev/null 2>&1 || {
     apt install -y ufw
 }
 
-command -v uuidgen >/dev/null 2>&1 || {
-    log "uuid-runtime не установлен. Установка uuid-runtime..."
+command -v uuid >/dev/null 2>&1 || {
+    log "uuid не установлен. Установка uuid..."
     apt update
-    apt install -y uuid-runtime
+    apt install -y uuid
 }
 
 # Установка дополнительных инструментов для проверки доменов
@@ -556,7 +556,7 @@ esac
 log "Выбран протокол: $PROTOCOL"
 
 # Генерация UUID для первого пользователя
-DEFAULT_UUID=$(uuidgen)
+DEFAULT_UUID=$(uuid -v 4)
 read -p "Введите UUID для первого пользователя [$DEFAULT_UUID]: " USER_UUID
 USER_UUID=${USER_UUID:-$DEFAULT_UUID}
 
@@ -1194,6 +1194,43 @@ log "Информация о первом пользователе:"
 log "Имя: $USER_NAME"
 log "UUID: $USER_UUID"
 log "Ссылка для подключения сохранена в: $WORK_DIR/users/$USER_NAME.link"
+
+# Отображение ссылки и QR-кода для первого пользователя
+echo ""
+echo "Ссылка для подключения:"
+echo "$REALITY_LINK"
+
+if command -v qrencode >/dev/null 2>&1; then
+    echo "QR-код:"
+    qrencode -t ANSIUTF8 "$REALITY_LINK"
+else
+    log "qrencode не установлен. QR-код сохранен в файле: $WORK_DIR/users/$USER_NAME.png"
+fi
+
+# Функция вывода информации о клиентах для Xray
+show_client_info_install() {
+    local BLUE='\033[0;34m'
+    echo ""
+    echo -e "${BLUE}📱 Рекомендуемые клиенты для Xray VPN:${NC}"
+    echo -e "${GREEN}Android:${NC}"
+    echo "  • v2RayTun - https://play.google.com/store/apps/details?id=com.v2raytun.android"
+    echo ""
+    echo -e "${GREEN}iOS:${NC}"
+    echo "  • Shadowrocket - https://apps.apple.com/app/shadowrocket/id932747118"
+    echo "  • v2RayTun - https://apps.apple.com/app/v2raytun/id6476628951"
+    echo ""
+    echo -e "${GREEN}Подключение:${NC}"
+    echo "  1. QR-код (рекомендуется) - отсканируйте QR-код выше"
+    echo "  2. Импорт ссылки - скопируйте ссылку для подключения"
+    echo "  3. Ручная настройка - введите параметры сервера вручную"
+    echo ""
+}
+
+# Показать информацию о клиентах только для Xray VPN
+if [ "$VPN_TYPE" = "xray" ]; then
+    show_client_info_install
+fi
+
 log "========================================================"
 log "Для управления пользователями используйте скрипт manage_users.sh"
 log "========================================================"
