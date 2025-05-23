@@ -34,7 +34,11 @@ fi
 
 # Проверка наличия необходимых инструментов
 command -v docker >/dev/null 2>&1 || error "Docker не установлен."
-command -v uuid >/dev/null 2>&1 || error "uuid-runtime не установлен. Установите с помощью 'apt install uuid-runtime'"
+command -v uuid >/dev/null 2>&1 || {
+    log "uuid-runtime не установлен. Установка uuid-runtime..."
+    apt update
+    apt install -y uuid-runtime
+}
 command -v qrencode >/dev/null 2>&1 || {
     log "qrencode не установлен. Установка qrencode..."
     apt update
