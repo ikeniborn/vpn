@@ -54,8 +54,8 @@ command -v ufw >/dev/null 2>&1 || {
     apt install -y ufw
 }
 
-command -v uuid >/dev/null 2>&1 || {
-    log "UUID не установлен. Установка uuid-runtime..."
+command -v uuidgen >/dev/null 2>&1 || {
+    log "uuidgen не установлен. Установка..."
     apt update
     apt install -y uuid-runtime
 }
@@ -549,7 +549,7 @@ esac
 log "Выбран протокол: $PROTOCOL"
 
 # Генерация UUID для первого пользователя
-DEFAULT_UUID=$(uuid -v 4)
+DEFAULT_UUID=$(uuidgen)
 read -p "Введите UUID для первого пользователя [$DEFAULT_UUID]: " USER_UUID
 USER_UUID=${USER_UUID:-$DEFAULT_UUID}
 
