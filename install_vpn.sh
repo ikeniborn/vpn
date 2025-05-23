@@ -73,6 +73,61 @@ if ! command -v openssl >/dev/null 2>&1; then
     apt install -y openssl
 fi
 
+# ========================= ОБЩИЕ ФУНКЦИИ =========================
+
+# Функция проверки свободного порта
+check_port_available() {
+    local port=$1
+    if command -v netstat >/dev/null 2>&1; then
+        ! netstat -tuln | grep -q ":$port "
+    elif command -v ss >/dev/null 2>&1; then
+        ! ss -tuln | grep -q ":$port "
+    else
+        # Попытка подключения к порту как проверка
+        ! timeout 1 bash -c "</dev/tcp/127.0.0.1/$port" 2>/dev/null
+    fi
+}
+
+# Унифицированная функция генерации случайного свободного порта
+generate_free_port() {
+    local min_port=${1:-10000}      # Минимальный порт (по умолчанию 10000)
+    local max_port=${2:-65000}      # Максимальный порт (по умолчанию 65000)
+    local check_availability=${3:-true}  # Проверять доступность (по умолчанию true)
+    local max_attempts=${4:-20}     # Максимум попыток (по умолчанию 20)
+    local fallback_port=${5:-10443} # Резервный порт (по умолчанию 10443)
+    
+    local attempts=0
+    
+    while [ $attempts -lt $max_attempts ]; do
+        # Генерируем случайный порт в указанном диапазоне
+        local port
+        if command -v shuf >/dev/null 2>&1; then
+            port=$(shuf -i $min_port-$max_port -n 1)
+        else
+            # Альтернативный метод если shuf недоступен
+            local range=$((max_port - min_port + 1))
+            port=$(( (RANDOM % range) + min_port ))
+        fi
+        
+        # Проверяем доступность порта если требуется
+        if [ "$check_availability" = "true" ]; then
+            if check_port_available $port; then
+                echo $port
+                return 0
+            fi
+        else
+            echo $port
+            return 0
+        fi
+        
+        attempts=$((attempts + 1))
+    done
+    
+    # Если не удалось найти свободный порт, возвращаем резервный
+    echo $fallback_port
+    return 1
+}
+
 # ========================= OUTLINE VPN FUNCTIONS =========================
 
 # Функция определения архитектуры для Outline
@@ -419,60 +474,6 @@ fi
 DEFAULT_IP=$(curl -s https://api.ipify.org)
 read -p "Введите IP-адрес сервера [$DEFAULT_IP]: " SERVER_IP
 SERVER_IP=${SERVER_IP:-$DEFAULT_IP}
-
-# Функция проверки свободного порта
-check_port_available() {
-    local port=$1
-    if command -v netstat >/dev/null 2>&1; then
-        ! netstat -tuln | grep -q ":$port "
-    elif command -v ss >/dev/null 2>&1; then
-        ! ss -tuln | grep -q ":$port "
-    else
-        # Попытка подключения к порту как проверка
-        ! timeout 1 bash -c "</dev/tcp/127.0.0.1/$port" 2>/dev/null
-    fi
-}
-
-# Унифицированная функция генерации случайного свободного порта
-generate_free_port() {
-    local min_port=${1:-10000}      # Минимальный порт (по умолчанию 10000)
-    local max_port=${2:-65000}      # Максимальный порт (по умолчанию 65000)
-    local check_availability=${3:-true}  # Проверять доступность (по умолчанию true)
-    local max_attempts=${4:-20}     # Максимум попыток (по умолчанию 20)
-    local fallback_port=${5:-10443} # Резервный порт (по умолчанию 10443)
-    
-    local attempts=0
-    
-    while [ $attempts -lt $max_attempts ]; do
-        # Генерируем случайный порт в указанном диапазоне
-        local port
-        if command -v shuf >/dev/null 2>&1; then
-            port=$(shuf -i $min_port-$max_port -n 1)
-        else
-            # Альтернативный метод если shuf недоступен
-            local range=$((max_port - min_port + 1))
-            port=$(( (RANDOM % range) + min_port ))
-        fi
-        
-        # Проверяем доступность порта если требуется
-        if [ "$check_availability" = "true" ]; then
-            if check_port_available $port; then
-                echo $port
-                return 0
-            fi
-        else
-            echo $port
-            return 0
-        fi
-        
-        attempts=$((attempts + 1))
-    done
-    
-    # Если не удалось найти свободный порт, возвращаем резервный
-    echo $fallback_port
-    return 1
-}
-
 
 # Порт для VPN сервера
 echo "Выберите метод назначения порта:"
