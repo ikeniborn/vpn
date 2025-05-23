@@ -405,32 +405,33 @@ install_outline_vpn() {
         ln -sf "/home/ikeniborn/Documents/Project/vpn/manage_users.sh" /usr/local/bin/outline-manage 2>/dev/null || true
     fi
     
+    # Добавим определение цветов если их еще нет
+    local BLUE='\033[0;34m'
+    
     # Отображение сообщения об успехе
-    cat <<EOF
-
-${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}
-${GREEN}║         ПОЗДРАВЛЯЕМ! OUTLINE VPN СЕРВЕР ГОТОВ К РАБОТЕ        ║${NC}
-${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}
-
-${BLUE}Информация о сервере:${NC}
-• IP/Hostname сервера: ${OUTLINE_HOSTNAME}
-• API порт: ${OUTLINE_API_PORT}
-• Порт ключей доступа: ${ACCESS_KEY_PORT}
-
-${BLUE}Для управления вашим Outline сервером:${NC}
-1. Установите Outline Manager с https://getoutline.org/
-2. Скопируйте следующую строку (включая фигурные скобки) в Outline Manager:
-
-${GREEN}{"apiUrl":"${API_URL}","certSha256":"${CERT_SHA256}"}${NC}
-
-${BLUE}Настройка брандмауэра:${NC}
-• Порт управления ${OUTLINE_API_PORT} (TCP) открыт
-• Порт ключей доступа ${ACCESS_KEY_PORT} (TCP/UDP) открыт
-
-${YELLOW}Примечание:${NC} Если есть проблемы с подключением, убедитесь что ваш облачный 
-провайдер или роутер разрешает эти порты. Файлы конфигурации хранятся в ${SHADOWBOX_DIR}.
-
-EOF
+    echo ""
+    echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║         ПОЗДРАВЛЯЕМ! OUTLINE VPN СЕРВЕР ГОТОВ К РАБОТЕ        ║${NC}"
+    echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${BLUE}Информация о сервере:${NC}"
+    echo -e "• IP/Hostname сервера: ${OUTLINE_HOSTNAME}"
+    echo -e "• API порт: ${OUTLINE_API_PORT}"
+    echo -e "• Порт ключей доступа: ${ACCESS_KEY_PORT}"
+    echo ""
+    echo -e "${BLUE}Для управления вашим Outline сервером:${NC}"
+    echo -e "1. Установите Outline Manager с https://getoutline.org/"
+    echo -e "2. Скопируйте следующую строку (включая фигурные скобки) в Outline Manager:"
+    echo ""
+    echo -e "${GREEN}{\"apiUrl\":\"${API_URL}\",\"certSha256\":\"${CERT_SHA256}\"}${NC}"
+    echo ""
+    echo -e "${BLUE}Настройка брандмауэра:${NC}"
+    echo -e "• Порт управления ${OUTLINE_API_PORT} (TCP) открыт"
+    echo -e "• Порт ключей доступа ${ACCESS_KEY_PORT} (TCP/UDP) открыт"
+    echo ""
+    echo -e "${YELLOW}Примечание:${NC} Если есть проблемы с подключением, убедитесь что ваш облачный"
+    echo -e "провайдер или роутер разрешает эти порты. Файлы конфигурации хранятся в ${SHADOWBOX_DIR}."
+    echo ""
 }
 
 # Выбор типа VPN сервера
