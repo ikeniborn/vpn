@@ -1032,7 +1032,7 @@ services:
     network_mode: host
     volumes:
       - ./config:/etc/xray
-      - ./logs:/var/log/xray
+      - ./logs:/opt/v2ray/logs
     environment:
       - TZ=Europe/Moscow
     command: ["xray", "run", "-c", "/etc/xray/config.json"]
@@ -1049,7 +1049,7 @@ services:
     network_mode: host
     volumes:
       - ./config:/etc/xray
-      - ./logs:/var/log/xray
+      - ./logs:/opt/v2ray/logs
     environment:
       - TZ=Europe/Moscow
     entrypoint: ["/usr/bin/xray"]

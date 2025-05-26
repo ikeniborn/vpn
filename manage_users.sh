@@ -573,6 +573,21 @@ restart_server() {
         fi
     fi
     
+    # Проверяем и исправляем docker-compose.yml для корректного монтирования логов
+    if [ -f "$WORK_DIR/docker-compose.yml" ]; then
+        if grep -q "./logs:/var/log/xray" "$WORK_DIR/docker-compose.yml"; then
+            log "Обнаружена старая конфигурация docker-compose, обновляем путь к логам..."
+            sed -i 's|./logs:/var/log/xray|./logs:/opt/v2ray/logs|g' "$WORK_DIR/docker-compose.yml"
+            
+            # Необходимо пересоздать контейнер для применения изменений
+            cd "$WORK_DIR"
+            docker-compose down
+            docker-compose up -d
+            echo -e "${GREEN}✅ VPN сервер пересоздан с исправленными путями!${NC}"
+            return
+        fi
+    fi
+    
     cd "$WORK_DIR"
     docker-compose restart
     echo -e "${GREEN}✅ VPN сервер успешно перезапущен!${NC}"
