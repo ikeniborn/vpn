@@ -70,7 +70,17 @@ SERVER_IP=$(curl -s https://api.ipify.org)
 
 get_server_info() {
     if [ -f "$CONFIG_FILE" ]; then
-        SERVER_PORT=$(jq '.inbounds[0].port' "$CONFIG_FILE")
+        # Сначала пробуем прочитать порт из файла конфигурации
+        if [ -f "$WORK_DIR/config/port.txt" ]; then
+            SERVER_PORT=$(cat "$WORK_DIR/config/port.txt")
+            log "Порт загружен из файла конфигурации: $SERVER_PORT"
+        else
+            # Если файла нет, читаем из JSON конфига
+            SERVER_PORT=$(jq '.inbounds[0].port' "$CONFIG_FILE")
+            log "Порт прочитан из JSON конфигурации: $SERVER_PORT"
+            # Сохраняем порт в файл для будущего использования
+            echo "$SERVER_PORT" > "$WORK_DIR/config/port.txt"
+        fi
         
         # Чтение SNI из файла, если он существует
         if [ -f "$WORK_DIR/config/sni.txt" ]; then
@@ -549,6 +559,19 @@ restart_server() {
     # Создаем файлы логов, если они не существуют
     touch "$WORK_DIR/logs/access.log" "$WORK_DIR/logs/error.log"
     chmod 644 "$WORK_DIR/logs/access.log" "$WORK_DIR/logs/error.log"
+    
+    # Проверяем, что порт в конфигурации соответствует сохраненному
+    if [ -f "$WORK_DIR/config/port.txt" ]; then
+        SAVED_PORT=$(cat "$WORK_DIR/config/port.txt")
+        CURRENT_PORT=$(jq -r '.inbounds[0].port' "$CONFIG_FILE")
+        
+        if [ "$SAVED_PORT" != "$CURRENT_PORT" ]; then
+            warning "Обнаружено изменение порта! Восстанавливаем сохраненный порт: $SAVED_PORT"
+            # Восстанавливаем правильный порт в конфигурации
+            jq ".inbounds[0].port = $SAVED_PORT" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
+            mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+        fi
+    fi
     
     cd "$WORK_DIR"
     docker-compose restart

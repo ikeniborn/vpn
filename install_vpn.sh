@@ -1159,6 +1159,7 @@ echo "$REALITY_LINK" > "$WORK_DIR/users/$USER_NAME.link"
 # Сохраняем информацию для использования в manage_users.sh
 echo "$SERVER_SNI" > "$WORK_DIR/config/sni.txt"
 echo "$PROTOCOL" > "$WORK_DIR/config/protocol.txt"
+echo "$SERVER_PORT" > "$WORK_DIR/config/port.txt"
 
 if [ "$USE_REALITY" = true ]; then
     log "Сохранение настроек Reality..."
