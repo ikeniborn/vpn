@@ -392,24 +392,30 @@ create_docker_compose() {
     log "Создание Docker Compose конфигурации..."
     
     cat > "$WORK_DIR/docker-compose.yml" <<EOF
-version: '3.8'
-
 services:
   v2raya:
     image: mzz2017/v2raya:latest
     container_name: v2raya
     restart: unless-stopped
     privileged: true
-    network_mode: host
+    network_mode: bridge
     volumes:
       - ./data:/etc/v2raya
       - /lib/modules:/lib/modules:ro
       - /etc/resolv.conf:/etc/resolv.conf
+      - /dev/net/tun:/dev/net/tun
     environment:
       - V2RAYA_ADDRESS=0.0.0.0:2017
       - V2RAYA_LOG_FILE=/var/log/v2raya/v2raya.log
-      - IPTABLES_MODE=tproxy
-      - V2RAYA_TRANSPARENT=true
+      - IPTABLES_MODE=nftables
+      - V2RAYA_TRANSPARENT=false
+      - V2RAYA_NFTABLES_SUPPORT=on
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.forwarding=1
 EOF
 
     # Если не используем nginx, открываем порт напрямую
@@ -417,6 +423,9 @@ EOF
         cat >> "$WORK_DIR/docker-compose.yml" <<EOF
     ports:
       - "${WEB_PORT}:2017"
+      - "20170:20170"  # SOCKS5 proxy
+      - "20171:20171"  # HTTP proxy
+      - "20172:20172"  # Mixed proxy
 EOF
     fi
 
@@ -460,26 +469,35 @@ create_simple_docker_compose() {
     log "Создание упрощенной Docker Compose конфигурации..."
     
     cat > "$WORK_DIR/docker-compose.yml" <<EOF
-version: '3.8'
-
 services:
   v2raya:
     image: mzz2017/v2raya:latest
     container_name: v2raya
     restart: unless-stopped
     privileged: true
-    network_mode: host
+    network_mode: bridge
     ports:
       - "${WEB_PORT}:2017"
+      - "20170:20170"  # SOCKS5 proxy
+      - "20171:20171"  # HTTP proxy
+      - "20172:20172"  # Mixed proxy
     volumes:
       - ./data:/etc/v2raya
       - /lib/modules:/lib/modules:ro
       - /etc/resolv.conf:/etc/resolv.conf
+      - /dev/net/tun:/dev/net/tun
     environment:
       - V2RAYA_ADDRESS=0.0.0.0:2017
       - V2RAYA_LOG_FILE=/var/log/v2raya/v2raya.log
-      - IPTABLES_MODE=tproxy
-      - V2RAYA_TRANSPARENT=true
+      - IPTABLES_MODE=nftables
+      - V2RAYA_TRANSPARENT=false
+      - V2RAYA_NFTABLES_SUPPORT=on
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.forwarding=1
 EOF
 }
 
@@ -514,6 +532,7 @@ show_menu() {
     echo "7. 🔧 Информация о подключении"
     echo "8. 🔐 Сбросить пароль администратора"
     echo "9. 🆙 Обновить v2rayA"
+    echo "10. 🗑️  Удалить v2rayA клиент"
     echo "0. 🚪 Выход"
     echo ""
 }
@@ -535,10 +554,17 @@ get_connection_info() {
         echo -e "  Пароль: ${YELLOW}$ADMIN_PASSWORD${NC}"
     fi
     echo ""
+    echo -e "${BLUE}Настройки прокси:${NC}"
+    echo -e "  SOCKS5: ${YELLOW}127.0.0.1:20170${NC}"
+    echo -e "  HTTP: ${YELLOW}127.0.0.1:20171${NC}"
+    echo -e "  Mixed: ${YELLOW}127.0.0.1:20172${NC}"
+    echo ""
     echo -e "${BLUE}Подключение через браузер:${NC}"
     echo -e "  1. Откройте браузер"
     echo -e "  2. Перейдите по адресу выше"
     echo -e "  3. Войдите с указанными данными"
+    echo -e "  4. Добавьте сервер и подключитесь"
+    echo -e "  5. Настройте прокси в браузере"
 }
 
 open_webui() {
@@ -600,6 +626,87 @@ update_v2raya() {
     echo -e "${GREEN}v2rayA обновлен${NC}"
 }
 
+uninstall_client() {
+    echo -e "${RED}╔══════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║        УДАЛЕНИЕ v2rayA КЛИЕНТА               ║${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${YELLOW}⚠️  Внимание! Будут удалены:${NC}"
+    echo -e "  • Docker контейнеры v2rayA"
+    echo -e "  • Docker образы v2rayA и nginx"
+    echo -e "  • Все данные и конфигурации в $WORK_DIR"
+    echo -e "  • Скрипт управления v2raya-client"
+    echo -e "  • Правила файрвола для портов клиента"
+    echo ""
+    read -p "$(echo -e ${RED}Вы уверены, что хотите продолжить? [y/N]:${NC} )" confirm
+    
+    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+        echo -e "${GREEN}Удаление отменено${NC}"
+        return
+    fi
+    
+    echo -e "${YELLOW}Начинаем удаление...${NC}"
+    
+    # Остановка и удаление контейнеров
+    echo -e "${BLUE}1. Остановка контейнеров...${NC}"
+    cd "$WORK_DIR" 2>/dev/null && docker-compose down -v
+    
+    # Удаление Docker образов
+    echo -e "${BLUE}2. Удаление Docker образов...${NC}"
+    docker rmi mzz2017/v2raya:latest 2>/dev/null || true
+    docker rmi nginx:alpine 2>/dev/null || true
+    
+    # Загрузка конфигурации для получения портов
+    if [ -f "$WORK_DIR/.env" ]; then
+        source "$WORK_DIR/.env"
+    fi
+    
+    # Удаление правил файрвола
+    echo -e "${BLUE}3. Удаление правил файрвола...${NC}"
+    if command -v ufw >/dev/null 2>&1; then
+        ufw delete allow ${WEB_PORT:-2017}/tcp 2>/dev/null || true
+        ufw delete allow 20170/tcp 2>/dev/null || true
+        ufw delete allow 20171/tcp 2>/dev/null || true
+        ufw delete allow 20172/tcp 2>/dev/null || true
+        if [ -n "$HTTPS_PORT" ]; then
+            ufw delete allow $HTTPS_PORT/tcp 2>/dev/null || true
+        fi
+        ufw reload
+    elif command -v firewall-cmd >/dev/null 2>&1; then
+        firewall-cmd --permanent --remove-port=${WEB_PORT:-2017}/tcp 2>/dev/null || true
+        firewall-cmd --permanent --remove-port=20170/tcp 2>/dev/null || true
+        firewall-cmd --permanent --remove-port=20171/tcp 2>/dev/null || true
+        firewall-cmd --permanent --remove-port=20172/tcp 2>/dev/null || true
+        if [ -n "$HTTPS_PORT" ]; then
+            firewall-cmd --permanent --remove-port=$HTTPS_PORT/tcp 2>/dev/null || true
+        fi
+        firewall-cmd --reload
+    fi
+    
+    # Удаление директории с данными
+    echo -e "${BLUE}4. Удаление данных и конфигураций...${NC}"
+    rm -rf "$WORK_DIR"
+    
+    # Удаление скрипта управления
+    echo -e "${BLUE}5. Удаление скрипта управления...${NC}"
+    rm -f /usr/local/bin/v2raya-client
+    
+    # Очистка неиспользуемых Docker ресурсов
+    echo -e "${BLUE}6. Очистка Docker ресурсов...${NC}"
+    docker system prune -f
+    
+    echo ""
+    echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║    ✅ v2rayA клиент успешно удален!         ║${NC}"
+    echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${YELLOW}Для повторной установки используйте:${NC}"
+    echo -e "  ${BLUE}sudo ./install_client.sh${NC}"
+    echo ""
+    
+    exit 0
+}
+
 while true; do
     show_menu
     read -p "Выберите действие: " choice
@@ -626,6 +733,7 @@ while true; do
         7) get_connection_info;;
         8) reset_password;;
         9) update_v2raya;;
+        10) uninstall_client;;
         0) exit 0;;
         *) echo -e "${RED}Неверный выбор${NC}";;
     esac
@@ -688,6 +796,9 @@ setup_firewall() {
     if command -v ufw >/dev/null 2>&1; then
         log "Настройка UFW..."
         ufw allow $WEB_PORT/tcp comment "v2rayA Web UI"
+        ufw allow 20170/tcp comment "v2rayA SOCKS5"
+        ufw allow 20171/tcp comment "v2rayA HTTP"
+        ufw allow 20172/tcp comment "v2rayA Mixed"
         if [ "$ENABLE_HTTPS" = "y" ]; then
             ufw allow $HTTPS_PORT/tcp comment "v2rayA HTTPS"
         fi
@@ -695,6 +806,9 @@ setup_firewall() {
     elif command -v firewall-cmd >/dev/null 2>&1; then
         log "Настройка firewalld..."
         firewall-cmd --permanent --add-port=$WEB_PORT/tcp
+        firewall-cmd --permanent --add-port=20170/tcp
+        firewall-cmd --permanent --add-port=20171/tcp
+        firewall-cmd --permanent --add-port=20172/tcp
         if [ "$ENABLE_HTTPS" = "y" ]; then
             firewall-cmd --permanent --add-port=$HTTPS_PORT/tcp
         fi
@@ -727,7 +841,7 @@ show_installation_info() {
     echo -e "  ✓ Импорт конфигураций по ссылкам"
     echo -e "  ✓ Управление подписками"
     echo -e "  ✓ Правила маршрутизации"
-    echo -e "  ✓ Прозрачный прокси"
+    echo -e "  ✓ SOCKS5/HTTP прокси (порты 20170/20171)"
     echo -e "  ✓ Статистика трафика"
     echo ""
     echo -e "${BLUE}🔧 Управление клиентом:${NC}"
@@ -739,13 +853,96 @@ show_installation_info() {
     echo -e "  3. Нажмите '+' для добавления сервера"
     echo -e "  4. Вставьте ссылку vless:// или другую"
     echo -e "  5. Выберите сервер и нажмите 'Connect'"
+    echo -e "  6. Настройте браузер на использование SOCKS5 прокси:"
+    echo -e "     • Адрес: ${YELLOW}127.0.0.1${NC}"
+    echo -e "     • Порт: ${YELLOW}20170${NC} (SOCKS5) или ${YELLOW}20171${NC} (HTTP)"
     echo ""
     echo -e "${YELLOW}⚠️  ВАЖНО: Сохраните пароль администратора!${NC}"
     echo ""
 }
 
-# Основная функция установки
-main() {
+# Функция удаления клиента (для основного скрипта)
+uninstall_client_main() {
+    echo -e "${RED}╔══════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║        УДАЛЕНИЕ v2rayA КЛИЕНТА               ║${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${YELLOW}⚠️  Внимание! Будут удалены:${NC}"
+    echo -e "  • Docker контейнеры v2rayA"
+    echo -e "  • Docker образы v2rayA и nginx"
+    echo -e "  • Все данные и конфигурации в $WORK_DIR"
+    echo -e "  • Скрипт управления v2raya-client"
+    echo -e "  • Правила файрвола для портов клиента"
+    echo ""
+    read -p "$(echo -e ${RED}Вы уверены, что хотите продолжить? [y/N]:${NC} )" confirm
+    
+    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+        echo -e "${GREEN}Удаление отменено${NC}"
+        exit 0
+    fi
+    
+    echo -e "${YELLOW}Начинаем удаление...${NC}"
+    
+    # Остановка и удаление контейнеров
+    echo -e "${BLUE}1. Остановка контейнеров...${NC}"
+    cd "$WORK_DIR" 2>/dev/null && docker-compose down -v
+    
+    # Удаление Docker образов
+    echo -e "${BLUE}2. Удаление Docker образов...${NC}"
+    docker rmi mzz2017/v2raya:latest 2>/dev/null || true
+    docker rmi nginx:alpine 2>/dev/null || true
+    
+    # Загрузка конфигурации для получения портов
+    if [ -f "$WORK_DIR/.env" ]; then
+        source "$WORK_DIR/.env"
+    fi
+    
+    # Удаление правил файрвола
+    echo -e "${BLUE}3. Удаление правил файрвола...${NC}"
+    if command -v ufw >/dev/null 2>&1; then
+        ufw delete allow ${WEB_PORT:-2017}/tcp 2>/dev/null || true
+        ufw delete allow 20170/tcp 2>/dev/null || true
+        ufw delete allow 20171/tcp 2>/dev/null || true
+        ufw delete allow 20172/tcp 2>/dev/null || true
+        if [ -n "$HTTPS_PORT" ]; then
+            ufw delete allow $HTTPS_PORT/tcp 2>/dev/null || true
+        fi
+        ufw reload
+    elif command -v firewall-cmd >/dev/null 2>&1; then
+        firewall-cmd --permanent --remove-port=${WEB_PORT:-2017}/tcp 2>/dev/null || true
+        firewall-cmd --permanent --remove-port=20170/tcp 2>/dev/null || true
+        firewall-cmd --permanent --remove-port=20171/tcp 2>/dev/null || true
+        firewall-cmd --permanent --remove-port=20172/tcp 2>/dev/null || true
+        if [ -n "$HTTPS_PORT" ]; then
+            firewall-cmd --permanent --remove-port=$HTTPS_PORT/tcp 2>/dev/null || true
+        fi
+        firewall-cmd --reload
+    fi
+    
+    # Удаление директории с данными
+    echo -e "${BLUE}4. Удаление данных и конфигураций...${NC}"
+    rm -rf "$WORK_DIR"
+    
+    # Удаление скрипта управления
+    echo -e "${BLUE}5. Удаление скрипта управления...${NC}"
+    rm -f /usr/local/bin/v2raya-client
+    
+    # Очистка неиспользуемых Docker ресурсов
+    echo -e "${BLUE}6. Очистка Docker ресурсов...${NC}"
+    docker system prune -f
+    
+    echo ""
+    echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║    ✅ v2rayA клиент успешно удален!         ║${NC}"
+    echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${YELLOW}Для повторной установки используйте:${NC}"
+    echo -e "  ${BLUE}sudo ./install_client.sh${NC}"
+    echo ""
+}
+
+# Функция установки
+install_client() {
     echo ""
     echo -e "${BLUE}╔══════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║${NC}   🚀 ${GREEN}Установка v2rayA клиента с Web UI${NC}    ${BLUE}║${NC}"
@@ -791,6 +988,78 @@ main() {
     
     # Показ информации
     show_installation_info
+}
+
+# Главное меню
+show_main_menu() {
+    echo ""
+    echo -e "${BLUE}╔══════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║${NC}    ${GREEN}v2rayA Client Management System${NC}         ${BLUE}║${NC}"
+    echo -e "${BLUE}╚══════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${GREEN}Выберите действие:${NC}"
+    echo ""
+    echo -e "  ${YELLOW}1${NC} 📦 Установить v2rayA клиент"
+    echo -e "  ${YELLOW}2${NC} 🗑️  Удалить v2rayA клиент"
+    echo -e "  ${YELLOW}3${NC} 🚪 Выход"
+    echo ""
+}
+
+# Основная функция
+main() {
+    # Проверка, установлен ли уже клиент
+    if [ -f "/usr/local/bin/v2raya-client" ] && [ -d "$WORK_DIR" ]; then
+        # Клиент уже установлен
+        echo ""
+        echo -e "${GREEN}✓ v2rayA клиент уже установлен${NC}"
+        echo ""
+        echo -e "${BLUE}Выберите действие:${NC}"
+        echo ""
+        echo -e "  ${YELLOW}1${NC} 🔧 Открыть панель управления"
+        echo -e "  ${YELLOW}2${NC} 🗑️  Удалить v2rayA клиент"
+        echo -e "  ${YELLOW}3${NC} 🚪 Выход"
+        echo ""
+        read -p "$(echo -e ${GREEN}Ваш выбор [1-3]:${NC} )" choice
+        
+        case $choice in
+            1)
+                exec /usr/local/bin/v2raya-client
+                ;;
+            2)
+                uninstall_client_main
+                ;;
+            3)
+                echo -e "${GREEN}До свидания!${NC}"
+                exit 0
+                ;;
+            *)
+                echo -e "${RED}Неверный выбор!${NC}"
+                exit 1
+                ;;
+        esac
+    else
+        # Клиент не установлен
+        show_main_menu
+        read -p "$(echo -e ${GREEN}Ваш выбор [1-3]:${NC} )" choice
+        
+        case $choice in
+            1)
+                install_client
+                ;;
+            2)
+                echo -e "${YELLOW}v2rayA клиент не установлен${NC}"
+                exit 0
+                ;;
+            3)
+                echo -e "${GREEN}До свидания!${NC}"
+                exit 0
+                ;;
+            *)
+                echo -e "${RED}Неверный выбор!${NC}"
+                exit 1
+                ;;
+        esac
+    fi
 }
 
 # Запуск основной функции

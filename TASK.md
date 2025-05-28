@@ -6,12 +6,16 @@ Refactor the monolithic VPN scripts into a modular architecture with each script
 ### Recent Updates
 - ✅ **Client Installation**: Unified client installation into single `install_client.sh` script with v2rayA Web UI
 - ✅ **Documentation**: Updated all documentation to reflect client script changes
+- ✅ **Client Connectivity Fix**: Fixed internet connectivity issue by changing network mode from host to bridge
+- ✅ **Proxy Configuration**: Added proper proxy ports (20170-20172) and updated firewall rules
+- ✅ **Client Stability**: Enhanced stability by disabling transparent proxy and adding proper network capabilities
 
 ## 📊 Current Status
-- [ ] **Total Lines**: 2,527+ (install: 1,269 + manage: 1,258 + client: 200+)
+- [ ] **Total Lines**: 2,527+ (install: 1,269 + manage: 1,258 + client: 797)
 - [ ] **Target**: ~20 modules × 200-300 lines each
 - [ ] **Duplicate Code**: ~15% (colors, functions, checks)
-- [ ] **Client Script**: Unified into single `install_client.sh` with v2rayA Web UI
+- [x] **Client Script**: Unified into single `install_client.sh` with v2rayA Web UI (completed)
+- [x] **Client Issues**: Fixed connectivity problems with proxy mode configuration
 
 ---
 
@@ -240,3 +244,23 @@ Refactor the monolithic VPN scripts into a modular architecture with each script
 - Keep backup of original scripts until refactoring is complete
 - Document decisions and changes in commit messages
 - Consider creating a migration guide for existing installations
+
+## 🐛 Discovered During Work
+
+### Client Installation Issues (2025-05-28) - COMPLETED
+- **Issue**: Client loses internet connectivity when connected to VPN server
+- **Root Cause**: Using `network_mode: host` in Docker caused routing conflicts
+- **Solution**: 
+  - Changed to `network_mode: bridge`
+  - Added explicit proxy ports (20170-20172)
+  - Disabled transparent proxy mode
+  - Added proper network capabilities
+  - Updated documentation with proxy configuration instructions
+- **Status**: ✅ Fixed and tested
+
+### Client Management Improvements (2025-05-28) - COMPLETED
+- **Added**: Uninstall functionality to v2raya-client management script
+- **Added**: Smart main menu that detects if client is already installed
+- **Fixed**: Docker Compose warning about obsolete version attribute
+- **Improved**: User experience with context-aware menu options
+- **Status**: ✅ Completed and tested
