@@ -8,6 +8,7 @@ This repository contains a Docker-based **Xray VPN server** implementation using
 
 - `install_vpn.sh` - Server installation and configuration script with smart features
 - `manage_users.sh` - Advanced user management utility with comprehensive features
+- `install_client.sh` - Client installation script with v2rayA Web UI for Linux desktop/server
 
 The VPN server runs in a Docker container using Xray-core, providing enterprise-level security with advanced features like automatic port selection, SNI quality monitoring, key rotation, and traffic statistics.
 
@@ -21,7 +22,7 @@ The VPN server runs in a Docker container using Xray-core, providing enterprise-
 
 ## Commands
 
-### Installation
+### Server Installation
 
 To install the VPN server:
 
@@ -180,11 +181,27 @@ The server configuration is stored in the following locations:
 The project uses shell scripts, so standard linting can be done with:
 ```bash
 # Check shell scripts
-shellcheck install_vpn.sh manage_users.sh
+shellcheck install_vpn.sh manage_users.sh install_client.sh
 
 # Check Docker configuration
 docker-compose config
 ```
+
+### Client Installation
+
+To install the VPN client with Web UI on Linux desktop/server:
+
+```bash
+sudo ./install_client.sh
+```
+
+The client provides:
+- **v2rayA Web Interface**: Access at http://localhost:2017
+- **Automatic System Startup**: Runs as a system service
+- **Docker Containerization**: Easy updates and maintenance
+- **SOCKS5/HTTP Proxy**: Default ports 20170 (SOCKS5) and 20171 (HTTP)
+- **Connection Management**: Easy import of VLESS links via web UI
+- **Traffic Statistics**: Monitor usage and performance
 
 ### Common Operations
 ```bash
@@ -203,4 +220,8 @@ free -h
 
 # Optimize Docker
 docker system prune -f
+
+# Client-specific commands
+docker logs v2raya  # Check client logs
+sudo systemctl status v2raya  # Check client service status
 ```

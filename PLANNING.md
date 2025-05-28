@@ -3,7 +3,7 @@
 ## 📋 Project Overview
 
 **Current State:**
-- 2 monolithic scripts: `install_vpn.sh` (1,269 lines) and `manage_users.sh` (1,258 lines)
+- 3 main scripts: `install_vpn.sh` (1,269 lines), `manage_users.sh` (1,258 lines), and `install_client.sh` (client with Web UI)
 - Significant code duplication between scripts
 - All functionality embedded in single files
 - Limited modularity and reusability
@@ -65,6 +65,7 @@ vpn/
 │
 ├── install.sh            # Main installer (< 300 lines)
 ├── manage.sh             # Management interface (< 300 lines)
+├── install_client.sh     # Client installer with Web UI
 └── uninstall.sh          # Uninstaller script
 ```
 

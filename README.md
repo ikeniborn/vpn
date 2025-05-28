@@ -35,7 +35,7 @@ git clone https://github.com/yourusername/vpn.git
 cd vpn
 
 # Make scripts executable
-chmod +x install_vpn.sh manage_users.sh
+chmod +x install_vpn.sh manage_users.sh install_client.sh
 
 # Run installation
 sudo ./install_vpn.sh
@@ -122,12 +122,31 @@ sudo ./manage_users.sh
 - **UFW Firewall**: Automatic firewall configuration
 - **Reality Protocol**: Advanced anti-detection with authentic TLS handshakes
 
-## 📱 Client Applications
+## 📱 Client Setup
 
-### Android
+### Option 1: Web UI Client (Linux Desktop/Server)
+
+For Linux desktop/server users, we provide a client installation script with web-based management interface:
+
+```bash
+# Install v2rayA client with Web UI
+sudo ./install_client.sh
+```
+
+Features:
+- 🌐 Web-based UI at http://localhost:2017
+- 🔧 Easy connection management
+- 📊 Traffic statistics and monitoring
+- 🚀 Automatic startup on system boot
+- 🛡️ Built-in routing rules and proxy settings
+- 📦 Docker-based deployment for easy updates
+
+### Option 2: Mobile Applications
+
+#### Android
 - **v2RayTun** - [Google Play](https://play.google.com/store/apps/details?id=com.v2raytun.android)
 
-### iOS
+#### iOS
 - **Shadowrocket** - [App Store](https://apps.apple.com/app/shadowrocket/id932747118)
 - **v2RayTun** - [App Store](https://apps.apple.com/app/v2raytun/id6476628951)
 
@@ -176,6 +195,8 @@ free -h
 - Improved SNI domain validation and testing
 - Enhanced user management with better error handling
 - Added comprehensive logging system with configurable levels
+- Added client installation script with Web UI for Linux desktop/server users
+- Unified client installation into single script with v2rayA web interface
 
 ## 📝 License
 

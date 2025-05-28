@@ -3,10 +3,15 @@
 ## 🎯 Primary Goal
 Refactor the monolithic VPN scripts into a modular architecture with each script containing 300-500 lines maximum.
 
+### Recent Updates
+- ✅ **Client Installation**: Unified client installation into single `install_client.sh` script with v2rayA Web UI
+- ✅ **Documentation**: Updated all documentation to reflect client script changes
+
 ## 📊 Current Status
-- [ ] **Total Lines**: 2,527 (install: 1,269 + manage: 1,258)
+- [ ] **Total Lines**: 2,527+ (install: 1,269 + manage: 1,258 + client: 200+)
 - [ ] **Target**: ~20 modules × 200-300 lines each
 - [ ] **Duplicate Code**: ~15% (colors, functions, checks)
+- [ ] **Client Script**: Unified into single `install_client.sh` with v2rayA Web UI
 
 ---
 
@@ -169,6 +174,10 @@ Refactor the monolithic VPN scripts into a modular architecture with each script
 - [ ] Create `uninstall.sh` (~100 lines)
   - [ ] Complete removal script
   - [ ] Separate from management
+- [ ] Refactor `install_client.sh` (~300 lines)
+  - [ ] Extract common functions to lib/
+  - [ ] Use shared Docker utilities
+  - [ ] Simplify configuration flow
 
 ---
 
