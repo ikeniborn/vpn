@@ -35,7 +35,7 @@ git clone https://github.com/yourusername/vpn.git
 cd vpn
 
 # Make scripts executable
-chmod +x install_vpn.sh manage_users.sh
+chmod +x install_vpn.sh manage_users.sh install_client.sh
 
 # Run installation
 sudo ./install_vpn.sh
@@ -122,12 +122,40 @@ sudo ./manage_users.sh
 - **UFW Firewall**: Automatic firewall configuration
 - **Reality Protocol**: Advanced anti-detection with authentic TLS handshakes
 
-## 📱 Client Applications
+## 📱 Client Setup
 
-### Android
+### Option 1: Web UI Client (Linux Desktop/Server)
+
+For Linux desktop/server users, we provide a client installation script with web-based management interface:
+
+```bash
+# Install or manage v2rayA client
+sudo ./install_client.sh
+```
+
+Features:
+- 🌐 Web-based UI at http://localhost:2017
+- 🔧 Easy connection management
+- 📊 Traffic statistics and monitoring
+- 🚀 Automatic startup on system boot
+- 🛡️ Built-in routing rules and proxy settings
+- 📦 Docker-based deployment for easy updates
+- 🔌 Proxy ports: SOCKS5 (20170), HTTP (20171), Mixed (20172)
+- 🗑️ Complete uninstall option with full cleanup
+- 🎯 Smart menu system that detects installation status
+
+**Management**: After installation, use `sudo v2raya-client` for management options.
+
+**Important**: After connecting to VPN server in v2rayA, configure your browser to use the proxy:
+- SOCKS5 proxy: `127.0.0.1:20170`
+- HTTP proxy: `127.0.0.1:20171`
+
+### Option 2: Mobile Applications
+
+#### Android
 - **v2RayTun** - [Google Play](https://play.google.com/store/apps/details?id=com.v2raytun.android)
 
-### iOS
+#### iOS
 - **Shadowrocket** - [App Store](https://apps.apple.com/app/shadowrocket/id932747118)
 - **v2RayTun** - [App Store](https://apps.apple.com/app/v2raytun/id6476628951)
 
@@ -154,6 +182,17 @@ docker-compose logs -f
 2. Check container status: `docker ps`
 3. Review logs: `tail -f /opt/v2ray/logs/access.log`
 
+#### Client Has No Internet After Connecting
+This is expected behavior. v2rayA uses proxy mode, not VPN mode:
+1. Configure your browser to use proxy:
+   - Firefox: Settings → Network → Manual proxy → SOCKS5: `127.0.0.1:20170`
+   - Chrome: Use Proxy SwitchyOmega extension or launch with `--proxy-server="socks5://127.0.0.1:20170"`
+2. For system-wide proxy (Linux):
+   ```bash
+   export http_proxy="http://127.0.0.1:20171"
+   export https_proxy="http://127.0.0.1:20171"
+   ```
+
 ### Maintenance Commands
 
 ```bash
@@ -176,6 +215,13 @@ free -h
 - Improved SNI domain validation and testing
 - Enhanced user management with better error handling
 - Added comprehensive logging system with configurable levels
+- Added client installation script with Web UI for Linux desktop/server users
+- Unified client installation into single script with v2rayA web interface
+- **Fixed client internet connectivity issue**: Changed network mode from host to bridge, added proxy ports configuration
+- **Enhanced client stability**: Disabled transparent proxy mode, added proper capabilities for network management
+- **Added client uninstall feature**: Complete removal of v2rayA client with cleanup of all components
+- **Improved user experience**: Added intelligent main menu that detects installation status
+- **Fixed Docker Compose warning**: Removed obsolete version attribute for compatibility with modern Docker
 
 ## 📝 License
 
