@@ -705,7 +705,7 @@ uninstall_vpn() {
     
     # Удаление Docker образа
     log "Удаление Docker образа..."
-    docker rmi v2fly/v2fly-core:latest 2>/dev/null || true
+    docker rmi teddysun/xray:latest 2>/dev/null || true
     
     # Удаление рабочего каталога
     log "Удаление рабочего каталога $WORK_DIR..."
@@ -1100,7 +1100,7 @@ show_traffic_stats() {
     # Статистика по времени работы
     log "Время работы сервера:"
     if command -v docker >/dev/null 2>&1; then
-        CONTAINER_ID=$(docker ps --filter "name=xray" --filter "name=v2ray" --format "{{.ID}}" | head -1)
+        CONTAINER_ID=$(docker ps --format "{{.ID}}\t{{.Names}}" | grep -E "(xray|v2ray)" | head -1 | awk '{print $1}')
         if [ -n "$CONTAINER_ID" ]; then
             UPTIME=$(docker inspect --format='{{.State.StartedAt}}' "$CONTAINER_ID" 2>/dev/null)
             if [ -n "$UPTIME" ]; then
