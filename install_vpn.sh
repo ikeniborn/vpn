@@ -1033,10 +1033,45 @@ else
 EOL
 fi
 
-# Создание docker-compose.yml
+# Создание docker-compose.yml с адаптивными лимитами ресурсов
 echo -e "${GREEN}🐳 Создание конфигурации Docker...${NC}"
 
-# Сначала пробуем основной вариант
+# Определение доступных ресурсов системы
+CPU_CORES=$(nproc 2>/dev/null || echo "1")
+AVAILABLE_MEM=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo "1024")
+
+log "Обнаружено CPU ядер: $CPU_CORES"
+log "Доступно памяти: ${AVAILABLE_MEM} MB"
+
+# Расчет оптимальных лимитов
+if [ "$CPU_CORES" -eq 1 ]; then
+    MAX_CPU="0.8"
+    RESERVE_CPU="0.2"
+    MAX_MEM="512m"
+    RESERVE_MEM="256m"
+    log "Система с одним ядром - используем консервативные лимиты"
+elif [ "$CPU_CORES" -eq 2 ]; then
+    MAX_CPU="1.5"
+    RESERVE_CPU="0.5"
+    if [ "$AVAILABLE_MEM" -lt 2048 ]; then
+        MAX_MEM="1g"
+        RESERVE_MEM="512m"
+    else
+        MAX_MEM="2g"
+        RESERVE_MEM="512m"
+    fi
+    log "Система с двумя ядрами - используем умеренные лимиты"
+else
+    MAX_CPU="2"
+    RESERVE_CPU="0.5"
+    MAX_MEM="2g"
+    RESERVE_MEM="512m"
+    log "Многоядерная система - используем стандартные лимиты"
+fi
+
+log "Установлены лимиты: CPU $MAX_CPU/$RESERVE_CPU, Memory $MAX_MEM/$RESERVE_MEM"
+
+# Создание основного docker-compose.yml с адаптивными лимитами
 cat > "$WORK_DIR/docker-compose.yml" <<EOL
 version: '3'
 services:
@@ -1060,11 +1095,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 2G
+          cpus: '$MAX_CPU'
+          memory: $MAX_MEM
         reservations:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '$RESERVE_CPU'
+          memory: $RESERVE_MEM
     logging:
       driver: "json-file"
       options:
@@ -1072,7 +1107,14 @@ services:
         max-file: "3"
 EOL
 
-# Создаем резервный docker-compose для случая проблем
+# Создаем резервный docker-compose для случая проблем (минимальные лимиты)
+BACKUP_CPU="0.5"
+BACKUP_MEM="256m"
+
+if [ "$CPU_CORES" -eq 1 ]; then
+    BACKUP_CPU="0.8"
+fi
+
 cat > "$WORK_DIR/docker-compose.backup.yml" <<EOL
 version: '3'
 services:
@@ -1097,11 +1139,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 2G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '$BACKUP_CPU'
+          memory: $BACKUP_MEM
     logging:
       driver: "json-file"
       options:

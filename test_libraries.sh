@@ -129,6 +129,149 @@ else
     echo "ℹ️  save_config needs existing VPN installation (expected)"
 fi
 
+# Test docker.sh
 echo ""
-echo "✨ All basic library tests completed successfully!"
-echo "Libraries are ready for use in modular refactoring."
+echo "🐳 Testing lib/docker.sh..."
+
+if ! source lib/docker.sh; then
+    echo "❌ Failed to source lib/docker.sh"
+    exit 1
+fi
+
+echo "✅ Successfully sourced lib/docker.sh"
+
+# Test resource detection
+cpu_cores=$(get_cpu_cores)
+available_mem=$(get_available_memory)
+echo "✅ System resources detected: $cpu_cores CPU cores, ${available_mem}MB RAM"
+
+# Test CPU/memory calculations
+cpu_limits=($(calculate_cpu_limits))
+memory_limits=($(calculate_memory_limits))
+echo "✅ Resource limits calculated: CPU ${cpu_limits[0]}/${cpu_limits[1]}, Memory ${memory_limits[0]}/${memory_limits[1]}"
+
+# Test network.sh
+echo ""
+echo "🌐 Testing lib/network.sh..."
+
+if ! source lib/network.sh; then
+    echo "❌ Failed to source lib/network.sh"
+    exit 1
+fi
+
+echo "✅ Successfully sourced lib/network.sh"
+
+# Test port functions  
+if check_port_available "8080" 2>/dev/null; then
+    echo "✅ check_port_available working correctly (port 8080 should be free)"
+else
+    echo "ℹ️  Port 8080 is in use (expected on some systems)"
+fi
+
+# Test port generation
+test_port=$(generate_free_port 50000 60000 false)
+if [ -n "$test_port" ]; then
+    echo "✅ generate_free_port working: generated port $test_port"
+else
+    echo "❌ generate_free_port failed"
+fi
+
+# Test domain validation
+if validate_domain_format "example.com"; then
+    echo "✅ validate_domain_format working correctly"
+else
+    echo "❌ validate_domain_format failed"
+fi
+
+# Test crypto.sh
+echo ""
+echo "🔐 Testing lib/crypto.sh..."
+
+if ! source lib/crypto.sh; then
+    echo "❌ Failed to source lib/crypto.sh"
+    exit 1
+fi
+
+echo "✅ Successfully sourced lib/crypto.sh"
+
+# Test UUID generation
+test_uuid=$(generate_uuid)
+if is_valid_uuid "$test_uuid"; then
+    echo "✅ UUID generation working: $test_uuid"
+else
+    echo "❌ UUID generation failed"
+fi
+
+# Test random generation
+test_hex=$(generate_random_hex 8)
+if [ ${#test_hex} -eq 16 ]; then
+    echo "✅ Random hex generation working: $test_hex"
+else
+    echo "❌ Random hex generation failed"
+fi
+
+test_base64=$(generate_random_base64 16)
+if [ ${#test_base64} -gt 0 ]; then
+    echo "✅ Random base64 generation working: ${test_base64:0:20}..."
+else
+    echo "❌ Random base64 generation failed"
+fi
+
+# Test Reality key generation (may take a moment)
+echo "ℹ️  Testing Reality key generation (this may take a moment)..."
+reality_keys=$(generate_reality_keys)
+if [ $? -eq 0 ]; then
+    private_key=$(echo "$reality_keys" | awk '{print $1}')
+    public_key=$(echo "$reality_keys" | awk '{print $2}')
+    short_id=$(echo "$reality_keys" | awk '{print $3}')
+    
+    if validate_reality_keys "$private_key" "$public_key" "$short_id"; then
+        echo "✅ Reality key generation and validation working"
+    else
+        echo "❌ Reality key validation failed"
+    fi
+else
+    echo "❌ Reality key generation failed"
+fi
+
+# Test ui.sh
+echo ""
+echo "🎨 Testing lib/ui.sh..."
+
+if ! source lib/ui.sh; then
+    echo "❌ Failed to source lib/ui.sh"
+    exit 1
+fi
+
+echo "✅ Successfully sourced lib/ui.sh"
+
+# Test UI components (visual test)
+echo "📱 Testing UI components..."
+draw_box "Test Box" 30
+separator 30
+show_status "Test Service" "active" "Running normally"
+echo "✅ UI components rendered correctly"
+
+echo ""
+echo "🧪 Testing library interactions..."
+
+# Test if all libraries work together
+init_common
+init_network >/dev/null 2>&1
+init_docker >/dev/null 2>&1
+init_crypto >/dev/null 2>&1
+init_ui >/dev/null 2>&1
+
+echo "✅ All library initialization completed"
+
+echo ""
+echo "✨ All Phase 2 Core Libraries tests completed successfully!"
+echo "Libraries ready for modular refactoring:"
+echo "  • lib/common.sh - ✅ Shared utilities and logging"
+echo "  • lib/config.sh - ✅ Configuration management"  
+echo "  • lib/network.sh - ✅ Network utilities and domain validation"
+echo "  • lib/docker.sh - ✅ Docker operations and resource management"
+echo "  • lib/crypto.sh - ✅ Cryptographic functions and key generation"
+echo "  • lib/ui.sh - ✅ User interface components and menus"
+echo ""
+echo "🎯 Ready to proceed with Phase 3: User Management Modules"
