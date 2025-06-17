@@ -104,9 +104,12 @@ show_usage() {
     echo "  deploy restore       Restore from backup"
     echo ""
     echo -e "${YELLOW}System Commands:${NC}"
+    echo "  watchdog install     Install watchdog service"
     echo "  watchdog start       Start watchdog service"
     echo "  watchdog stop        Stop watchdog service"
+    echo "  watchdog restart     Restart watchdog service"
     echo "  watchdog status      Show watchdog status"
+    echo "  watchdog remove      Remove watchdog service"
     echo ""
     echo -e "${YELLOW}Options:${NC}"
     echo "  --help, -h           Show this help message"
@@ -337,33 +340,41 @@ handle_deployment() {
 # =============================================================================
 
 handle_watchdog() {
+    # Load watchdog module
+    source "$SCRIPT_DIR/modules/system/watchdog.sh" || {
+        error "Failed to load watchdog module"
+        return 1
+    }
+    
     case "$SUB_ACTION" in
+        "install")
+            install_watchdog_service
+            ;;
+        "remove"|"uninstall")
+            remove_watchdog_service
+            ;;
         "start")
-            if [ ! -f "$SCRIPT_DIR/vpn-watchdog.service" ]; then
-                error "Watchdog service file not found"
-            fi
-            
-            # Install watchdog script
-            cp "$SCRIPT_DIR/watchdog.sh" /usr/local/bin/vpn-watchdog.sh
-            chmod +x /usr/local/bin/vpn-watchdog.sh
-            
-            # Install systemd service
-            cp "$SCRIPT_DIR/vpn-watchdog.service" /etc/systemd/system/
-            systemctl daemon-reload
-            systemctl enable vpn-watchdog.service
-            systemctl start vpn-watchdog.service
-            
-            log "Watchdog service started"
+            start_watchdog_service
             ;;
         "stop")
-            systemctl stop vpn-watchdog.service
-            log "Watchdog service stopped"
+            stop_watchdog_service
             ;;
         "status")
-            systemctl status vpn-watchdog.service
+            get_watchdog_status
+            ;;
+        "restart")
+            stop_watchdog_service
+            sleep 2
+            start_watchdog_service
             ;;
         *)
-            error "Unknown watchdog command: $SUB_ACTION"
+            echo -e "${YELLOW}Watchdog Commands:${NC}"
+            echo "  watchdog install     Install watchdog service"
+            echo "  watchdog start       Start watchdog service"
+            echo "  watchdog stop        Stop watchdog service"
+            echo "  watchdog restart     Restart watchdog service"
+            echo "  watchdog status      Show watchdog status"
+            echo "  watchdog remove      Remove watchdog service"
             ;;
     esac
 }
@@ -478,15 +489,21 @@ handle_menu_choice() {
             ;;
         14)
             echo -e "${BLUE}Watchdog Service:${NC}"
-            echo "1) Start"
-            echo "2) Stop"
-            echo "3) Status"
+            echo "1) Install Service"
+            echo "2) Start Service"
+            echo "3) Stop Service"
+            echo "4) Restart Service"
+            echo "5) Service Status"
+            echo "6) Remove Service"
             echo "0) Back"
             read -p "Select option: " watchdog_choice
             case "$watchdog_choice" in
-                1) SUB_ACTION="start"; handle_watchdog ;;
-                2) SUB_ACTION="stop"; handle_watchdog ;;
-                3) SUB_ACTION="status"; handle_watchdog ;;
+                1) SUB_ACTION="install"; handle_watchdog ;;
+                2) SUB_ACTION="start"; handle_watchdog ;;
+                3) SUB_ACTION="stop"; handle_watchdog ;;
+                4) SUB_ACTION="restart"; handle_watchdog ;;
+                5) SUB_ACTION="status"; handle_watchdog ;;
+                6) SUB_ACTION="remove"; handle_watchdog ;;
                 0) return ;;
                 *) warning "Invalid option" ;;
             esac

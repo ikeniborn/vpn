@@ -165,28 +165,27 @@ vpn/
 │   │   ├── restart.sh      # Service control
 │   │   ├── rotate_keys.sh  # Security management
 │   │   └── uninstall.sh    # System cleanup
-│   └── monitoring/         # Monitoring & Analytics Modules
-│       ├── statistics.sh   # Traffic analysis
-│       ├── logging.sh      # Log configuration
-│       └── logs_viewer.sh  # Log analysis
+│   ├── monitoring/         # Monitoring & Analytics Modules
+│   │   ├── statistics.sh   # Traffic analysis
+│   │   ├── logging.sh      # Log configuration
+│   │   └── logs_viewer.sh  # Log analysis
+│   └── system/              # System Management Modules
+│       └── watchdog.sh     # Container monitoring and recovery
 ├── test/                   # Comprehensive Test Suite
 │   ├── test_libraries.sh   # Library testing
 │   ├── test_user_modules.sh # User module testing
 │   ├── test_server_modules.sh # Server module testing
 │   ├── test_monitoring_modules.sh # Monitoring testing
 │   └── test_install_modules.sh # Installation module testing
-├── vpn.sh                  # Unified management script (NEW)
-├── install_vpn.sh          # Main installation script (legacy, use vpn.sh install)
-├── manage_users.sh         # User management interface (legacy, use vpn.sh users)
-├── install_client.sh       # Client setup script (legacy, use vpn.sh client)
-├── uninstall.sh           # Standalone uninstaller (legacy, use vpn.sh uninstall)
-├── deploy.sh              # Deployment script (legacy, use vpn.sh deploy)
-├── watchdog.sh            # Container monitoring service
-├── vpn-watchdog.service   # Systemd service definition
-├── LEGACY_SCRIPTS.md      # Migration guide for legacy scripts
+├── config/                 # Configuration templates
+│   └── vpn-watchdog.service # Systemd service template
+├── vpn.sh                  # Unified management script (MAIN SCRIPT)
+├── LEGACY_SCRIPTS.md      # Migration guide
 ├── CLAUDE.md              # Claude Code instructions
-├── PLANNING.md            # Architecture planning documentation
-├── TASK.md                # Project tasks and progress tracking
+├── PLANNING.md            # Architecture documentation
+├── TASK.md                # Project tasks tracking
+├── DEPLOYMENT.md          # Deployment instructions
+├── DEVELOPER.md           # Developer documentation
 └── README.md              # This documentation
 ```
 

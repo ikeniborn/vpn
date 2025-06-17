@@ -22,12 +22,18 @@ The VPN server runs in a Docker container using Xray-core, providing enterprise-
 
 ## Commands
 
-### Server Installation
+### Unified Management Script
 
-To install the VPN server:
+All VPN functionality is now available through a single script:
 
 ```bash
-sudo ./install_vpn.sh
+# Launch interactive menu
+sudo ./vpn.sh
+
+# Or use specific commands
+sudo ./vpn.sh install      # Install VPN server
+sudo ./vpn.sh status       # Check server status
+sudo ./vpn.sh users        # Manage users
 ```
 
 The installation script provides smart configuration options:
@@ -50,10 +56,12 @@ The installation script provides smart configuration options:
 
 ### User Management
 
-The management script is automatically installed and can be accessed using:
+User management is available through the unified script:
 
 ```bash
-sudo v2ray-manage
+sudo ./vpn.sh users        # Interactive menu
+sudo ./vpn.sh user add john    # Add user directly
+sudo ./vpn.sh user list        # List all users
 ```
 
 This provides a comprehensive menu-driven interface for:
