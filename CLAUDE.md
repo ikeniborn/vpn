@@ -140,11 +140,55 @@ tail -f /opt/v2ray/logs/error.log
 vnstat -i eth0
 ```
 
+## Project Structure
+
+The VPN project follows a modular architecture with the following structure:
+
+### Repository Structure
+```
+/home/ikeniborn/Documents/Project/vpn/
+├── lib/                     # Core Libraries (Phase 1-2)
+│   ├── common.sh           # Common functions and utilities
+│   ├── config.sh           # Configuration management
+│   ├── docker.sh           # Docker operations and resource management
+│   ├── network.sh          # Network utilities and port management
+│   ├── crypto.sh           # Cryptographic functions and key generation
+│   └── ui.sh               # User interface components
+├── modules/                 # Feature Modules (Phase 3-5)
+│   ├── users/              # User Management Modules
+│   │   ├── add.sh          # User creation and validation
+│   │   ├── delete.sh       # User removal and cleanup
+│   │   ├── edit.sh         # User modification and updates
+│   │   ├── list.sh         # User listing and display
+│   │   └── show.sh         # User information and QR codes
+│   ├── server/             # Server Management Modules
+│   │   ├── status.sh       # Server status and health checks
+│   │   ├── restart.sh      # Server restart and validation
+│   │   ├── rotate_keys.sh  # Reality key rotation and backup
+│   │   └── uninstall.sh    # Complete server removal
+│   └── monitoring/         # Monitoring Modules
+│       ├── statistics.sh   # Traffic statistics and vnstat integration
+│       ├── logging.sh      # Xray logging configuration
+│       └── logs_viewer.sh  # Log viewing and analysis
+├── test/                   # Test Suite
+│   ├── test_libraries.sh   # Core libraries testing
+│   ├── test_user_modules.sh # User management testing
+│   ├── test_server_modules.sh # Server management testing
+│   └── test_monitoring_modules.sh # Monitoring testing
+├── install_vpn.sh          # Main server installation script
+├── manage_users.sh         # Main user management script
+├── install_client.sh       # Client installation script
+├── CLAUDE.md               # Project documentation
+├── PLANNING.md             # Architecture and refactoring plan
+├── TASK.md                 # Task tracking and progress
+└── README.md               # Project overview
+```
+
 ## Server Configuration
 
 The server configuration is stored in the following locations:
 
-### Directory Structure
+### Server Directory Structure
 ```
 /opt/v2ray/
 ├── config/
@@ -177,14 +221,51 @@ The server configuration is stored in the following locations:
 
 ## Troubleshooting
 
+### Testing Framework
+
+The project includes a comprehensive testing framework located in the `test/` directory:
+
+```bash
+# Run all tests
+cd /path/to/vpn/project
+./test/test_libraries.sh        # Test core libraries
+./test/test_user_modules.sh     # Test user management modules
+./test/test_server_modules.sh   # Test server management modules
+./test/test_monitoring_modules.sh # Test monitoring modules
+
+# Run individual module tests
+bash test/test_libraries.sh
+bash test/test_user_modules.sh
+bash test/test_server_modules.sh
+bash test/test_monitoring_modules.sh
+```
+
+Each test suite includes:
+- Module loading and syntax validation
+- Function export verification
+- Mock environment testing
+- Cross-module integration testing
+- Error handling validation
+- Configuration validation
+- File operations testing
+
 ### Lint and Type Check Commands
 The project uses shell scripts, so standard linting can be done with:
 ```bash
-# Check shell scripts
-shellcheck install_vpn.sh manage_users.sh install_client.sh
+# Check shell scripts syntax
+bash -n install_vpn.sh
+bash -n manage_users.sh
+bash -n install_client.sh
+
+# Check all modules
+for module in lib/*.sh modules/*/*.sh; do bash -n "$module"; done
 
 # Check Docker configuration
 docker-compose config
+
+# Optional: Use shellcheck for advanced linting
+shellcheck install_vpn.sh manage_users.sh install_client.sh
+shellcheck lib/*.sh modules/*/*.sh
 ```
 
 ### Client Installation
