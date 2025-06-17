@@ -1,1365 +1,408 @@
 #!/bin/bash
 
-# Скрипт установки v2ray vless+reality в Docker
-# Автор: Claude
-# Комментарий: протестированная рабочая версия
+# =============================================================================
+# VPN Server Installation Script (Modular Version)
+# 
+# This script installs and configures a VPN server using Xray with VLESS+Reality
+# or Outline VPN protocols. It has been refactored to use modular architecture.
+#
+# Author: Claude
+# Version: 2.0 (Modular)
+# =============================================================================
 
 set -e
 
-# Цвета для вывода
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'    # Bright yellow for better visibility
-BLUE='\033[0;36m'      # Cyan instead of blue for better readability
-PURPLE='\033[0;35m'    # Purple for additional highlights
-WHITE='\033[1;37m'     # Bright white for emphasis
-NC='\033[0m' # No Color
+# =============================================================================
+# SCRIPT INITIALIZATION
+# =============================================================================
 
-# Функция для вывода сообщений
-log() {
-    echo -e "${GREEN}✓${NC} $1"
-}
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-error() {
-    echo -e "${RED}✗ [ERROR]${NC} $1"
+# Source required libraries
+source "$SCRIPT_DIR/lib/common.sh" || {
+    echo "Error: Cannot source lib/common.sh"
     exit 1
 }
 
-warning() {
-    echo -e "${YELLOW}⚠️  [WARNING]${NC} $1"
+source "$SCRIPT_DIR/lib/config.sh" || {
+    error "Cannot source lib/config.sh"
 }
 
-# Проверка прав суперпользователя
-if [ "$EUID" -ne 0 ]; then
-    error "Пожалуйста, запустите скрипт с правами суперпользователя (sudo)"
-fi
-
-# Проверка наличия необходимых инструментов
-echo -e "${GREEN}🔍 Проверка необходимых компонентов...${NC}"
-command -v docker >/dev/null 2>&1 || { 
-    log "Docker не установлен. Установка Docker..."
-    curl -fsSL https://get.docker.com -o get-docker.sh
-    sh get-docker.sh
-    systemctl enable docker
-    systemctl start docker
+source "$SCRIPT_DIR/lib/network.sh" || {
+    error "Cannot source lib/network.sh"
 }
 
-command -v docker-compose >/dev/null 2>&1 || {
-    log "Docker Compose не установлен. Установка Docker Compose..."
-    curl -L "https://github.com/docker/compose/releases/download/v2.20.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-    chmod +x /usr/local/bin/docker-compose
-    ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
+source "$SCRIPT_DIR/lib/crypto.sh" || {
+    error "Cannot source lib/crypto.sh"
 }
 
-command -v ufw >/dev/null 2>&1 || {
-    log "UFW не установлен. Установка UFW..."
-    apt update
-    apt install -y ufw
+source "$SCRIPT_DIR/lib/ui.sh" || {
+    error "Cannot source lib/ui.sh"
 }
 
-command -v uuid >/dev/null 2>&1 || {
-    log "uuid не установлен. Установка uuid..."
-    apt update
-    apt install -y uuid
+# Source installation modules
+source "$SCRIPT_DIR/modules/install/prerequisites.sh" || {
+    error "Cannot source modules/install/prerequisites.sh"
 }
 
-# Установка дополнительных инструментов для проверки доменов
-if ! command -v dig >/dev/null 2>&1; then
-    log "Установка dnsutils для улучшенной проверки DNS..."
-    apt update
-    apt install -y dnsutils
-fi
-
-if ! command -v openssl >/dev/null 2>&1; then
-    log "Установка openssl..."
-    apt update
-    apt install -y openssl
-fi
-
-# ========================= ОБЩИЕ ФУНКЦИИ =========================
-
-# Функция проверки свободного порта
-check_port_available() {
-    local port=$1
-    if command -v netstat >/dev/null 2>&1; then
-        ! netstat -tuln | grep -q ":$port "
-    elif command -v ss >/dev/null 2>&1; then
-        ! ss -tuln | grep -q ":$port "
-    else
-        # Попытка подключения к порту как проверка
-        ! timeout 1 bash -c "</dev/tcp/127.0.0.1/$port" 2>/dev/null
-    fi
+source "$SCRIPT_DIR/modules/install/docker_setup.sh" || {
+    error "Cannot source modules/install/docker_setup.sh"
 }
 
-# Унифицированная функция генерации случайного свободного порта
-generate_free_port() {
-    local min_port=${1:-10000}      # Минимальный порт (по умолчанию 10000)
-    local max_port=${2:-65000}      # Максимальный порт (по умолчанию 65000)
-    local check_availability=${3:-true}  # Проверять доступность (по умолчанию true)
-    local max_attempts=${4:-20}     # Максимум попыток (по умолчанию 20)
-    local fallback_port=${5:-10443} # Резервный порт (по умолчанию 10443)
+source "$SCRIPT_DIR/modules/install/xray_config.sh" || {
+    error "Cannot source modules/install/xray_config.sh"
+}
+
+source "$SCRIPT_DIR/modules/install/firewall.sh" || {
+    error "Cannot source modules/install/firewall.sh"
+}
+
+# =============================================================================
+# GLOBAL VARIABLES
+# =============================================================================
+
+WORK_DIR="/opt/v2ray"
+SERVER_IP=""
+SERVER_PORT=""
+SERVER_SNI=""
+PROTOCOL=""
+USE_REALITY=false
+USER_NAME=""
+USER_UUID=""
+PRIVATE_KEY=""
+PUBLIC_KEY=""
+SHORT_ID=""
+
+# =============================================================================
+# USER INTERACTION FUNCTIONS
+# =============================================================================
+
+# Choose VPN server type
+choose_vpn_type() {
+    echo -e "${BLUE}Выберите тип VPN сервера:${NC}"
+    echo "1) Xray VPN (VLESS+Reality) - Рекомендуется"
+    echo "2) Xray VPN (VLESS Basic)"
+    echo "3) Outline VPN (Shadowsocks)"
     
-    local attempts=0
-    
-    while [ $attempts -lt $max_attempts ]; do
-        # Генерируем случайный порт в указанном диапазоне
-        local port
-        if command -v shuf >/dev/null 2>&1; then
-            port=$(shuf -i $min_port-$max_port -n 1)
-        else
-            # Альтернативный метод если shuf недоступен
-            local range=$((max_port - min_port + 1))
-            port=$(( (RANDOM % range) + min_port ))
-        fi
-        
-        # Проверяем доступность порта если требуется
-        if [ "$check_availability" = "true" ]; then
-            if check_port_available $port; then
-                echo $port
-                return 0
-            fi
-        else
-            echo $port
-            return 0
-        fi
-        
-        attempts=$((attempts + 1))
+    while true; do
+        read -p "Выберите вариант (1-3): " choice
+        case $choice in
+            1)
+                PROTOCOL="vless-reality"
+                USE_REALITY=true
+                log "Выбран протокол: VLESS+Reality"
+                break
+                ;;
+            2)
+                PROTOCOL="vless-basic"
+                USE_REALITY=false
+                log "Выбран протокол: VLESS Basic"
+                break
+                ;;
+            3)
+                PROTOCOL="outline"
+                USE_REALITY=false
+                log "Выбран протокол: Outline (Shadowsocks)"
+                break
+                ;;
+            *)
+                warning "Пожалуйста, выберите 1, 2 или 3"
+                ;;
+        esac
     done
+}
+
+# Get server configuration
+get_server_config() {
+    # Get external IP
+    SERVER_IP=$(get_external_ip)
+    if [ -z "$SERVER_IP" ]; then
+        read -p "Не удалось определить внешний IP. Введите IP адрес сервера: " SERVER_IP
+    fi
+    log "Внешний IP сервера: $SERVER_IP"
     
-    # Если не удалось найти свободный порт, возвращаем резервный
-    echo $fallback_port
+    # Get server port
+    echo -e "${BLUE}Выберите порт сервера:${NC}"
+    echo "1) Автоматический выбор свободного порта (10000-65000) - Рекомендуется"
+    echo "2) Ввести порт вручную"
+    echo "3) Использовать стандартный порт (10443)"
+    
+    while true; do
+        read -p "Выберите вариант (1-3): " port_choice
+        case $port_choice in
+            1)
+                SERVER_PORT=$(generate_free_port 10000 65000 true 20 10443)
+                log "Автоматически выбран порт: $SERVER_PORT"
+                break
+                ;;
+            2)
+                read -p "Введите порт (1024-65535): " custom_port
+                if validate_port "$custom_port" && check_port_available "$custom_port"; then
+                    SERVER_PORT="$custom_port"
+                    log "Выбран порт: $SERVER_PORT"
+                    break
+                else
+                    warning "Порт недоступен или некорректен"
+                fi
+                ;;
+            3)
+                SERVER_PORT="10443"
+                if check_port_available "$SERVER_PORT"; then
+                    log "Использован стандартный порт: $SERVER_PORT"
+                    break
+                else
+                    warning "Стандартный порт занят, выберите другой вариант"
+                fi
+                ;;
+            *)
+                warning "Пожалуйста, выберите 1, 2 или 3"
+                ;;
+        esac
+    done
+}
+
+# Get user configuration
+get_user_config() {
+    # Generate UUID
+    USER_UUID=$(generate_uuid)
+    log "Сгенерирован UUID: $USER_UUID"
+    
+    # Get username
+    read -p "Введите имя первого пользователя (по умолчанию: user1): " input_name
+    USER_NAME="${input_name:-user1}"
+    log "Имя пользователя: $USER_NAME"
+}
+
+# Get SNI configuration for Reality
+get_sni_config() {
+    if [ "$USE_REALITY" != true ]; then
+        return 0
+    fi
+    
+    echo -e "${BLUE}Выберите домен для SNI (Server Name Indication):${NC}"
+    echo "1) addons.mozilla.org - Рекомендуется"
+    echo "2) www.lovelive-anime.jp"
+    echo "3) www.swift.org"
+    echo "4) Ввести свой домен"
+    echo "5) Автоматический выбор лучшего домена"
+    
+    local sni_domains=(
+        "addons.mozilla.org"
+        "www.lovelive-anime.jp"
+        "www.swift.org"
+    )
+    
+    while true; do
+        read -p "Выберите вариант (1-5): " sni_choice
+        case $sni_choice in
+            1|2|3)
+                local selected_domain="${sni_domains[$((sni_choice-1))]}"
+                if check_sni_domain "$selected_domain"; then
+                    SERVER_SNI="$selected_domain"
+                    log "Выбран домен SNI: $SERVER_SNI"
+                    break
+                else
+                    warning "Домен недоступен, попробуйте другой"
+                fi
+                ;;
+            4)
+                read -p "Введите домен: " custom_domain
+                if check_sni_domain "$custom_domain"; then
+                    SERVER_SNI="$custom_domain"
+                    log "Выбран пользовательский домен: $SERVER_SNI"
+                    break
+                else
+                    warning "Домен недоступен или некорректен"
+                fi
+                ;;
+            5)
+                log "Поиск лучшего домена..."
+                for domain in "${sni_domains[@]}"; do
+                    if check_sni_domain "$domain"; then
+                        SERVER_SNI="$domain"
+                        log "Автоматически выбран домен: $SERVER_SNI"
+                        break
+                    fi
+                done
+                if [ -n "$SERVER_SNI" ]; then
+                    break
+                else
+                    warning "Не удалось найти доступный домен"
+                fi
+                ;;
+            *)
+                warning "Пожалуйста, выберите 1-5"
+                ;;
+        esac
+    done
+}
+
+# Generate Reality keys
+generate_reality_keys() {
+    if [ "$USE_REALITY" != true ]; then
+        return 0
+    fi
+    
+    log "Генерация ключей Reality..."
+    
+    # Generate keys using crypto library
+    local keys=$(generate_reality_keypair)
+    PRIVATE_KEY=$(echo "$keys" | cut -d' ' -f1)
+    PUBLIC_KEY=$(echo "$keys" | cut -d' ' -f2)
+    
+    # Generate short ID
+    SHORT_ID=$(generate_short_id)
+    
+    log "Ключи Reality сгенерированы"
+}
+
+# =============================================================================
+# INSTALLATION FUNCTIONS
+# =============================================================================
+
+# Install Xray VPN
+install_xray_vpn() {
+    log "Установка Xray VPN..."
+    
+    # Setup directories
+    setup_xray_directories "$WORK_DIR" true || {
+        error "Failed to setup Xray directories"
+    }
+    
+    # Create configuration
+    setup_xray_configuration "$WORK_DIR" "$PROTOCOL" "$SERVER_PORT" "$USER_UUID" \
+        "$USER_NAME" "$SERVER_IP" "$SERVER_SNI" "$PRIVATE_KEY" "$PUBLIC_KEY" \
+        "$SHORT_ID" true || {
+        error "Failed to create Xray configuration"
+    }
+    
+    # Setup Docker environment
+    setup_docker_environment "$WORK_DIR" "$SERVER_PORT" true || {
+        error "Failed to setup Docker environment"
+    }
+    
+    # Configure firewall
+    setup_xray_firewall "$SERVER_PORT" true || {
+        error "Failed to configure firewall"
+    }
+    
+    log "Xray VPN установлен успешно"
+}
+
+# Install Outline VPN (placeholder - would need full implementation)
+install_outline_vpn() {
+    warning "Outline VPN installation not implemented in modular version"
+    warning "Please use the original script for Outline VPN"
     return 1
 }
 
-# ========================= OUTLINE VPN FUNCTIONS =========================
+# =============================================================================
+# POST-INSTALLATION
+# =============================================================================
 
-# Функция определения архитектуры для Outline
-detect_architecture() {
-    local arch=$(uname -m)
+# Show client information
+show_client_info() {
+    echo -e "\n${GREEN}=== ИНФОРМАЦИЯ ДЛЯ ПОДКЛЮЧЕНИЯ ===${NC}"
+    echo -e "${BLUE}Сервер:${NC} $SERVER_IP"
+    echo -e "${BLUE}Порт:${NC} $SERVER_PORT"
+    echo -e "${BLUE}Протокол:${NC} $PROTOCOL"
+    echo -e "${BLUE}Пользователь:${NC} $USER_NAME"
     
-    case "$arch" in
-        x86_64)
-            log "Detected x86-64 architecture"
-            export ARCHITECTURE="amd64"
-            export WATCHTOWER_IMAGE="containrrr/watchtower:latest"
-            export SB_IMAGE="quay.io/outline/shadowbox:stable"
-            ;;
-        aarch64|arm64)
-            log "Detected ARM64 architecture"
-            export ARCHITECTURE="arm64"
-            export WATCHTOWER_IMAGE="ken1029/watchtower:arm64"
-            export SB_IMAGE="ken1029/shadowbox:latest"
-            ;;
-        armv7*|armv8*|armhf)
-            log "Detected ARMv7 architecture"
-            export ARCHITECTURE="armv7"
-            export WATCHTOWER_IMAGE="ken1029/watchtower:arm32"
-            export SB_IMAGE="ken1029/shadowbox:latest"
-            ;;
-        *)
-            error "Unsupported architecture: $arch"
-            ;;
-    esac
+    if [ "$USE_REALITY" = true ]; then
+        echo -e "${BLUE}SNI:${NC} $SERVER_SNI"
+        echo -e "${BLUE}Public Key:${NC} $PUBLIC_KEY"
+        echo -e "${BLUE}Short ID:${NC} $SHORT_ID"
+    fi
+    
+    # Show connection link
+    if [ -f "$WORK_DIR/users/$USER_NAME.link" ]; then
+        echo -e "\n${GREEN}Ссылка для подключения:${NC}"
+        cat "$WORK_DIR/users/$USER_NAME.link"
+        echo
+    fi
+    
+    # Show QR code location
+    if [ -f "$WORK_DIR/users/$USER_NAME.png" ]; then
+        echo -e "${GREEN}QR-код сохранен:${NC} $WORK_DIR/users/$USER_NAME.png"
+    fi
 }
 
-# Функция настройки файрвола для Outline
-setup_outline_firewall() {
-    local api_port="$1"
-    local access_key_port="$2"
+# Setup management script
+setup_management() {
+    log "Настройка управления..."
     
-    log "Настройка брандмауэра для Outline VPN..."
-    
-    # Backup current UFW rules
-    mkdir -p /opt/outline/backup
-    ufw status verbose > /opt/outline/backup/ufw_rules_backup.txt 2>/dev/null || true
-    
-    # Configure UFW
-    # Check if SSH rule already exists
-    if ! ufw status | grep -q "22/tcp\|OpenSSH\|ssh"; then
-        ufw allow ssh
-        log "SSH правило добавлено"
-    else
-        log "SSH правило уже существует"
-    fi
-    ufw allow "$api_port"/tcp
-    ufw allow "$access_key_port"/tcp
-    ufw allow "$access_key_port"/udp
-    
-    # Enable UFW if not already enabled
-    if ! ufw status | grep -q "Status: active"; then
-        log "Включение UFW брандмауэра"
-        ufw --force enable
-    fi
-    
-    log "Брандмауэр настроен успешно"
-}
-
-# Функция создания safe base64 строки
-safe_base64() {
-    base64 -w 0 | tr '/+' '_-' | tr -d '='
-}
-
-# Основная функция установки Outline VPN
-install_outline_vpn() {
-    log "========================================================"
-    log "Начало установки Outline VPN сервера"
-    log "========================================================"
-    
-    # Определяем архитектуру
-    detect_architecture
-    
-    # Запрос параметров для Outline VPN
-    log "Настройка параметров Outline VPN сервера..."
-    
-    # Получение hostname
-    DEFAULT_IP=$(curl -s https://api.ipify.org)
-    echo ""
-    echo "Настройка hostname/IP адреса:"
-    read -p "Введите hostname или IP-адрес сервера [$DEFAULT_IP]: " OUTLINE_HOSTNAME
-    OUTLINE_HOSTNAME=${OUTLINE_HOSTNAME:-$DEFAULT_IP}
-    
-    # Настройка API порта
-    echo ""
-    echo "Настройка API порта (для управления через Outline Manager):"
-    echo "1. Случайный свободный порт (рекомендуется)"
-    echo "2. Указать порт вручную"
-    read -p "Ваш выбор [1]: " API_PORT_CHOICE
-    API_PORT_CHOICE=${API_PORT_CHOICE:-1}
-    
-    case $API_PORT_CHOICE in
-        1)
-            OUTLINE_API_PORT=$(generate_free_port 8000 9999 true 20 8080)
-            log "✓ Сгенерирован API порт: $OUTLINE_API_PORT"
-            ;;
-        2)
-            while true; do
-                read -p "Введите API порт [8080]: " OUTLINE_API_PORT
-                OUTLINE_API_PORT=${OUTLINE_API_PORT:-8080}
-                
-                if ! [[ "$OUTLINE_API_PORT" =~ ^[0-9]+$ ]] || [ "$OUTLINE_API_PORT" -lt 1024 ] || [ "$OUTLINE_API_PORT" -gt 65535 ]; then
-                    warning "Некорректный порт. Введите число от 1024 до 65535."
-                    continue
-                fi
-                
-                if check_port_available $OUTLINE_API_PORT; then
-                    log "✓ API порт $OUTLINE_API_PORT свободен"
-                    break
-                else
-                    warning "Порт $OUTLINE_API_PORT уже используется!"
-                    read -p "Использовать занятый порт? (y/n): " use_busy_port
-                    if [ "$use_busy_port" = "y" ]; then
-                        break
-                    fi
-                fi
-            done
-            ;;
-        *)
-            OUTLINE_API_PORT=$(generate_free_port 8000 9999 true 20 8080)
-            ;;
-    esac
-    
-    # Настройка порта для ключей доступа
-    echo ""
-    echo "Настройка порта для ключей доступа (клиентские подключения):"
-    echo "1. Случайный свободный порт (рекомендуется)"
-    echo "2. Указать порт вручную"
-    read -p "Ваш выбор [1]: " KEYS_PORT_CHOICE
-    KEYS_PORT_CHOICE=${KEYS_PORT_CHOICE:-1}
-    
-    case $KEYS_PORT_CHOICE in
-        1)
-            OUTLINE_KEYS_PORT=$(generate_free_port 10000 15999 true 20 9000)
-            # Убеждаемся что порты разные
-            while [ "$OUTLINE_KEYS_PORT" = "$OUTLINE_API_PORT" ]; do
-                OUTLINE_KEYS_PORT=$(generate_free_port 10000 15999 true 20 9000)
-            done
-            log "✓ Сгенерирован порт для ключей: $OUTLINE_KEYS_PORT"
-            ;;
-        2)
-            while true; do
-                read -p "Введите порт для ключей доступа [9000]: " OUTLINE_KEYS_PORT
-                OUTLINE_KEYS_PORT=${OUTLINE_KEYS_PORT:-9000}
-                
-                if ! [[ "$OUTLINE_KEYS_PORT" =~ ^[0-9]+$ ]] || [ "$OUTLINE_KEYS_PORT" -lt 1024 ] || [ "$OUTLINE_KEYS_PORT" -gt 65535 ]; then
-                    warning "Некорректный порт. Введите число от 1024 до 65535."
-                    continue
-                fi
-                
-                if [ "$OUTLINE_KEYS_PORT" = "$OUTLINE_API_PORT" ]; then
-                    warning "Порт для ключей должен отличаться от API порта!"
-                    continue
-                fi
-                
-                if check_port_available $OUTLINE_KEYS_PORT; then
-                    log "✓ Порт для ключей $OUTLINE_KEYS_PORT свободен"
-                    break
-                else
-                    warning "Порт $OUTLINE_KEYS_PORT уже используется!"
-                    read -p "Использовать занятый порт? (y/n): " use_busy_port
-                    if [ "$use_busy_port" = "y" ]; then
-                        break
-                    fi
-                fi
-            done
-            ;;
-        *)
-            OUTLINE_KEYS_PORT=$(generate_free_port 10000 15999 true 20 9000)
-            while [ "$OUTLINE_KEYS_PORT" = "$OUTLINE_API_PORT" ]; do
-                OUTLINE_KEYS_PORT=$(generate_free_port 10000 15999 true 20 9000)
-            done
-            ;;
-    esac
-    
-    # Создание рабочей директории для Outline
-    export SHADOWBOX_DIR="/opt/outline"
-    log "Создание директории Outline по адресу $SHADOWBOX_DIR"
-    mkdir -p --mode=770 "$SHADOWBOX_DIR"
-    
-    # Создание конфигурационного файла
-    readonly ACCESS_CONFIG="$SHADOWBOX_DIR/access.txt"
-    
-    # Создание директории состояния
-    log "Создание директории постоянного состояния"
-    readonly STATE_DIR="$SHADOWBOX_DIR/persisted-state"
-    mkdir -p --mode=770 "${STATE_DIR}"
-    chmod g+s "${STATE_DIR}"
-    
-    # Генерация API ключа
-    log "Генерация секретного ключа API"
-    readonly SB_API_PREFIX=$(head -c 16 /dev/urandom | safe_base64)
-    
-    # Генерация TLS сертификата
-    log "Генерация TLS сертификата"
-    readonly CERTIFICATE_NAME="${STATE_DIR}/shadowbox-selfsigned"
-    readonly SB_CERTIFICATE_FILE="${CERTIFICATE_NAME}.crt"
-    readonly SB_PRIVATE_KEY_FILE="${CERTIFICATE_NAME}.key"
-    
-    openssl req -x509 -nodes -days 36500 -newkey rsa:2048 \
-        -subj "/CN=${OUTLINE_HOSTNAME}" \
-        -keyout "${SB_PRIVATE_KEY_FILE}" -out "${SB_CERTIFICATE_FILE}" >/dev/null 2>&1
-    
-    # Генерация отпечатка сертификата
-    log "Генерация отпечатка сертификата"
-    CERT_OPENSSL_FINGERPRINT=$(openssl x509 -in "${SB_CERTIFICATE_FILE}" -noout -sha256 -fingerprint)
-    CERT_HEX_FINGERPRINT=$(echo ${CERT_OPENSSL_FINGERPRINT#*=} | tr --delete :)
-    echo "certSha256:$CERT_HEX_FINGERPRINT" >> $ACCESS_CONFIG
-    
-    # Запись конфигурации если указан порт для ключей
-    if [ -n "$OUTLINE_KEYS_PORT" ]; then
-        log "Запись конфигурации сервера"
-        echo "{\"portForNewAccessKeys\":$OUTLINE_KEYS_PORT}" > $STATE_DIR/shadowbox_server_config.json
-    fi
-    
-    # Запуск контейнера Shadowbox
-    log "Запуск контейнера Shadowbox"
-    docker run -d \
-        --name shadowbox \
-        --restart=unless-stopped \
-        --net=host \
-        -v "${STATE_DIR}:${STATE_DIR}" \
-        -e "SB_STATE_DIR=${STATE_DIR}" \
-        -e "SB_PUBLIC_IP=${OUTLINE_HOSTNAME}" \
-        -e "SB_API_PORT=${OUTLINE_API_PORT}" \
-        -e "SB_API_PREFIX=${SB_API_PREFIX}" \
-        -e "SB_CERTIFICATE_FILE=${SB_CERTIFICATE_FILE}" \
-        -e "SB_PRIVATE_KEY_FILE=${SB_PRIVATE_KEY_FILE}" \
-        --health-cmd="curl -k -f https://localhost:${OUTLINE_API_PORT}/${SB_API_PREFIX}/access-keys || exit 1" \
-        --health-interval=30s \
-        --health-timeout=10s \
-        --health-retries=3 \
-        --health-start-period=40s \
-        --memory="2g" \
-        --memory-reservation="512m" \
-        --cpus="2" \
-        --log-opt max-size=10m \
-        --log-opt max-file=3 \
-        ${SB_IMAGE} >/dev/null
-    
-    # Запуск Watchtower для автоматических обновлений
-    log "Запуск Watchtower для автоматических обновлений"
-    docker run -d \
-        --name watchtower \
-        --restart=unless-stopped \
-        -v /var/run/docker.sock:/var/run/docker.sock \
-        --memory="256m" \
-        --memory-reservation="128m" \
-        --cpus="0.5" \
-        --log-opt max-size=10m \
-        --log-opt max-file=3 \
-        ${WATCHTOWER_IMAGE} \
-        --cleanup --tlsverify --interval 3600 >/dev/null
-    
-    # Установка URL-ов API
-    readonly PUBLIC_API_URL="https://${OUTLINE_HOSTNAME}:${OUTLINE_API_PORT}/${SB_API_PREFIX}"
-    readonly LOCAL_API_URL="https://localhost:${OUTLINE_API_PORT}/${SB_API_PREFIX}"
-    
-    # Ожидание готовности сервиса
-    log "Ожидание готовности Outline сервера"
-    until curl --insecure -s "${LOCAL_API_URL}/access-keys" >/dev/null; do 
-        sleep 1
-    done
-    
-    # Создание первого ключа доступа
-    log "Создание первого ключа доступа"
-    curl --insecure -X POST -s "${LOCAL_API_URL}/access-keys" >/dev/null
-    
-    # Добавление URL API в конфигурацию
-    log "Добавление URL API в конфигурацию"
-    echo "apiUrl:${PUBLIC_API_URL}" >> $ACCESS_CONFIG
-    
-    # Получение порта ключа доступа
-    log "Получение порта ключа доступа"
-    local ACCESS_KEY_PORT=$(curl --insecure -s ${LOCAL_API_URL}/access-keys | 
-        docker exec -i shadowbox node -e '
-            const fs = require("fs");
-            const accessKeys = JSON.parse(fs.readFileSync(0, {encoding: "utf-8"}));
-            console.log(accessKeys["accessKeys"][0]["port"]);
-        ')
-    
-    # Настройка брандмауэра
-    setup_outline_firewall "$OUTLINE_API_PORT" "$ACCESS_KEY_PORT"
-    
-    # Получение информации о сервере
-    log "Получение информации о сервере"
-    local API_URL=$(grep "apiUrl" $ACCESS_CONFIG | sed "s/apiUrl://")
-    local CERT_SHA256=$(grep "certSha256" $ACCESS_CONFIG | sed "s/certSha256://")
-    
-    # Создание ссылки на скрипт управления
-    if [ -f "/home/ikeniborn/Documents/Project/vpn/manage_users.sh" ]; then
-        ln -sf "/home/ikeniborn/Documents/Project/vpn/manage_users.sh" /usr/local/bin/outline-manage 2>/dev/null || true
-    fi
-    
-    # Добавим определение цветов если их еще нет
-    local BLUE='\033[0;34m'
-    
-    # Отображение сообщения об успехе
-    echo ""
-    echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║         ПОЗДРАВЛЯЕМ! OUTLINE VPN СЕРВЕР ГОТОВ К РАБОТЕ        ║${NC}"
-    echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
-    echo ""
-    echo -e "${BLUE}Информация о сервере:${NC}"
-    echo -e "• IP/Hostname сервера: ${OUTLINE_HOSTNAME}"
-    echo -e "• API порт: ${OUTLINE_API_PORT}"
-    echo -e "• Порт ключей доступа: ${ACCESS_KEY_PORT}"
-    echo ""
-    echo -e "${BLUE}Для управления вашим Outline сервером:${NC}"
-    echo -e "1. Установите Outline Manager с https://getoutline.org/"
-    echo -e "2. Скопируйте следующую строку (включая фигурные скобки) в Outline Manager:"
-    echo ""
-    echo -e "${GREEN}{\"apiUrl\":\"${API_URL}\",\"certSha256\":\"${CERT_SHA256}\"}${NC}"
-    echo ""
-    echo -e "${BLUE}Настройка брандмауэра:${NC}"
-    echo -e "• Порт управления ${OUTLINE_API_PORT} (TCP) открыт"
-    echo -e "• Порт ключей доступа ${ACCESS_KEY_PORT} (TCP/UDP) открыт"
-    echo ""
-    echo -e "${YELLOW}Примечание:${NC} Если есть проблемы с подключением, убедитесь что ваш облачный"
-    echo -e "провайдер или роутер разрешает эти порты. Файлы конфигурации хранятся в ${SHADOWBOX_DIR}."
-    echo ""
-}
-
-# Выбор типа VPN сервера
-echo ""
-echo -e "${BLUE}╔══════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║${NC}   🎉 ${GREEN}Добро пожаловать в установщик VPN!${NC}   ${BLUE}║${NC}"
-echo -e "${BLUE}╚══════════════════════════════════════════════╝${NC}"
-echo ""
-echo -e "${GREEN}🎯 Выберите тип VPN сервера для установки:${NC}"
-echo -e "   ${YELLOW}1${NC} 🚀 ${WHITE}Xray VPN${NC} (VLESS+Reality)"
-echo -e "      ${PURPLE}↳${NC} Рекомендуется для обхода блокировок 🛡️"
-echo -e "   ${YELLOW}2${NC} 📱 ${WHITE}Outline VPN${NC} (Shadowsocks)"
-echo -e "      ${PURPLE}↳${NC} Простота управления через приложение 🎮"
-echo ""
-read -p "$(echo -e ${GREEN}Ваш выбор [1]:${NC} )" VPN_TYPE_CHOICE
-VPN_TYPE_CHOICE=${VPN_TYPE_CHOICE:-1}
-
-case $VPN_TYPE_CHOICE in
-    1) 
-        VPN_TYPE="xray"
-        echo -e "\n${GREEN}🎉 Отличный выбор! Устанавливаем Xray VPN (VLESS+Reality)${NC} 🚀\n"
-        ;;
-    2) 
-        VPN_TYPE="outline"
-        echo -e "\n${GREEN}🎉 Хороший выбор! Устанавливаем Outline VPN (Shadowsocks)${NC} 📱\n"
-        ;;
-    *) 
-        VPN_TYPE="xray"
-        echo -e "\n${GREEN}🎉 Используем Xray VPN по умолчанию${NC} 🚀\n"
-        ;;
-esac
-
-if [ "$VPN_TYPE" = "xray" ]; then
-    # Создание рабочей директории для Xray
-    WORK_DIR="/opt/v2ray"
-    mkdir -p "$WORK_DIR"
-    cd "$WORK_DIR"
-
-    echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-    echo -e "${GREEN}⚙️  Настройка параметров Xray сервера${NC}"
-    echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-    echo ""
-else
-    # Для Outline VPN запускаем соответствующую функцию
-    install_outline_vpn
-    exit 0
-fi
-
-# Получение внешнего IP-адреса, если не указан другой
-DEFAULT_IP=$(curl -s https://api.ipify.org)
-read -p "Введите IP-адрес сервера [$DEFAULT_IP]: " SERVER_IP
-SERVER_IP=${SERVER_IP:-$DEFAULT_IP}
-
-# Порт для VPN сервера
-echo -e "${GREEN}🔌 Выберите метод назначения порта:${NC}"
-echo -e "   ${YELLOW}1${NC} 🎲 Случайный свободный порт ${GREEN}(рекомендуется)${NC}"
-echo -e "   ${YELLOW}2${NC} ✏️  Указать порт вручную"
-echo -e "   ${YELLOW}3${NC} 🏢 Использовать стандартный порт (10443)"
-echo ""
-read -p "$(echo -e ${GREEN}Ваш выбор [1]:${NC} )" PORT_CHOICE
-PORT_CHOICE=${PORT_CHOICE:-1}
-
-case $PORT_CHOICE in
-    1)
-        echo -e "${GREEN}🔍 Поиск свободного порта...${NC}"
-        SERVER_PORT=$(generate_free_port 10000 65000 true 20 10443)
-        if [ $? -eq 0 ]; then
-            echo -e "${GREEN}✅ Найден свободный порт: ${YELLOW}$SERVER_PORT${NC} 🎉"
-        else
-            warning "Не удалось найти свободный случайный порт, используется стандартный"
-            SERVER_PORT=10443
-        fi
-        ;;
-    2)
-        while true; do
-            read -p "Введите порт для VPN сервера [10443]: " SERVER_PORT
-            SERVER_PORT=${SERVER_PORT:-10443}
-            
-            # Проверка корректности порта
-            if ! [[ "$SERVER_PORT" =~ ^[0-9]+$ ]] || [ "$SERVER_PORT" -lt 1 ] || [ "$SERVER_PORT" -gt 65535 ]; then
-                error "Некорректный порт. Введите число от 1 до 65535."
-                continue
-            fi
-            
-            # Проверка доступности порта
-            if check_port_available $SERVER_PORT; then
-                log "✓ Порт $SERVER_PORT свободен"
-                break
-            else
-                warning "Порт $SERVER_PORT уже используется!"
-                read -p "Использовать занятый порт? (y/n): " use_busy_port
-                if [ "$use_busy_port" = "y" ]; then
-                    warning "Внимание: порт $SERVER_PORT может конфликтовать с другими службами"
-                    break
-                fi
-            fi
-        done
-        ;;
-    3)
-        SERVER_PORT=10443
-        if ! check_port_available $SERVER_PORT; then
-            warning "Стандартный порт $SERVER_PORT занят, но будет использован"
-        fi
-        ;;
-    *)
-        SERVER_PORT=$(generate_free_port 10000 65000 true 20 10443)
-        log "Использован случайный порт: $SERVER_PORT"
-        ;;
-esac
-
-echo -e "${GREEN}✓ Выбран порт: ${YELLOW}$SERVER_PORT${NC} 🔌"
-
-# Выбор протокола
-echo ""
-echo -e "${GREEN}🔐 Выберите протокол:${NC}"
-echo -e "   ${YELLOW}1${NC} 📡 VLESS (базовый)"
-echo -e "   ${YELLOW}2${NC} 🛡️  VLESS+Reality ${GREEN}(рекомендуется)${NC}"
-echo ""
-read -p "$(echo -e ${GREEN}Ваш выбор [2]:${NC} )" PROTOCOL_CHOICE
-PROTOCOL_CHOICE=${PROTOCOL_CHOICE:-2}
-
-case $PROTOCOL_CHOICE in
-    1) 
-        PROTOCOL="vless"
-        USE_REALITY=false
-        echo -e "${GREEN}✓ Выбран протокол: ${YELLOW}VLESS${NC}"
-        ;;
-    2) 
-        PROTOCOL="vless+reality"
-        USE_REALITY=true
-        echo -e "${GREEN}✓ Выбран протокол: ${YELLOW}VLESS+Reality${NC} 🛡️"
-        ;;
-    *) 
-        error "Неверный выбор протокола"
-        ;;
-esac
-
-# Генерация UUID для первого пользователя
-DEFAULT_UUID=$(uuid -v 4)
-read -p "Введите UUID для первого пользователя [$DEFAULT_UUID]: " USER_UUID
-USER_UUID=${USER_UUID:-$DEFAULT_UUID}
-
-# Имя первого пользователя
-read -p "Введите имя первого пользователя [user1]: " USER_NAME
-USER_NAME=${USER_NAME:-user1}
-
-# Функция проверки доступности SNI домена
-check_sni_domain() {
-    local domain=$1
-    local timeout=3
-    
-    log "Проверка доступности домена $domain..."
-    
-    # Проверка 1: DNS резолюция с использованием dig (более надежно чем nslookup)
-    if command -v dig >/dev/null 2>&1; then
-        if ! timeout $timeout dig +short "$domain" >/dev/null 2>&1; then
-            warning "Домен $domain не резолвится в DNS (dig)"
-            return 1
-        fi
-    else
-        # Fallback на host если dig недоступен
-        if ! timeout $timeout host "$domain" >/dev/null 2>&1; then
-            warning "Домен $domain не резолвится в DNS (host)"
-            return 1
-        fi
-    fi
-    
-    # Проверка 2: TCP подключение к порту 443 (самый быстрый способ)
-    if ! timeout $timeout bash -c "</dev/tcp/$domain/443" 2>/dev/null; then
-        warning "Домен $domain недоступен на порту 443"
-        return 1
-    fi
-    
-    # Проверка 3: Базовая HTTPS доступность (без --fail для большей толерантности)
-    local http_code=$(timeout $timeout curl -s -o /dev/null -w "%{http_code}" \
-        --connect-timeout $timeout --max-time $timeout \
-        --insecure --location --user-agent "Mozilla/5.0" \
-        "https://$domain" 2>/dev/null || echo "000")
-    
-    if [ "$http_code" = "000" ]; then
-        warning "Домен $domain не отвечает на HTTPS запросы"
-        return 1
-    fi
-    
-    # Проверка 4: Упрощенная проверка TLS (только базовое подключение)
-    local tls_check=""
-    if command -v openssl >/dev/null 2>&1; then
-        tls_check=$(timeout $timeout bash -c "echo | openssl s_client -connect '$domain:443' -servername '$domain' -quiet 2>/dev/null | head -n 1" | grep -i "verify\|protocol\|cipher" || echo "")
-        
-        if [ -z "$tls_check" ]; then
-            # Попробуем еще раз с другими параметрами
-            tls_check=$(timeout $timeout bash -c "echo 'Q' | openssl s_client -connect '$domain:443' -servername '$domain' 2>/dev/null | grep -E 'Protocol|Cipher'" || echo "ok")
-        fi
-        
-        if [ -z "$tls_check" ]; then
-            warning "Домен $domain: не удалось проверить TLS, но TCP соединение работает"
-            # Не возвращаем ошибку, так как основные проверки прошли
-        fi
-    fi
-    
-    log "✓ Домен $domain прошел основные проверки (HTTP код: $http_code)"
-    return 0
-}
-
-# Выбор сайта для SNI
-echo ""
-log "Настройка домена для маскировки Reality..."
-warning "Проверка доменов может занять время. Для быстрой установки выберите вариант 6."
-echo ""
-echo "Выберите сайт для маскировки Reality:"
-echo "1. addons.mozilla.org (рекомендуется)"
-echo "2. www.lovelive-anime.jp"
-echo "3. www.swift.org"
-echo "4. Ввести свой домен"
-echo "5. Автоматический выбор лучшего домена"
-echo "6. Пропустить проверку домена (быстрая установка)"
-read -p "Ваш выбор [1]: " SNI_CHOICE
-SNI_CHOICE=${SNI_CHOICE:-1}
-
-case $SNI_CHOICE in
-    1) SERVER_SNI="addons.mozilla.org";;
-    2) SERVER_SNI="www.lovelive-anime.jp";;
-    3) SERVER_SNI="www.swift.org";;
-    4) 
-        while true; do
-            read -p "Введите домен для SNI (например: example.com): " SERVER_SNI
-            
-            # Базовая валидация формата домена
-            if [[ ! "$SERVER_SNI" =~ ^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$ ]]; then
-                warning "Некорректный формат домена. Введите правильный домен."
-                continue
-            fi
-            
-            log "Проверка домена $SERVER_SNI (максимум 10 секунд)..."
-            
-            # Быстрая предварительная проверка
-            if timeout 2 bash -c "</dev/tcp/$SERVER_SNI/443" 2>/dev/null; then
-                log "✓ Домен $SERVER_SNI доступен, выполняем полную проверку..."
-                if check_sni_domain "$SERVER_SNI"; then
-                    log "✓ Домен $SERVER_SNI успешно прошел все проверки"
-                    break
-                else
-                    warning "Домен $SERVER_SNI прошел базовую проверку, но не все тесты."
-                fi
-            else
-                warning "Домен $SERVER_SNI недоступен на порту 443."
-            fi
-            
-            echo "Варианты действий:"
-            echo "1. Использовать этот домен (может не работать оптимально)"
-            echo "2. Попробовать другой домен"
-            echo "3. Использовать рекомендованный домен (addons.mozilla.org)"
-            read -p "Ваш выбор [2]: " domain_choice
-            domain_choice=${domain_choice:-2}
-            
-            case $domain_choice in
-                1)
-                    warning "Внимание: домен $SERVER_SNI будет использован без полной проверки"
-                    break
-                    ;;
-                2)
-                    continue
-                    ;;
-                3)
-                    SERVER_SNI="addons.mozilla.org"
-                    log "Использован рекомендованный домен: $SERVER_SNI"
-                    break
-                    ;;
-                *)
-                    continue
-                    ;;
-            esac
-        done
-        ;;
-    5)
-        log "Автоматический выбор лучшего домена (максимум 30 секунд)..."
-        # Расширенный список кандидатов с более стабильными доменами
-        CANDIDATES=(
-            "addons.mozilla.org" 
-            "www.swift.org" 
-            "golang.org"
-            "www.kernel.org"
-            "cdn.jsdelivr.net"
-            "registry.npmjs.org"
-            "api.github.com"
-            "www.lovelive-anime.jp"
-        )
-        SERVER_SNI=""
-        
-        log "Тестирование доменов-кандидатов..."
-        for domain in "${CANDIDATES[@]}"; do
-            log "Быстрая проверка $domain..."
-            
-            # Используем более быструю предварительную проверку
-            if timeout 2 bash -c "</dev/tcp/$domain/443" 2>/dev/null; then
-                log "✓ $domain доступен, выполняем полную проверку..."
-                if check_sni_domain "$domain"; then
-                    SERVER_SNI="$domain"
-                    log "✓ Автоматически выбран домен: $SERVER_SNI"
-                    break
-                fi
-            else
-                log "✗ $domain недоступен, пропускаем..."
-            fi
-        done
-        
-        if [ -z "$SERVER_SNI" ]; then
-            warning "Ни один из кандидатов не прошел проверку. Используется домен по умолчанию."
-            SERVER_SNI="addons.mozilla.org"
-            log "Резервный домен: $SERVER_SNI"
-        fi
-        ;;
-    6)
-        log "Быстрая установка: проверка доменов пропущена"
-        SERVER_SNI="addons.mozilla.org"
-        ;;
-    *) SERVER_SNI="addons.mozilla.org";;
-esac
-
-# Финальная проверка выбранного домена (только для вариантов 1-3)
-if [ "$SNI_CHOICE" -ge 1 ] && [ "$SNI_CHOICE" -le 3 ]; then
-    log "Быстрая проверка выбранного домена $SERVER_SNI..."
-    
-    # Сначала быстрая проверка TCP соединения
-    if timeout 3 bash -c "</dev/tcp/$SERVER_SNI/443" 2>/dev/null; then
-        log "✓ Домен $SERVER_SNI доступен"
-    else
-        warning "Домен $SERVER_SNI может быть недоступен, но будет использован"
-        read -p "Заменить на резервный домен addons.mozilla.org? (y/n) [n]: " use_backup
-        if [ "$use_backup" = "y" ]; then
-            SERVER_SNI="addons.mozilla.org"
-            log "Использован резервный домен: $SERVER_SNI"
-        fi
-    fi
-fi
-
-echo -e "${GREEN}✅ Итоговый выбор SNI: ${YELLOW}$SERVER_SNI${NC} 🌐"
-
-# Генерация приватного ключа и публичного ключа для reality (если используется)
-if [ "$USE_REALITY" = true ]; then
-    echo -e "${GREEN}🔐 Генерация ключей для Reality...${NC}"
-
-    # Используем Docker Xray для генерации ключей Reality
-    log "Генерация ключей с помощью Xray..."
-    
-    # Попытка использовать команду x25519 из Xray
-    TEMP_OUTPUT=$(docker run --rm teddysun/xray:latest xray x25519 2>&1 || echo "")
-    
-    if [ -n "$TEMP_OUTPUT" ] && echo "$TEMP_OUTPUT" | grep -q "Private key:"; then
-        # Извлекаем ключи из вывода Xray
-        PRIVATE_KEY=$(echo "$TEMP_OUTPUT" | grep "Private key:" | awk '{print $3}')
-        PUBLIC_KEY=$(echo "$TEMP_OUTPUT" | grep "Public key:" | awk '{print $3}')
-        SHORT_ID=$(openssl rand -hex 8)
-        log "Ключи сгенерированы с помощью Xray x25519"
-    else
-        # Попробуем альтернативную команду
-        TEMP_OUTPUT2=$(docker run --rm teddysun/xray:latest /usr/bin/xray x25519 2>/dev/null || echo "")
-        
-        if [ -n "$TEMP_OUTPUT2" ] && echo "$TEMP_OUTPUT2" | grep -q "Private key:"; then
-            # Извлекаем ключи из вывода Xray
-            PRIVATE_KEY=$(echo "$TEMP_OUTPUT2" | grep "Private key:" | awk '{print $3}')
-            PUBLIC_KEY=$(echo "$TEMP_OUTPUT2" | grep "Public key:" | awk '{print $3}')
-            SHORT_ID=$(openssl rand -hex 8)
-            log "Ключи сгенерированы с помощью Xray x25519 (альтернативная команда)"
-        else
-            # Используем альтернативный способ генерации ключей
-            log "Используем альтернативный способ генерации ключей..."
-            
-            # Генерируем ключи с помощью OpenSSL
-            SHORT_ID=$(openssl rand -hex 8)
-            
-            # Генерируем правильный X25519 приватный ключ
-            TEMP_PRIVATE=$(openssl genpkey -algorithm X25519 2>/dev/null)
-            if [ $? -eq 0 ] && [ -n "$TEMP_PRIVATE" ]; then
-                # Извлекаем приватный ключ из PEM в правильном формате
-                PRIVATE_KEY=$(echo "$TEMP_PRIVATE" | openssl pkey -outform DER 2>/dev/null | tail -c 32 | base64 | tr -d '\n')
-                # Генерируем соответствующий публичный ключ
-                PUBLIC_KEY=$(echo "$TEMP_PRIVATE" | openssl pkey -pubout -outform DER 2>/dev/null | tail -c 32 | base64 | tr -d '\n')
-                log "Ключи сгенерированы с помощью OpenSSL X25519"
-            else
-                # Последний резерв - используем проверенный метод
-                log "Используем резервный метод генерации..."
-                SHORT_ID=$(openssl rand -hex 8)
-                PRIVATE_KEY=$(openssl rand 32 | base64 | tr -d '\n')
-                PUBLIC_KEY=$(openssl rand 32 | base64 | tr -d '\n')
-                log "Ключи сгенерированы резервным методом"
-            fi
-        fi
-    fi
-    
-    # Проверяем, что ключи сгенерированы
-    if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ] || [ -z "$SHORT_ID" ]; then
-        log "Генерируем финальные резервные ключи через Xray в интерактивном режиме..."
-        SHORT_ID=$(openssl rand -hex 8)
-        
-        # Попытка запустить xray с генерацией ключей напрямую
-        XRAY_KEYS=$(timeout 10 docker run --rm -i teddysun/xray:latest sh -c 'echo | xray x25519' 2>/dev/null || echo "")
-        
-        if [ -n "$XRAY_KEYS" ] && echo "$XRAY_KEYS" | grep -q "Private key:"; then
-            PRIVATE_KEY=$(echo "$XRAY_KEYS" | grep "Private key:" | awk '{print $3}')
-            PUBLIC_KEY=$(echo "$XRAY_KEYS" | grep "Public key:" | awk '{print $3}')
-            log "Успешно сгенерированы ключи через Xray в интерактивном режиме"
-        else
-            # Финальный фоллбек
-            PRIVATE_KEY=$(openssl rand 32 | base64 | tr -d '\n')
-            PUBLIC_KEY=$(openssl rand 32 | base64 | tr -d '\n')
-            log "Использованы случайные ключи как последний резерв"
-        fi
-    fi
-    
-    log "Ключи сгенерированы:"
-    log "Private Key: $PRIVATE_KEY"
-    log "Public Key: $PUBLIC_KEY"
-    log "Short ID: $SHORT_ID"
-else
-    # Если Reality не используется, устанавливаем пустые значения
-    PRIVATE_KEY=""
-    PUBLIC_KEY=""
-    SHORT_ID=""
-fi
-
-# Для случая если мы уже вышли из блока, где генерируются ключи
-
-# Создание директорий для конфигурации и логов
-mkdir -p "$WORK_DIR/config"
-mkdir -p "$WORK_DIR/logs"
-
-# Создание конфигурации Xray
-if [ "$USE_REALITY" = true ]; then
-    # Конфигурация для VLESS+Reality по стандартам XTLS/Xray-core
-    cat > "$WORK_DIR/config/config.json" <<EOL
-{
-  "log": {
-    "loglevel": "info",
-    "access": "/var/log/xray/access.log",
-    "error": "/var/log/xray/error.log"
-  },
-  "stats": {},
-  "api": {
-    "tag": "api",
-    "services": [
-      "StatsService"
-    ]
-  },
-  "policy": {
-    "system": {
-      "statsInboundUplink": true,
-      "statsInboundDownlink": true,
-      "statsOutboundUplink": true,
-      "statsOutboundDownlink": true
-    }
-  },
-  "inbounds": [
-    {
-      "port": $SERVER_PORT,
-      "protocol": "vless",
-      "settings": {
-        "clients": [
-          {
-            "id": "$USER_UUID",
-            "flow": "xtls-rprx-vision",
-            "email": "$USER_NAME"
-          }
-        ],
-        "decryption": "none"
-      },
-      "streamSettings": {
-        "network": "tcp",
-        "security": "reality",
-        "realitySettings": {
-          "show": false,
-          "dest": "$SERVER_SNI:443",
-          "xver": 0,
-          "serverNames": [
-            "$SERVER_SNI"
-          ],
-          "privateKey": "$PRIVATE_KEY",
-          "minClientVer": "",
-          "maxClientVer": "",
-          "maxTimeDiff": 60000,
-          "shortIds": [
-            "$SHORT_ID"
-          ]
+    # Create management script symlink
+    if [ -f "$SCRIPT_DIR/manage_users.sh" ]; then
+        ln -sf "$SCRIPT_DIR/manage_users.sh" /usr/local/bin/v2ray-manage 2>/dev/null || {
+            warning "Failed to create management script symlink"
         }
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["http", "tls", "quic", "fakedns"]
-      }
+        log "Скрипт управления доступен через: v2ray-manage"
+    fi
+}
+
+# =============================================================================
+# MAIN INSTALLATION FLOW
+# =============================================================================
+
+main() {
+    # Welcome message
+    echo -e "${GREEN}=== VPN Server Installation (Modular Version) ===${NC}"
+    echo -e "${BLUE}Версия: 2.0${NC}\n"
+    
+    # Check prerequisites
+    log "Проверка системных требований..."
+    check_root_privileges true || exit 1
+    detect_system_info true
+    
+    # Install dependencies
+    log "Установка зависимостей..."
+    install_system_dependencies true || {
+        error "Failed to install system dependencies"
     }
-  ],
-  "outbounds": [
-    {
-      "protocol": "freedom",
-      "settings": {
-        "domainStrategy": "UseIPv4"
-      }
-    },
-    {
-      "tag": "blocked",
-      "protocol": "blackhole",
-      "settings": {}
+    
+    verify_dependencies true || {
+        error "Dependency verification failed"
     }
-  ],
-  "routing": {
-    "domainStrategy": "IPIfNonMatch",
-    "rules": [
-      {
-        "type": "field",
-        "ip": [
-          "0.0.0.0/8",
-          "10.0.0.0/8",
-          "100.64.0.0/10",
-          "127.0.0.0/8",
-          "169.254.0.0/16",
-          "172.16.0.0/12",
-          "192.0.0.0/24",
-          "192.0.2.0/24",
-          "192.168.0.0/16",
-          "198.18.0.0/15",
-          "198.51.100.0/24",
-          "203.0.113.0/24",
-          "::1/128",
-          "fc00::/7",
-          "fe80::/10"
-        ],
-        "outboundTag": "blocked"
-      }
-    ]
-  }
-}
-EOL
-else
-    # Конфигурация для базового VLESS
-    cat > "$WORK_DIR/config/config.json" <<EOL
-{
-  "log": {
-    "loglevel": "warning"
-  },
-  "inbounds": [
-    {
-      "port": $SERVER_PORT,
-      "protocol": "vless",
-      "settings": {
-        "clients": [
-          {
-            "id": "$USER_UUID",
-            "flow": "",
-            "email": "$USER_NAME"
-          }
-        ],
-        "decryption": "none"
-      },
-      "streamSettings": {
-        "network": "tcp",
-        "security": "none",
-        "tcpSettings": {
-          "header": {
-            "type": "none"
-          }
-        }
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["http", "tls"]
-      }
-    }
-  ],
-  "outbounds": [
-    {
-      "protocol": "freedom"
-    }
-  ]
-}
-EOL
-fi
-
-# Создание docker-compose.yml
-echo -e "${GREEN}🐳 Создание конфигурации Docker...${NC}"
-
-# Сначала пробуем основной вариант
-cat > "$WORK_DIR/docker-compose.yml" <<EOL
-version: '3'
-services:
-  xray:
-    image: teddysun/xray:latest
-    container_name: xray
-    restart: unless-stopped
-    network_mode: host
-    volumes:
-      - ./config:/etc/xray
-      - ./logs:/var/log/xray
-    environment:
-      - TZ=Europe/Moscow
-    command: ["xray", "run", "-c", "/etc/xray/config.json"]
-    healthcheck:
-      test: ["CMD", "nc", "-z", "127.0.0.1", "$SERVER_PORT"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-EOL
-
-# Создаем резервный docker-compose для случая проблем
-cat > "$WORK_DIR/docker-compose.backup.yml" <<EOL
-version: '3'
-services:
-  xray:
-    image: teddysun/xray:latest
-    container_name: xray
-    restart: unless-stopped
-    network_mode: host
-    volumes:
-      - ./config:/etc/xray
-      - ./logs:/var/log/xray
-    environment:
-      - TZ=Europe/Moscow
-    entrypoint: ["/usr/bin/xray"]
-    command: ["run", "-c", "/etc/xray/config.json"]
-    healthcheck:
-      test: ["CMD", "nc", "-z", "127.0.0.1", "$SERVER_PORT"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-EOL
-
-log "Docker конфигурация создана"
-
-# Настройка брандмауэра
-log "Настройка брандмауэра..."
-# Check if SSH rule already exists
-if ! ufw status | grep -q "22/tcp\|OpenSSH\|ssh"; then
-    ufw allow ssh
-    log "SSH правило добавлено"
-else
-    log "SSH правило уже существует"
-fi
-ufw allow $SERVER_PORT/tcp
-ufw --force enable
-
-# Запуск сервера
-log "Запуск VPN сервера..."
-cd "$WORK_DIR"
-
-# Проверяем конфигурацию перед запуском
-if [ ! -f "config/config.json" ]; then
-    error "Конфигурационный файл не найден!"
-fi
-
-# Запускаем с детальным логированием
-echo -e "${GREEN}📦 Запуск Docker контейнера...${NC}"
-if ! docker-compose up -d; then
-    warning "Основная конфигурация не сработала, пробуем резервную..."
     
-    # Останавливаем неудачный запуск
-    docker-compose down 2>/dev/null || true
+    # Get configuration
+    choose_vpn_type
+    get_server_config
+    get_user_config
+    get_sni_config
+    generate_reality_keys
     
-    # Заменяем на резервную конфигурацию
-    cp "$WORK_DIR/docker-compose.backup.yml" "$WORK_DIR/docker-compose.yml"
+    # Install VPN based on chosen protocol
+    case "$PROTOCOL" in
+        "vless-reality"|"vless-basic")
+            install_xray_vpn
+            ;;
+        "outline")
+            install_outline_vpn
+            ;;
+        *)
+            error "Unknown protocol: $PROTOCOL"
+            ;;
+    esac
     
-    # Пробуем запустить с резервной конфигурацией
-    if ! docker-compose up -d; then
-        error "Не удалось запустить Docker контейнер даже с резервной конфигурацией"
-    else
-        log "✓ Контейнер запущен с резервной конфигурацией"
-    fi
-fi
-
-# Проверяем статус контейнера
-sleep 3
-if docker ps | grep -q "xray"; then
-    log "✓ Контейнер Xray успешно запущен и работает"
-else
-    warning "Контейнер не запущен. Проверяем логи..."
-    log "Логи контейнера:"
-    docker-compose logs --tail 20
+    # Post-installation setup
+    setup_management
     
-    # Попытка диагностики
-    log "Диагностика проблемы..."
-    log "Проверка образа:"
-    docker run --rm teddysun/xray:latest xray version 2>/dev/null || log "Проблема с образом или командой xray"
+    # Show results
+    echo -e "\n${GREEN}=== УСТАНОВКА ЗАВЕРШЕНА ===${NC}"
+    show_client_info
     
-    error "Установка прервана из-за ошибки запуска контейнера"
-fi
-
-# Сохраняем информацию о пользователе
-mkdir -p "$WORK_DIR/users"
-
-if [ "$USE_REALITY" = true ]; then
-    cat > "$WORK_DIR/users/$USER_NAME.json" <<EOL
-{
-  "name": "$USER_NAME",
-  "uuid": "$USER_UUID",
-  "port": $SERVER_PORT,
-  "server": "$SERVER_IP",
-  "sni": "$SERVER_SNI",
-  "private_key": "$PRIVATE_KEY",
-  "public_key": "$PUBLIC_KEY",
-  "short_id": "$SHORT_ID",
-  "protocol": "$PROTOCOL"
-}
-EOL
-else
-    cat > "$WORK_DIR/users/$USER_NAME.json" <<EOL
-{
-  "name": "$USER_NAME",
-  "uuid": "$USER_UUID",
-  "port": $SERVER_PORT,
-  "server": "$SERVER_IP",
-  "sni": "$SERVER_SNI",
-  "private_key": "$PRIVATE_KEY",
-  "public_key": "$PUBLIC_KEY",
-  "protocol": "$PROTOCOL"
-}
-EOL
-fi
-
-# Создание ссылки для подключения
-if [ "$USE_REALITY" = true ]; then
-    # VLESS+Reality ссылка с поддержкой XTLS Vision и правильным fingerprint
-    REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp&headerType=none#$USER_NAME"
-else
-    REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
-fi
-echo "$REALITY_LINK" > "$WORK_DIR/users/$USER_NAME.link"
-
-# Сохраняем информацию для использования в manage_users.sh
-echo "$SERVER_SNI" > "$WORK_DIR/config/sni.txt"
-echo "$PROTOCOL" > "$WORK_DIR/config/protocol.txt"
-echo "$SERVER_PORT" > "$WORK_DIR/config/port.txt"
-
-if [ "$USE_REALITY" = true ]; then
-    log "Сохранение настроек Reality..."
-    echo "true" > "$WORK_DIR/config/use_reality.txt"
+    echo -e "\n${YELLOW}Для управления пользователями используйте:${NC}"
+    echo -e "${WHITE}sudo v2ray-manage${NC}"
     
-    # Проверяем и сохраняем ключи
-    if [ -n "$PRIVATE_KEY" ]; then
-        echo "$PRIVATE_KEY" > "$WORK_DIR/config/private_key.txt"
-        log "Private key сохранен в файл"
-    else
-        error "Private key пуст, не может быть сохранен"
-    fi
-    
-    if [ -n "$PUBLIC_KEY" ]; then
-        echo "$PUBLIC_KEY" > "$WORK_DIR/config/public_key.txt"
-        log "Public key сохранен в файл"
-    else
-        error "Public key пуст, не может быть сохранен"
-    fi
-    
-    if [ -n "$SHORT_ID" ]; then
-        echo "$SHORT_ID" > "$WORK_DIR/config/short_id.txt"
-        log "Short ID сохранен в файл"
-    else
-        error "Short ID пуст, не может быть сохранен"
-    fi
-    
-    # Проверяем, что файлы действительно созданы
-    if [ -f "$WORK_DIR/config/public_key.txt" ]; then
-        log "Файл public_key.txt успешно создан"
-        log "Содержимое: $(cat "$WORK_DIR/config/public_key.txt")"
-    else
-        error "Файл public_key.txt не был создан!"
-    fi
-    
-    log "Сохранены ключи Reality:"
-    log "Private Key: $PRIVATE_KEY"
-    log "Public Key: $PUBLIC_KEY"
-    log "Short ID: $SHORT_ID"
-else
-    echo "false" > "$WORK_DIR/config/use_reality.txt"
-    # Удаляем файлы с ключами, если они существуют
-    rm -f "$WORK_DIR/config/private_key.txt" "$WORK_DIR/config/public_key.txt" "$WORK_DIR/config/short_id.txt"
-    log "Reality не используется, файлы ключей удалены"
-fi
-
-echo ""
-echo -e "${BLUE}╔══════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║${NC}    🎉 ${GREEN}ПОЗДРАВЛЯЕМ! VPN СЕРВЕР УСПЕШНО УСТАНОВЛЕН!${NC} 🎉  ${BLUE}║${NC}"
-echo -e "${BLUE}╚══════════════════════════════════════════════════════╝${NC}"
-echo ""
-echo -e "${GREEN}🌐 Информация о сервере:${NC}"
-echo -e "  📍 IP адрес: ${YELLOW}$SERVER_IP${NC}"
-echo -e "  🔌 Порт: ${YELLOW}$SERVER_PORT${NC}"
-echo -e "  🔒 Протокол: ${YELLOW}$PROTOCOL${NC}"
-echo -e "  🌐 SNI: ${YELLOW}$SERVER_SNI${NC}"
-echo ""
-echo -e "${GREEN}👤 Информация о первом пользователе:${NC}"
-echo -e "  👤 Имя: ${YELLOW}$USER_NAME${NC}"
-echo -e "  🆔 UUID: ${YELLOW}$USER_UUID${NC}"
-echo -e "  🔗 Ссылка сохранена в: ${PURPLE}$WORK_DIR/users/$USER_NAME.link${NC}"
-
-# Отображение ссылки и QR-кода для первого пользователя
-echo ""
-echo "Ссылка для подключения:"
-echo "$REALITY_LINK"
-
-if command -v qrencode >/dev/null 2>&1; then
-    echo "QR-код:"
-    qrencode -t ANSIUTF8 "$REALITY_LINK"
-else
-    log "qrencode не установлен. QR-код сохранен в файле: $WORK_DIR/users/$USER_NAME.png"
-fi
-
-# Функция вывода информации о клиентах для Xray
-show_client_info_install() {
-    local BLUE='\033[0;34m'
-    echo ""
-    echo -e "${BLUE}📱 Рекомендуемые клиенты для Xray VPN:${NC}"
-    echo -e "${GREEN}Android:${NC}"
-    echo "  • v2RayTun - https://play.google.com/store/apps/details?id=com.v2raytun.android"
-    echo ""
-    echo -e "${GREEN}iOS:${NC}"
-    echo "  • Shadowrocket - https://apps.apple.com/app/shadowrocket/id932747118"
-    echo "  • v2RayTun - https://apps.apple.com/app/v2raytun/id6476628951"
-    echo ""
-    echo -e "${GREEN}Подключение:${NC}"
-    echo "  1. QR-код (рекомендуется) - отсканируйте QR-код выше"
-    echo "  2. Импорт ссылки - скопируйте ссылку для подключения"
-    echo "  3. Ручная настройка - введите параметры сервера вручную"
-    echo ""
+    echo -e "\n${GREEN}Установка VPN сервера завершена успешно!${NC}"
 }
 
-# Показать информацию о клиентах только для Xray VPN
-if [ "$VPN_TYPE" = "xray" ]; then
-    show_client_info_install
+# =============================================================================
+# SCRIPT EXECUTION
+# =============================================================================
+
+# Run main function if script is executed directly
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+    main "$@"
 fi
-
-echo ""
-echo -e "${GREEN}🔧 Для управления пользователями:${NC}"
-echo -e "  🎛️  Используйте команду: ${YELLOW}sudo v2ray-manage${NC}"
-echo ""
-echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-
-# Создаем ссылку на скрипт управления пользователями
-ln -sf "$WORK_DIR/manage_users.sh" /usr/local/bin/v2ray-manage
-
-# Установка watchdog службы
-log "Установка VPN Watchdog службы..."
-
-# Определяем путь к скрипту относительно текущего каталога
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WATCHDOG_SCRIPT="$SCRIPT_DIR/watchdog.sh"
-WATCHDOG_SERVICE="$SCRIPT_DIR/vpn-watchdog.service"
-
-# Если скрипты не найдены в текущем каталоге, ищем в стандартных местах
-if [ ! -f "$WATCHDOG_SCRIPT" ]; then
-    for path in "./watchdog.sh" "/home/*/Documents/Project/vpn/watchdog.sh" "/root/vpn/watchdog.sh"; do
-        if [ -f "$path" ]; then
-            WATCHDOG_SCRIPT="$path"
-            break
-        fi
-    done
-fi
-
-if [ ! -f "$WATCHDOG_SERVICE" ]; then
-    for path in "./vpn-watchdog.service" "/home/*/Documents/Project/vpn/vpn-watchdog.service" "/root/vpn/vpn-watchdog.service"; do
-        if [ -f "$path" ]; then
-            WATCHDOG_SERVICE="$path"
-            break
-        fi
-    done
-fi
-
-if [ -f "$WATCHDOG_SCRIPT" ]; then
-    cp "$WATCHDOG_SCRIPT" /usr/local/bin/vpn-watchdog.sh
-    chmod +x /usr/local/bin/vpn-watchdog.sh
-    
-    if [ -f "$WATCHDOG_SERVICE" ]; then
-        cp "$WATCHDOG_SERVICE" /etc/systemd/system/
-        systemctl daemon-reload
-        systemctl enable vpn-watchdog.service
-        systemctl start vpn-watchdog.service
-        log "✓ VPN Watchdog служба установлена и запущена"
-    fi
-else
-    log "Watchdog скрипт не найден, пропускаем установку"
-fi
-
-exit 0

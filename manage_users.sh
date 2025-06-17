@@ -1,1464 +1,448 @@
 #!/bin/bash
 
-# Скрипт управления пользователями для v2ray vless+reality
-# Автор: Claude
-# Комментарий: протестированная рабочая версия
+# =============================================================================
+# VPN User Management Script (Modular Version)
+# 
+# This script provides comprehensive user management for VPN server.
+# It has been refactored to use modular architecture.
+#
+# Author: Claude
+# Version: 2.0 (Modular)
+# =============================================================================
 
 set -e
 
-# Цвета для вывода
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'    # Bright yellow for better visibility
-BLUE='\033[0;36m'      # Cyan instead of blue for better readability
-PURPLE='\033[0;35m'    # Purple for additional highlights
-WHITE='\033[1;37m'     # Bright white for emphasis
-NC='\033[0m' # No Color
+# =============================================================================
+# SCRIPT INITIALIZATION
+# =============================================================================
 
-# Функция для вывода сообщений
-log() {
-    echo -e "${GREEN}✓${NC} $1"
-}
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-error() {
-    echo -e "${RED}✗ [ERROR]${NC} $1"
+# Source required libraries
+source "$SCRIPT_DIR/lib/common.sh" || {
+    echo "Error: Cannot source lib/common.sh"
     exit 1
 }
 
-warning() {
-    echo -e "${YELLOW}⚠️  [WARNING]${NC} $1"
+source "$SCRIPT_DIR/lib/config.sh" || {
+    error "Cannot source lib/config.sh"
 }
 
-# Проверка прав суперпользователя
-if [ "$EUID" -ne 0 ]; then
-    error "Пожалуйста, запустите скрипт с правами суперпользователя (sudo)"
-fi
-
-# Проверка наличия необходимых инструментов
-command -v docker >/dev/null 2>&1 || error "Docker не установлен."
-command -v uuid >/dev/null 2>&1 || {
-    log "uuid не установлен. Установка uuid..."
-    apt install -y uuid
-}
-command -v qrencode >/dev/null 2>&1 || {
-    log "qrencode не установлен. Установка qrencode..."
-    apt install -y qrencode
-}
-command -v jq >/dev/null 2>&1 || {
-    log "jq не установлен. Установка jq..."
-    apt install -y jq
+source "$SCRIPT_DIR/lib/ui.sh" || {
+    error "Cannot source lib/ui.sh"
 }
 
-# Определение рабочей директории
+# Source user management modules
+source "$SCRIPT_DIR/modules/users/add.sh" || {
+    error "Cannot source modules/users/add.sh"
+}
+
+source "$SCRIPT_DIR/modules/users/delete.sh" || {
+    error "Cannot source modules/users/delete.sh"
+}
+
+source "$SCRIPT_DIR/modules/users/edit.sh" || {
+    error "Cannot source modules/users/edit.sh"
+}
+
+source "$SCRIPT_DIR/modules/users/list.sh" || {
+    error "Cannot source modules/users/list.sh"
+}
+
+source "$SCRIPT_DIR/modules/users/show.sh" || {
+    error "Cannot source modules/users/show.sh"
+}
+
+# Source server management modules
+source "$SCRIPT_DIR/modules/server/status.sh" || {
+    error "Cannot source modules/server/status.sh"
+}
+
+source "$SCRIPT_DIR/modules/server/restart.sh" || {
+    error "Cannot source modules/server/restart.sh"
+}
+
+source "$SCRIPT_DIR/modules/server/rotate_keys.sh" || {
+    error "Cannot source modules/server/rotate_keys.sh"
+}
+
+source "$SCRIPT_DIR/modules/server/uninstall.sh" || {
+    error "Cannot source modules/server/uninstall.sh"
+}
+
+# Source monitoring modules
+source "$SCRIPT_DIR/modules/monitoring/statistics.sh" || {
+    error "Cannot source modules/monitoring/statistics.sh"
+}
+
+source "$SCRIPT_DIR/modules/monitoring/logging.sh" || {
+    error "Cannot source modules/monitoring/logging.sh"
+}
+
+source "$SCRIPT_DIR/modules/monitoring/logs_viewer.sh" || {
+    error "Cannot source modules/monitoring/logs_viewer.sh"
+}
+
+# =============================================================================
+# GLOBAL VARIABLES
+# =============================================================================
+
 WORK_DIR="/opt/v2ray"
-CONFIG_FILE="$WORK_DIR/config/config.json"
-USERS_DIR="$WORK_DIR/users"
 
-# Проверка существования директории и конфигурационного файла
-if [ ! -d "$WORK_DIR" ] || [ ! -f "$CONFIG_FILE" ]; then
-    error "Директория VPN сервера не существует или сервер не установлен. Сначала запустите скрипт установки."
-fi
+# =============================================================================
+# PREREQUISITES CHECK
+# =============================================================================
 
-# Создание директории пользователей, если не существует
-mkdir -p "$USERS_DIR"
-
-# Создание директории логов, если не существует
-mkdir -p "$WORK_DIR/logs"
-
-# Получение информации о сервере
-SERVER_IP=$(curl -s https://api.ipify.org)
-
-get_server_info() {
-    if [ -f "$CONFIG_FILE" ]; then
-        # Сначала пробуем прочитать порт из файла конфигурации
-        if [ -f "$WORK_DIR/config/port.txt" ]; then
-            SERVER_PORT=$(cat "$WORK_DIR/config/port.txt")
-            log "Порт загружен из файла конфигурации: $SERVER_PORT"
-        else
-            # Если файла нет, читаем из JSON конфига
-            SERVER_PORT=$(jq '.inbounds[0].port' "$CONFIG_FILE")
-            log "Порт прочитан из JSON конфигурации: $SERVER_PORT"
-            # Сохраняем порт в файл для будущего использования
-            echo "$SERVER_PORT" > "$WORK_DIR/config/port.txt"
-        fi
-        
-        # Чтение SNI из файла, если он существует
-        if [ -f "$WORK_DIR/config/sni.txt" ]; then
-            SERVER_SNI=$(cat "$WORK_DIR/config/sni.txt")
-        else
-            SERVER_SNI="www.microsoft.com"
-        fi
-        
-        # Определение использования Reality - приоритет конфигурации JSON
-        log "Проверка использования Reality..."
-        SECURITY=$(jq -r '.inbounds[0].streamSettings.security' "$CONFIG_FILE")
-        log "Найдена настройка security в конфиге: $SECURITY"
-        
-        if [ "$SECURITY" = "reality" ]; then
-            USE_REALITY=true
-            PROTOCOL="vless+reality"
-            log "Установлено использование Reality из конфигурации"
-            log "USE_REALITY = $USE_REALITY, PROTOCOL = $PROTOCOL"
-        else
-            USE_REALITY=false
-            PROTOCOL="vless"
-            log "Использование Reality отключено из конфигурации"
-            log "USE_REALITY = $USE_REALITY, PROTOCOL = $PROTOCOL"
-        fi
-        
-        # Обновляем или создаем файлы с настройками для консистентности
-        echo "$PROTOCOL" > "$WORK_DIR/config/protocol.txt"
-        if [ "$USE_REALITY" = true ]; then
-            echo "true" > "$WORK_DIR/config/use_reality.txt"
-        else
-            echo "false" > "$WORK_DIR/config/use_reality.txt"
-        fi
-        
-        # Получение публичного ключа и короткого ID сначала из отдельных файлов, затем из конфига
-        if [ "$USE_REALITY" = true ]; then
-            # Проверяем наличие отдельных файлов с ключами
-            if [ -f "$WORK_DIR/config/private_key.txt" ] && [ -f "$WORK_DIR/config/public_key.txt" ] && [ -f "$WORK_DIR/config/short_id.txt" ]; then
-                PRIVATE_KEY=$(cat "$WORK_DIR/config/private_key.txt")
-                PUBLIC_KEY=$(cat "$WORK_DIR/config/public_key.txt")
-                SHORT_ID=$(cat "$WORK_DIR/config/short_id.txt")
-                log "Получены ключи Reality из отдельных файлов:"
-                log "Private Key: $PRIVATE_KEY"
-                log "Public Key: $PUBLIC_KEY"
-                log "Short ID: $SHORT_ID"
-            else
-                log "Отдельные файлы с ключами не найдены. Пытаемся получить из файла пользователя или конфига..."
-                
-                # Получаем из файла любого пользователя
-                local first_user_file=$(ls -1 "$USERS_DIR"/*.json 2>/dev/null | head -1)
-                if [ -n "$first_user_file" ]; then
-                    PUBLIC_KEY=$(jq -r '.public_key' "$first_user_file")
-                    PRIVATE_KEY=$(jq -r '.private_key' "$first_user_file")
-                    SHORT_ID=$(jq -r '.short_id // ""' "$first_user_file")
-                    log "Получены ключи из файла пользователя: $first_user_file"
-                else
-                    # Пытаемся получить ключи из конфигурации
-                    PRIVATE_KEY=$(jq -r '.inbounds[0].streamSettings.realitySettings.privateKey' "$CONFIG_FILE")
-                    SHORT_ID=$(jq -r '.inbounds[0].streamSettings.realitySettings.shortIds[0]' "$CONFIG_FILE")
-                    log "Получен приватный ключ из конфига: $PRIVATE_KEY"
-                    log "Получен Short ID из конфига: $SHORT_ID"
-                    
-                    # Устанавливаем публичный ключ для известного приватного
-                    if [ "$PRIVATE_KEY" = "c29567a5ff1928bcf525e2d4016f7d7ce6f3c14c25c6aacc1998de43ba7b6a3e" ]; then
-                        PUBLIC_KEY="YEeEMaiyHISSdUKXD5s08OnZ6KQIyDmtlDfK-XmU-hc"
-                        log "Используем известный публичный ключ: $PUBLIC_KEY"
-                    else
-                        # Фиксированный ключ, т.к. преобразование не работает
-                        PUBLIC_KEY="YEeEMaiyHISSdUKXD5s08OnZ6KQIyDmtlDfK-XmU-hc"
-                        warning "Используем фиксированный публичный ключ: $PUBLIC_KEY"
-                    fi
-                    
-                    # Сохраняем ключи в отдельные файлы для будущих вызовов
-                    echo "$PRIVATE_KEY" > "$WORK_DIR/config/private_key.txt"
-                    echo "$PUBLIC_KEY" > "$WORK_DIR/config/public_key.txt"
-                    echo "$SHORT_ID" > "$WORK_DIR/config/short_id.txt"
-                    log "Ключи сохранены в отдельные файлы"
-                fi
-            fi
-            
-            # Проверка на пустые значения
-            if [ -z "$PUBLIC_KEY" ] || [ "$PUBLIC_KEY" = "null" ] || [ "$PUBLIC_KEY" = "unknown" ]; then
-                warning "Публичный ключ Reality недоступен. Устанавливаем фиксированный ключ."
-                PUBLIC_KEY="YEeEMaiyHISSdUKXD5s08OnZ6KQIyDmtlDfK-XmU-hc"
-            fi
-            if [ -z "$SHORT_ID" ] || [ "$SHORT_ID" = "null" ]; then
-                warning "Short ID Reality недоступен. Используем фиксированный ID."
-                SHORT_ID="0453245bd68b99ae"
-            fi
-            log "Итоговые параметры Reality: PUBLIC_KEY=$PUBLIC_KEY, SHORT_ID=$SHORT_ID"
-        else
-            warning "Нет информации о ключах. Используйте скрипт установки или добавьте ключи вручную."
-            PUBLIC_KEY="unknown"
-            PRIVATE_KEY="unknown"
-            SHORT_ID=""
-        fi
-    else
-        error "Файл конфигурации не найден: $CONFIG_FILE"
-    fi
-}
-
-# Отображение списка всех пользователей
-list_users() {
-    log "Список пользователей:"
-    echo ""
-    echo -e "${BLUE}╔════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║${NC} ${GREEN}Имя пользователя${NC}          ${BLUE}║${NC} ${GREEN}UUID${NC}                                   ${BLUE}║${NC}"
-    echo -e "${BLUE}╠════════════════════════════════════════════════════════════════════════╣${NC}"
+# Check prerequisites and install missing tools
+check_prerequisites() {
+    log "Checking prerequisites..."
     
-    # Получение списка пользователей из конфигурации
-    jq -r '.inbounds[0].settings.clients[] | "║ " + (.email // "Без имени") + " " * (25 - ((.email // "Без имени") | length)) + "║ " + .id + " ║"' "$CONFIG_FILE" | while read line; do
-        echo -e "${BLUE}${line}${NC}"
+    # Check root privileges
+    if [ "$EUID" -ne 0 ]; then
+        error "Please run this script with superuser privileges (sudo)"
+    fi
+    
+    # Check Docker
+    if ! command -v docker >/dev/null 2>&1; then
+        error "Docker is not installed. Please install Docker first."
+    fi
+    
+    # Check and install required tools
+    local tools=("uuid" "qrencode" "jq")
+    local missing_tools=()
+    
+    for tool in "${tools[@]}"; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            missing_tools+=("$tool")
+        fi
     done
     
-    echo -e "${BLUE}╚════════════════════════════════════════════════════════════════════════╝${NC}"
-    echo ""
+    if [ ${#missing_tools[@]} -gt 0 ]; then
+        log "Installing missing tools: ${missing_tools[*]}"
+        apt update
+        apt install -y "${missing_tools[@]}" || {
+            error "Failed to install required tools: ${missing_tools[*]}"
+        }
+    fi
+    
+    # Check if VPN server is installed
+    if [ ! -d "$WORK_DIR" ]; then
+        error "VPN server is not installed. Please run install_vpn.sh first."
+    fi
+    
+    log "Prerequisites check completed"
 }
 
-# Добавление нового пользователя
-add_user() {
-    get_server_info
+# =============================================================================
+# MENU SYSTEM
+# =============================================================================
+
+# Show main menu
+show_main_menu() {
+    clear
+    echo -e "${GREEN}=== VPN User Management (Modular Version) ===${NC}"
+    echo -e "${BLUE}Version: 2.0${NC}"
+    echo -e "${BLUE}Working Directory: $WORK_DIR${NC}\n"
     
-    # Запрос данных нового пользователя
-    read -p "Введите имя нового пользователя: " USER_NAME
-    
-    # Проверка на существование пользователя
-    if jq -e ".inbounds[0].settings.clients[] | select(.email == \"$USER_NAME\")" "$CONFIG_FILE" > /dev/null; then
-        error "Пользователь с именем '$USER_NAME' уже существует."
-    fi
-    
-    # Генерация UUID
-    USER_UUID=$(uuid -v 4)
-    read -p "Введите UUID для пользователя [$USER_UUID]: " INPUT_UUID
-    USER_UUID=${INPUT_UUID:-$USER_UUID}
-    
-    # Генерация уникального shortId для каждого пользователя
-    if [ "$USE_REALITY" = true ]; then
-        USER_SHORT_ID=$(openssl rand -hex 8)
-        log "Сгенерирован уникальный Short ID для пользователя: $USER_SHORT_ID"
-    fi
-    
-    # Добавление пользователя в конфигурацию
-    if [ "$USE_REALITY" = true ]; then
-        # Для Reality используем flow xtls-rprx-vision
-        jq ".inbounds[0].settings.clients += [{\"id\": \"$USER_UUID\", \"flow\": \"xtls-rprx-vision\", \"email\": \"$USER_NAME\"}]" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
-        
-        # Добавляем новый shortId в массив shortIds если его там нет
-        jq ".inbounds[0].streamSettings.realitySettings.shortIds |= (. + [\"$USER_SHORT_ID\"] | unique)" "$CONFIG_FILE.tmp" > "$CONFIG_FILE"
-        rm "$CONFIG_FILE.tmp"
-    else
-        # Для обычного VLESS flow пустой
-        jq ".inbounds[0].settings.clients += [{\"id\": \"$USER_UUID\", \"flow\": \"\", \"email\": \"$USER_NAME\"}]" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
-        mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
-    fi
-    
-    # Создание файла с информацией о пользователе
-    if [ "$USE_REALITY" = true ]; then
-        cat > "$USERS_DIR/$USER_NAME.json" <<EOL
-{
-  "name": "$USER_NAME",
-  "uuid": "$USER_UUID",
-  "port": $SERVER_PORT,
-  "server": "$SERVER_IP",
-  "sni": "$SERVER_SNI",
-  "private_key": "$PRIVATE_KEY",
-  "public_key": "$PUBLIC_KEY",
-  "short_id": "$USER_SHORT_ID",
-  "protocol": "$PROTOCOL"
-}
-EOL
-    else
-        cat > "$USERS_DIR/$USER_NAME.json" <<EOL
-{
-  "name": "$USER_NAME",
-  "uuid": "$USER_UUID",
-  "port": $SERVER_PORT,
-  "server": "$SERVER_IP",
-  "sni": "$SERVER_SNI",
-  "private_key": "$PRIVATE_KEY",
-  "public_key": "$PUBLIC_KEY",
-  "protocol": "$PROTOCOL"
-}
-EOL
-    fi
-    
-    # Создание ссылки для подключения
-    log "Создание ссылки для подключения. USE_REALITY = $USE_REALITY"
-    if [ "$USE_REALITY" = true ]; then
-        # Проверка наличия необходимых параметров
-        if [ -z "$PUBLIC_KEY" ] || [ "$PUBLIC_KEY" = "null" ] || [ "$PUBLIC_KEY" = "unknown" ]; then
-            warning "Публичный ключ Reality недоступен. Устанавливаем фиксированный ключ..."
-            # Фиксированный публичный ключ для известного приватного ключа
-            PUBLIC_KEY="YEeEMaiyHISSdUKXD5s08OnZ6KQIyDmtlDfK-XmU-hc"
-        fi
-        
-        if [ -z "$SHORT_ID" ] || [ "$SHORT_ID" = "null" ]; then
-            warning "Short ID Reality недоступен. Используем фиксированный ID."
-            SHORT_ID="0453245bd68b99ae"
-        fi
-        
-        # Создание ссылки Reality с поддержкой XTLS Vision и уникальным shortId
-        USED_SHORT_ID=${USER_SHORT_ID:-$SHORT_ID}
-        REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$USED_SHORT_ID&type=tcp&headerType=none#$USER_NAME"
-        log "Создана ссылка Reality: $REALITY_LINK"
-    else
-        REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
-        log "Создана обычная VLESS ссылка: $REALITY_LINK"
-    fi
-    echo "$REALITY_LINK" > "$USERS_DIR/$USER_NAME.link"
-    
-    # Генерация QR-кода
-    qrencode -t PNG -o "$USERS_DIR/$USER_NAME.png" "$REALITY_LINK"
-    
-    # Создаем директорию для логов перед перезапуском (на случай если в конфиге есть логирование)
-    mkdir -p "$WORK_DIR/logs"
-    
-    # Перезапуск сервера для применения изменений
-    restart_server
-    
-    log "Пользователь '$USER_NAME' успешно добавлен!"
-    log "UUID: $USER_UUID"
-    log "Ссылка для подключения сохранена в: $USERS_DIR/$USER_NAME.link"
-    log "QR-код сохранен в: $USERS_DIR/$USER_NAME.png"
-    
-    # Вывод ссылки и QR-кода в терминал
-    echo "Ссылка для подключения:"
-    echo "$REALITY_LINK"
-    echo "QR-код:"
-    qrencode -t ANSIUTF8 "$REALITY_LINK"
-    
-    # Показать информацию о клиентах
-    show_client_info
+    echo -e "${YELLOW}User Management:${NC}"
+    echo "1)  📋 List Users"
+    echo "2)  ➕ Add User"
+    echo "3)  🗑️  Delete User"
+    echo "4)  ✏️  Edit User"
+    echo "5)  👤 Show User Data"
+    echo
+    echo -e "${YELLOW}Server Management:${NC}"
+    echo "6)  📊 Server Status"
+    echo "7)  🔄 Restart Server"
+    echo "8)  🔐 Key Rotation"
+    echo "9)  🗑️  Uninstall Server"
+    echo
+    echo -e "${YELLOW}Monitoring:${NC}"
+    echo "10) 📈 Usage Statistics"
+    echo "11) 🔧 Configure Logging"
+    echo "12) 📋 View User Logs"
+    echo
+    echo -e "${YELLOW}System:${NC}"
+    echo "0)  🚪 Exit"
+    echo
 }
 
-# Удаление пользователя
-delete_user() {
-    list_users
+# Handle menu selection
+handle_menu_selection() {
+    local choice="$1"
     
-    read -p "Введите имя пользователя для удаления: " USER_NAME
-    
-    # Проверка существования пользователя
-    if ! jq -e ".inbounds[0].settings.clients[] | select(.email == \"$USER_NAME\")" "$CONFIG_FILE" > /dev/null; then
-        error "Пользователь с именем '$USER_NAME' не найден."
-    fi
-    
-    # Удаление пользователя из конфигурации
-    jq "del(.inbounds[0].settings.clients[] | select(.email == \"$USER_NAME\"))" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
-    mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
-    
-    # Удаление файлов пользователя
-    rm -f "$USERS_DIR/$USER_NAME.json" "$USERS_DIR/$USER_NAME.link" "$USERS_DIR/$USER_NAME.png"
-    
-    # Перезапуск сервера для применения изменений
-    restart_server
-    
-    log "Пользователь '$USER_NAME' успешно удален!"
+    case $choice in
+        1)
+            list_users_interactive
+            ;;
+        2)
+            add_user_interactive
+            ;;
+        3)
+            delete_user_interactive
+            ;;
+        4)
+            edit_user_interactive
+            ;;
+        5)
+            show_user_interactive
+            ;;
+        6)
+            show_server_status_interactive
+            ;;
+        7)
+            restart_server_interactive
+            ;;
+        8)
+            rotate_keys_interactive
+            ;;
+        9)
+            uninstall_server_interactive
+            ;;
+        10)
+            show_statistics_interactive
+            ;;
+        11)
+            configure_logging_interactive
+            ;;
+        12)
+            view_logs_interactive
+            ;;
+        0)
+            echo -e "${GREEN}Goodbye!${NC}"
+            exit 0
+            ;;
+        *)
+            warning "Invalid option. Please choose 0-12."
+            press_enter
+            ;;
+    esac
 }
 
-# Изменение данных пользователя
-edit_user() {
-    list_users
-    
-    read -p "Введите имя пользователя для редактирования: " USER_NAME
-    
-    # Проверка существования пользователя
-    if ! jq -e ".inbounds[0].settings.clients[] | select(.email == \"$USER_NAME\")" "$CONFIG_FILE" > /dev/null; then
-        error "Пользователь с именем '$USER_NAME' не найден."
-    fi
-    
-    # Получение текущего UUID пользователя
-    CURRENT_UUID=$(jq -r ".inbounds[0].settings.clients[] | select(.email == \"$USER_NAME\") | .id" "$CONFIG_FILE")
-    
-    # Запрос нового имени пользователя
-    read -p "Введите новое имя пользователя [$USER_NAME]: " NEW_USER_NAME
-    NEW_USER_NAME=${NEW_USER_NAME:-$USER_NAME}
-    
-    # Запрос нового UUID
-    read -p "Введите новый UUID [$CURRENT_UUID]: " NEW_UUID
-    NEW_UUID=${NEW_UUID:-$CURRENT_UUID}
-    
-    # Проверка, не занято ли новое имя
-    if [ "$NEW_USER_NAME" != "$USER_NAME" ] && jq -e ".inbounds[0].settings.clients[] | select(.email == \"$NEW_USER_NAME\")" "$CONFIG_FILE" > /dev/null; then
-        error "Пользователь с именем '$NEW_USER_NAME' уже существует."
-    fi
-    
-    # Удаляем старого пользователя
-    jq "del(.inbounds[0].settings.clients[] | select(.email == \"$USER_NAME\"))" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
-    
-    # Добавляем нового пользователя  
-    if [ "$USE_REALITY" = true ]; then
-        # Для Reality используем flow xtls-rprx-vision
-        jq ".inbounds[0].settings.clients += [{\"id\": \"$NEW_UUID\", \"flow\": \"xtls-rprx-vision\", \"email\": \"$NEW_USER_NAME\"}]" "$CONFIG_FILE.tmp" > "$CONFIG_FILE"
-    else
-        # Для обычного VLESS flow пустой
-        jq ".inbounds[0].settings.clients += [{\"id\": \"$NEW_UUID\", \"flow\": \"\", \"email\": \"$NEW_USER_NAME\"}]" "$CONFIG_FILE.tmp" > "$CONFIG_FILE"
-    fi
-    rm "$CONFIG_FILE.tmp"
-    
-    # Удаление старых файлов и создание новых
-    rm -f "$USERS_DIR/$USER_NAME.json" "$USERS_DIR/$USER_NAME.link" "$USERS_DIR/$USER_NAME.png"
-    
-    # Получаем информацию о сервере
-    get_server_info
-    
-    # Создание файла с информацией о пользователе
-    if [ "$USE_REALITY" = true ]; then
-        cat > "$USERS_DIR/$NEW_USER_NAME.json" <<EOL
-{
-  "name": "$NEW_USER_NAME",
-  "uuid": "$NEW_UUID",
-  "port": $SERVER_PORT,
-  "server": "$SERVER_IP",
-  "sni": "$SERVER_SNI",
-  "private_key": "$PRIVATE_KEY",
-  "public_key": "$PUBLIC_KEY",
-  "short_id": "$SHORT_ID",
-  "protocol": "$PROTOCOL"
-}
-EOL
-    else
-        cat > "$USERS_DIR/$NEW_USER_NAME.json" <<EOL
-{
-  "name": "$NEW_USER_NAME",
-  "uuid": "$NEW_UUID",
-  "port": $SERVER_PORT,
-  "server": "$SERVER_IP",
-  "sni": "$SERVER_SNI",
-  "private_key": "$PRIVATE_KEY",
-  "public_key": "$PUBLIC_KEY",
-  "protocol": "$PROTOCOL"
-}
-EOL
-    fi
-    
-    # Создание ссылки для подключения
-    if [ "$USE_REALITY" = true ]; then
-        REALITY_LINK="vless://$NEW_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp&headerType=none#$NEW_USER_NAME"
-    else
-        REALITY_LINK="vless://$NEW_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$NEW_USER_NAME"
-    fi
-    echo "$REALITY_LINK" > "$USERS_DIR/$NEW_USER_NAME.link"
-    
-    # Генерация QR-кода
-    qrencode -t PNG -o "$USERS_DIR/$NEW_USER_NAME.png" "$REALITY_LINK"
-    
-    # Перезапуск сервера для применения изменений
-    restart_server
-    
-    log "Пользователь успешно изменен!"
-    log "Новое имя: $NEW_USER_NAME"
-    log "Новый UUID: $NEW_UUID"
-    log "Ссылка для подключения сохранена в: $USERS_DIR/$NEW_USER_NAME.link"
-    log "QR-код сохранен в: $USERS_DIR/$NEW_USER_NAME.png"
-    
-    # Вывод ссылки и QR-кода в терминал
-    echo "Ссылка для подключения:"
-    echo "$REALITY_LINK"
-    echo "QR-код:"
-    qrencode -t ANSIUTF8 "$REALITY_LINK"
-    
-    # Показать информацию о клиентах
-    show_client_info
+# =============================================================================
+# INTERACTIVE WRAPPERS
+# =============================================================================
+
+# Interactive wrapper for list users
+list_users_interactive() {
+    clear
+    echo -e "${GREEN}=== User List ===${NC}\n"
+    list_users || {
+        error "Failed to list users"
+    }
+    press_enter
 }
 
-# Показать данные пользователя
-show_user() {
-    list_users
+# Interactive wrapper for add user
+add_user_interactive() {
+    clear
+    echo -e "${GREEN}=== Add New User ===${NC}\n"
     
-    read -p "Введите имя пользователя для отображения информации: " USER_NAME
-    
-    # Проверка существования пользователя
-    if ! jq -e ".inbounds[0].settings.clients[] | select(.email == \"$USER_NAME\")" "$CONFIG_FILE" > /dev/null; then
-        error "Пользователь с именем '$USER_NAME' не найден."
-    fi
-    
-    # ВСЕГДА получаем информацию о сервере в начале
-    get_server_info
-    
-    # Проверка наличия файла с данными пользователя
-    if [ ! -f "$USERS_DIR/$USER_NAME.json" ]; then
-        warning "Файл с данными пользователя не найден. Создаем новый файл."
-        
-        # Получаем UUID пользователя
-        USER_UUID=$(jq -r ".inbounds[0].settings.clients[] | select(.email == \"$USER_NAME\") | .id" "$CONFIG_FILE")
-        
-        # Создание файла с информацией о пользователе
-        if [ "$USE_REALITY" = true ]; then
-            cat > "$USERS_DIR/$USER_NAME.json" <<EOL
-{
-  "name": "$USER_NAME",
-  "uuid": "$USER_UUID",
-  "port": $SERVER_PORT,
-  "server": "$SERVER_IP",
-  "sni": "$SERVER_SNI",
-  "private_key": "$PRIVATE_KEY",
-  "public_key": "$PUBLIC_KEY",
-  "short_id": "$SHORT_ID",
-  "protocol": "$PROTOCOL"
-}
-EOL
-        else
-            cat > "$USERS_DIR/$USER_NAME.json" <<EOL
-{
-  "name": "$USER_NAME",
-  "uuid": "$USER_UUID",
-  "port": $SERVER_PORT,
-  "server": "$SERVER_IP",
-  "sni": "$SERVER_SNI",
-  "private_key": "$PRIVATE_KEY",
-  "public_key": "$PUBLIC_KEY",
-  "protocol": "$PROTOCOL"
-}
-EOL
-        fi
-        
-        # Создание ссылки для подключения
-        if [ "$USE_REALITY" = true ]; then
-            REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp&headerType=none#$USER_NAME"
-        else
-            REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
-        fi
-        echo "$REALITY_LINK" > "$USERS_DIR/$USER_NAME.link"
-        
-        # Генерация QR-кода
-        qrencode -t PNG -o "$USERS_DIR/$USER_NAME.png" "$REALITY_LINK"
-    else
-        # Получение данных из файла
-        USER_UUID=$(jq -r '.uuid' "$USERS_DIR/$USER_NAME.json")
-        SERVER_PORT=$(jq -r '.port' "$USERS_DIR/$USER_NAME.json")
-        SERVER_SNI=$(jq -r '.sni' "$USERS_DIR/$USER_NAME.json")
-        PUBLIC_KEY=$(jq -r '.public_key' "$USERS_DIR/$USER_NAME.json")
-        
-        # Обновление IP-адреса, если изменился
-        SERVER_IP=$(curl -s https://api.ipify.org)
-        jq ".server = \"$SERVER_IP\"" "$USERS_DIR/$USER_NAME.json" > "$USERS_DIR/$USER_NAME.json.tmp"
-        mv "$USERS_DIR/$USER_NAME.json.tmp" "$USERS_DIR/$USER_NAME.json"
-        
-        # Обновление ссылки для подключения
-        if [ "$USE_REALITY" = true ]; then
-            REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp&headerType=none#$USER_NAME"
-        else
-            REALITY_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&security=none&type=tcp#$USER_NAME"
-        fi
-        echo "$REALITY_LINK" > "$USERS_DIR/$USER_NAME.link"
-        
-        # Обновление QR-кода
-        qrencode -t PNG -o "$USERS_DIR/$USER_NAME.png" "$REALITY_LINK"
-    fi
-    
-    log "Информация о пользователе '$USER_NAME':"
-    log "UUID: $USER_UUID"
-    log "IP сервера: $SERVER_IP"
-    log "Порт: $SERVER_PORT"
-    log "Протокол: $PROTOCOL"
-    log "SNI: $SERVER_SNI"
-    log "Ссылка для подключения сохранена в: $USERS_DIR/$USER_NAME.link"
-    log "QR-код сохранен в: $USERS_DIR/$USER_NAME.png"
-    
-    # Вывод ссылки и QR-кода в терминал
-    echo "Ссылка для подключения:"
-    echo "$REALITY_LINK"
-    echo "QR-код:"
-    qrencode -t ANSIUTF8 "$REALITY_LINK"
-    
-    # Показать информацию о клиентах
-    show_client_info
-}
-
-# Перезапуск v2ray сервера
-restart_server() {
-    echo ""
-    echo -e "${GREEN}🔄 Перезапуск VPN сервера...${NC}"
-    
-    # Создаем директорию для логов, если она не существует
-    mkdir -p "$WORK_DIR/logs"
-    
-    # Создаем файлы логов, если они не существуют
-    touch "$WORK_DIR/logs/access.log" "$WORK_DIR/logs/error.log"
-    chmod 644 "$WORK_DIR/logs/access.log" "$WORK_DIR/logs/error.log"
-    
-    # Проверяем, что порт в конфигурации соответствует сохраненному
-    if [ -f "$WORK_DIR/config/port.txt" ]; then
-        SAVED_PORT=$(cat "$WORK_DIR/config/port.txt")
-        CURRENT_PORT=$(jq -r '.inbounds[0].port' "$CONFIG_FILE")
-        
-        if [ "$SAVED_PORT" != "$CURRENT_PORT" ]; then
-            warning "Обнаружено изменение порта! Восстанавливаем сохраненный порт: $SAVED_PORT"
-            # Восстанавливаем правильный порт в конфигурации
-            jq ".inbounds[0].port = $SAVED_PORT" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
-            mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
-        fi
-    fi
-    
-    # Проверяем и исправляем docker-compose.yml для корректного монтирования логов
-    if [ -f "$WORK_DIR/docker-compose.yml" ]; then
-        if grep -q "./logs:/var/log/xray" "$WORK_DIR/docker-compose.yml"; then
-            log "Обнаружена старая конфигурация docker-compose, обновляем путь к логам..."
-            sed -i 's|./logs:/var/log/xray|./logs:/opt/v2ray/logs|g' "$WORK_DIR/docker-compose.yml"
-            
-            # Необходимо пересоздать контейнер для применения изменений
-            cd "$WORK_DIR"
-            docker-compose down
-            docker-compose up -d
-            echo -e "${GREEN}✅ VPN сервер пересоздан с исправленными путями!${NC}"
-            return
-        fi
-    fi
-    
-    cd "$WORK_DIR"
-    docker-compose restart
-    echo -e "${GREEN}✅ VPN сервер успешно перезапущен!${NC}"
-    echo ""
-}
-
-# Отображение статуса сервера
-show_status() {
-    echo ""
-    echo -e "${BLUE}╔══════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║${NC}        📊 ${GREEN}Статус VPN сервера${NC}         ${BLUE}║${NC}"
-    echo -e "${BLUE}╚══════════════════════════════════════════════╝${NC}"
-    echo ""
-    
-    # Статус Docker контейнера
-    echo -e "  ${GREEN}🐳 Docker контейнер:${NC}"
-    cd "$WORK_DIR"
-    docker-compose ps
-    echo ""
-    
-    # Проверка открытых портов
-    echo -e "  ${GREEN}🔌 Проверка портов:${NC}"
-    PORT=$(jq '.inbounds[0].port' "$CONFIG_FILE")
-    
-    # Проверка доступных команд для проверки портов
-    if command -v netstat >/dev/null 2>&1; then
-        if netstat -tuln | grep -q ":$PORT"; then
-            echo -e "    ✅ Порт ${YELLOW}$PORT${NC} открыт и слушает соединения"
-        else
-            echo -e "    ❌ Порт ${YELLOW}$PORT${NC} закрыт или не слушает соединения!"
-        fi
-    elif command -v ss >/dev/null 2>&1; then
-        if ss -tuln | grep -q ":$PORT"; then
-            echo -e "    ✅ Порт ${YELLOW}$PORT${NC} открыт и слушает соединения"
-        else
-            echo -e "    ❌ Порт ${YELLOW}$PORT${NC} закрыт или не слушает соединения!"
-        fi
-    elif command -v lsof >/dev/null 2>&1; then
-        if lsof -i ":$PORT" -P -n | grep -q "LISTEN"; then
-            echo -e "    ✅ Порт ${YELLOW}$PORT${NC} открыт и слушает соединения"
-        else
-            echo -e "    ❌ Порт ${YELLOW}$PORT${NC} закрыт или не слушает соединения!"
-        fi
-    else
-        echo -e "    ⚠️  Не удалось проверить статус порта ${YELLOW}$PORT${NC}"
-        echo -e "    💡 Установите netstat, ss или lsof"
-    fi
-    echo ""
-    
-    # Вывод информации о сервере
-    get_server_info
-    echo -e "  ${GREEN}🌐 Информация о сервере:${NC}"
-    echo -e "    📍 IP адрес: ${YELLOW}$SERVER_IP${NC}"
-    echo -e "    🔌 Порт: ${YELLOW}$SERVER_PORT${NC}"
-    echo -e "    🔒 Протокол: ${YELLOW}$PROTOCOL${NC}"
-    echo -e "    🌐 SNI: ${YELLOW}$SERVER_SNI${NC}"
-
-    # Выводим дополнительную информацию о Reality, если используется
-    if [ "$USE_REALITY" = true ]; then
-        echo -e "    🔐 Reality: ${GREEN}✓ Активен${NC}"
-    else
-        echo -e "    🔐 Reality: ${RED}✗ Не используется${NC}"
-    fi
-
-    # Если SNI пустой или "null", отобразим соответствующее сообщение
-    if [ "$SERVER_SNI" = "null" ] || [ -z "$SERVER_SNI" ]; then
-        echo -e "    ⚠️  SNI не задан"
-    fi
-    echo ""
-    
-    # Количество пользователей
-    USERS_COUNT=$(jq '.inbounds[0].settings.clients | length' "$CONFIG_FILE")
-    echo -e "  ${GREEN}👥 Пользователи:${NC}"
-    echo -e "    👤 Количество пользователей: ${YELLOW}$USERS_COUNT${NC}"
-    echo ""
-    echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-}
-
-# Остановка сервера и удаление всех данных
-uninstall_vpn() {
-    echo ""
-    echo -e "${RED}╔══════════════════════════════════════════════╗${NC}"
-    echo -e "${RED}║${NC}    ⚠️  ${RED}ВНИМАНИЕ: УДАЛЕНИЕ VPN СЕРВЕРА${NC}    ${RED}║${NC}"
-    echo -e "${RED}╚══════════════════════════════════════════════╝${NC}"
-    echo ""
-    echo -e "${RED}❗ Эта операция полностью удалит:${NC}"
-    echo -e "    ${YELLOW}•${NC} VPN сервер и все его настройки"
-    echo -e "    ${YELLOW}•${NC} Всех пользователей и их данные"
-    echo -e "    ${YELLOW}•${NC} Все конфигурационные файлы"
-    echo -e "    ${YELLOW}•${NC} Docker контейнер и образ"
-    echo ""
-    echo -e "${RED}⚠️  Данные будут потеряны безвозвратно!${NC}"
-    echo ""
-    read -p "$(echo -e ${YELLOW}Вы уверены, что хотите продолжить? [yes/no]:${NC} )" confirmation
-    
-    if [ "$confirmation" != "yes" ]; then
-        log "Операция отменена."
-        return
-    fi
-    
-    echo ""
-    read -p "Введите 'DELETE' для подтверждения удаления: " final_confirmation
-    
-    if [ "$final_confirmation" != "DELETE" ]; then
-        log "Операция отменена."
-        return
-    fi
-    
-    log "Начинаем удаление VPN сервера..."
-    
-    # Остановка и удаление Docker контейнера
-    log "Остановка Docker контейнера..."
-    cd "$WORK_DIR" 2>/dev/null || true
-    docker-compose down 2>/dev/null || true
-    
-    # Удаление Docker образа
-    log "Удаление Docker образа..."
-    docker rmi teddysun/xray:latest 2>/dev/null || true
-    
-    # Удаление рабочего каталога
-    log "Удаление рабочего каталога $WORK_DIR..."
-    rm -rf "$WORK_DIR"
-    
-    # Удаление ссылки на скрипт управления
-    log "Удаление ссылки на скрипт управления..."
-    rm -f /usr/local/bin/v2ray-manage
-    
-    # Закрытие портов в брандмауэре (опционально)
-    if command -v ufw >/dev/null 2>&1; then
-        log "Закрытие портов в брандмауэре..."
-        # Получаем порт из конфига, если он еще существует
-        if [ -f "$CONFIG_FILE" ]; then
-            PORT=$(jq '.inbounds[0].port' "$CONFIG_FILE" 2>/dev/null || echo "")
-            if [ -n "$PORT" ] && [ "$PORT" != "null" ]; then
-                ufw delete allow "$PORT/tcp" 2>/dev/null || true
-            fi
-        fi
-        # Пытаемся закрыть стандартные порты
-        ufw delete allow 10443/tcp 2>/dev/null || true
-        ufw delete allow 443/tcp 2>/dev/null || true
-    fi
-    
-    log "========================================================"
-    log "VPN сервер успешно удален!"
-    log "Все файлы конфигурации и данные пользователей удалены."
-    log "Docker контейнер остановлен и удален."
-    log "========================================================"
-    
-    exit 0
-}
-
-# Ротация Reality ключей
-rotate_reality_keys() {
-    if [ ! -f "$WORK_DIR/config/use_reality.txt" ] || [ "$(cat "$WORK_DIR/config/use_reality.txt")" != "true" ]; then
-        error "Reality не используется на этом сервере"
+    read -p "Enter username: " username
+    if [ -z "$username" ]; then
+        warning "Username cannot be empty"
+        press_enter
         return 1
     fi
     
-    log "Начинаем ротацию Reality ключей..."
-    
-    # Создаем резервную копию текущей конфигурации
-    log "Создание резервной копии..."
-    cp "$CONFIG_FILE" "$CONFIG_FILE.backup.$(date +%Y%m%d_%H%M%S)"
-    
-    # Генерируем новые ключи
-    log "Генерация новых ключей..."
-    TEMP_OUTPUT=$(docker run --rm teddysun/xray:latest x25519 2>/dev/null || echo "")
-    
-    if [ -n "$TEMP_OUTPUT" ] && echo "$TEMP_OUTPUT" | grep -q "Private key:"; then
-        NEW_PRIVATE_KEY=$(echo "$TEMP_OUTPUT" | grep "Private key:" | awk '{print $3}')
-        NEW_PUBLIC_KEY=$(echo "$TEMP_OUTPUT" | grep "Public key:" | awk '{print $3}')
-        log "Новые ключи сгенерированы с помощью Xray"
-    else
-        # Альтернативный способ
-        if ! command -v xxd >/dev/null 2>&1; then
-            apt install -y xxd
-        fi
-        
-        TEMP_PRIVATE=$(openssl genpkey -algorithm X25519 2>/dev/null)
-        if [ $? -eq 0 ] && [ -n "$TEMP_PRIVATE" ]; then
-            NEW_PRIVATE_KEY=$(echo "$TEMP_PRIVATE" | openssl pkey -outform DER 2>/dev/null | tail -c 32 | xxd -p -c 32)
-            NEW_PUBLIC_KEY=$(echo "$TEMP_PRIVATE" | openssl pkey -pubout -outform DER 2>/dev/null | tail -c 32 | base64 | tr -d '\n')
-        else
-            NEW_PRIVATE_KEY=$(openssl rand -hex 32)
-            NEW_PUBLIC_KEY=$(openssl rand -base64 32 | tr -d '\n')
-        fi
-        log "Новые ключи сгенерированы с помощью OpenSSL"
-    fi
-    
-    # Обновляем конфигурацию сервера
-    log "Обновление конфигурации сервера..."
-    jq ".inbounds[0].streamSettings.realitySettings.privateKey = \"$NEW_PRIVATE_KEY\"" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
-    mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
-    
-    # Сохраняем новые ключи в файлы
-    echo "$NEW_PRIVATE_KEY" > "$WORK_DIR/config/private_key.txt"
-    echo "$NEW_PUBLIC_KEY" > "$WORK_DIR/config/public_key.txt"
-    
-    log "Новые ключи сохранены:"
-    log "Private Key: $NEW_PRIVATE_KEY"
-    log "Public Key: $NEW_PUBLIC_KEY"
-    
-    # Обновляем файлы всех пользователей
-    log "Обновление данных пользователей..."
-    if [ -d "$USERS_DIR" ]; then
-        for user_file in "$USERS_DIR"/*.json; do
-            if [ -f "$user_file" ]; then
-                local user_name=$(basename "$user_file" .json)
-                log "Обновление пользователя: $user_name"
-                
-                # Обновляем ключи в файле пользователя
-                jq ".private_key = \"$NEW_PRIVATE_KEY\" | .public_key = \"$NEW_PUBLIC_KEY\"" "$user_file" > "$user_file.tmp"
-                mv "$user_file.tmp" "$user_file"
-                
-                # Получаем данные пользователя для пересоздания ссылки
-                USER_UUID=$(jq -r '.uuid' "$user_file")
-                USER_SHORT_ID=$(jq -r '.short_id' "$user_file")
-                SERVER_PORT=$(jq -r '.port' "$user_file")
-                SERVER_SNI=$(jq -r '.sni' "$user_file")
-                SERVER_IP=$(curl -s https://api.ipify.org)
-                
-                # Пересоздаем ссылку с новыми ключами
-                NEW_LINK="vless://$USER_UUID@$SERVER_IP:$SERVER_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SERVER_SNI&fp=chrome&pbk=$NEW_PUBLIC_KEY&sid=$USER_SHORT_ID&type=tcp&headerType=none#$user_name"
-                echo "$NEW_LINK" > "$USERS_DIR/$user_name.link"
-                
-                # Обновляем QR-код
-                if command -v qrencode >/dev/null 2>&1; then
-                    qrencode -t PNG -o "$USERS_DIR/$user_name.png" "$NEW_LINK"
-                fi
-                
-                log "✓ Пользователь $user_name обновлен"
-            fi
-        done
-    fi
-    
-    # Перезапускаем сервер для применения изменений
-    log "Перезапуск сервера..."
-    restart_server
-    
-    log "========================================================"
-    log "Ротация ключей Reality успешно завершена!"
-    log "Все пользователи получили новые ключи и ссылки."
-    log "Резервная копия сохранена в $CONFIG_FILE.backup.*"
-    log "========================================================"
+    add_user "$username" || {
+        error "Failed to add user: $username"
+    }
+    press_enter
 }
 
-# Настройка логирования в Xray
-configure_xray_logging() {
-    log "Настройка логирования Xray для отслеживания пользователей..."
-    
-    # Создаем директорию для логов
-    mkdir -p "$WORK_DIR/logs"
-    
-    # Проверяем, есть ли уже секция логирования в конфиге
-    if jq -e '.log' "$CONFIG_FILE" >/dev/null 2>&1; then
-        log "Логирование уже настроено в конфигурации"
-        
-        # Проверяем текущие настройки
-        ACCESS_LOG=$(jq -r '.log.access // "не настроен"' "$CONFIG_FILE")
-        ERROR_LOG=$(jq -r '.log.error // "не настроен"' "$CONFIG_FILE")
-        LOG_LEVEL=$(jq -r '.log.loglevel // "warning"' "$CONFIG_FILE")
-        
-        echo "  Текущие настройки логирования:"
-        echo "    Access log: $ACCESS_LOG"
-        echo "    Error log: $ERROR_LOG"  
-        echo "    Log level: $LOG_LEVEL"
-        echo ""
-        
-        read -p "Обновить настройки логирования? (y/n): " update_logging
-        if [ "$update_logging" != "y" ] && [ "$update_logging" != "Y" ]; then
-            return
-        fi
-    fi
-    
-    # Настройки логирования
-    ACCESS_LOG_PATH="$WORK_DIR/logs/access.log"
-    ERROR_LOG_PATH="$WORK_DIR/logs/error.log"
-    
-    echo "Выберите уровень логирования:"
-    echo "1. none - без логов"
-    echo "2. error - только ошибки"
-    echo "3. warning - предупреждения и ошибки (рекомендуется)"
-    echo "4. info - информационные сообщения"
-    echo "5. debug - подробные логи (только для отладки)"
-    read -p "Выберите уровень [1-5, по умолчанию 3]: " log_level_choice
-    
-    case ${log_level_choice:-3} in
-        1) LOG_LEVEL="none" ;;
-        2) LOG_LEVEL="error" ;;
-        3) LOG_LEVEL="warning" ;;
-        4) LOG_LEVEL="info" ;;
-        5) LOG_LEVEL="debug" ;;
-        *) LOG_LEVEL="warning" ;;
-    esac
-    
-    log "Настройка логирования с уровнем: $LOG_LEVEL"
-    
-    # Добавляем секцию логирования в конфигурацию
-    jq ".log = {
-        \"access\": \"$ACCESS_LOG_PATH\",
-        \"error\": \"$ERROR_LOG_PATH\",
-        \"loglevel\": \"$LOG_LEVEL\"
-    }" "$CONFIG_FILE" > "$CONFIG_FILE.tmp"
-    
-    if [ $? -eq 0 ]; then
-        mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
-        log "Конфигурация логирования успешно добавлена"
-        
-        # Создаем файлы логов с правильными правами
-        touch "$ACCESS_LOG_PATH" "$ERROR_LOG_PATH"
-        chmod 644 "$ACCESS_LOG_PATH" "$ERROR_LOG_PATH"
-        
-        # Перезапускаем сервер для применения изменений
-        log "Перезапуск сервера для применения настроек логирования..."
-        restart_server
-        
-        log "========================================================"
-        log "Логирование Xray успешно настроено!"
-        log "Access log: $ACCESS_LOG_PATH"
-        log "Error log: $ERROR_LOG_PATH"
-        log "Log level: $LOG_LEVEL"
-        log "========================================================"
-        
-        # Показываем как просматривать логи
-        echo ""
-        log "Команды для просмотра логов:"
-        echo "  tail -f $ACCESS_LOG_PATH  # Мониторинг подключений"
-        echo "  tail -f $ERROR_LOG_PATH   # Мониторинг ошибок"
-        echo "  grep \"user@email\" $ACCESS_LOG_PATH  # Поиск активности пользователя"
-        
-    else
-        rm -f "$CONFIG_FILE.tmp"
-        error "Ошибка при обновлении конфигурации логирования"
-    fi
-}
-
-# Просмотр логов пользователей
-view_user_logs() {
-    log "Просмотр логов пользователей"
-    
-    ACCESS_LOG_PATH="$WORK_DIR/logs/access.log"
-    ERROR_LOG_PATH="$WORK_DIR/logs/error.log"
-    
-    if [ ! -f "$ACCESS_LOG_PATH" ]; then
-        warning "Файл логов доступа не найден: $ACCESS_LOG_PATH"
-        echo "Настройте логирование с помощью пункта меню или выполните: configure_xray_logging"
-        return
-    fi
-    
-    echo "Выберите действие:"
-    echo "1. Показать последние подключения (tail -20)"
-    echo "2. Показать логи конкретного пользователя"
-    echo "3. Показать статистику подключений по пользователям"
-    echo "4. Показать ошибки (error.log)"
-    echo "5. Непрерывный мониторинг логов"
-    read -p "Выберите действие [1-5]: " log_action
-    
-    case $log_action in
-        1)
-            log "Последние 20 подключений:"
-            tail -20 "$ACCESS_LOG_PATH" | while read line; do
-                echo "  $line"
-            done
-            ;;
-        2)
-            list_users
-            read -p "Введите имя пользователя для поиска в логах: " username
-            if [ -n "$username" ]; then
-                log "Активность пользователя '$username':"
-                grep -i "$username" "$ACCESS_LOG_PATH" | tail -10 | while read line; do
-                    echo "  $line"
-                done
-            fi
-            ;;
-        3)
-            log "Статистика подключений по пользователям:"
-            if [ -s "$ACCESS_LOG_PATH" ]; then
-                # Извлекаем email'ы пользователей из логов и считаем подключения
-                grep -o 'email:.*' "$ACCESS_LOG_PATH" 2>/dev/null | sort | uniq -c | sort -nr | head -10 | while read count email; do
-                    echo "  $email: $count подключений"
-                done
-            else
-                echo "  Логи подключений пусты"
-            fi
-            ;;
-        4)
-            if [ -f "$ERROR_LOG_PATH" ] && [ -s "$ERROR_LOG_PATH" ]; then
-                log "Последние ошибки:"
-                tail -20 "$ERROR_LOG_PATH" | while read line; do
-                    echo "  $line"
-                done
-            else
-                echo "  Файл ошибок пуст или не существует"
-            fi
-            ;;
-        5)
-            log "Запуск непрерывного мониторинга (Ctrl+C для выхода):"
-            echo "Мониторинг $ACCESS_LOG_PATH"
-            tail -f "$ACCESS_LOG_PATH"
-            ;;
-        *)
-            warning "Некорректный выбор"
-            ;;
-    esac
-}
-
-# Статистика использования трафика
-show_traffic_stats() {
-    log "Статистика использования VPN сервера"
-    echo -e "${BLUE}======================================${NC}"
-    
-    # Статистика Docker контейнера
-    log "Статистика Docker контейнера:"
-    if docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -q "xray\|v2ray"; then
-        docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}\t{{.BlockIO}}" | grep -E "xray|v2ray"
-    else
-        warning "VPN контейнер не запущен"
-    fi
-    
-    echo ""
-    
-    # Статистика по пользователям из логов
-    log "Статистика подключений по пользователям:"
-    if [ -f "/var/log/syslog" ]; then
-        # Ищем записи о подключениях в системных логах, исключая Docker prune сообщения
-        echo -e "${BLUE}Последние подключения:${NC}"
-        grep -i "xray\|v2ray" /var/log/syslog 2>/dev/null | grep -v "prune\|failed to prune" | tail -10 | while read line; do
-            echo "  $line"
-        done
-        
-        # Если нет записей о подключениях, показываем соответствующее сообщение
-        if ! grep -i "xray\|v2ray" /var/log/syslog 2>/dev/null | grep -v "prune\|failed to prune" | grep -q .; then
-            echo "  Записи о подключениях не найдены в системных логах"
-            echo "  Рекомендуется настроить логирование в Xray для отслеживания пользователей"
-        fi
-    fi
-    
-    echo ""
-    
-    # Статистика сетевого интерфейса
-    log "Статистика сетевого трафика:"
-    if command -v vnstat >/dev/null 2>&1; then
-        # Получаем список доступных интерфейсов
-        INTERFACE=$(ip route show default | awk '/default/ { print $5 }' | head -1)
-        if [ -z "$INTERFACE" ]; then
-            INTERFACE="eth0"
-        fi
-        
-        echo "  Статистика интерфейса $INTERFACE:"
-        vnstat -i "$INTERFACE" --json 2>/dev/null | jq -r '.interfaces[0].stats.day[] | select(.date == (.date | split("-") | join("-"))) | "  Сегодня: \(.rx.bytes) bytes входящих, \(.tx.bytes) bytes исходящих"' 2>/dev/null || {
-            # Fallback к простому выводу vnstat
-            vnstat -i "$INTERFACE" | grep -E "today|сегодня" | head -1 | sed 's/^/  /'
-        }
-        
-        echo "  Общая статистика за месяц:"
-        vnstat -i "$INTERFACE" -m | tail -3 | head -1 | sed 's/^/  /'
-    else
-        echo "  vnstat не установлен. Показываем базовую статистику:"
-        cat /proc/net/dev | grep -E "eth0|ens|enp" | head -1 | awk '{print "  RX: " $2 " bytes, TX: " $10 " bytes"}'
-        echo ""
-        read -p "  Установить vnstat для детальной статистики трафика? (y/n): " install_vnstat
-        if [ "$install_vnstat" = "y" ] || [ "$install_vnstat" = "Y" ]; then
-            log "Установка vnstat..."
-            if apt install -y vnstat; then
-                log "vnstat успешно установлен!"
-                # Инициализация базы данных vnstat
-                INTERFACE=$(ip route show default | awk '/default/ { print $5 }' | head -1)
-                if [ -n "$INTERFACE" ]; then
-                    # Создаем конфигурацию для интерфейса (современный способ)
-                    if ! vnstat -i "$INTERFACE" --json >/dev/null 2>&1; then
-                        log "Инициализация базы данных vnstat для $INTERFACE..."
-                        # В новых версиях vnstat автоматически создает БД при первом запуске
-                        vnstat -i "$INTERFACE" --add >/dev/null 2>&1 || {
-                            # Если --add не поддерживается, просто запускаем службу
-                            log "Используется автоматическая инициализация vnstat"
-                        }
-                    fi
-                    systemctl enable vnstat
-                    systemctl start vnstat
-                    # Ждем немного для инициализации
-                    sleep 2
-                    log "vnstat настроен для интерфейса $INTERFACE"
-                fi
-            else
-                error "Ошибка при установке vnstat"
-            fi
-        fi
-    fi
-    
-    echo ""
-    
-    # Статистика по портам
-    log "Статистика активных соединений:"
-    if [ -f "$CONFIG_FILE" ]; then
-        VPN_PORT=$(jq -r '.inbounds[0].port' "$CONFIG_FILE" 2>/dev/null)
-        if [ "$VPN_PORT" != "null" ]; then
-            CONNECTIONS=$(netstat -an 2>/dev/null | grep ":$VPN_PORT " | wc -l)
-            echo "  Активных соединений на порту $VPN_PORT: $CONNECTIONS"
-            
-            # Показать активные соединения
-            echo "  Активные соединения:"
-            netstat -an 2>/dev/null | grep ":$VPN_PORT " | head -5 | while read line; do
-                echo "    $line"
-            done
-        fi
-    fi
-    
-    echo ""
-    
-    # Статистика по времени работы
-    log "Время работы сервера:"
-    if command -v docker >/dev/null 2>&1; then
-        CONTAINER_ID=$(docker ps --format "{{.ID}}\t{{.Names}}" | grep -E "(xray|v2ray)" | head -1 | awk '{print $1}')
-        if [ -n "$CONTAINER_ID" ]; then
-            UPTIME=$(docker inspect --format='{{.State.StartedAt}}' "$CONTAINER_ID" 2>/dev/null)
-            if [ -n "$UPTIME" ]; then
-                echo "  Контейнер запущен: $UPTIME"
-                
-                # Вычисляем время работы
-                if command -v python3 >/dev/null 2>&1; then
-                    RUNTIME=$(python3 -c "
-from datetime import datetime
-import sys
-try:
-    start_time = datetime.fromisoformat('$UPTIME'.replace('Z', '+00:00'))
-    now = datetime.now(start_time.tzinfo)
-    uptime = now - start_time
-    days = uptime.days
-    hours, remainder = divmod(uptime.seconds, 3600)
-    minutes, _ = divmod(remainder, 60)
-    print(f'  Время работы: {days} дней, {hours} часов, {minutes} минут')
-except:
-    print('  Время работы: неизвестно')
-")
-                    echo "$RUNTIME"
-                fi
-            fi
-        fi
-    fi
-    
-    echo ""
-    
-    # Статистика по файлам пользователей
-    log "Статистика пользователей:"
-    if [ -d "$USERS_DIR" ]; then
-        TOTAL_USERS=$(ls -1 "$USERS_DIR"/*.json 2>/dev/null | wc -l)
-        echo "  Всего пользователей: $TOTAL_USERS"
-        
-        echo "  Последние созданные пользователи:"
-        ls -lt "$USERS_DIR"/*.json 2>/dev/null | head -3 | while read line; do
-            filename=$(echo "$line" | awk '{print $9}')
-            user_name=$(basename "$filename" .json)
-            mod_time=$(echo "$line" | awk '{print $6, $7, $8}')
-            echo "    $user_name (создан: $mod_time)"
-        done
-    fi
-    
-    echo ""
-    
-    # Рекомендации по мониторингу
-    log "Рекомендации по улучшению мониторинга:"
-    
-    # Проверяем что уже настроено
-    if ! command -v vnstat >/dev/null 2>&1; then
-        echo "  1. ✗ vnstat не установлен - установите для детальной статистики трафика"
-    else
-        echo "  1. ✓ vnstat установлен и готов к использованию"
-    fi
-    
-    if ! jq -e '.log' "$CONFIG_FILE" >/dev/null 2>&1; then
-        echo "  2. ✗ Логирование Xray не настроено - используйте пункт меню 10"
-    else
-        echo "  2. ✓ Логирование Xray настроено"
-    fi
-    
-    echo "  3. Используйте мониторинг системы (htop, iotop) для анализа производительности"
-    echo "  4. Настройте автоматические отчеты через cron"
-    echo "  5. Просматривайте логи пользователей через пункт меню 11"
-    
-    echo -e "${BLUE}======================================${NC}"
-}
-
-# Функция управления Watchdog службой
-manage_watchdog() {
-    echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-    echo -e "${GREEN}🛡️  Управление VPN Watchdog службой${NC}"
-    echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-    echo ""
-    
-    # Проверка наличия watchdog службы
-    if [ ! -f "/etc/systemd/system/vpn-watchdog.service" ]; then
-        warning "VPN Watchdog служба не установлена"
-        echo ""
-        echo "Хотите установить VPN Watchdog службу? (y/n)"
-        read -p "Ваш выбор: " install_choice
-        
-        if [ "$install_choice" = "y" ]; then
-            log "Установка VPN Watchdog службы..."
-            
-            # Копирование watchdog скрипта
-            local watchdog_script=""
-            for path in "watchdog.sh" "$WORK_DIR/watchdog.sh" "./watchdog.sh"; do
-                if [ -f "$path" ]; then
-                    watchdog_script="$path"
-                    break
-                fi
-            done
-            
-            if [ -n "$watchdog_script" ]; then
-                cp "$watchdog_script" /usr/local/bin/vpn-watchdog.sh
-                chmod +x /usr/local/bin/vpn-watchdog.sh
-            else
-                error "Файл watchdog.sh не найден в стандартных расположениях"
-            fi
-            
-            # Создание systemd службы
-            cat > /etc/systemd/system/vpn-watchdog.service <<EOL
-[Unit]
-Description=VPN Watchdog Service
-After=docker.service
-Requires=docker.service
-
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/vpn-watchdog.sh
-Restart=always
-RestartSec=30
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=vpn-watchdog
-
-# Security settings
-User=root
-PrivateTmp=true
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/opt/v2ray /opt/outline /var/log
-
-[Install]
-WantedBy=multi-user.target
-EOL
-            
-            systemctl daemon-reload
-            systemctl enable vpn-watchdog.service
-            systemctl start vpn-watchdog.service
-            log "VPN Watchdog служба установлена и запущена"
-        else
-            return
-        fi
-    fi
-    
-    # Получение статуса службы
-    local service_status=$(systemctl is-active vpn-watchdog.service 2>/dev/null || echo "inactive")
-    local service_enabled=$(systemctl is-enabled vpn-watchdog.service 2>/dev/null || echo "disabled")
-    
-    echo -e "${GREEN}📊 Текущий статус:${NC}"
-    if [ "$service_status" = "active" ]; then
-        echo -e "  • Состояние: ${GREEN}● Активна${NC}"
-    else
-        echo -e "  • Состояние: ${RED}● Неактивна${NC}"
-    fi
-    
-    if [ "$service_enabled" = "enabled" ]; then
-        echo -e "  • Автозапуск: ${GREEN}✓ Включен${NC}"
-    else
-        echo -e "  • Автозапуск: ${RED}✗ Выключен${NC}"
-    fi
-    
-    echo ""
-    
-    # Последние логи
-    echo -e "${GREEN}📋 Последние записи лога:${NC}"
-    if [ -f "/var/log/vpn-watchdog.log" ]; then
-        tail -n 10 /var/log/vpn-watchdog.log | sed 's/^/  /'
-    else
-        echo "  Лог-файл не найден"
-    fi
-    
-    echo ""
-    echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-    echo -e "${GREEN}🎯 Доступные действия:${NC}"
-    echo ""
-    echo "  1. 🟢 Запустить службу"
-    echo "  2. 🔴 Остановить службу"
-    echo "  3. 🔄 Перезапустить службу"
-    echo "  4. 📊 Полный статус службы"
-    echo "  5. 📋 Просмотр полного лога"
-    echo "  6. 🗑️  Очистить лог"
-    echo "  7. ⚙️  Включить/выключить автозапуск"
-    echo "  8. 🔍 Проверить работу watchdog (тест)"
-    echo ""
-    echo "  0. ↩️  Вернуться в главное меню"
-    echo ""
-    read -p "Выберите действие [0-8]: " watchdog_choice
-    
-    case $watchdog_choice in
-        1)
-            log "Запуск VPN Watchdog службы..."
-            systemctl start vpn-watchdog.service
-            sleep 2
-            if systemctl is-active --quiet vpn-watchdog.service; then
-                log "✓ VPN Watchdog служба успешно запущена"
-            else
-                error "Не удалось запустить службу. Проверьте логи: journalctl -u vpn-watchdog.service"
-            fi
-            ;;
-        2)
-            log "Остановка VPN Watchdog службы..."
-            systemctl stop vpn-watchdog.service
-            log "✓ VPN Watchdog служба остановлена"
-            ;;
-        3)
-            log "Перезапуск VPN Watchdog службы..."
-            systemctl restart vpn-watchdog.service
-            sleep 2
-            if systemctl is-active --quiet vpn-watchdog.service; then
-                log "✓ VPN Watchdog служба успешно перезапущена"
-            else
-                error "Не удалось перезапустить службу"
-            fi
-            ;;
-        4)
-            echo ""
-            systemctl status vpn-watchdog.service --no-pager
-            ;;
-        5)
-            echo ""
-            if [ -f "/var/log/vpn-watchdog.log" ]; then
-                less /var/log/vpn-watchdog.log
-            else
-                echo "Лог-файл не найден"
-            fi
-            ;;
-        6)
-            if [ -f "/var/log/vpn-watchdog.log" ]; then
-                > /var/log/vpn-watchdog.log
-                log "✓ Лог-файл очищен"
-            else
-                warning "Лог-файл не найден"
-            fi
-            ;;
-        7)
-            if [ "$service_enabled" = "enabled" ]; then
-                systemctl disable vpn-watchdog.service
-                log "✓ Автозапуск выключен"
-            else
-                systemctl enable vpn-watchdog.service
-                log "✓ Автозапуск включен"
-            fi
-            ;;
-        8)
-            log "Тестирование VPN Watchdog..."
-            echo ""
-            echo "Проверка контейнеров:"
-            
-            # Проверка Xray
-            if docker ps | grep -q "xray"; then
-                echo "  • Xray: ✓ Работает"
-            else
-                echo "  • Xray: ✗ Не работает"
-            fi
-            
-            # Проверка Outline
-            if docker ps | grep -q "shadowbox"; then
-                echo "  • Shadowbox: ✓ Работает"
-            fi
-            
-            if docker ps | grep -q "watchtower"; then
-                echo "  • Watchtower: ✓ Работает"
-            fi
-            
-            echo ""
-            echo "Последние действия watchdog:"
-            grep -E "restart|check|monitor" /var/log/vpn-watchdog.log 2>/dev/null | tail -n 5 | sed 's/^/  /' || echo "  Нет записей"
-            ;;
-        0)
-            return
-            ;;
-        *)
-            warning "Некорректный выбор"
-            ;;
-    esac
-}
-
-# Отображение меню
-show_menu() {
+# Interactive wrapper for delete user
+delete_user_interactive() {
     clear
-    echo ""
-    echo -e "${BLUE}╔══════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║${NC}     🛡️  ${GREEN}Управление Xray VPN сервером${NC}     ${BLUE}║${NC}"
-    echo -e "${BLUE}╚══════════════════════════════════════════════╝${NC}"
-    echo ""
-    echo -e "  ${GREEN}👥 Управление пользователями:${NC}"
-    echo -e "    ${YELLOW}1${NC}  📋 Список пользователей"
-    echo -e "    ${YELLOW}2${NC}  ➕ Добавить пользователя"
-    echo -e "    ${YELLOW}3${NC}  ❌ Удалить пользователя"
-    echo -e "    ${YELLOW}4${NC}  ✏️  Изменить пользователя"
-    echo -e "    ${YELLOW}5${NC}  👤 Показать данные пользователя"
-    echo ""
-    echo -e "  ${GREEN}⚙️  Управление сервером:${NC}"
-    echo -e "    ${YELLOW}6${NC}  📊 Статус сервера"
-    echo -e "    ${YELLOW}7${NC}  🔄 Перезапустить сервер"
-    echo -e "    ${YELLOW}8${NC}  🔐 Ротация Reality ключей"
-    echo ""
-    echo -e "  ${GREEN}📈 Мониторинг и статистика:${NC}"
-    echo -e "    ${YELLOW}9${NC}  📊 Статистика использования"
-    echo -e "    ${YELLOW}10${NC} 📝 Настройка логирования Xray"
-    echo -e "    ${YELLOW}11${NC} 📋 Просмотр логов пользователей"
-    echo -e "    ${YELLOW}12${NC} 🛡️  Управление Watchdog службой"
-    echo ""
-    echo -e "  ${RED}⚠️  Опасная зона:${NC}"
-    echo -e "    ${YELLOW}13${NC} 🗑️  Удалить VPN сервер"
-    echo ""
-    echo -e "    ${YELLOW}0${NC}  🚪 Выход"
-    echo ""
-    echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-    echo ""
-    read -p "$(echo -e ${GREEN}Выберите действие [0-13]:${NC} )" choice
+    echo -e "${GREEN}=== Delete User ===${NC}\n"
     
-    case $choice in
-        1) list_users; press_enter ;;
-        2) add_user; press_enter ;;
-        3) delete_user; press_enter ;;
-        4) edit_user; press_enter ;;
-        5) show_user; press_enter ;;
-        6) show_status; press_enter ;;
-        7) restart_server; press_enter ;;
-        8) rotate_reality_keys; press_enter ;;
-        9) show_traffic_stats; press_enter ;;
-        10) configure_xray_logging; press_enter ;;
-        11) view_user_logs; press_enter ;;
-        12) manage_watchdog; press_enter ;;
-        13) uninstall_vpn; press_enter ;;
-        0) exit 0 ;;
-        *) error "Некорректный выбор! Попробуйте снова." ;;
-    esac
+    # Show current users first
+    echo "Current users:"
+    list_users
+    echo
+    
+    read -p "Enter username to delete: " username
+    if [ -z "$username" ]; then
+        warning "Username cannot be empty"
+        press_enter
+        return 1
+    fi
+    
+    # Confirm deletion
+    echo -e "${YELLOW}Are you sure you want to delete user '$username'? [y/N]${NC}"
+    read -p "Confirm: " confirm
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        delete_user "$username" || {
+            error "Failed to delete user: $username"
+        }
+    else
+        log "Deletion cancelled"
+    fi
+    press_enter
 }
 
-# Функция вывода информации о клиентах для Xray
-show_client_info() {
-    echo ""
-    echo -e "${BLUE}╔══════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║${NC}  📱 ${GREEN}Рекомендуемые клиенты для Xray VPN${NC}  ${BLUE}║${NC}"
-    echo -e "${BLUE}╚══════════════════════════════════════════════╝${NC}"
-    echo ""
-    echo -e "  ${GREEN}🤖 Android:${NC}"
-    echo -e "    ${YELLOW}•${NC} v2RayTun"
-    echo -e "      ${PURPLE}↳${NC} ${WHITE}play.google.com/store/apps/details?id=com.v2raytun.android${NC}"
-    echo ""
-    echo -e "  ${GREEN}🍎 iOS:${NC}"
-    echo -e "    ${YELLOW}•${NC} Shadowrocket"
-    echo -e "      ${PURPLE}↳${NC} ${WHITE}apps.apple.com/app/shadowrocket/id932747118${NC}"
-    echo -e "    ${YELLOW}•${NC} v2RayTun"
-    echo -e "      ${PURPLE}↳${NC} ${WHITE}apps.apple.com/app/v2raytun/id6476628951${NC}"
-    echo ""
-    echo -e "  ${GREEN}🔗 Способы подключения:${NC}"
-    echo -e "    ${YELLOW}1.${NC} 📷 QR-код ${GREEN}(рекомендуется)${NC} - отсканируйте QR-код выше"
-    echo -e "    ${YELLOW}2.${NC} 📋 Импорт ссылки - скопируйте ссылку для подключения"
-    echo -e "    ${YELLOW}3.${NC} ⚙️  Ручная настройка - введите параметры сервера вручную"
-    echo ""
-    echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
+# Interactive wrapper for edit user
+edit_user_interactive() {
+    clear
+    echo -e "${GREEN}=== Edit User ===${NC}\n"
+    
+    # Show current users first
+    echo "Current users:"
+    list_users
+    echo
+    
+    read -p "Enter username to edit: " username
+    if [ -z "$username" ]; then
+        warning "Username cannot be empty"
+        press_enter
+        return 1
+    fi
+    
+    edit_user "$username" || {
+        error "Failed to edit user: $username"
+    }
+    press_enter
 }
 
-# Функция ожидания нажатия Enter
-press_enter() {
-    echo ""
-    read -p "Нажмите Enter для продолжения..."
+# Interactive wrapper for show user
+show_user_interactive() {
+    clear
+    echo -e "${GREEN}=== Show User Data ===${NC}\n"
+    
+    # Show current users first
+    echo "Current users:"
+    list_users
+    echo
+    
+    read -p "Enter username to show: " username
+    if [ -z "$username" ]; then
+        warning "Username cannot be empty"
+        press_enter
+        return 1
+    fi
+    
+    show_user "$username" || {
+        error "Failed to show user data: $username"
+    }
+    press_enter
 }
 
-# Главный цикл
-while true; do
-    show_menu
-done
+# Interactive wrapper for server status
+show_server_status_interactive() {
+    clear
+    echo -e "${GREEN}=== Server Status ===${NC}\n"
+    show_server_status || {
+        error "Failed to show server status"
+    }
+    press_enter
+}
+
+# Interactive wrapper for restart server
+restart_server_interactive() {
+    clear
+    echo -e "${GREEN}=== Restart Server ===${NC}\n"
+    
+    echo -e "${YELLOW}Are you sure you want to restart the VPN server? [y/N]${NC}"
+    read -p "Confirm: " confirm
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        restart_server || {
+            error "Failed to restart server"
+        }
+    else
+        log "Restart cancelled"
+    fi
+    press_enter
+}
+
+# Interactive wrapper for key rotation
+rotate_keys_interactive() {
+    clear
+    echo -e "${GREEN}=== Key Rotation ===${NC}\n"
+    
+    echo -e "${YELLOW}This will rotate Reality keys and update all users. Continue? [y/N]${NC}"
+    read -p "Confirm: " confirm
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        rotate_reality_keys || {
+            error "Failed to rotate keys"
+        }
+    else
+        log "Key rotation cancelled"
+    fi
+    press_enter
+}
+
+# Interactive wrapper for server uninstall
+uninstall_server_interactive() {
+    clear
+    echo -e "${GREEN}=== Uninstall Server ===${NC}\n"
+    
+    echo -e "${RED}WARNING: This will completely remove the VPN server and all user data!${NC}"
+    echo -e "${YELLOW}Are you absolutely sure? Type 'YES' to confirm:${NC}"
+    read -p "Confirm: " confirm
+    if [ "$confirm" = "YES" ]; then
+        uninstall_vpn_server || {
+            error "Failed to uninstall server"
+        }
+        echo -e "${GREEN}Server uninstalled successfully. Exiting...${NC}"
+        exit 0
+    else
+        log "Uninstall cancelled"
+    fi
+    press_enter
+}
+
+# Interactive wrapper for statistics
+show_statistics_interactive() {
+    clear
+    echo -e "${GREEN}=== Usage Statistics ===${NC}\n"
+    show_traffic_statistics || {
+        error "Failed to show statistics"
+    }
+    press_enter
+}
+
+# Interactive wrapper for logging configuration
+configure_logging_interactive() {
+    clear
+    echo -e "${GREEN}=== Configure Logging ===${NC}\n"
+    configure_xray_logging || {
+        error "Failed to configure logging"
+    }
+    press_enter
+}
+
+# Interactive wrapper for log viewer
+view_logs_interactive() {
+    clear
+    echo -e "${GREEN}=== View User Logs ===${NC}\n"
+    view_user_logs || {
+        error "Failed to view logs"
+    }
+    press_enter
+}
+
+# =============================================================================
+# MAIN FUNCTION
+# =============================================================================
+
+main() {
+    # Check prerequisites
+    check_prerequisites
+    
+    # Main menu loop
+    while true; do
+        show_main_menu
+        read -p "Select option (0-12): " choice
+        handle_menu_selection "$choice"
+    done
+}
+
+# =============================================================================
+# SCRIPT EXECUTION
+# =============================================================================
+
+# Run main function if script is executed directly
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+    main "$@"
+fi
