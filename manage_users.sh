@@ -1170,6 +1170,209 @@ except:
     echo -e "${BLUE}======================================${NC}"
 }
 
+# Функция управления Watchdog службой
+manage_watchdog() {
+    echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}🛡️  Управление VPN Watchdog службой${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
+    echo ""
+    
+    # Проверка наличия watchdog службы
+    if [ ! -f "/etc/systemd/system/vpn-watchdog.service" ]; then
+        warning "VPN Watchdog служба не установлена"
+        echo ""
+        echo "Хотите установить VPN Watchdog службу? (y/n)"
+        read -p "Ваш выбор: " install_choice
+        
+        if [ "$install_choice" = "y" ]; then
+            log "Установка VPN Watchdog службы..."
+            
+            # Копирование watchdog скрипта
+            local watchdog_script=""
+            for path in "watchdog.sh" "$WORK_DIR/watchdog.sh" "./watchdog.sh"; do
+                if [ -f "$path" ]; then
+                    watchdog_script="$path"
+                    break
+                fi
+            done
+            
+            if [ -n "$watchdog_script" ]; then
+                cp "$watchdog_script" /usr/local/bin/vpn-watchdog.sh
+                chmod +x /usr/local/bin/vpn-watchdog.sh
+            else
+                error "Файл watchdog.sh не найден в стандартных расположениях"
+            fi
+            
+            # Создание systemd службы
+            cat > /etc/systemd/system/vpn-watchdog.service <<EOL
+[Unit]
+Description=VPN Watchdog Service
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/vpn-watchdog.sh
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vpn-watchdog
+
+# Security settings
+User=root
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/v2ray /opt/outline /var/log
+
+[Install]
+WantedBy=multi-user.target
+EOL
+            
+            systemctl daemon-reload
+            systemctl enable vpn-watchdog.service
+            systemctl start vpn-watchdog.service
+            log "VPN Watchdog служба установлена и запущена"
+        else
+            return
+        fi
+    fi
+    
+    # Получение статуса службы
+    local service_status=$(systemctl is-active vpn-watchdog.service 2>/dev/null || echo "inactive")
+    local service_enabled=$(systemctl is-enabled vpn-watchdog.service 2>/dev/null || echo "disabled")
+    
+    echo -e "${GREEN}📊 Текущий статус:${NC}"
+    if [ "$service_status" = "active" ]; then
+        echo -e "  • Состояние: ${GREEN}● Активна${NC}"
+    else
+        echo -e "  • Состояние: ${RED}● Неактивна${NC}"
+    fi
+    
+    if [ "$service_enabled" = "enabled" ]; then
+        echo -e "  • Автозапуск: ${GREEN}✓ Включен${NC}"
+    else
+        echo -e "  • Автозапуск: ${RED}✗ Выключен${NC}"
+    fi
+    
+    echo ""
+    
+    # Последние логи
+    echo -e "${GREEN}📋 Последние записи лога:${NC}"
+    if [ -f "/var/log/vpn-watchdog.log" ]; then
+        tail -n 10 /var/log/vpn-watchdog.log | sed 's/^/  /'
+    else
+        echo "  Лог-файл не найден"
+    fi
+    
+    echo ""
+    echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}🎯 Доступные действия:${NC}"
+    echo ""
+    echo "  1. 🟢 Запустить службу"
+    echo "  2. 🔴 Остановить службу"
+    echo "  3. 🔄 Перезапустить службу"
+    echo "  4. 📊 Полный статус службы"
+    echo "  5. 📋 Просмотр полного лога"
+    echo "  6. 🗑️  Очистить лог"
+    echo "  7. ⚙️  Включить/выключить автозапуск"
+    echo "  8. 🔍 Проверить работу watchdog (тест)"
+    echo ""
+    echo "  0. ↩️  Вернуться в главное меню"
+    echo ""
+    read -p "Выберите действие [0-8]: " watchdog_choice
+    
+    case $watchdog_choice in
+        1)
+            log "Запуск VPN Watchdog службы..."
+            systemctl start vpn-watchdog.service
+            sleep 2
+            if systemctl is-active --quiet vpn-watchdog.service; then
+                log "✓ VPN Watchdog служба успешно запущена"
+            else
+                error "Не удалось запустить службу. Проверьте логи: journalctl -u vpn-watchdog.service"
+            fi
+            ;;
+        2)
+            log "Остановка VPN Watchdog службы..."
+            systemctl stop vpn-watchdog.service
+            log "✓ VPN Watchdog служба остановлена"
+            ;;
+        3)
+            log "Перезапуск VPN Watchdog службы..."
+            systemctl restart vpn-watchdog.service
+            sleep 2
+            if systemctl is-active --quiet vpn-watchdog.service; then
+                log "✓ VPN Watchdog служба успешно перезапущена"
+            else
+                error "Не удалось перезапустить службу"
+            fi
+            ;;
+        4)
+            echo ""
+            systemctl status vpn-watchdog.service --no-pager
+            ;;
+        5)
+            echo ""
+            if [ -f "/var/log/vpn-watchdog.log" ]; then
+                less /var/log/vpn-watchdog.log
+            else
+                echo "Лог-файл не найден"
+            fi
+            ;;
+        6)
+            if [ -f "/var/log/vpn-watchdog.log" ]; then
+                > /var/log/vpn-watchdog.log
+                log "✓ Лог-файл очищен"
+            else
+                warning "Лог-файл не найден"
+            fi
+            ;;
+        7)
+            if [ "$service_enabled" = "enabled" ]; then
+                systemctl disable vpn-watchdog.service
+                log "✓ Автозапуск выключен"
+            else
+                systemctl enable vpn-watchdog.service
+                log "✓ Автозапуск включен"
+            fi
+            ;;
+        8)
+            log "Тестирование VPN Watchdog..."
+            echo ""
+            echo "Проверка контейнеров:"
+            
+            # Проверка Xray
+            if docker ps | grep -q "xray"; then
+                echo "  • Xray: ✓ Работает"
+            else
+                echo "  • Xray: ✗ Не работает"
+            fi
+            
+            # Проверка Outline
+            if docker ps | grep -q "shadowbox"; then
+                echo "  • Shadowbox: ✓ Работает"
+            fi
+            
+            if docker ps | grep -q "watchtower"; then
+                echo "  • Watchtower: ✓ Работает"
+            fi
+            
+            echo ""
+            echo "Последние действия watchdog:"
+            grep -E "restart|check|monitor" /var/log/vpn-watchdog.log 2>/dev/null | tail -n 5 | sed 's/^/  /' || echo "  Нет записей"
+            ;;
+        0)
+            return
+            ;;
+        *)
+            warning "Некорректный выбор"
+            ;;
+    esac
+}
+
 # Отображение меню
 show_menu() {
     clear
@@ -1194,15 +1397,16 @@ show_menu() {
     echo -e "    ${YELLOW}9${NC}  📊 Статистика использования"
     echo -e "    ${YELLOW}10${NC} 📝 Настройка логирования Xray"
     echo -e "    ${YELLOW}11${NC} 📋 Просмотр логов пользователей"
+    echo -e "    ${YELLOW}12${NC} 🛡️  Управление Watchdog службой"
     echo ""
     echo -e "  ${RED}⚠️  Опасная зона:${NC}"
-    echo -e "    ${YELLOW}12${NC} 🗑️  Удалить VPN сервер"
+    echo -e "    ${YELLOW}13${NC} 🗑️  Удалить VPN сервер"
     echo ""
     echo -e "    ${YELLOW}0${NC}  🚪 Выход"
     echo ""
     echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
     echo ""
-    read -p "$(echo -e ${GREEN}Выберите действие [0-12]:${NC} )" choice
+    read -p "$(echo -e ${GREEN}Выберите действие [0-13]:${NC} )" choice
     
     case $choice in
         1) list_users; press_enter ;;
@@ -1216,7 +1420,8 @@ show_menu() {
         9) show_traffic_stats; press_enter ;;
         10) configure_xray_logging; press_enter ;;
         11) view_user_logs; press_enter ;;
-        12) uninstall_vpn; press_enter ;;
+        12) manage_watchdog; press_enter ;;
+        13) uninstall_vpn; press_enter ;;
         0) exit 0 ;;
         *) error "Некорректный выбор! Попробуйте снова." ;;
     esac

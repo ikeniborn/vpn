@@ -354,7 +354,7 @@ install_outline_vpn() {
     log "Запуск контейнера Shadowbox"
     docker run -d \
         --name shadowbox \
-        --restart=always \
+        --restart=unless-stopped \
         --net=host \
         -v "${STATE_DIR}:${STATE_DIR}" \
         -e "SB_STATE_DIR=${STATE_DIR}" \
@@ -363,14 +363,29 @@ install_outline_vpn() {
         -e "SB_API_PREFIX=${SB_API_PREFIX}" \
         -e "SB_CERTIFICATE_FILE=${SB_CERTIFICATE_FILE}" \
         -e "SB_PRIVATE_KEY_FILE=${SB_PRIVATE_KEY_FILE}" \
+        --health-cmd="curl -k -f https://localhost:${OUTLINE_API_PORT}/${SB_API_PREFIX}/access-keys || exit 1" \
+        --health-interval=30s \
+        --health-timeout=10s \
+        --health-retries=3 \
+        --health-start-period=40s \
+        --memory="2g" \
+        --memory-reservation="512m" \
+        --cpus="2" \
+        --log-opt max-size=10m \
+        --log-opt max-file=3 \
         ${SB_IMAGE} >/dev/null
     
     # Запуск Watchtower для автоматических обновлений
     log "Запуск Watchtower для автоматических обновлений"
     docker run -d \
         --name watchtower \
-        --restart=always \
+        --restart=unless-stopped \
         -v /var/run/docker.sock:/var/run/docker.sock \
+        --memory="256m" \
+        --memory-reservation="128m" \
+        --cpus="0.5" \
+        --log-opt max-size=10m \
+        --log-opt max-file=3 \
         ${WATCHTOWER_IMAGE} \
         --cleanup --tlsverify --interval 3600 >/dev/null
     
@@ -1028,14 +1043,33 @@ services:
   xray:
     image: teddysun/xray:latest
     container_name: xray
-    restart: always
+    restart: unless-stopped
     network_mode: host
     volumes:
       - ./config:/etc/xray
-      - ./logs:/opt/v2ray/logs
+      - ./logs:/var/log/xray
     environment:
       - TZ=Europe/Moscow
     command: ["xray", "run", "-c", "/etc/xray/config.json"]
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "$SERVER_PORT"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 EOL
 
 # Создаем резервный docker-compose для случая проблем
@@ -1045,15 +1079,34 @@ services:
   xray:
     image: teddysun/xray:latest
     container_name: xray
-    restart: always
+    restart: unless-stopped
     network_mode: host
     volumes:
       - ./config:/etc/xray
-      - ./logs:/opt/v2ray/logs
+      - ./logs:/var/log/xray
     environment:
       - TZ=Europe/Moscow
     entrypoint: ["/usr/bin/xray"]
     command: ["run", "-c", "/etc/xray/config.json"]
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "$SERVER_PORT"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 EOL
 
 log "Docker конфигурация создана"
@@ -1266,5 +1319,47 @@ echo -e "${BLUE}═════════════════════�
 
 # Создаем ссылку на скрипт управления пользователями
 ln -sf "$WORK_DIR/manage_users.sh" /usr/local/bin/v2ray-manage
+
+# Установка watchdog службы
+log "Установка VPN Watchdog службы..."
+
+# Определяем путь к скрипту относительно текущего каталога
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WATCHDOG_SCRIPT="$SCRIPT_DIR/watchdog.sh"
+WATCHDOG_SERVICE="$SCRIPT_DIR/vpn-watchdog.service"
+
+# Если скрипты не найдены в текущем каталоге, ищем в стандартных местах
+if [ ! -f "$WATCHDOG_SCRIPT" ]; then
+    for path in "./watchdog.sh" "/home/*/Documents/Project/vpn/watchdog.sh" "/root/vpn/watchdog.sh"; do
+        if [ -f "$path" ]; then
+            WATCHDOG_SCRIPT="$path"
+            break
+        fi
+    done
+fi
+
+if [ ! -f "$WATCHDOG_SERVICE" ]; then
+    for path in "./vpn-watchdog.service" "/home/*/Documents/Project/vpn/vpn-watchdog.service" "/root/vpn/vpn-watchdog.service"; do
+        if [ -f "$path" ]; then
+            WATCHDOG_SERVICE="$path"
+            break
+        fi
+    done
+fi
+
+if [ -f "$WATCHDOG_SCRIPT" ]; then
+    cp "$WATCHDOG_SCRIPT" /usr/local/bin/vpn-watchdog.sh
+    chmod +x /usr/local/bin/vpn-watchdog.sh
+    
+    if [ -f "$WATCHDOG_SERVICE" ]; then
+        cp "$WATCHDOG_SERVICE" /etc/systemd/system/
+        systemctl daemon-reload
+        systemctl enable vpn-watchdog.service
+        systemctl start vpn-watchdog.service
+        log "✓ VPN Watchdog служба установлена и запущена"
+    fi
+else
+    log "Watchdog скрипт не найден, пропускаем установку"
+fi
 
 exit 0

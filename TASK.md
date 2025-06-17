@@ -11,11 +11,13 @@ Refactor the monolithic VPN scripts into a modular architecture with each script
 - ✅ **Client Stability**: Enhanced stability by disabling transparent proxy and adding proper network capabilities
 
 ## 📊 Current Status
-- [ ] **Total Lines**: 2,527+ (install: 1,269 + manage: 1,258 + client: 797)
-- [ ] **Target**: ~20 modules × 200-300 lines each
+- [ ] **Total Lines**: 2,891+ (install: 1,365 + manage: 1,426 + client: 797 + deploy: 394 + watchdog: 278)
+- [ ] **Target**: ~25 modules × 200-300 lines each
 - [ ] **Duplicate Code**: ~15% (colors, functions, checks)
 - [x] **Client Script**: Unified into single `install_client.sh` with v2rayA Web UI (completed)
 - [x] **Client Issues**: Fixed connectivity problems with proxy mode configuration
+- [x] **Stability Improvements**: Added health checks, resource limits, and watchdog service (completed)
+- [x] **Deployment Tools**: Added deploy.sh script and CI/CD configuration (completed)
 
 ---
 
@@ -264,3 +266,23 @@ Refactor the monolithic VPN scripts into a modular architecture with each script
 - **Fixed**: Docker Compose warning about obsolete version attribute
 - **Improved**: User experience with context-aware menu options
 - **Status**: ✅ Completed and tested
+
+### Container Stability Improvements (2025-06-17) - COMPLETED
+- **Issue**: VPN containers stop daily and need manual restart
+- **Root Cause**: No health monitoring and resource constraints
+- **Solution**:
+  - Added comprehensive health checks for all containers (xray, shadowbox, watchtower)
+  - Implemented resource limits (CPU: 0.5-2 cores, Memory: 512MB-2GB)
+  - Changed restart policy from `always` to `unless-stopped` for better control
+  - Created VPN Watchdog Service for 24/7 monitoring with automatic recovery
+  - Added log rotation and system resource monitoring
+- **Status**: ✅ Completed and deployed
+
+### Deployment & DevOps Enhancement (2025-06-17) - COMPLETED
+- **Added**: `deploy.sh` script for automated deployment with backup/restore
+- **Added**: GitHub Actions CI/CD workflow for staging/production deployments
+- **Added**: Multi-environment support with environment variables
+- **Added**: Auto-discovery for flexible deployment paths
+- **Added**: Watchdog management UI in main menu (option 12)
+- **Improved**: Docker Compose with override file for production settings
+- **Status**: ✅ Completed and ready for CI/CD

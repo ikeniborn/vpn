@@ -3,7 +3,9 @@
 ## 📋 Project Overview
 
 **Current State:**
-- 3 main scripts: `install_vpn.sh` (1,269 lines), `manage_users.sh` (1,258 lines), and `install_client.sh` (client with Web UI)
+- 3 main scripts: `install_vpn.sh` (1,365 lines), `manage_users.sh` (1,426 lines), and `install_client.sh` (client with Web UI)
+- Added stability improvements: health checks, resource limits, watchdog service
+- Enhanced deployment tools: `deploy.sh` script and CI/CD configuration
 - Significant code duplication between scripts
 - All functionality embedded in single files
 - Limited modularity and reusability
@@ -59,6 +61,19 @@ vpn/
 │       ├── logging.sh         # Log configuration
 │       └── logs_viewer.sh     # Log analysis
 │
+├── stability/             # Stability & monitoring modules
+│   ├── watchdog.sh           # Container monitoring service
+│   ├── health_checks.sh      # Health check configurations
+│   ├── resource_limits.sh    # CPU/memory management
+│   └── log_rotation.sh       # Log management
+│
+├── deployment/            # Deployment & CI/CD
+│   ├── deploy.sh             # Main deployment script
+│   ├── backup.sh             # Backup operations
+│   ├── restore.sh            # Restore operations
+│   └── ci_cd/
+│       └── github_actions.yml
+│
 ├── config/                # Configuration templates
 │   ├── xray_template.json
 │   └── docker-compose.template.yml
@@ -66,6 +81,8 @@ vpn/
 ├── install.sh            # Main installer (< 300 lines)
 ├── manage.sh             # Management interface (< 300 lines)
 ├── install_client.sh     # Client installer with Web UI
+├── deploy.sh             # Deployment script (current)
+├── watchdog.sh           # Monitoring service (current)
 └── uninstall.sh          # Uninstaller script
 ```
 
@@ -223,6 +240,26 @@ done
 - Server operation tests
 - Monitoring functionality
 
+## 🛡️ Recent Stability Improvements (Completed)
+
+### Container Health & Monitoring
+- **Health Checks**: Implemented for all Docker containers (Xray, Shadowbox, Watchtower)
+- **VPN Watchdog Service**: 24/7 monitoring with automatic restart capabilities
+- **Resource Limits**: CPU and memory constraints to prevent system overload
+- **Smart Restart Policy**: Changed from `always` to `unless-stopped`
+
+### Deployment & DevOps
+- **deploy.sh Script**: Comprehensive deployment automation with backup/restore
+- **CI/CD Integration**: GitHub Actions workflow for automated deployments
+- **Multi-Environment**: Support for staging and production environments
+- **Auto-Discovery**: Smart path detection for flexible deployment locations
+
+### Enhanced Management
+- **Watchdog Dashboard**: New UI option for monitoring and controlling watchdog service
+- **Log Management**: Automatic log rotation and centralized logging
+- **System Monitoring**: CPU, memory, and disk usage tracking
+- **Real-time Status**: Live container health and service status monitoring
+
 ## 📈 Success Metrics
 
 1. **Line Count**: Each script < 500 lines
@@ -230,6 +267,8 @@ done
 3. **Module Count**: 15-20 focused modules
 4. **Test Coverage**: > 80% functionality tested
 5. **Performance**: No regression in execution time
+6. **Stability**: 99.9% uptime with automatic recovery (NEW)
+7. **Deployment**: Zero-downtime CI/CD deployments (NEW)
 
 ## 🚀 Benefits
 

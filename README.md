@@ -73,9 +73,10 @@ sudo ./manage_users.sh
 9. **📊 Usage Statistics** - Traffic analysis and performance metrics
 10. **📝 Configure Logging** - Setup Xray logging levels
 11. **📋 View User Logs** - Analyze connection logs and activity
+12. **🛡️ Watchdog Management** - Monitor and manage container health service
 
 ### Maintenance
-12. **🗑️ Uninstall Server** - Complete removal with cleanup
+13. **🗑️ Uninstall Server** - Complete removal with cleanup
 
 ## 🔧 Configuration
 
@@ -210,6 +211,28 @@ free -h
 
 ## 🔄 Recent Updates
 
+### Stability and Reliability Improvements ⚡
+- **Enhanced Container Stability**: Added comprehensive health checks for all Docker containers
+- **Smart Restart Policy**: Changed from `always` to `unless-stopped` for better control
+- **Resource Management**: Added CPU and memory limits to prevent system overload
+- **VPN Watchdog Service**: 24/7 monitoring with automatic container recovery
+- **Advanced Logging**: Implemented log rotation and centralized logging system
+
+### Deployment and CI/CD 🚀
+- **Automated Deployment**: Added `deploy.sh` script for CI/CD pipelines
+- **GitHub Actions**: Ready-to-use CI/CD configuration for automated deployments
+- **Backup & Restore**: Automated backup creation before updates
+- **Multi-Environment**: Support for staging and production deployments
+- **Auto-Discovery**: Smart path detection for flexible deployment locations
+
+### Monitoring and Management 📊
+- **Watchdog Dashboard**: New menu option for monitoring service health
+- **Real-time Logs**: Live log monitoring and filtering capabilities
+- **System Resources**: CPU, memory, and disk usage monitoring
+- **Container Health**: Docker health check integration with restart logic
+- **Service Management**: Start/stop/restart watchdog service through UI
+
+### Previous Updates
 - Fixed logs directory mounting issue in Docker
 - Added automatic port preservation across restarts
 - Improved SNI domain validation and testing
