@@ -2,6 +2,10 @@
 
 A comprehensive Docker-based VPN server solution featuring automated installation and management of Xray-core with VLESS+Reality protocol, providing enterprise-level security with user-friendly administration.
 
+## 🎯 Unified Management Script
+
+**NEW**: All VPN functionality is now available through a single unified script: `vpn.sh`
+
 ## 📋 Features
 
 ### Core Capabilities
@@ -34,26 +38,47 @@ A comprehensive Docker-based VPN server solution featuring automated installatio
 git clone https://github.com/yourusername/vpn.git
 cd vpn
 
-# Make scripts executable
-chmod +x install_vpn.sh manage_users.sh install_client.sh
+# Make the unified script executable
+chmod +x vpn.sh
 
 # Run installation
-sudo ./install_vpn.sh
+sudo ./vpn.sh install
 ```
 
 ### Usage
 
-After installation, manage your VPN server using:
+The unified `vpn.sh` script provides all VPN management functionality:
 
 ```bash
-sudo v2ray-manage
+# Show all available commands
+./vpn.sh --help
+
+# Server management
+sudo ./vpn.sh install              # Install VPN server
+sudo ./vpn.sh status               # Show server status
+sudo ./vpn.sh restart              # Restart server
+sudo ./vpn.sh uninstall            # Uninstall server
+
+# User management
+sudo ./vpn.sh users                # Interactive user menu
+sudo ./vpn.sh user add john        # Add user 'john'
+sudo ./vpn.sh user list            # List all users
+sudo ./vpn.sh user show john       # Show connection details
+sudo ./vpn.sh user delete john     # Delete user
+
+# Client management
+sudo ./vpn.sh client install       # Install VPN client
+sudo ./vpn.sh client status        # Show client status
+sudo ./vpn.sh client uninstall     # Uninstall client
+
+# Monitoring
+sudo ./vpn.sh stats                # Show traffic statistics
+sudo ./vpn.sh logs                 # View server logs
+sudo ./vpn.sh rotate-keys          # Rotate encryption keys
 ```
 
-Or directly:
-
-```bash
-sudo ./manage_users.sh
-```
+For backward compatibility, the original commands still work:
+- `sudo v2ray-manage` → redirects to user management
 
 ## 📚 Menu Options
 
@@ -136,10 +161,15 @@ vpn/
 │   ├── test_server_modules.sh # Server module testing
 │   ├── test_monitoring_modules.sh # Monitoring testing
 │   └── test_install_modules.sh # Installation module testing
-├── install_vpn.sh          # Main installation script (407 lines, 71% reduction)
-├── manage_users.sh         # User management interface (447 lines, 69% reduction)
-├── install_client.sh       # Client setup script (521 lines, 51% reduction)
-├── uninstall.sh           # Standalone uninstaller (361 lines)
+├── vpn.sh                  # Unified management script (NEW)
+├── install_vpn.sh          # Main installation script (legacy, use vpn.sh install)
+├── manage_users.sh         # User management interface (legacy, use vpn.sh users)
+├── install_client.sh       # Client setup script (legacy, use vpn.sh client)
+├── uninstall.sh           # Standalone uninstaller (legacy, use vpn.sh uninstall)
+├── deploy.sh              # Deployment script (legacy, use vpn.sh deploy)
+├── watchdog.sh            # Container monitoring service
+├── vpn-watchdog.service   # Systemd service definition
+├── LEGACY_SCRIPTS.md      # Migration guide for legacy scripts
 ├── CLAUDE.md              # Claude Code instructions
 ├── PLANNING.md            # Architecture planning documentation
 ├── TASK.md                # Project tasks and progress tracking
@@ -308,6 +338,13 @@ free -h
 ```
 
 ## 🔄 Recent Updates
+
+### Latest Update: Unified Management Script 🎉
+- **Single Command Interface**: All functionality now available through `vpn.sh`
+- **Simplified Usage**: Consistent command structure for all operations  
+- **Backward Compatibility**: Legacy scripts remain functional during transition
+- **Modular Architecture**: Fully leverages the modular system introduced in v2.0
+- **Comprehensive Help**: Built-in help system with examples
 
 ### Stability and Reliability Improvements ⚡
 - **Enhanced Container Stability**: Added comprehensive health checks for all Docker containers
