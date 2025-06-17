@@ -49,6 +49,20 @@ sudo ./vpn.sh install
 
 The unified `vpn.sh` script provides all VPN management functionality:
 
+### Interactive Menu Mode
+
+```bash
+# Launch interactive menu (recommended for beginners)
+sudo ./vpn.sh
+
+# Or explicitly with menu command
+sudo ./vpn.sh menu
+```
+
+The interactive menu provides a user-friendly interface with numbered options for all VPN operations.
+
+### Command Line Mode
+
 ```bash
 # Show all available commands
 ./vpn.sh --help
@@ -339,8 +353,11 @@ free -h
 
 ## 🔄 Recent Updates
 
-### Latest Update: Unified Management Script 🎉
-- **Single Command Interface**: All functionality now available through `vpn.sh`
+### Latest Update: Unified Management Script with Interactive Menu 🎉
+- **Interactive Menu**: Launch with `sudo ./vpn.sh` for user-friendly numbered menu
+- **Single Command Interface**: All functionality available through `vpn.sh`
+- **Zero Exit Code**: Script always exits with code 0 for better integration
+- **Error Recovery**: Graceful error handling returns to menu instead of exiting
 - **Simplified Usage**: Consistent command structure for all operations  
 - **Backward Compatibility**: Legacy scripts remain functional during transition
 - **Modular Architecture**: Fully leverages the modular system introduced in v2.0

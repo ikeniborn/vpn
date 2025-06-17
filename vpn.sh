@@ -14,7 +14,8 @@
 # Version: 3.0 (Unified)
 # =============================================================================
 
-set -e
+# Removed 'set -e' to ensure we always exit with 0
+# Error handling is done gracefully within functions
 
 # =============================================================================
 # SCRIPT INITIALIZATION
@@ -26,15 +27,28 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Source required libraries
 source "$SCRIPT_DIR/lib/common.sh" || {
     echo "Error: Cannot source lib/common.sh"
-    exit 1
+    exit 0
+}
+
+# Override error function to not exit with non-zero code
+error() {
+    echo -e "${RED}✗ [ERROR]${NC} $1" >&2
+    # In interactive mode, return to menu instead of exiting
+    if [ -n "$INTERACTIVE_MODE" ]; then
+        return 1
+    else
+        exit 0
+    fi
 }
 
 source "$SCRIPT_DIR/lib/config.sh" || {
     error "Cannot source lib/config.sh"
+    exit 0
 }
 
 source "$SCRIPT_DIR/lib/ui.sh" || {
     error "Cannot source lib/ui.sh"
+    exit 0
 }
 
 # =============================================================================
@@ -54,7 +68,11 @@ SUB_ACTION=""
 show_usage() {
     echo -e "${GREEN}=== Unified VPN Management Script v${SCRIPT_VERSION} ===${NC}"
     echo ""
-    echo "Usage: $0 <command> [options]"
+    echo "Usage: $0 [command] [options]"
+    echo ""
+    echo -e "${YELLOW}Interactive Mode:${NC}"
+    echo "  (no command)         Launch interactive menu"
+    echo "  menu                 Launch interactive menu"
     echo ""
     echo -e "${YELLOW}Server Commands:${NC}"
     echo "  install              Install VPN server"
@@ -95,7 +113,8 @@ show_usage() {
     echo "  --version, -v        Show version information"
     echo ""
     echo -e "${YELLOW}Examples:${NC}"
-    echo "  $0 install                    # Install VPN server interactively"
+    echo "  $0                            # Launch interactive menu"
+    echo "  $0 install                    # Install VPN server"
     echo "  $0 user add john              # Add user 'john'"
     echo "  $0 client install             # Install VPN client"
     echo "  $0 stats                      # Show traffic statistics"
@@ -163,7 +182,10 @@ handle_server_install() {
     log "Starting VPN server installation..."
     
     # Check prerequisites
-    check_root_privileges true || exit 1
+    check_root_privileges true || {
+        error "Root privileges required"
+        return 1
+    }
     detect_system_info true
     
     # Load required modules
@@ -347,19 +369,195 @@ handle_watchdog() {
 }
 
 # =============================================================================
+# INTERACTIVE MENU
+# =============================================================================
+
+show_main_menu() {
+    clear
+    echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║          VPN Management System v${SCRIPT_VERSION}                  ║${NC}"
+    echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${YELLOW}Server Management:${NC}"
+    echo "  1)  📦 Install VPN Server"
+    echo "  2)  📊 Server Status"
+    echo "  3)  🔄 Restart Server"
+    echo "  4)  🗑️  Uninstall Server"
+    echo ""
+    echo -e "${YELLOW}User Management:${NC}"
+    echo "  5)  👥 User Management Menu"
+    echo "  6)  ➕ Add User (Quick)"
+    echo "  7)  📋 List Users"
+    echo ""
+    echo -e "${YELLOW}Client Management:${NC}"
+    echo "  8)  💻 Client Management Menu"
+    echo "  9)  📥 Install Client"
+    echo ""
+    echo -e "${YELLOW}Monitoring & Maintenance:${NC}"
+    echo "  10) 📈 Traffic Statistics"
+    echo "  11) 📋 View Logs"
+    echo "  12) 🔐 Rotate Keys"
+    echo ""
+    echo -e "${YELLOW}Advanced:${NC}"
+    echo "  13) 🚀 Deployment Options"
+    echo "  14) 🛡️  Watchdog Service"
+    echo ""
+    echo -e "${YELLOW}Help & Info:${NC}"
+    echo "  15) ❓ Show Help"
+    echo "  16) ℹ️  Show Version"
+    echo ""
+    echo -e "${RED}  0)  🚪 Exit${NC}"
+    echo ""
+}
+
+handle_menu_choice() {
+    local choice="$1"
+    
+    case "$choice" in
+        1)
+            handle_server_install
+            ;;
+        2)
+            handle_server_status
+            ;;
+        3)
+            handle_server_restart
+            ;;
+        4)
+            handle_server_uninstall
+            ;;
+        5)
+            handle_user_management
+            ;;
+        6)
+            echo -e "${BLUE}Quick Add User${NC}"
+            read -p "Enter username: " username
+            if [ -n "$username" ]; then
+                SUB_ACTION="add"
+                handle_user_management "$username"
+            else
+                warning "Username cannot be empty"
+            fi
+            ;;
+        7)
+            SUB_ACTION="list"
+            handle_user_management
+            ;;
+        8)
+            handle_client_management
+            ;;
+        9)
+            SUB_ACTION="install"
+            handle_client_management
+            ;;
+        10)
+            handle_statistics
+            ;;
+        11)
+            handle_logs
+            ;;
+        12)
+            handle_key_rotation
+            ;;
+        13)
+            echo -e "${BLUE}Deployment Options:${NC}"
+            echo "1) Install"
+            echo "2) Update"
+            echo "3) Backup"
+            echo "4) Restore"
+            echo "0) Back"
+            read -p "Select option: " deploy_choice
+            case "$deploy_choice" in
+                1) SUB_ACTION="install"; handle_deployment ;;
+                2) SUB_ACTION="update"; handle_deployment ;;
+                3) SUB_ACTION="backup"; handle_deployment ;;
+                4) SUB_ACTION="restore"; handle_deployment ;;
+                0) return ;;
+                *) warning "Invalid option" ;;
+            esac
+            ;;
+        14)
+            echo -e "${BLUE}Watchdog Service:${NC}"
+            echo "1) Start"
+            echo "2) Stop"
+            echo "3) Status"
+            echo "0) Back"
+            read -p "Select option: " watchdog_choice
+            case "$watchdog_choice" in
+                1) SUB_ACTION="start"; handle_watchdog ;;
+                2) SUB_ACTION="stop"; handle_watchdog ;;
+                3) SUB_ACTION="status"; handle_watchdog ;;
+                0) return ;;
+                *) warning "Invalid option" ;;
+            esac
+            ;;
+        15)
+            show_usage
+            ;;
+        16)
+            show_version
+            ;;
+        0)
+            echo -e "${GREEN}Goodbye!${NC}"
+            exit 0
+            ;;
+        *)
+            warning "Invalid option. Please choose 0-16."
+            ;;
+    esac
+}
+
+run_interactive_menu() {
+    # Set interactive mode flag
+    export INTERACTIVE_MODE=1
+    
+    # Trap to ensure we always exit with 0
+    trap 'exit 0' INT TERM EXIT
+    
+    while true; do
+        show_main_menu
+        read -p "Select option (0-16): " choice
+        
+        # Handle errors gracefully
+        handle_menu_choice "$choice" || {
+            # If error occurred, show message and continue
+            echo ""
+            read -p "Press Enter to continue..."
+            continue
+        }
+        
+        if [ "$choice" = "0" ]; then
+            exit 0
+        fi
+        
+        if [ "$choice" != "15" ] && [ "$choice" != "16" ]; then
+            echo ""
+            read -p "Press Enter to continue..."
+        fi
+    done
+}
+
+# =============================================================================
 # MAIN COMMAND ROUTER
 # =============================================================================
 
 main() {
+    # Trap to ensure we always exit with 0
+    trap 'exit 0' INT TERM EXIT
+    
     # Parse command line arguments
     case "$1" in
-        --help|-h|"")
+        --help|-h)
             show_usage
             exit 0
             ;;
         --version|-v)
             show_version
             exit 0
+            ;;
+        ""|menu)
+            # Run interactive menu when no arguments or 'menu' command
+            run_interactive_menu
             ;;
         install)
             ACTION="install"
@@ -420,9 +618,14 @@ main() {
             handle_watchdog "$@"
             ;;
         *)
-            error "Unknown command: $1\nRun '$0 --help' for usage information."
+            warning "Unknown command: $1"
+            echo "Run '$0 --help' for usage information."
+            exit 0
             ;;
     esac
+    
+    # Always exit with 0
+    exit 0
 }
 
 # =============================================================================
