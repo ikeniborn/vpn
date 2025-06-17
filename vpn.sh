@@ -178,28 +178,327 @@ load_additional_libraries() {
 }
 
 # =============================================================================
+# SERVER INSTALLATION LOGIC
+# =============================================================================
+
+# Run complete server installation using modules
+run_server_installation() {
+    log "Starting modular VPN server installation..."
+    
+    # Install system dependencies
+    install_system_dependencies true || {
+        error "Failed to install system dependencies"
+        return 1
+    }
+    
+    # Verify dependencies
+    verify_dependencies true || {
+        error "Dependency verification failed"
+        return 1
+    }
+    
+    # Get server configuration interactively
+    get_server_config_interactive || {
+        error "Failed to get server configuration"
+        return 1
+    }
+    
+    # Setup Xray directories
+    setup_xray_directories "$WORK_DIR" true || {
+        error "Failed to setup Xray directories"
+        return 1
+    }
+    
+    # Create Xray configuration
+    create_xray_config || {
+        error "Failed to create Xray configuration"
+        return 1
+    }
+    
+    # Setup Docker environment
+    setup_docker_environment "$WORK_DIR" "$SERVER_PORT" true || {
+        error "Failed to setup Docker environment"
+        return 1
+    }
+    
+    # Configure firewall
+    setup_xray_firewall "$SERVER_PORT" true || {
+        error "Failed to configure firewall"
+        return 1
+    }
+    
+    # Create first user
+    create_first_user || {
+        error "Failed to create first user"
+        return 1
+    }
+    
+    # Show installation results
+    show_installation_results
+    
+    log "VPN server installation completed successfully!"
+}
+
+# Get server configuration interactively
+get_server_config_interactive() {
+    # Global variables for configuration
+    export SERVER_IP=""
+    export SERVER_PORT=""
+    export SERVER_SNI=""
+    export PROTOCOL="vless-reality"
+    export USE_REALITY=true
+    export USER_NAME=""
+    export USER_UUID=""
+    export PRIVATE_KEY=""
+    export PUBLIC_KEY=""
+    export SHORT_ID=""
+    
+    # Get external IP
+    SERVER_IP=$(get_external_ip) || {
+        read -p "Could not detect external IP. Enter server IP address: " SERVER_IP
+    }
+    log "External IP: $SERVER_IP"
+    
+    # Choose protocol
+    echo -e "${BLUE}Choose VPN protocol:${NC}"
+    echo "1) VLESS+Reality (Recommended)"
+    echo "2) VLESS Basic"
+    
+    while true; do
+        read -p "Select option (1-2): " choice
+        case $choice in
+            1)
+                PROTOCOL="vless-reality"
+                USE_REALITY=true
+                log "Selected protocol: VLESS+Reality"
+                break
+                ;;
+            2)
+                PROTOCOL="vless-basic"
+                USE_REALITY=false
+                log "Selected protocol: VLESS Basic"
+                break
+                ;;
+            *)
+                warning "Please choose 1 or 2"
+                ;;
+        esac
+    done
+    
+    # Get server port
+    echo -e "${BLUE}Choose server port:${NC}"
+    echo "1) Automatic free port (10000-65000) - Recommended"
+    echo "2) Manual port"
+    echo "3) Standard port (10443)"
+    
+    while true; do
+        read -p "Select option (1-3): " port_choice
+        case $port_choice in
+            1)
+                SERVER_PORT=$(generate_free_port 10000 65000 true 20 10443)
+                log "Automatically selected port: $SERVER_PORT"
+                break
+                ;;
+            2)
+                read -p "Enter port (1024-65535): " custom_port
+                if validate_port "$custom_port" && check_port_available "$custom_port"; then
+                    SERVER_PORT="$custom_port"
+                    log "Selected port: $SERVER_PORT"
+                    break
+                else
+                    warning "Port unavailable or incorrect"
+                fi
+                ;;
+            3)
+                SERVER_PORT="10443"
+                if check_port_available "$SERVER_PORT"; then
+                    log "Using standard port: $SERVER_PORT"
+                    break
+                else
+                    warning "Standard port is busy, choose another option"
+                fi
+                ;;
+            *)
+                warning "Please choose 1, 2, or 3"
+                ;;
+        esac
+    done
+    
+    # Get SNI configuration for Reality
+    if [ "$USE_REALITY" = true ]; then
+        get_sni_config_interactive
+        generate_reality_keys
+    fi
+    
+    return 0
+}
+
+# Get SNI configuration
+get_sni_config_interactive() {
+    echo -e "${BLUE}Choose SNI domain:${NC}"
+    echo "1) addons.mozilla.org - Recommended"
+    echo "2) www.lovelive-anime.jp"
+    echo "3) www.swift.org"
+    echo "4) Custom domain"
+    echo "5) Auto-select best domain"
+    
+    local sni_domains=(
+        "addons.mozilla.org"
+        "www.lovelive-anime.jp"
+        "www.swift.org"
+    )
+    
+    while true; do
+        read -p "Select option (1-5): " sni_choice
+        case $sni_choice in
+            1|2|3)
+                local selected_domain="${sni_domains[$((sni_choice-1))]}"
+                if check_sni_domain "$selected_domain"; then
+                    SERVER_SNI="$selected_domain"
+                    log "Selected SNI domain: $SERVER_SNI"
+                    break
+                else
+                    warning "Domain unavailable, try another"
+                fi
+                ;;
+            4)
+                read -p "Enter domain: " custom_domain
+                if check_sni_domain "$custom_domain"; then
+                    SERVER_SNI="$custom_domain"
+                    log "Selected custom domain: $SERVER_SNI"
+                    break
+                else
+                    warning "Domain unavailable or incorrect"
+                fi
+                ;;
+            5)
+                log "Finding best domain..."
+                for domain in "${sni_domains[@]}"; do
+                    if check_sni_domain "$domain"; then
+                        SERVER_SNI="$domain"
+                        log "Auto-selected domain: $SERVER_SNI"
+                        break
+                    fi
+                done
+                if [ -n "$SERVER_SNI" ]; then
+                    break
+                else
+                    warning "Could not find available domain"
+                fi
+                ;;
+            *)
+                warning "Please choose 1-5"
+                ;;
+        esac
+    done
+}
+
+# Generate Reality keys
+generate_reality_keys() {
+    log "Generating Reality keys..."
+    
+    # Generate keys using crypto library
+    local keys=$(generate_reality_keypair)
+    PRIVATE_KEY=$(echo "$keys" | cut -d' ' -f1)
+    PUBLIC_KEY=$(echo "$keys" | cut -d' ' -f2)
+    
+    # Generate short ID
+    SHORT_ID=$(generate_short_id)
+    
+    log "Reality keys generated"
+}
+
+# Create Xray configuration
+create_xray_config() {
+    log "Creating Xray configuration..."
+    
+    # Generate user UUID
+    USER_UUID=$(generate_uuid)
+    
+    # Get username
+    read -p "Enter first user name (default: user1): " input_name
+    USER_NAME="${input_name:-user1}"
+    log "Username: $USER_NAME"
+    
+    # Create configuration using module
+    setup_xray_configuration "$WORK_DIR" "$PROTOCOL" "$SERVER_PORT" "$USER_UUID" \
+        "$USER_NAME" "$SERVER_IP" "$SERVER_SNI" "$PRIVATE_KEY" "$PUBLIC_KEY" \
+        "$SHORT_ID" true || {
+        error "Failed to create Xray configuration"
+        return 1
+    }
+    
+    log "Xray configuration created"
+}
+
+# Create first user
+create_first_user() {
+    log "Creating first user: $USER_NAME"
+    
+    # This will be handled by the configuration creation
+    # User is already created in create_xray_config
+    
+    log "First user created successfully"
+}
+
+# Show installation results
+show_installation_results() {
+    echo -e "\n${GREEN}=== Installation Complete ===${NC}"
+    echo -e "${BLUE}Server:${NC} $SERVER_IP"
+    echo -e "${BLUE}Port:${NC} $SERVER_PORT"
+    echo -e "${BLUE}Protocol:${NC} $PROTOCOL"
+    echo -e "${BLUE}User:${NC} $USER_NAME"
+    
+    if [ "$USE_REALITY" = true ]; then
+        echo -e "${BLUE}SNI:${NC} $SERVER_SNI"
+        echo -e "${BLUE}Public Key:${NC} $PUBLIC_KEY"
+        echo -e "${BLUE}Short ID:${NC} $SHORT_ID"
+    fi
+    
+    # Show connection link
+    if [ -f "$WORK_DIR/users/$USER_NAME.link" ]; then
+        echo -e "\n${GREEN}Connection link:${NC}"
+        cat "$WORK_DIR/users/$USER_NAME.link"
+        echo
+    fi
+    
+    # Show QR code location
+    if [ -f "$WORK_DIR/users/$USER_NAME.png" ]; then
+        echo -e "${GREEN}QR code saved:${NC} $WORK_DIR/users/$USER_NAME.png"
+    fi
+    
+    echo -e "\n${YELLOW}For user management use:${NC}"
+    echo -e "${WHITE}sudo ./vpn.sh users${NC}"
+}
+
+# =============================================================================
 # SERVER INSTALLATION (from install_vpn.sh)
 # =============================================================================
 
 handle_server_install() {
     log "Starting VPN server installation..."
     
-    # Check prerequisites
-    check_root_privileges true || {
-        error "Root privileges required"
+    # Check root privileges first (built-in check)
+    if [ "$EUID" -ne 0 ]; then
+        error "Root privileges required. Please run with sudo."
         return 1
-    }
-    detect_system_info true
+    fi
     
     # Load required modules
-    load_additional_libraries || error "Failed to load additional libraries"
-    load_server_modules || error "Failed to load server modules"
+    load_additional_libraries || {
+        error "Failed to load additional libraries"
+        return 1
+    }
+    load_server_modules || {
+        error "Failed to load server modules"
+        return 1
+    }
     
-    # Source the original installation logic
-    source "$SCRIPT_DIR/install_vpn.sh" || error "Failed to load install_vpn.sh"
+    # Now check system prerequisites using loaded modules
+    detect_system_info true
     
-    # Run main installation
-    main
+    # Run installation using modules
+    run_server_installation
 }
 
 # =============================================================================
@@ -210,17 +509,28 @@ handle_user_management() {
     # Check prerequisites
     if [ "$EUID" -ne 0 ]; then
         error "User management requires superuser privileges (sudo)"
+        return 1
     fi
     
     # Check if server is installed
     if [ ! -d "$WORK_DIR" ]; then
         error "VPN server is not installed. Run '$0 install' first."
+        return 1
     fi
     
     # Load required modules
-    load_user_modules || error "Failed to load user modules"
-    load_monitoring_modules || error "Failed to load monitoring modules"
-    load_server_modules || error "Failed to load server modules"
+    load_user_modules || {
+        error "Failed to load user modules"
+        return 1
+    }
+    load_monitoring_modules || {
+        error "Failed to load monitoring modules"
+        return 1
+    }
+    load_server_modules || {
+        error "Failed to load server modules"
+        return 1
+    }
     
     case "$SUB_ACTION" in
         "add")
@@ -245,11 +555,84 @@ handle_user_management() {
             show_user "$2"
             ;;
         *)
-            # Interactive mode
-            source "$SCRIPT_DIR/manage_users.sh" || error "Failed to load manage_users.sh"
-            main
+            # Interactive mode - call users menu directly
+            show_user_management_menu
             ;;
     esac
+}
+
+# Show user management submenu
+show_user_management_menu() {
+    while true; do
+        clear
+        echo -e "${GREEN}=== User Management ===${NC}"
+        echo ""
+        echo "1) 📋 List Users"
+        echo "2) ➕ Add User"
+        echo "3) 🗑️  Delete User"
+        echo "4) ✏️  Edit User"
+        echo "5) 👤 Show User Data"
+        echo "0) 🔙 Back to Main Menu"
+        echo ""
+        
+        read -p "Select option (0-5): " choice
+        case $choice in
+            1) list_users; read -p "Press Enter to continue..." ;;
+            2) 
+                read -p "Enter username: " username
+                if [ -n "$username" ]; then
+                    add_user "$username"
+                else
+                    warning "Username cannot be empty"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            3)
+                echo "Current users:"
+                list_users
+                echo ""
+                read -p "Enter username to delete: " username
+                if [ -n "$username" ]; then
+                    echo -e "${YELLOW}Delete user '$username'? [y/N]${NC}"
+                    read -p "Confirm: " confirm
+                    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+                        delete_user "$username"
+                    else
+                        log "Deletion cancelled"
+                    fi
+                else
+                    warning "Username cannot be empty"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            4)
+                echo "Current users:"
+                list_users
+                echo ""
+                read -p "Enter username to edit: " username
+                if [ -n "$username" ]; then
+                    edit_user "$username"
+                else
+                    warning "Username cannot be empty"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            5)
+                echo "Current users:"
+                list_users
+                echo ""
+                read -p "Enter username to show: " username
+                if [ -n "$username" ]; then
+                    show_user "$username"
+                else
+                    warning "Username cannot be empty"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            0) break ;;
+            *) warning "Invalid option. Please choose 0-5." ;;
+        esac
+    done
 }
 
 # =============================================================================
@@ -259,22 +642,25 @@ handle_user_management() {
 handle_client_management() {
     case "$SUB_ACTION" in
         "install")
-            log "Starting VPN client installation..."
-            source "$SCRIPT_DIR/install_client.sh" || error "Failed to load install_client.sh"
-            install_client
+            log "Client installation not yet implemented in unified script"
+            warning "Please use the original install_client.sh for now"
             ;;
         "status")
-            source "$SCRIPT_DIR/install_client.sh" || error "Failed to load install_client.sh"
-            show_client_status
+            log "Client status check not yet implemented in unified script"
+            warning "Please use the original install_client.sh for now"
             ;;
         "uninstall")
-            source "$SCRIPT_DIR/install_client.sh" || error "Failed to load install_client.sh"
-            uninstall_client
+            log "Client uninstall not yet implemented in unified script"
+            warning "Please use the original install_client.sh for now"
             ;;
         *)
             # Interactive mode
-            source "$SCRIPT_DIR/install_client.sh" || error "Failed to load install_client.sh"
-            main
+            echo -e "${YELLOW}Client management commands:${NC}"
+            echo "  client install     Install VPN client"
+            echo "  client status      Show client status"
+            echo "  client uninstall   Uninstall client"
+            echo ""
+            warning "Client management not yet fully implemented in unified script"
             ;;
     esac
 }
@@ -294,8 +680,20 @@ handle_server_restart() {
 }
 
 handle_server_uninstall() {
-    source "$SCRIPT_DIR/uninstall.sh" || error "Failed to load uninstall.sh"
-    main "$@"
+    # Check root privileges
+    if [ "$EUID" -ne 0 ]; then
+        error "Uninstall requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    # Load server modules
+    load_server_modules || {
+        error "Failed to load server modules"
+        return 1
+    }
+    
+    # Use the uninstall module
+    uninstall_vpn_server
 }
 
 # =============================================================================
