@@ -1,287 +1,190 @@
-# 🏗️ VPN Project Refactoring Plan
+# VPN Project Architecture & Planning
 
-## 📋 Project Overview
+## Current State (v3.0)
 
-**Current State:**
-- 3 main scripts: `install_vpn.sh` (1,365 lines), `manage_users.sh` (1,426 lines), and `install_client.sh` (client with Web UI)
-- Added stability improvements: health checks, resource limits, watchdog service
-- Enhanced deployment tools: `deploy.sh` script and CI/CD configuration
-- Significant code duplication between scripts
-- All functionality embedded in single files
-- Limited modularity and reusability
+### ✅ Completed Milestones
 
-**Target State:**
-- Modular architecture with scripts under 500 lines each
-- Shared library for common functions
-- Clear separation of concerns
-- Easy to maintain and extend
+1. **Modular Architecture** - Full refactoring to modular system
+2. **Unified Interface** - Single `vpn.sh` script for all operations
+3. **Interactive Menu** - User-friendly numbered menu system
+4. **Zero Exit Code** - Graceful error handling
+5. **Clean Project Root** - Only one script in root directory
+6. **Comprehensive Testing** - Test suite for all modules
+7. **Documentation** - Updated and streamlined
 
-## 🎯 Refactoring Goals
-
-1. **Code Reduction**: Reduce each script to 300-500 lines maximum
-2. **DRY Principle**: Eliminate duplicate code
-3. **Modularity**: Create reusable components
-4. **Maintainability**: Improve code organization and readability
-5. **Extensibility**: Make it easy to add new features
-
-## 🏛️ Proposed Architecture
+### 🏗️ Architecture Overview
 
 ```
-vpn/
-├── lib/                    # Shared libraries
-│   ├── common.sh          # Common functions (log, error, warning, colors)
-│   ├── config.sh          # Configuration management
-│   ├── network.sh         # Network utilities (port, SNI validation)
-│   ├── docker.sh          # Docker operations
-│   ├── crypto.sh          # Key generation and management
-│   └── ui.sh              # User interface components
-│
-├── modules/               # Feature modules
-│   ├── install/
-│   │   ├── prerequisites.sh    # System requirements check
-│   │   ├── docker_setup.sh     # Docker installation
-│   │   ├── xray_config.sh      # Xray configuration
-│   │   └── firewall.sh         # UFW setup
-│   │
-│   ├── users/
-│   │   ├── add.sh             # Add user functionality
-│   │   ├── delete.sh          # Delete user functionality
-│   │   ├── edit.sh            # Edit user functionality
-│   │   ├── list.sh            # List users functionality
-│   │   └── show.sh            # Show user details
-│   │
-│   ├── server/
-│   │   ├── status.sh          # Server status
-│   │   ├── restart.sh         # Restart operations
-│   │   ├── rotate_keys.sh     # Key rotation
-│   │   └── uninstall.sh       # Uninstallation
-│   │
-│   └── monitoring/
-│       ├── statistics.sh      # Traffic statistics
-│       ├── logging.sh         # Log configuration
-│       └── logs_viewer.sh     # Log analysis
-│
-├── stability/             # Stability & monitoring modules
-│   ├── watchdog.sh           # Container monitoring service
-│   ├── health_checks.sh      # Health check configurations
-│   ├── resource_limits.sh    # CPU/memory management
-│   └── log_rotation.sh       # Log management
-│
-├── deployment/            # Deployment & CI/CD
-│   ├── deploy.sh             # Main deployment script
-│   ├── backup.sh             # Backup operations
-│   ├── restore.sh            # Restore operations
-│   └── ci_cd/
-│       └── github_actions.yml
-│
-├── config/                # Configuration templates
-│   ├── xray_template.json
-│   └── docker-compose.template.yml
-│
-├── install.sh            # Main installer (< 300 lines)
-├── manage.sh             # Management interface (< 300 lines)
-├── install_client.sh     # Client installer with Web UI
-├── deploy.sh             # Deployment script (current)
-├── watchdog.sh           # Monitoring service (current)
-└── uninstall.sh          # Uninstaller script
+┌─────────────┐
+│   vpn.sh    │  ← Single entry point
+└──────┬──────┘
+       │
+┌──────┴──────────────────────────────┐
+│         Core Libraries              │
+├─────────────┬───────────────────────┤
+│  common.sh  │  config.sh            │
+│  docker.sh  │  network.sh           │
+│  crypto.sh  │  ui.sh                │
+└─────────────┴───────────────────────┘
+       │
+┌──────┴──────────────────────────────┐
+│        Feature Modules              │
+├─────────────┬───────────────────────┤
+│  install/   │  Prerequisites        │
+│             │  Docker Setup         │
+│             │  Xray Config          │
+│             │  Firewall             │
+├─────────────┼───────────────────────┤
+│  users/     │  Add, Delete, Edit    │
+│             │  List, Show           │
+├─────────────┼───────────────────────┤
+│  server/    │  Status, Restart      │
+│             │  Rotate Keys          │
+│             │  Uninstall            │
+├─────────────┼───────────────────────┤
+│  monitoring/│  Statistics           │
+│             │  Logging, Viewer      │
+├─────────────┼───────────────────────┤
+│  system/    │  Watchdog             │
+└─────────────┴───────────────────────┘
 ```
 
-## 📦 Module Breakdown
+## 🎯 Future Development Plan
 
-### lib/common.sh (~100 lines)
-- Color definitions
-- log(), error(), warning() functions
-- Common variables (WORK_DIR, etc.)
-- Utility functions
+### Phase 1: Performance Optimization (Q1 2025)
 
-### lib/config.sh (~150 lines)
-- Configuration file management
-- Settings persistence
-- Configuration validation
-- Default values
+1. **Lazy Loading**
+   - Load modules only when needed
+   - Reduce startup time
+   - Memory optimization
 
-### lib/network.sh (~200 lines)
-- Port availability checking
-- Port generation
-- SNI domain validation
-- Network interface detection
+2. **Caching System**
+   - Cache Docker container states
+   - Cache user configurations
+   - Reduce API calls
 
-### lib/docker.sh (~150 lines)
-- Docker installation check
-- Container management
-- Docker-compose operations
-- Container health checks
+3. **Parallel Processing**
+   - Concurrent health checks
+   - Parallel user operations
+   - Batch processing
 
-### lib/crypto.sh (~100 lines)
-- X25519 key generation
-- Key rotation logic
-- UUID generation
-- Short ID generation
+### Phase 2: Enhanced Features (Q2 2025)
 
-### lib/ui.sh (~200 lines)
-- Menu display functions
-- User input validation
-- Progress indicators
-- Client info display
+1. **Multi-Protocol Support**
+   - Add Trojan protocol
+   - Add Shadowsocks protocol
+   - Protocol switching
 
-### Main Scripts
+2. **Advanced Monitoring**
+   - Real-time traffic graphs
+   - Alert system (email/telegram)
+   - Performance metrics dashboard
 
-#### install.sh (~300 lines)
-```bash
-#!/bin/bash
-# Load libraries
-source lib/common.sh
-source lib/config.sh
-source lib/network.sh
-source lib/docker.sh
-source lib/crypto.sh
+3. **Backup & Restore**
+   - Automated backups
+   - Cloud backup support
+   - One-click restore
 
-# Main installation flow
-main() {
-    check_root
-    show_welcome
-    
-    # Load modules
-    source modules/install/prerequisites.sh
-    source modules/install/docker_setup.sh
-    source modules/install/xray_config.sh
-    source modules/install/firewall.sh
-    
-    # Execute installation
-    check_prerequisites
-    setup_docker
-    configure_xray
-    setup_firewall
-    
-    show_completion_message
-}
+### Phase 3: Enterprise Features (Q3 2025)
 
-main "$@"
-```
+1. **High Availability**
+   - Multi-server support
+   - Load balancing
+   - Failover mechanism
 
-#### manage.sh (~300 lines)
-```bash
-#!/bin/bash
-# Load libraries
-source lib/common.sh
-source lib/config.sh
-source lib/ui.sh
+2. **API Development**
+   - RESTful API
+   - Web dashboard
+   - Mobile app support
 
-# Load configuration
-load_server_config
+3. **Advanced Security**
+   - 2FA for management
+   - Audit logging
+   - Intrusion detection
 
-# Main menu loop
-while true; do
-    show_menu
-    read_user_choice
-    
-    case $choice in
-        1) source modules/users/list.sh && list_users ;;
-        2) source modules/users/add.sh && add_user ;;
-        3) source modules/users/delete.sh && delete_user ;;
-        # ... etc
-    esac
-done
-```
+### Phase 4: Ecosystem (Q4 2025)
 
-## 🔄 Refactoring Steps
+1. **Plugin System**
+   - Third-party modules
+   - Custom protocols
+   - Extension marketplace
 
-### Phase 1: Create Library Structure (Week 1)
-1. Create `lib/` directory structure
-2. Extract common functions to `lib/common.sh`
-3. Move color definitions and utilities
-4. Test library imports
+2. **Integration**
+   - CI/CD pipelines
+   - Kubernetes support
+   - Cloud provider integration
 
-### Phase 2: Extract Network & Docker (Week 1)
-1. Create `lib/network.sh` with port/SNI functions
-2. Create `lib/docker.sh` with container operations
-3. Update scripts to use libraries
-4. Test functionality
+3. **Community**
+   - Documentation portal
+   - Video tutorials
+   - Community forum
 
-### Phase 3: Modularize User Management (Week 2)
-1. Create `modules/users/` structure
-2. Extract user operations to separate files
-3. Implement module loading in manage.sh
-4. Test user operations
+## 🔧 Technical Debt
 
-### Phase 4: Modularize Server Operations (Week 2)
-1. Create `modules/server/` structure
-2. Extract server operations
-3. Implement module loading
-4. Test server operations
+### High Priority
+- [ ] Add comprehensive error codes
+- [ ] Implement proper logging levels
+- [ ] Add configuration validation
 
-### Phase 5: Modularize Monitoring (Week 3)
-1. Create `modules/monitoring/` structure
-2. Extract monitoring functions
-3. Implement module loading
-4. Test monitoring features
+### Medium Priority
+- [ ] Optimize Docker image size
+- [ ] Implement connection pooling
+- [ ] Add performance benchmarks
 
-### Phase 6: Refactor Main Scripts (Week 3)
-1. Rewrite `install.sh` using modules
-2. Rewrite `manage.sh` using modules
-3. Create `uninstall.sh` as separate script
-4. Final testing
+### Low Priority
+- [ ] Code coverage reports
+- [ ] Automated documentation
+- [ ] Style guide enforcement
 
-## 🧪 Testing Strategy
+## 📊 Metrics & Goals
 
-### Unit Testing
-- Test each module independently
-- Verify library functions
-- Mock dependencies where needed
+### Performance Targets
+- Startup time: < 2 seconds
+- User operation: < 1 second
+- Memory usage: < 50MB
+- CPU usage: < 5% idle
 
-### Integration Testing
-- Test module interactions
-- Verify configuration persistence
-- Test error handling
+### Quality Metrics
+- Code coverage: > 80%
+- Documentation: 100% public functions
+- Module independence: High
+- Error handling: Comprehensive
 
-### System Testing
-- Full installation test
-- Complete user lifecycle test
-- Server operation tests
-- Monitoring functionality
+## 🛠️ Development Guidelines
 
-## 🛡️ Recent Stability Improvements (Completed)
+### Code Standards
+1. All functions must have debug parameter
+2. Error messages must be descriptive
+3. Module files < 500 lines
+4. Functions do one thing well
 
-### Container Health & Monitoring
-- **Health Checks**: Implemented for all Docker containers (Xray, Shadowbox, Watchtower)
-- **VPN Watchdog Service**: 24/7 monitoring with automatic restart capabilities
-- **Resource Limits**: CPU and memory constraints to prevent system overload
-- **Smart Restart Policy**: Changed from `always` to `unless-stopped`
+### Testing Requirements
+1. Unit tests for all public functions
+2. Integration tests for workflows
+3. Performance tests for critical paths
+4. Security tests for user input
 
-### Deployment & DevOps
-- **deploy.sh Script**: Comprehensive deployment automation with backup/restore
-- **CI/CD Integration**: GitHub Actions workflow for automated deployments
-- **Multi-Environment**: Support for staging and production environments
-- **Auto-Discovery**: Smart path detection for flexible deployment locations
+### Documentation Standards
+1. README for each module directory
+2. Function documentation inline
+3. Examples for complex operations
+4. Troubleshooting guides
 
-### Enhanced Management
-- **Watchdog Dashboard**: New UI option for monitoring and controlling watchdog service
-- **Log Management**: Automatic log rotation and centralized logging
-- **System Monitoring**: CPU, memory, and disk usage tracking
-- **Real-time Status**: Live container health and service status monitoring
+## 🚀 Release Strategy
 
-## 📈 Success Metrics
+### Version Numbering
+- Major: Breaking changes
+- Minor: New features
+- Patch: Bug fixes
 
-1. **Line Count**: Each script < 500 lines
-2. **Code Duplication**: < 5% duplicate code
-3. **Module Count**: 15-20 focused modules
-4. **Test Coverage**: > 80% functionality tested
-5. **Performance**: No regression in execution time
-6. **Stability**: 99.9% uptime with automatic recovery (NEW)
-7. **Deployment**: Zero-downtime CI/CD deployments (NEW)
+### Release Process
+1. Feature freeze
+2. Testing phase
+3. Documentation update
+4. Release candidate
+5. Production release
 
-## 🚀 Benefits
-
-1. **Maintainability**: Easier to fix bugs and add features
-2. **Readability**: Clear structure and organization
-3. **Reusability**: Shared libraries reduce code
-4. **Testability**: Modular design enables testing
-5. **Scalability**: Easy to add new VPN types or features
-
-## 📝 Notes
-
-- Maintain backward compatibility during refactoring
-- Document each module's purpose and usage
-- Keep user-facing interfaces unchanged
-- Preserve all existing functionality
-- Add comprehensive error handling in modules
+### Support Policy
+- Current version: Full support
+- Previous version: Security updates
+- Older versions: Community support
