@@ -178,7 +178,8 @@ setup_basic_firewall() {
     fi
     
     # Enable UFW if not active
-    local status=$(check_firewall_status "$debug")
+    check_firewall_status "$debug"
+    local status=$?
     if [ "$status" -ne 0 ]; then
         [ "$debug" = true ] && log "Enabling UFW firewall..."
         if ufw --force enable; then

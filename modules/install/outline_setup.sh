@@ -119,6 +119,10 @@ generate_outline_config() {
     # Save configuration
     echo "$api_prefix" > "$OUTLINE_DIR/api_prefix.txt"
     echo "$api_port" > "$OUTLINE_DIR/api_port.txt"
+    # Save the configured access key port
+    if [[ $keys_port != 0 ]]; then
+        echo "$keys_port" > "$OUTLINE_DIR/configured_port.txt"
+    fi
     
     [ "$debug" = true ] && log "Outline configuration generated"
     return 0
@@ -272,17 +276,26 @@ check_outline_firewall() {
     local api_url="${1}"
     local public_api_url="${2}"
     local api_port="${3}"
-    local debug="${4:-false}"
+    local access_key_port="${4}"
+    local debug="${5:-false}"
     
     [ "$debug" = true ] && log "Checking firewall status..."
     
-    # Get access key port from first user
-    local access_key_port=$(curl --insecure -s "${api_url}/access-keys" | \
-        docker exec -i shadowbox node -e '
-            const fs = require("fs");
-            const accessKeys = JSON.parse(fs.readFileSync(0, {encoding: "utf-8"}));
-            console.log(accessKeys["accessKeys"][0]["port"]);
-        ' 2>/dev/null || echo "")
+    # If no access key port provided, try to get it from the saved configuration
+    if [ -z "$access_key_port" ] || [ "$access_key_port" = "0" ]; then
+        # First check if we have a saved configured port
+        if [ -f "$OUTLINE_DIR/configured_port.txt" ]; then
+            access_key_port=$(cat "$OUTLINE_DIR/configured_port.txt")
+        else
+            # Otherwise get it from the first user
+            access_key_port=$(curl --insecure -s "${api_url}/access-keys" | \
+                docker exec -i shadowbox node -e '
+                    const fs = require("fs");
+                    const accessKeys = JSON.parse(fs.readFileSync(0, {encoding: "utf-8"}));
+                    console.log(accessKeys["accessKeys"][0]["port"]);
+                ' 2>/dev/null || echo "")
+        fi
+    fi
     
     local firewall_status=""
     if ! curl --max-time 5 --cacert "${SB_CERTIFICATE_FILE}" -s "${public_api_url}/access-keys" >/dev/null 2>&1; then
@@ -317,20 +330,18 @@ display_outline_results() {
     local cert_sha256=$(grep "certSha256" "$access_file" | sed "s/certSha256://")
     
     # Display results
-    cat <<EOF
-
-${GREEN}CONGRATULATIONS! Your Outline server is up and running.${NC}
-
-To manage your Outline server, please copy the following line (including curly
-brackets) into Step 2 of the Outline Manager interface:
-
-$(echo -e "${GREEN}{\"apiUrl\":\"${public_api_url}\",\"certSha256\":\"${cert_sha256}\"}${NC}")
-
-${firewall_status}
-
-${YELLOW}Download Outline Manager:${NC}
-${WHITE}https://getoutline.org/get-started/#step-1${NC}
-EOF
+    echo ""
+    echo -e "${GREEN}CONGRATULATIONS! Your Outline server is up and running.${NC}"
+    echo ""
+    echo "To manage your Outline server, please copy the following line (including curly"
+    echo "brackets) into Step 2 of the Outline Manager interface:"
+    echo ""
+    echo -e "${GREEN}{\"apiUrl\":\"${public_api_url}\",\"certSha256\":\"${cert_sha256}\"}${NC}"
+    echo ""
+    echo "${firewall_status}"
+    echo ""
+    echo -e "${YELLOW}Download Outline Manager:${NC}"
+    echo -e "${WHITE}https://getoutline.org/get-started/#step-1${NC}"
     
     # Save management info
     ensure_dir "$OUTLINE_DIR/management"
@@ -410,7 +421,7 @@ install_outline_server() {
     }
     
     # Check firewall status
-    local firewall_status=$(check_outline_firewall "$local_api_url" "$public_api_url" "$api_port" "$debug")
+    local firewall_status=$(check_outline_firewall "$local_api_url" "$public_api_url" "$api_port" "$SERVER_PORT" "$debug")
     
     # Display results
     display_outline_results "$access_file" "$public_api_url" "$firewall_status"
