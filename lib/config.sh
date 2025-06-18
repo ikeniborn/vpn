@@ -1,6 +1,9 @@
 #!/bin/bash
 
 # VPN Project Configuration Management Library
+
+# Mark as sourced
+export CONFIG_LIB_SOURCED=true
 # Handles loading, saving, and validating server configuration
 
 # Source common library

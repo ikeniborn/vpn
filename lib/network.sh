@@ -315,6 +315,44 @@ find_working_sni_domain() {
 
 # ========================= NETWORK INTERFACE DETECTION =========================
 
+# Get external IP address
+get_external_ip() {
+    local timeout="${1:-5}"
+    local services=(
+        "https://api.ipify.org"
+        "https://ifconfig.me"
+        "https://icanhazip.com"
+        "https://checkip.amazonaws.com"
+        "https://ipinfo.io/ip"
+    )
+    
+    for service in "${services[@]}"; do
+        if command_exists curl; then
+            local ip=$(timeout "$timeout" curl -s -4 --max-time "$timeout" "$service" 2>/dev/null | grep -E '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$')
+            if [ -n "$ip" ]; then
+                echo "$ip"
+                return 0
+            fi
+        elif command_exists wget; then
+            local ip=$(timeout "$timeout" wget -qO- -T "$timeout" "$service" 2>/dev/null | grep -E '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$')
+            if [ -n "$ip" ]; then
+                echo "$ip"
+                return 0
+            fi
+        fi
+    done
+    
+    # Fallback: try to get IP from network interface
+    local interface=$(get_primary_interface)
+    local ip=$(get_interface_ip "$interface")
+    if [ -n "$ip" ] && [ "$ip" != "127.0.0.1" ]; then
+        echo "$ip"
+        return 0
+    fi
+    
+    return 1
+}
+
 # Get primary network interface
 get_primary_interface() {
     # Method 1: Default route interface

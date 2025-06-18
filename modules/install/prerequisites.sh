@@ -17,8 +17,10 @@
 
 # Source required libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../../lib/common.sh" 2>/dev/null || {
-    echo "Error: Cannot source lib/common.sh"
+# Use PROJECT_ROOT if available (when loaded by main script), otherwise fallback to relative path
+LIB_PATH="${PROJECT_ROOT:-$SCRIPT_DIR/../..}/lib/common.sh"
+source "$LIB_PATH" 2>/dev/null || {
+    echo "Error: Cannot source lib/common.sh from $LIB_PATH"
     exit 1
 }
 

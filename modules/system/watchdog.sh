@@ -21,7 +21,7 @@
 # Source common library if not already sourced
 if [ -z "$COMMON_SOURCED" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/../../lib/common.sh" || {
-        echo "Error: Cannot source lib/common.sh"
+        echo "Error: Cannot source lib/common.sh from $LIB_PATH/common.sh"
         return 1
     }
 fi

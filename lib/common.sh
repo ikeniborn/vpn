@@ -3,6 +3,9 @@
 # VPN Project Common Library
 # Contains shared functions, colors, and utilities used across all scripts
 
+# Mark as sourced
+export COMMON_SOURCED=true
+
 # Exit on error
 set -e
 
@@ -25,6 +28,9 @@ export OUTLINE_DIR="${OUTLINE_DIR:-/opt/outline}"
 export USERS_DIR="$WORK_DIR/users"
 export CONFIG_FILE="$WORK_DIR/config/config.json"
 export LOGS_DIR="$WORK_DIR/logs"
+
+# Default ports
+export OUTLINE_API_PORT="${OUTLINE_API_PORT:-9000}"
 
 # Script directory (dynamically determined)
 export SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -145,6 +151,25 @@ validate_uuid() {
         return 0
     else
         return 1
+    fi
+}
+
+# ========================= GENERATION FUNCTIONS =========================
+
+# Generate random string
+generate_random_string() {
+    local length="${1:-32}"
+    local chars="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    
+    if command_exists openssl; then
+        openssl rand -base64 "$length" | tr -d "=+/" | cut -c1-"$length"
+    elif [ -c /dev/urandom ]; then
+        < /dev/urandom tr -dc "$chars" | head -c"$length"
+    else
+        # Fallback method
+        for i in $(seq 1 "$length"); do
+            echo -n "${chars:$(( RANDOM % ${#chars} )):1}"
+        done
     fi
 }
 

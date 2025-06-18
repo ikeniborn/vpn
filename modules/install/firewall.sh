@@ -20,8 +20,9 @@
 
 # Source required libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../../lib/common.sh" 2>/dev/null || {
-    echo "Error: Cannot source lib/common.sh"
+COMMON_PATH="${PROJECT_ROOT:-$SCRIPT_DIR/../..}/lib/common.sh"
+source "$COMMON_PATH" 2>/dev/null || {
+    echo "Error: Cannot source lib/common.sh from $COMMON_PATH"
     exit 1
 }
 
@@ -178,7 +179,7 @@ setup_basic_firewall() {
     
     # Enable UFW if not active
     local status=$(check_firewall_status "$debug")
-    if [ $status -ne 0 ]; then
+    if [ "$status" -ne 0 ]; then
         [ "$debug" = true ] && log "Enabling UFW firewall..."
         if ufw --force enable; then
             log "UFW firewall enabled"

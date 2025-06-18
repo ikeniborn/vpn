@@ -4,21 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This repository contains a Docker-based **Xray VPN server** implementation using the **VLESS+Reality** protocol. The system consists of:
+This repository contains a multi-protocol VPN server implementation supporting both **Xray** (VLESS+Reality) and **Outline VPN** (Shadowsocks). The system consists of:
 
-- `install_vpn.sh` - Server installation and configuration script with smart features
-- `manage_users.sh` - Advanced user management utility with comprehensive features
-- `install_client.sh` - Client installation script with v2rayA Web UI for Linux desktop/server
+- `vpn.sh` - Unified management script with interactive menu
+- Modular architecture in `lib/` and `modules/` directories
+- Support for ARM architectures (ARM64/ARMv7) including Raspberry Pi
 
-The VPN server runs in a Docker container using Xray-core, providing enterprise-level security with advanced features like automatic port selection, SNI quality monitoring, key rotation, and traffic statistics.
+The VPN servers run in Docker containers, providing enterprise-level security with advanced features like automatic port selection, SNI quality monitoring, key rotation, traffic statistics, and automatic updates.
 
 ## Key Technologies
 
 - **Xray-core**: Latest XTLS/Xray-core implementation (migrated from V2Ray)
+- **Outline VPN**: Shadowsocks-based protocol with web management interface
 - **VLESS+Reality Protocol**: State-of-the-art protocol with TLS 1.3 masquerading
 - **XTLS Vision Flow**: Enhanced performance with minimal processing overhead
-- **Docker**: Containerized deployment with teddysun/xray image
+- **Docker**: Containerized deployment with automatic updates via Watchtower
 - **X25519 Cryptography**: Military-grade key generation
+- **ARM Support**: Full compatibility with ARM64 and ARMv7 architectures
 
 ## Commands
 
@@ -38,21 +40,21 @@ sudo ./vpn.sh users        # Manage users
 
 The installation script provides smart configuration options:
 
-**Port Selection:**
-- Random free port (10000-65000) - Recommended
-- Manual port specification with validation
-- Standard port (10443)
-
-**SNI Domain Options:**
-- addons.mozilla.org (Recommended)
-- www.lovelive-anime.jp
-- www.swift.org
-- Custom domain with validation
-- Automatic best domain selection
-
-**Protocol Selection:**
-- VLESS+Reality (Enhanced security - Recommended)
-- VLESS Basic (Standard protocol)
+**VPN Protocol Selection:**
+1. **VLESS+Reality** (Recommended for maximum security)
+   - Enhanced anti-detection technology
+   - Port Selection: Random (10000-65000), manual, or standard (10443)
+   - SNI Domain Options: Pre-validated domains or custom
+   
+2. **VLESS Basic** (Standard VLESS protocol)
+   - Simplified configuration
+   - Same port selection options
+   
+3. **Outline VPN** (Shadowsocks-based)
+   - Easy client setup and management
+   - Web-based management interface
+   - Automatic updates via Watchtower
+   - ARM architecture support
 
 ### User Management
 
@@ -106,8 +108,7 @@ This provides a comprehensive menu-driven interface for:
 
 ### Docker Operations
 
-To manually manage the Docker container:
-
+**For Xray VPN:**
 ```bash
 # Navigate to working directory
 cd /opt/v2ray
@@ -129,6 +130,24 @@ docker-compose logs -f
 
 # Real-time container stats
 docker stats xray
+```
+
+**For Outline VPN:**
+```bash
+# View container status
+docker ps | grep -E "shadowbox|watchtower"
+
+# View Outline logs
+docker logs shadowbox
+
+# View Watchtower logs
+docker logs watchtower
+
+# Access management configuration
+cat /opt/outline/management/config.json
+
+# View access file
+cat /opt/outline/access.txt
 ```
 
 ### Monitoring Commands
@@ -196,7 +215,7 @@ The VPN project follows a modular architecture with the following structure:
 
 The server configuration is stored in the following locations:
 
-### Server Directory Structure
+### Xray Server Directory Structure
 ```
 /opt/v2ray/
 ├── config/
@@ -216,16 +235,41 @@ The server configuration is stored in the following locations:
 └── docker-compose.yml      # Container configuration
 ```
 
+### Outline Server Directory Structure
+```
+/opt/outline/
+├── persisted-state/
+│   ├── shadowbox-selfsigned.crt  # SSL certificate
+│   ├── shadowbox-selfsigned.key  # SSL private key
+│   └── shadowbox_server_config.json # Server configuration
+├── management/
+│   └── config.json          # Management API configuration
+├── access.txt              # API access information
+├── api_prefix.txt          # API secret prefix
+└── api_port.txt            # API port number
+```
+
 ## Architecture
 
+**Common Features:**
+- **Docker Containers**: All VPN servers run in Docker with host networking
+- **UFW Firewall**: Automatically configured to allow only SSH and VPN ports
+- **Comprehensive Monitoring**: Built-in statistics, logging, and user tracking
+- **Automatic Updates**: Watchtower container for Outline, manual updates for Xray
+
+**Xray-specific:**
 - **Xray-core**: Latest XTLS/Xray-core implementation with VLESS+Reality
 - **XTLS Vision Flow**: Enhanced performance with minimal encryption overhead
 - **Reality Protocol**: Advanced anti-detection technology with TLS 1.3 masquerading
-- **Docker Container**: Runs the teddysun/xray image with host networking
 - **Unique Authentication**: Each user has a unique UUID and short ID
 - **Advanced Security**: Automatic key rotation and domain validation
-- **Comprehensive Monitoring**: Built-in statistics, logging, and user tracking
-- **UFW Firewall**: Automatically configured to allow only SSH and the VPN port
+
+**Outline-specific:**
+- **Shadowbox**: Official Outline server implementation
+- **Shadowsocks Protocol**: ChaCha20-IETF-Poly1305 encryption
+- **Web Management**: HTTPS API for server management
+- **ARM Support**: Native support for ARM64 and ARMv7 architectures
+- **Automatic Updates**: Watchtower monitors and updates containers
 
 ## Troubleshooting
 
@@ -295,6 +339,8 @@ The client provides:
 - **Manual Proxy Configuration**: Requires browser/app proxy settings
 
 ### Common Operations
+
+**For Xray VPN:**
 ```bash
 # Check container status
 docker ps
@@ -311,8 +357,28 @@ free -h
 
 # Optimize Docker
 docker system prune -f
+```
 
-# Client-specific commands
+**For Outline VPN:**
+```bash
+# Check containers
+docker ps | grep -E "shadowbox|watchtower"
+
+# View management configuration
+cat /opt/outline/management/config.json
+
+# Check Outline API
+curl -k https://localhost:$(cat /opt/outline/api_port.txt)/$(cat /opt/outline/api_prefix.txt)/access-keys
+
+# Restart Outline
+docker restart shadowbox
+
+# View firewall rules for Outline
+sudo ufw status numbered | grep -E "9000|YOUR_ACCESS_KEY_PORT"
+```
+
+**Client-specific commands:**
+```bash
 docker logs v2raya  # Check client logs
 sudo systemctl status v2raya  # Check client service status
 

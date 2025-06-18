@@ -136,18 +136,50 @@ show_version() {
 # =============================================================================
 
 load_server_modules() {
+    local debug="${1:-false}"
+    
+    [[ "$debug" == true ]] && log "Loading server modules from: $SCRIPT_DIR/modules/"
+    
+    # Set PROJECT_ROOT for modules to use when sourcing libraries
+    export PROJECT_ROOT="$SCRIPT_DIR"
+    
     # Load installation modules
-    source "$SCRIPT_DIR/modules/install/prerequisites.sh" || return 1
-    source "$SCRIPT_DIR/modules/install/docker_setup.sh" || return 1
-    source "$SCRIPT_DIR/modules/install/xray_config.sh" || return 1
-    source "$SCRIPT_DIR/modules/install/firewall.sh" || return 1
+    source "$SCRIPT_DIR/modules/install/prerequisites.sh" || {
+        error "Failed to source modules/install/prerequisites.sh"
+        return 1
+    }
+    source "$SCRIPT_DIR/modules/install/docker_setup.sh" || {
+        error "Failed to source modules/install/docker_setup.sh"
+        return 1
+    }
+    source "$SCRIPT_DIR/modules/install/xray_config.sh" || {
+        error "Failed to source modules/install/xray_config.sh"
+        return 1
+    }
+    source "$SCRIPT_DIR/modules/install/firewall.sh" || {
+        error "Failed to source modules/install/firewall.sh"
+        return 1
+    }
     
     # Load server management modules
-    source "$SCRIPT_DIR/modules/server/status.sh" || return 1
-    source "$SCRIPT_DIR/modules/server/restart.sh" || return 1
-    source "$SCRIPT_DIR/modules/server/rotate_keys.sh" || return 1
-    source "$SCRIPT_DIR/modules/server/uninstall.sh" || return 1
+    source "$SCRIPT_DIR/modules/server/status.sh" || {
+        error "Failed to source modules/server/status.sh"
+        return 1
+    }
+    source "$SCRIPT_DIR/modules/server/restart.sh" || {
+        error "Failed to source modules/server/restart.sh"
+        return 1
+    }
+    source "$SCRIPT_DIR/modules/server/rotate_keys.sh" || {
+        error "Failed to source modules/server/rotate_keys.sh"
+        return 1
+    }
+    source "$SCRIPT_DIR/modules/server/uninstall.sh" || {
+        error "Failed to source modules/server/uninstall.sh"
+        return 1
+    }
     
+    [[ "$debug" == true ]] && log "Server modules loaded successfully"
     return 0
 }
 
@@ -170,10 +202,34 @@ load_monitoring_modules() {
 }
 
 load_additional_libraries() {
-    source "$SCRIPT_DIR/lib/network.sh" || return 1
-    source "$SCRIPT_DIR/lib/crypto.sh" || return 1
-    source "$SCRIPT_DIR/lib/docker.sh" || return 1
+    local debug="${1:-false}"
     
+    [[ "$debug" == true ]] && log "Loading additional libraries from: $SCRIPT_DIR/lib/"
+    
+    # Check if files exist before sourcing
+    for lib in "network.sh" "crypto.sh" "docker.sh"; do
+        if [ ! -f "$SCRIPT_DIR/lib/$lib" ]; then
+            error "Library file not found: $SCRIPT_DIR/lib/$lib"
+            return 1
+        fi
+    done
+    
+    source "$SCRIPT_DIR/lib/network.sh" || {
+        error "Failed to source lib/network.sh"
+        return 1
+    }
+    
+    source "$SCRIPT_DIR/lib/crypto.sh" || {
+        error "Failed to source lib/crypto.sh"
+        return 1
+    }
+    
+    source "$SCRIPT_DIR/lib/docker.sh" || {
+        error "Failed to source lib/docker.sh"
+        return 1
+    }
+    
+    [[ "$debug" == true ]] && log "Additional libraries loaded successfully"
     return 0
 }
 
@@ -203,35 +259,50 @@ run_server_installation() {
         return 1
     }
     
-    # Setup Xray directories
-    setup_xray_directories "$WORK_DIR" true || {
-        error "Failed to setup Xray directories"
-        return 1
-    }
-    
-    # Create Xray configuration
-    create_xray_config || {
-        error "Failed to create Xray configuration"
-        return 1
-    }
-    
-    # Setup Docker environment
-    setup_docker_environment "$WORK_DIR" "$SERVER_PORT" true || {
-        error "Failed to setup Docker environment"
-        return 1
-    }
-    
-    # Configure firewall
-    setup_xray_firewall "$SERVER_PORT" true || {
-        error "Failed to configure firewall"
-        return 1
-    }
-    
-    # Create first user
-    create_first_user || {
-        error "Failed to create first user"
-        return 1
-    }
+    # Install based on selected protocol
+    if [ "$PROTOCOL" = "outline" ]; then
+        # Source Outline installation module
+        source "$SCRIPT_DIR/modules/install/outline_setup.sh" || {
+            error "Failed to load Outline installation module"
+            return 1
+        }
+        
+        # Install Outline VPN server
+        install_outline_server true || {
+            error "Failed to install Outline VPN server"
+            return 1
+        }
+    else
+        # Setup Xray directories
+        setup_xray_directories "$WORK_DIR" true || {
+            error "Failed to setup Xray directories"
+            return 1
+        }
+        
+        # Create Xray configuration
+        create_xray_config || {
+            error "Failed to create Xray configuration"
+            return 1
+        }
+        
+        # Setup Docker environment
+        setup_docker_environment "$WORK_DIR" "$SERVER_PORT" true || {
+            error "Failed to setup Docker environment"
+            return 1
+        }
+        
+        # Configure firewall
+        setup_xray_firewall "$SERVER_PORT" true || {
+            error "Failed to configure firewall"
+            return 1
+        }
+        
+        # Create first user
+        create_first_user || {
+            error "Failed to create first user"
+            return 1
+        }
+    fi
     
     # Show installation results
     show_installation_results
@@ -259,13 +330,14 @@ get_server_config_interactive() {
     }
     log "External IP: $SERVER_IP"
     
-    # Choose protocol
-    echo -e "${BLUE}Choose VPN protocol:${NC}"
+    # Choose VPN type
+    echo -e "${BLUE}Choose VPN type:${NC}"
     echo "1) VLESS+Reality (Recommended)"
     echo "2) VLESS Basic"
+    echo "3) Outline VPN (Shadowsocks)"
     
     while true; do
-        read -p "Select option (1-2): " choice
+        read -p "Select option (1-3): " choice
         case $choice in
             1)
                 PROTOCOL="vless-reality"
@@ -279,8 +351,14 @@ get_server_config_interactive() {
                 log "Selected protocol: VLESS Basic"
                 break
                 ;;
+            3)
+                PROTOCOL="outline"
+                USE_REALITY=false
+                log "Selected protocol: Outline VPN"
+                break
+                ;;
             *)
-                warning "Please choose 1 or 2"
+                warning "Please choose 1, 2, or 3"
                 ;;
         esac
     done
@@ -329,6 +407,17 @@ get_server_config_interactive() {
         get_sni_config_interactive
         generate_reality_keys
     fi
+    
+    # Get user name for first user
+    while true; do
+        read -p "Enter username for the first user: " USER_NAME
+        if [ -n "$USER_NAME" ] && [[ "$USER_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            log "User name: $USER_NAME"
+            break
+        else
+            warning "Invalid username. Use only letters, numbers, hyphens, and underscores"
+        fi
+    done
     
     return 0
 }
@@ -443,6 +532,11 @@ create_first_user() {
 
 # Show installation results
 show_installation_results() {
+    # Skip for Outline as it has its own results display
+    if [ "$PROTOCOL" = "outline" ]; then
+        return 0
+    fi
+    
     echo -e "\n${GREEN}=== Installation Complete ===${NC}"
     echo -e "${BLUE}Server:${NC} $SERVER_IP"
     echo -e "${BLUE}Port:${NC} $SERVER_PORT"
@@ -485,11 +579,11 @@ handle_server_install() {
     fi
     
     # Load required modules
-    load_additional_libraries || {
+    load_additional_libraries true || {
         error "Failed to load additional libraries"
         return 1
     }
-    load_server_modules || {
+    load_server_modules true || {
         error "Failed to load server modules"
         return 1
     }
@@ -670,12 +764,18 @@ handle_client_management() {
 # =============================================================================
 
 handle_server_status() {
-    load_server_modules || error "Failed to load server modules"
+    load_server_modules || {
+        error "Failed to load server modules"
+        return 1
+    }
     show_server_status
 }
 
 handle_server_restart() {
-    load_server_modules || error "Failed to load server modules"
+    load_server_modules || {
+        error "Failed to load server modules"
+        return 1
+    }
     restart_server
 }
 
@@ -701,18 +801,30 @@ handle_server_uninstall() {
 # =============================================================================
 
 handle_statistics() {
-    load_monitoring_modules || error "Failed to load monitoring modules"
+    load_monitoring_modules || {
+        error "Failed to load monitoring modules"
+        return 1
+    }
     show_traffic_statistics
 }
 
 handle_logs() {
-    load_monitoring_modules || error "Failed to load monitoring modules"
+    load_monitoring_modules || {
+        error "Failed to load monitoring modules"
+        return 1
+    }
     view_user_logs
 }
 
 handle_key_rotation() {
-    load_server_modules || error "Failed to load server modules"
-    load_additional_libraries || error "Failed to load additional libraries"
+    load_server_modules || {
+        error "Failed to load server modules"
+        return 1
+    }
+    load_additional_libraries || {
+        error "Failed to load additional libraries"
+        return 1
+    }
     rotate_reality_keys
 }
 
