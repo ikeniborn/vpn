@@ -1,31 +1,26 @@
-# 🚀 Xray VPN Server Automation Suite
+# 🚀 VPN Management System
 
-A comprehensive Docker-based VPN server solution featuring automated installation and management of Xray-core with VLESS+Reality protocol, providing enterprise-level security with user-friendly administration.
+A modern, modular VPN server solution featuring automated installation and management of multiple VPN protocols including Xray-core (VLESS+Reality) and Outline VPN (Shadowsocks), providing enterprise-level security through a unified command-line interface.
 
-## 📋 Features
+## ✨ Key Features
 
-### Core Capabilities
-- **🔐 VLESS+Reality Protocol**: State-of-the-art anti-detection technology with TLS 1.3 masquerading
-- **🐳 Docker Containerization**: Isolated, portable deployment using teddysun/xray image
-- **🎯 Smart Configuration**: Automated port selection, SNI validation, and key generation
+- **🎯 Single Script Interface**: All functionality through `vpn.sh`
+- **📦 Modular Architecture**: Clean, maintainable code structure
+- **🔐 Multiple Protocols**: VLESS+Reality and Outline VPN (Shadowsocks)
+- **🐳 Docker-Based**: Containerized deployment for consistency
 - **👥 Multi-User Support**: Individual user management with unique authentication
-- **📊 Comprehensive Monitoring**: Traffic statistics, connection logs, and performance metrics
-- **🔄 Zero-Downtime Updates**: Key rotation and configuration changes without service interruption
+- **📊 Comprehensive Monitoring**: Traffic statistics, logs, and health checks
+- **🛡️ Auto-Recovery**: Built-in watchdog service for container monitoring
+- **🎨 Interactive Menu**: User-friendly interface with numbered options
+- **🌍 ARM Support**: Full support for ARM64 and ARMv7 architectures (Raspberry Pi)
 
-### Management Features
-- **Interactive CLI**: Beautiful menu-driven interface with emoji support
-- **QR Code Generation**: Instant client configuration via QR codes
-- **Automatic Backups**: Configuration snapshots before critical operations
-- **Resource Monitoring**: Docker stats, network usage, and user activity tracking
-- **Advanced Logging**: Configurable log levels with user activity analysis
-
-## 🚦 Quick Start
+## 🚀 Quick Start
 
 ### Prerequisites
+
 - Ubuntu/Debian Linux server
 - Root or sudo access
-- Docker and Docker Compose installed (auto-installed if missing)
-- Open ports: SSH (22) and one VPN port (auto-selected or manual)
+- Port 22 (SSH) and one VPN port open
 
 ### Installation
 
@@ -34,334 +29,167 @@ A comprehensive Docker-based VPN server solution featuring automated installatio
 git clone https://github.com/yourusername/vpn.git
 cd vpn
 
-# Make scripts executable
-chmod +x install_vpn.sh manage_users.sh install_client.sh
+# Make the script executable
+chmod +x vpn.sh
 
-# Run installation
-sudo ./install_vpn.sh
+# Launch interactive menu
+sudo ./vpn.sh
+
+# Or install directly
+sudo ./vpn.sh install
 ```
 
-### Usage
+## 📖 Usage
 
-After installation, manage your VPN server using:
+### Interactive Mode (Recommended)
 
 ```bash
-sudo v2ray-manage
+sudo ./vpn.sh
 ```
 
-Or directly:
+This launches a user-friendly menu with all available options.
+
+### Command Line Mode
 
 ```bash
-sudo ./manage_users.sh
+# Server Management
+sudo ./vpn.sh install              # Install VPN server
+sudo ./vpn.sh status               # Show server status
+sudo ./vpn.sh restart              # Restart server
+sudo ./vpn.sh uninstall            # Uninstall server
+
+# User Management
+sudo ./vpn.sh users                # Interactive user menu
+sudo ./vpn.sh user add john        # Add user 'john'
+sudo ./vpn.sh user list            # List all users
+sudo ./vpn.sh user show john       # Show connection details
+sudo ./vpn.sh user delete john     # Delete user
+
+# Monitoring
+sudo ./vpn.sh stats                # Show traffic statistics
+sudo ./vpn.sh logs                 # View server logs
+sudo ./vpn.sh rotate-keys          # Rotate encryption keys
+
+# Watchdog Service
+sudo ./vpn.sh watchdog install     # Install watchdog
+sudo ./vpn.sh watchdog start       # Start monitoring
+sudo ./vpn.sh watchdog status      # Check status
 ```
 
-## 📚 Menu Options
+## 🏗️ Architecture
 
-### User Management
-1. **📋 List Users** - Display all configured users with their UUIDs
-2. **➕ Add User** - Create new user with unique credentials
-3. **❌ Delete User** - Remove user and cleanup configurations
-4. **✏️ Edit User** - Modify existing user settings
-5. **👤 Show User Data** - Display connection details with QR code
-
-### Server Control
-6. **📊 Server Status** - System health and container status
-7. **🔄 Restart Server** - Apply configuration changes
-8. **🔐 Key Rotation** - Rotate Reality encryption keys
-
-### Monitoring & Analytics
-9. **📊 Usage Statistics** - Traffic analysis and performance metrics
-10. **📝 Configure Logging** - Setup Xray logging levels
-11. **📋 View User Logs** - Analyze connection logs and activity
-12. **🛡️ Watchdog Management** - Monitor and manage container health service
-
-### Maintenance
-13. **🗑️ Uninstall Server** - Complete removal with cleanup
-
-## 🔧 Configuration
-
-### Installation Options
-
-#### Port Selection
-- **Random Port**: Automatically finds free port (10000-65000)
-- **Manual Port**: Specify custom port with validation
-- **Standard Port**: Use default 10443
-
-#### SNI Domain Options
-- addons.mozilla.org (Recommended)
-- www.lovelive-anime.jp
-- www.swift.org
-- Custom domain with validation
-- Automatic best domain selection
-
-## 📁 Project Structure
-
-### Modular Architecture (Version 2.0)
-
-This project has been completely refactored into a modular architecture for improved maintainability, testability, and code reuse. The system is organized into libraries, feature modules, and installation modules.
+### Project Structure
 
 ```
 vpn/
-├── lib/                     # Core Libraries (Shared Utilities)
-│   ├── common.sh           # Shared utilities and functions
-│   ├── config.sh           # Configuration management
-│   ├── docker.sh           # Docker operations and resource management
-│   ├── network.sh          # Network utilities and port management
-│   ├── crypto.sh           # Cryptographic functions (X25519, UUID, etc.)
-│   └── ui.sh               # User interface components and menus
-├── modules/                 # Feature Modules (Business Logic)
-│   ├── install/            # Installation Modules
-│   │   ├── prerequisites.sh # System checks and dependency installation
-│   │   ├── docker_setup.sh  # Docker environment setup
-│   │   ├── xray_config.sh   # Xray configuration generation
-│   │   └── firewall.sh      # Firewall configuration
-│   ├── users/              # User Management Modules
-│   │   ├── add.sh          # User creation
-│   │   ├── delete.sh       # User removal
-│   │   ├── edit.sh         # User modification
-│   │   ├── list.sh         # User listing
-│   │   └── show.sh         # User information display
-│   ├── server/             # Server Management Modules
-│   │   ├── status.sh       # Health monitoring
-│   │   ├── restart.sh      # Service control
-│   │   ├── rotate_keys.sh  # Security management
-│   │   └── uninstall.sh    # System cleanup
-│   └── monitoring/         # Monitoring & Analytics Modules
-│       ├── statistics.sh   # Traffic analysis
-│       ├── logging.sh      # Log configuration
-│       └── logs_viewer.sh  # Log analysis
-├── test/                   # Comprehensive Test Suite
-│   ├── test_libraries.sh   # Library testing
-│   ├── test_user_modules.sh # User module testing
-│   ├── test_server_modules.sh # Server module testing
-│   ├── test_monitoring_modules.sh # Monitoring testing
-│   └── test_install_modules.sh # Installation module testing
-├── install_vpn.sh          # Main installation script (407 lines, 71% reduction)
-├── manage_users.sh         # User management interface (447 lines, 69% reduction)
-├── install_client.sh       # Client setup script (521 lines, 51% reduction)
-├── uninstall.sh           # Standalone uninstaller (361 lines)
-├── CLAUDE.md              # Claude Code instructions
-├── PLANNING.md            # Architecture planning documentation
-├── TASK.md                # Project tasks and progress tracking
-└── README.md              # This documentation
+├── vpn.sh                  # Main executable script
+├── lib/                    # Core libraries
+│   ├── common.sh          # Shared utilities
+│   ├── config.sh          # Configuration management
+│   ├── docker.sh          # Docker operations
+│   ├── network.sh         # Network utilities
+│   ├── crypto.sh          # Cryptographic functions
+│   └── ui.sh              # User interface components
+├── modules/               # Feature modules
+│   ├── install/           # Installation modules
+│   ├── users/             # User management
+│   ├── server/            # Server management
+│   ├── monitoring/        # Monitoring & analytics
+│   └── system/            # System utilities (watchdog)
+├── config/                # Configuration templates
+├── test/                  # Test suite
+└── docs/                  # Documentation
 ```
 
-### Modular Benefits
+### Key Technologies
 
-#### Code Organization
-- **Single Responsibility**: Each module focuses on one specific task
-- **Reusability**: Functions can be shared across different scripts
-- **Maintainability**: Easy to locate and modify specific functionality
-- **Testability**: Individual modules can be tested in isolation
+- **Xray-core**: Latest VLESS+Reality implementation
+- **Outline VPN**: Shadowsocks-based protocol with ARM support
+- **Docker**: Container orchestration
+- **XTLS Vision**: Enhanced performance protocol
+- **X25519**: Military-grade encryption
+- **Watchtower**: Automatic container updates
 
-#### Architecture Improvements
-- **Line Count Reduction**: 
-  - install_vpn.sh: 1,403 → 407 lines (71% reduction)
-  - manage_users.sh: 1,463 → 447 lines (69% reduction)
-  - install_client.sh: 1,065 → 521 lines (51% reduction)
-- **Code Duplication**: Reduced from ~15% to <2%
-- **Function Exports**: All modules export functions for cross-module use
-- **Error Handling**: Comprehensive debug logging and graceful error recovery
+## 🔧 Configuration
 
-#### Development Workflow
+### Server Installation Options
+
+When installing, you can choose from:
+
+1. **VLESS+Reality** (Recommended)
+   - Advanced anti-detection technology
+   - Port Selection: Random (10000-65000), manual, or standard (10443)
+   - SNI Domains: Pre-validated domains or custom
+   
+2. **VLESS Basic**
+   - Standard VLESS protocol
+   - Simplified configuration
+   
+3. **Outline VPN** (Shadowsocks)
+   - Easy client setup
+   - ARM architecture support (ARM64/ARMv7)
+   - Automatic updates via Watchtower
+   - Web-based management interface
+
+### Client Setup
+
+#### Desktop/Server (Linux)
 ```bash
-# Run tests for specific modules
-./test/test_libraries.sh
-./test/test_install_modules.sh
-./test/test_user_modules.sh
-
-# Test all modules
-find test/ -name "test_*.sh" -exec {} \;
-
-# Syntax checking
-shellcheck lib/*.sh modules/*/*.sh *.sh
+sudo ./vpn.sh client install
 ```
+Access web UI at http://localhost:2017
 
-#### Module Usage Example
-```bash
-# Source required libraries
-source "lib/common.sh"
-source "lib/docker.sh"
+#### Mobile Applications
 
-# Use functions from modules
-source "modules/install/prerequisites.sh"
-install_system_dependencies true
+**For VLESS Protocols:**
+- **Android**: v2RayTun (Google Play)
+- **iOS**: Shadowrocket, v2RayTun (App Store)
 
-# All modules support debug mode
-source "modules/users/add.sh"
-add_user "username" true  # true enables debug logging
-```
+**For Outline VPN:**
+- **Android**: Outline Client (Google Play)
+- **iOS**: Outline Client (App Store)
+- **Windows/macOS/Linux**: [Outline Client](https://getoutline.org/download/)
 
-### Server File Structure
-```
-/opt/v2ray/
-├── config/
-│   ├── config.json          # Main Xray configuration
-│   ├── private_key.txt      # Reality private key
-│   ├── public_key.txt       # Reality public key
-│   ├── short_id.txt         # Reality short ID
-│   ├── port.txt             # Server port
-│   ├── sni.txt              # SNI domain
-│   └── protocol.txt         # Protocol type
-├── users/
-│   ├── <username>.json      # User configuration
-│   ├── <username>.link      # Connection link
-│   └── <username>.png       # QR code
-├── logs/
-│   ├── access.log           # Access logs
-│   └── error.log            # Error logs
-└── docker-compose.yml       # Container configuration
-```
+## 🛡️ Security Features
 
-## 🔐 Security Features
+- **Reality Protocol**: Advanced TLS masquerading
+- **Unique Authentication**: Per-user UUID and short ID
+- **Automatic Key Rotation**: Zero-downtime security updates
+- **UFW Integration**: Automatic firewall configuration
+- **Container Isolation**: Docker security boundaries
 
-- **X25519 Cryptography**: Military-grade key generation
-- **XTLS Vision Flow**: Enhanced performance with minimal overhead
-- **Unique Short IDs**: Per-user authentication tokens
-- **UFW Firewall**: Automatic firewall configuration
-- **Reality Protocol**: Advanced anti-detection with authentic TLS handshakes
-
-## 📱 Client Setup
-
-### Option 1: Web UI Client (Linux Desktop/Server)
-
-For Linux desktop/server users, we provide a client installation script with web-based management interface:
-
-```bash
-# Install or manage v2rayA client
-sudo ./install_client.sh
-```
-
-Features:
-- 🌐 Web-based UI at http://localhost:2017
-- 🔧 Easy connection management
-- 📊 Traffic statistics and monitoring
-- 🚀 Automatic startup on system boot
-- 🛡️ Built-in routing rules and proxy settings
-- 📦 Docker-based deployment for easy updates
-- 🔌 Proxy ports: SOCKS5 (20170), HTTP (20171), Mixed (20172)
-- 🗑️ Complete uninstall option with full cleanup
-- 🎯 Smart menu system that detects installation status
-
-**Management**: After installation, use `sudo v2raya-client` for management options.
-
-**Important**: After connecting to VPN server in v2rayA, configure your browser to use the proxy:
-- SOCKS5 proxy: `127.0.0.1:20170`
-- HTTP proxy: `127.0.0.1:20171`
-
-### Option 2: Mobile Applications
-
-#### Android
-- **v2RayTun** - [Google Play](https://play.google.com/store/apps/details?id=com.v2raytun.android)
-
-#### iOS
-- **Shadowrocket** - [App Store](https://apps.apple.com/app/shadowrocket/id932747118)
-- **v2RayTun** - [App Store](https://apps.apple.com/app/v2raytun/id6476628951)
-
-## 🛠️ Troubleshooting
+## 🔍 Troubleshooting
 
 ### Common Issues
 
-#### Port Already in Use
-The installer automatically detects occupied ports. If issues persist:
+**Container Won't Start**
+```bash
+sudo ./vpn.sh logs
+docker logs xray
+```
+
+**Port Conflicts**
 ```bash
 sudo netstat -tulnp | grep :YOUR_PORT
-sudo ufw status
 ```
 
-#### Container Won't Start
-Check Docker logs:
-```bash
-docker logs xray
-docker-compose logs -f
-```
-
-#### Connection Issues
-1. Verify firewall rules: `sudo ufw status`
-2. Check container status: `docker ps`
-3. Review logs: `tail -f /opt/v2ray/logs/access.log`
-
-#### Client Has No Internet After Connecting
-This is expected behavior. v2rayA uses proxy mode, not VPN mode:
-1. Configure your browser to use proxy:
-   - Firefox: Settings → Network → Manual proxy → SOCKS5: `127.0.0.1:20170`
-   - Chrome: Use Proxy SwitchyOmega extension or launch with `--proxy-server="socks5://127.0.0.1:20170"`
-2. For system-wide proxy (Linux):
-   ```bash
-   export http_proxy="http://127.0.0.1:20171"
-   export https_proxy="http://127.0.0.1:20171"
-   ```
-
-### Maintenance Commands
-
-```bash
-# View container stats
-docker stats xray
-
-# Clean up Docker resources
-docker system prune -f
-
-# Check system resources
-htop
-df -h
-free -h
-```
-
-## 🔄 Recent Updates
-
-### Stability and Reliability Improvements ⚡
-- **Enhanced Container Stability**: Added comprehensive health checks for all Docker containers
-- **Smart Restart Policy**: Changed from `always` to `unless-stopped` for better control
-- **Resource Management**: Added CPU and memory limits to prevent system overload
-- **VPN Watchdog Service**: 24/7 monitoring with automatic container recovery
-- **Advanced Logging**: Implemented log rotation and centralized logging system
-
-### Deployment and CI/CD 🚀
-- **Automated Deployment**: Added `deploy.sh` script for CI/CD pipelines
-- **GitHub Actions**: Ready-to-use CI/CD configuration for automated deployments
-- **Backup & Restore**: Automated backup creation before updates
-- **Multi-Environment**: Support for staging and production deployments
-- **Auto-Discovery**: Smart path detection for flexible deployment locations
-
-### Monitoring and Management 📊
-- **Watchdog Dashboard**: New menu option for monitoring service health
-- **Real-time Logs**: Live log monitoring and filtering capabilities
-- **System Resources**: CPU, memory, and disk usage monitoring
-- **Container Health**: Docker health check integration with restart logic
-- **Service Management**: Start/stop/restart watchdog service through UI
-
-### Previous Updates
-- Fixed logs directory mounting issue in Docker
-- Added automatic port preservation across restarts
-- Improved SNI domain validation and testing
-- Enhanced user management with better error handling
-- Added comprehensive logging system with configurable levels
-- Added client installation script with Web UI for Linux desktop/server users
-- Unified client installation into single script with v2rayA web interface
-- **Fixed client internet connectivity issue**: Changed network mode from host to bridge, added proxy ports configuration
-- **Enhanced client stability**: Disabled transparent proxy mode, added proper capabilities for network management
-- **Added client uninstall feature**: Complete removal of v2rayA client with cleanup of all components
-- **Improved user experience**: Added intelligent main menu that detects installation status
-- **Fixed Docker Compose warning**: Removed obsolete version attribute for compatibility with modern Docker
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+**Connection Issues**
+1. Check firewall: `sudo ufw status`
+2. Verify container: `docker ps`
+3. Review logs: `sudo ./vpn.sh logs`
 
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+## 📝 License
+
+This project is licensed under the MIT License.
+
 ## ⚠️ Disclaimer
 
-This tool is for educational and personal use only. Users are responsible for complying with local laws and regulations regarding VPN usage.
-
-## 🙏 Acknowledgments
-
-- [XTLS/Xray-core](https://github.com/XTLS/Xray-core) - The core proxy software
-- [teddysun/xray](https://hub.docker.com/r/teddysun/xray) - Docker image maintainer
-- Community contributors and testers
+This tool is for educational and personal use only. Users are responsible for complying with local laws and regulations.
 
 ---
 
-**Note**: Always ensure your server is properly secured and regularly updated. Use strong passwords and keep your private keys safe.
+**Version**: 3.0 | **Architecture**: Modular | **Status**: Production Ready

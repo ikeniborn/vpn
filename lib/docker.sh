@@ -3,6 +3,9 @@
 # VPN Project Docker Operations Library
 # Handles Docker installation, container management, and resource optimization
 
+# Mark as sourced
+export DOCKER_LIB_SOURCED=true
+
 # Source common library
 if [ -f "$(dirname "${BASH_SOURCE[0]}")/common.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/common.sh"

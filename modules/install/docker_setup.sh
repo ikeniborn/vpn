@@ -17,17 +17,24 @@
 # Dependencies: lib/common.sh, lib/docker.sh
 # =============================================================================
 
-# Source required libraries
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../../lib/common.sh" 2>/dev/null || {
-    echo "Error: Cannot source lib/common.sh"
-    exit 1
-}
+# Source required libraries if not already sourced
+if [ -z "$COMMON_SOURCED" ]; then
+    MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    COMMON_PATH="${PROJECT_ROOT:-$MODULE_DIR/../..}/lib/common.sh"
+    source "$COMMON_PATH" 2>/dev/null || {
+        echo "Error: Cannot source lib/common.sh from $COMMON_PATH"
+        return 1 2>/dev/null || exit 1
+    }
+fi
 
-source "$SCRIPT_DIR/../../lib/docker.sh" 2>/dev/null || {
-    echo "Error: Cannot source lib/docker.sh"
-    exit 1
-}
+if [ -z "$DOCKER_LIB_SOURCED" ]; then
+    MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    DOCKER_PATH="${PROJECT_ROOT:-$MODULE_DIR/../..}/lib/docker.sh"
+    source "$DOCKER_PATH" 2>/dev/null || {
+        echo "Error: Cannot source lib/docker.sh from $DOCKER_PATH"
+        return 1 2>/dev/null || exit 1
+    }
+fi
 
 # =============================================================================
 # RESOURCE CALCULATION

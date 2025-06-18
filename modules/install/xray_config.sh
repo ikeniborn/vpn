@@ -20,13 +20,15 @@
 
 # Source required libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../../lib/common.sh" 2>/dev/null || {
-    echo "Error: Cannot source lib/common.sh"
+COMMON_PATH="${PROJECT_ROOT:-$SCRIPT_DIR/../..}/lib/common.sh"
+source "$COMMON_PATH" 2>/dev/null || {
+    echo "Error: Cannot source lib/common.sh from $COMMON_PATH"
     exit 1
 }
 
-source "$SCRIPT_DIR/../../lib/config.sh" 2>/dev/null || {
-    echo "Error: Cannot source lib/config.sh"
+CONFIG_PATH="${PROJECT_ROOT:-$SCRIPT_DIR/../..}/lib/config.sh"
+source "$CONFIG_PATH" 2>/dev/null || {
+    echo "Error: Cannot source lib/config.sh from $CONFIG_PATH"
     exit 1
 }
 
