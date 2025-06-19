@@ -304,8 +304,8 @@ run_server_installation() {
             return 1
         }
         
-        # Create Xray configuration
-        create_xray_config || {
+        # Create Xray configuration and first user
+        create_xray_config_and_user || {
             error "Failed to create Xray configuration"
             return 1
         }
@@ -522,8 +522,8 @@ generate_reality_keys() {
     log "Reality keys generated"
 }
 
-# Create Xray configuration
-create_xray_config() {
+# Create Xray configuration and first user
+create_xray_config_and_user() {
     log "Creating Xray configuration..."
     
     # Generate user UUID
