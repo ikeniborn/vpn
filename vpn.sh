@@ -107,15 +107,20 @@ load_additional_libraries() {
     
     [[ "$debug" == true ]] && log "Loading additional libraries from: $SCRIPT_DIR/lib/"
     
-    # Check if files exist before sourcing
+    # Load required libraries
     for lib in "network.sh" "crypto.sh" "docker.sh"; do
         if [ ! -f "$SCRIPT_DIR/lib/$lib" ]; then
             error "Library file not found: $SCRIPT_DIR/lib/$lib"
             return 1
         fi
+        
+        source "$SCRIPT_DIR/lib/$lib" || {
+            error "Failed to load library: $lib"
+            return 1
+        }
+        [[ "$debug" == true ]] && log "Loaded $lib"
     done
     
-    # Libraries are already sourced above
     [[ "$debug" == true ]] && log "Additional libraries loaded successfully"
     return 0
 }
@@ -506,6 +511,14 @@ get_sni_config_interactive() {
 
 generate_reality_keys() {
     # Generate Reality keys
+    # Ensure crypto library is loaded
+    if ! command -v generate_keypair >/dev/null 2>&1; then
+        source "$SCRIPT_DIR/lib/crypto.sh" || {
+            error "Failed to load crypto library"
+            return 1
+        }
+    fi
+    
     local keys=$(generate_keypair)
     PRIVATE_KEY=$(echo "$keys" | cut -d' ' -f1)
     PUBLIC_KEY=$(echo "$keys" | cut -d' ' -f2)
@@ -519,10 +532,36 @@ generate_reality_keys() {
 create_xray_config_and_user() {
     log "Creating Xray configuration..."
     
+    # Validate required variables
+    if [ -z "$PROTOCOL" ]; then
+        PROTOCOL="vless-reality"
+        log "Protocol not set, defaulting to: $PROTOCOL"
+    fi
+    
+    if [ -z "$WORK_DIR" ]; then
+        WORK_DIR="/opt/v2ray"
+        log "Work directory not set, defaulting to: $WORK_DIR"
+    fi
+    
     # Generate UUID for first user if not set
     if [ -z "$USER_UUID" ]; then
+        # Ensure crypto library is loaded for UUID generation
+        if ! command -v generate_uuid >/dev/null 2>&1; then
+            source "$SCRIPT_DIR/lib/crypto.sh" || {
+                error "Failed to load crypto library for UUID generation"
+                return 1
+            }
+        fi
         USER_UUID=$(generate_uuid)
     fi
+    
+    # Debug information
+    log "Configuration parameters:"
+    log "  WORK_DIR: $WORK_DIR"
+    log "  PROTOCOL: $PROTOCOL"
+    log "  SERVER_PORT: $SERVER_PORT"
+    log "  USER_NAME: $USER_NAME"
+    log "  USER_UUID: $USER_UUID"
     
     # Store configuration values
     mkdir -p "$WORK_DIR/config"
@@ -531,6 +570,7 @@ create_xray_config_and_user() {
     echo "$SHORT_ID" > "$WORK_DIR/config/short_id.txt"
     echo "$SERVER_SNI" > "$WORK_DIR/config/sni.txt"
     echo "$PROTOCOL" > "$WORK_DIR/config/protocol.txt"
+    echo "$SERVER_PORT" > "$WORK_DIR/config/port.txt"
     
     # Setup Xray configuration using the module
     setup_xray_configuration "$WORK_DIR" "$PROTOCOL" "$SERVER_PORT" "$USER_UUID" \

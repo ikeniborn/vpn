@@ -377,3 +377,17 @@ init_crypto() {
     debug "Initializing crypto library"
     install_crypto_tools
 }
+
+# =============================================================================
+# COMPATIBILITY FUNCTIONS
+# =============================================================================
+
+# Compatibility function for generate_keypair (used by vpn.sh)
+generate_keypair() {
+    generate_x25519_keys
+}
+
+# Compatibility function for generate_short_id (used by vpn.sh)
+generate_short_id() {
+    generate_random_hex 8
+}
