@@ -46,14 +46,33 @@ calculate_resource_limits() {
     
     [ "$debug" = true ] && log "Calculating resource limits..."
     
+    # Check if required functions are available
+    if ! command -v get_cpu_cores >/dev/null 2>&1; then
+        error "Function get_cpu_cores not found. Docker library may not be loaded."
+        return 1
+    fi
+    
+    if ! command -v get_available_memory >/dev/null 2>&1; then
+        error "Function get_available_memory not found. Docker library may not be loaded."
+        return 1
+    fi
+    
     # Get system resources
     local cpu_cores=$(get_cpu_cores)
-    local available_mem=$(get_available_memory_mb)
+    local available_mem=$(get_available_memory)
     
     [ "$debug" = true ] && {
         log "Detected CPU cores: $cpu_cores"
         log "Available memory: ${available_mem} MB"
     }
+    
+    # Check if main calculation functions are available
+    for func in calculate_cpu_limits calculate_memory_limits; do
+        if ! command -v "$func" >/dev/null 2>&1; then
+            error "Function $func not found. Docker library may not be loaded."
+            return 1
+        fi
+    done
     
     # Calculate CPU limits
     local cpu_limits=$(calculate_cpu_limits)
@@ -66,16 +85,26 @@ calculate_resource_limits() {
     RESERVE_MEM=$(echo "$mem_limits" | cut -d' ' -f2)
     
     # Calculate backup limits (more conservative)
-    BACKUP_CPU=$(calculate_backup_cpu_limit)
-    BACKUP_MEM=$(calculate_backup_memory_limit)
+    BACKUP_CPU=$(echo "scale=1; $MAX_CPU * 0.5" | bc 2>/dev/null || echo "0.5")
+    BACKUP_MEM=$(echo "scale=0; $MAX_MEM * 0.5 / 1" | bc 2>/dev/null || echo "256")m
     
     [ "$debug" = true ] && {
         log "Primary limits: CPU $MAX_CPU/$RESERVE_CPU, Memory $MAX_MEM/$RESERVE_MEM"
         log "Backup limits: CPU $BACKUP_CPU, Memory $BACKUP_MEM"
     }
     
+    # Set fallback values if calculations failed
+    MAX_CPU="${MAX_CPU:-1.0}"
+    RESERVE_CPU="${RESERVE_CPU:-0.5}"
+    MAX_MEM="${MAX_MEM:-512m}"
+    RESERVE_MEM="${RESERVE_MEM:-256m}"
+    BACKUP_CPU="${BACKUP_CPU:-0.5}"
+    BACKUP_MEM="${BACKUP_MEM:-256m}"
+    
     # Export variables for use in docker-compose
     export MAX_CPU RESERVE_CPU MAX_MEM RESERVE_MEM BACKUP_CPU BACKUP_MEM
+    
+    [ "$debug" = true ] && log "Resource limits calculated and exported successfully"
     
     return 0
 }
