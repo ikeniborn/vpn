@@ -231,40 +231,40 @@ check_sni_domain() {
         return 1
     fi
     
-    echo -e "   ${YELLOW}📋 Testing domain:${NC} ${WHITE}$domain${NC}"
+    printf "   %b📋 Testing domain:%b %b%s%b\n" "$YELLOW" "$NC" "$WHITE" "$domain" "$NC"
     echo ""
     
     # Step 1: Validate domain format
-    echo -n "   ${BLUE}1/4${NC} Format validation... "
+    printf "   %b1/4%b Format validation... " "$BLUE" "$NC"
     if ! validate_domain_format "$domain" 2>/dev/null; then
-        echo -e "${RED}✗ Invalid format${NC}"
+        printf "%b✗ Invalid format%b\n" "$RED" "$NC"
         return 1
     fi
-    echo -e "${GREEN}✓ Valid${NC}"
+    printf "%b✓ Valid%b\n" "$GREEN" "$NC"
     
     # Step 2: DNS resolution check
-    echo -n "   ${BLUE}2/4${NC} DNS resolution... "
+    printf "   %b2/4%b DNS resolution... " "$BLUE" "$NC"
     if ! check_domain_dns "$domain" "$timeout" 2>/dev/null; then
-        echo -e "${RED}✗ Failed${NC}"
+        printf "%b✗ Failed%b\n" "$RED" "$NC"
         return 1
     fi
-    echo -e "${GREEN}✓ Resolved${NC}"
+    printf "%b✓ Resolved%b\n" "$GREEN" "$NC"
     
     # Step 3: TCP connection to port 443
-    echo -n "   ${BLUE}3/4${NC} TCP connectivity (port 443)... "
+    printf "   %b3/4%b TCP connectivity (port 443)... " "$BLUE" "$NC"
     if ! check_domain_port "$domain" 443 "$timeout" 2>/dev/null; then
-        echo -e "${RED}✗ Unreachable${NC}"
+        printf "%b✗ Unreachable%b\n" "$RED" "$NC"
         return 1
     fi
-    echo -e "${GREEN}✓ Connected${NC}"
+    printf "%b✓ Connected%b\n" "$GREEN" "$NC"
     
     # Step 4: HTTPS accessibility check
-    echo -n "   ${BLUE}4/4${NC} HTTPS response... "
+    printf "   %b4/4%b HTTPS response... " "$BLUE" "$NC"
     if ! check_domain_https "$domain" "$timeout" 2>/dev/null; then
-        echo -e "${RED}✗ No response${NC}"
+        printf "%b✗ No response%b\n" "$RED" "$NC"
         return 1
     fi
-    echo -e "${GREEN}✓ Responding${NC}"
+    printf "%b✓ Responding%b\n" "$GREEN" "$NC"
     
     # Step 5: Optional TLS check (silent)
     if command_exists openssl; then
@@ -276,7 +276,7 @@ check_sni_domain() {
     fi
     
     echo ""
-    echo -e "   ${GREEN}🎉 Domain verification successful!${NC}"
+    printf "   %b🎉 Domain verification successful!%b\n" "$GREEN" "$NC"
     echo ""
     return 0
 }
@@ -315,13 +315,13 @@ get_sni_domain() {
         "www.lovelive-anime.jp"
     )
     
-    echo -e "${GREEN}=== SNI Domain Selection ===${NC}"
+    printf "%b=== SNI Domain Selection ===%b\n" "$GREEN" "$NC"
     echo ""
-    echo -e "${YELLOW}📡 Available pre-configured domains:${NC}"
+    printf "%b📡 Available pre-configured domains:%b\n" "$YELLOW" "$NC"
     echo ""
     local i=1
     for domain in "${domains[@]}"; do
-        echo -e "   ${BLUE}$i)${NC} ${WHITE}$domain${NC}"
+        printf "   %b%d)%b %b%s%b\n" "$BLUE" "$i" "$NC" "$WHITE" "$domain" "$NC"
         ((i++))
     done
     echo ""
@@ -331,16 +331,16 @@ get_sni_domain() {
         if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#domains[@]}" ]; then
             SERVER_SNI="${domains[$((choice-1))]}"
             echo ""
-            echo -e "${GREEN}✓ Selected domain:${NC} ${WHITE}$SERVER_SNI${NC}"
+            printf "%b✓ Selected domain:%b %b%s%b\n" "$GREEN" "$NC" "$WHITE" "$SERVER_SNI" "$NC"
             
             # Verify selected domain
             echo ""
-            echo -e "${BLUE}🔍 Verifying domain connectivity...${NC}"
+            printf "%b🔍 Verifying domain connectivity...%b\n" "$BLUE" "$NC"
             if check_sni_domain "$SERVER_SNI" 5; then
-                echo -e "${GREEN}✓ Domain verification completed successfully${NC}"
+                printf "%b✓ Domain verification completed successfully%b\n" "$GREEN" "$NC"
                 return 0
             else
-                echo -e "${YELLOW}⚠ Domain verification failed, but will proceed${NC}"
+                printf "%b⚠ Domain verification failed, but will proceed%b\n" "$YELLOW" "$NC"
                 return 0
             fi
         else
