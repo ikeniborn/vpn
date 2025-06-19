@@ -529,10 +529,8 @@ create_xray_config_and_user() {
     # Generate user UUID
     USER_UUID=$(generate_uuid)
     
-    # Get username
-    read -p "Enter first user name (default: user1): " input_name
-    USER_NAME="${input_name:-user1}"
-    log "Username: $USER_NAME"
+    # Use already configured username
+    log "Creating configuration for user: $USER_NAME"
     
     # Determine protocol format for configuration
     local config_protocol=""
@@ -543,12 +541,22 @@ create_xray_config_and_user() {
     fi
     
     # Create configuration using module
-    setup_xray_configuration "$WORK_DIR" "$config_protocol" "$SERVER_PORT" "$USER_UUID" \
-        "$USER_NAME" "$SERVER_IP" "$SERVER_SNI" "$PRIVATE_KEY" "$PUBLIC_KEY" \
-        "$SHORT_ID" true || {
-        error "Failed to create Xray configuration"
-        return 1
-    }
+    # For basic VLESS, pass empty strings for Reality-specific parameters
+    if [ "$USE_REALITY" = true ]; then
+        setup_xray_configuration "$WORK_DIR" "$config_protocol" "$SERVER_PORT" "$USER_UUID" \
+            "$USER_NAME" "$SERVER_IP" "$SERVER_SNI" "$PRIVATE_KEY" "$PUBLIC_KEY" \
+            "$SHORT_ID" true || {
+            error "Failed to create Xray configuration"
+            return 1
+        }
+    else
+        setup_xray_configuration "$WORK_DIR" "$config_protocol" "$SERVER_PORT" "$USER_UUID" \
+            "$USER_NAME" "$SERVER_IP" "" "" "" \
+            "" true || {
+            error "Failed to create Xray configuration"
+            return 1
+        }
+    fi
     
     log "Xray configuration created"
 }
