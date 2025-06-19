@@ -72,41 +72,52 @@ handle_server_status() {
         return 1
     fi
     
-    # Check which VPN type is installed
-    local vpn_type=$(detect_installed_vpn_type)
+    echo -e "${GREEN}=== VPN Server Status ===${NC}"
+    echo ""
     
-    if [ "$vpn_type" = "none" ]; then
-        warning "No VPN server is installed. Run installation first."
-        return 1
+    local servers_found=false
+    
+    # Check Xray server
+    if [ -d "/opt/v2ray" ] && [ -f "/opt/v2ray/docker-compose.yml" ]; then
+        servers_found=true
+        echo -e "${YELLOW}Xray/VLESS Server:${NC}"
+        if docker ps | grep -q "xray"; then
+            echo -e "  Status: ${GREEN}✓ Running${NC}"
+            local port=$(cat /opt/v2ray/config/port.txt 2>/dev/null || echo "Unknown")
+            local protocol=$(cat /opt/v2ray/config/protocol.txt 2>/dev/null || echo "VLESS+Reality")
+            echo -e "  Port: ${BLUE}$port${NC}"
+            echo -e "  Protocol: ${BLUE}$protocol${NC}"
+            # Count users
+            if [ -f "/opt/v2ray/config/config.json" ]; then
+                local user_count=$(jq -r '.inbounds[0].settings.clients | length' /opt/v2ray/config/config.json 2>/dev/null || echo "0")
+                echo -e "  Users: ${BLUE}$user_count${NC}"
+            fi
+        else
+            echo -e "  Status: ${RED}✗ Stopped${NC}"
+        fi
+        echo ""
     fi
     
-    # Load required modules
-    load_server_modules || {
-        error "Failed to load server modules"
-        return 1
-    }
-    
-    # Call appropriate status function
-    case "$vpn_type" in
-        "xray")
-            show_server_status
-            ;;
-        "outline")
-            echo -e "${YELLOW}Outline VPN Server Status:${NC}"
-            if docker ps | grep -q "shadowbox"; then
-                echo -e "${GREEN}✓ Outline server is running${NC}"
-                echo ""
-                echo "Management configuration:"
-                if [ -f "/opt/outline/management/config.json" ]; then
-                    cat /opt/outline/management/config.json | jq -r '.'
-                else
-                    echo "Configuration file not found"
-                fi
-            else
-                echo -e "${RED}✗ Outline server is not running${NC}"
+    # Check Outline server
+    if [ -d "/opt/outline" ] || docker ps -a | grep -q "shadowbox"; then
+        servers_found=true
+        echo -e "${YELLOW}Outline VPN Server:${NC}"
+        if docker ps | grep -q "shadowbox"; then
+            echo -e "  Status: ${GREEN}✓ Running${NC}"
+            if [ -f "/opt/outline/access.txt" ]; then
+                local api_url=$(grep "apiUrl" /opt/outline/access.txt | cut -d'"' -f4)
+                echo -e "  API URL: ${BLUE}$api_url${NC}"
             fi
-            ;;
-    esac
+        else
+            echo -e "  Status: ${RED}✗ Stopped${NC}"
+        fi
+        echo ""
+    fi
+    
+    if [ "$servers_found" = false ]; then
+        warning "No VPN servers are installed."
+        echo "Run 'Install VPN Server' from the main menu to get started."
+    fi
 }
 
 # =============================================================================
@@ -120,12 +131,38 @@ handle_server_restart() {
         return 1
     fi
     
-    # Check which VPN type is installed
-    local vpn_type=$(detect_installed_vpn_type)
+    echo -e "${GREEN}=== Restart VPN Server ===${NC}"
+    echo ""
     
-    if [ "$vpn_type" = "none" ]; then
-        warning "No VPN server is installed. Run installation first."
+    # Check what servers are installed
+    local servers=()
+    [ -d "/opt/v2ray" ] && [ -f "/opt/v2ray/docker-compose.yml" ] && servers+=("xray")
+    ([ -d "/opt/outline" ] || docker ps -a | grep -q "shadowbox") && servers+=("outline")
+    
+    if [ ${#servers[@]} -eq 0 ]; then
+        warning "No VPN servers are installed."
         return 1
+    fi
+    
+    # If only one server, restart it
+    if [ ${#servers[@]} -eq 1 ]; then
+        local vpn_type="${servers[0]}"
+    else
+        # Multiple servers, ask which one
+        echo "Select server to restart:"
+        echo "1) Xray/VLESS Server"
+        echo "2) Outline VPN Server"
+        echo "3) All Servers"
+        echo "0) Cancel"
+        read -p "Select option: " choice
+        
+        case "$choice" in
+            1) vpn_type="xray" ;;
+            2) vpn_type="outline" ;;
+            3) vpn_type="all" ;;
+            0) return 0 ;;
+            *) warning "Invalid option"; return 1 ;;
+        esac
     fi
     
     # Load required modules
@@ -134,21 +171,35 @@ handle_server_restart() {
         return 1
     }
     
-    # Call appropriate restart function
-    case "$vpn_type" in
-        "xray")
-            restart_server
-            ;;
-        "outline")
-            echo -e "${BLUE}Restarting Outline VPN server...${NC}"
-            if docker restart shadowbox 2>/dev/null; then
-                log "Outline server restarted successfully"
-            else
-                error "Failed to restart Outline server"
-                return 1
-            fi
-            ;;
-    esac
+    # Restart selected server(s)
+    if [ "$vpn_type" = "all" ]; then
+        for server in "${servers[@]}"; do
+            echo -e "${BLUE}Restarting $server server...${NC}"
+            case "$server" in
+                "xray") 
+                    restart_server || error "Failed to restart Xray server"
+                    ;;
+                "outline")
+                    docker restart shadowbox 2>/dev/null && log "Outline server restarted" || error "Failed to restart Outline"
+                    ;;
+            esac
+        done
+    else
+        case "$vpn_type" in
+            "xray")
+                restart_server
+                ;;
+            "outline")
+                echo -e "${BLUE}Restarting Outline VPN server...${NC}"
+                if docker restart shadowbox 2>/dev/null; then
+                    log "Outline server restarted successfully"
+                else
+                    error "Failed to restart Outline server"
+                    return 1
+                fi
+                ;;
+        esac
+    fi
 }
 
 # =============================================================================
@@ -162,19 +213,46 @@ handle_server_uninstall() {
         return 1
     fi
     
-    # Check which VPN type is installed
-    local vpn_type=$(detect_installed_vpn_type)
+    echo -e "${GREEN}=== Uninstall VPN Server ===${NC}"
+    echo ""
     
-    if [ "$vpn_type" = "none" ]; then
-        warning "No VPN server is installed."
+    # Check what servers are installed
+    local servers=()
+    [ -d "/opt/v2ray" ] && [ -f "/opt/v2ray/docker-compose.yml" ] && servers+=("xray")
+    ([ -d "/opt/outline" ] || docker ps -a | grep -q "shadowbox") && servers+=("outline")
+    
+    if [ ${#servers[@]} -eq 0 ]; then
+        warning "No VPN servers are installed."
         return 1
     fi
     
-    # Confirmation prompt
-    echo -e "${YELLOW}⚠️  This will completely remove the VPN server and all user data.${NC}"
-    read -p "Are you sure you want to continue? (y/N): " confirm
+    # Select server to uninstall
+    local vpn_type=""
+    if [ ${#servers[@]} -eq 1 ]; then
+        vpn_type="${servers[0]}"
+        echo -e "${YELLOW}Found installed server: $vpn_type${NC}"
+    else
+        echo "Select server to uninstall:"
+        echo "1) Xray/VLESS Server"
+        echo "2) Outline VPN Server"
+        echo "0) Cancel"
+        read -p "Select option: " choice
+        
+        case "$choice" in
+            1) vpn_type="xray" ;;
+            2) vpn_type="outline" ;;
+            0) return 0 ;;
+            *) warning "Invalid option"; return 1 ;;
+        esac
+    fi
     
-    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+    # Confirmation prompt
+    echo -e "\n${RED}⚠️  WARNING: This will completely remove the selected VPN server${NC}"
+    echo -e "${RED}All user data and configurations will be permanently deleted!${NC}"
+    echo -e "\nServer to remove: ${YELLOW}$vpn_type${NC}"
+    read -p "Are you sure you want to continue? (yes/N): " confirm
+    
+    if [ "$confirm" != "yes" ]; then
         log "Uninstall cancelled by user"
         return 0
     fi

@@ -753,6 +753,29 @@ handle_key_rotation() {
     rotate_reality_keys true
 }
 
+handle_logging_config() {
+    if [ "$EUID" -ne 0 ]; then
+        error "Logging configuration requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    # Check if Xray server is installed
+    local vpn_type=$(detect_installed_vpn_type)
+    if [ "$vpn_type" != "xray" ]; then
+        error "Logging configuration is only available for Xray servers"
+        return 1
+    fi
+    
+    # Load monitoring modules
+    load_monitoring_modules || {
+        error "Failed to load monitoring modules"
+        return 1
+    }
+    
+    # Call logging configuration function
+    configure_logging
+}
+
 
 handle_watchdog() {
     echo -e "${BLUE}VPN Watchdog Management${NC}"

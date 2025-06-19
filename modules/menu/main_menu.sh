@@ -38,24 +38,15 @@ show_main_menu() {
     echo "  3)  🔄 Restart Server"
     echo "  4)  🗑️  Uninstall Server"
     echo ""
-    echo -e "${YELLOW}User Management:${NC}"
-    echo "  5)  👥 User Management"
-    echo ""
-    echo -e "${YELLOW}Client Management:${NC}"
-    echo "  6)  💻 Client Management"
-    echo "  7)  📥 Install Client (Quick)"
-    echo ""
-    echo -e "${YELLOW}Monitoring & Maintenance:${NC}"
-    echo "  8)  📈 Traffic Statistics"
-    echo "  9)  📋 View Logs"
-    echo "  10) 🔐 Rotate Keys"
+    echo -e "${YELLOW}Xray Server Management:${NC}"
+    echo "  5)  ⚙️  Manage Xray Server"
     echo ""
     echo -e "${YELLOW}Advanced:${NC}"
-    echo "  11) 🛡️  Watchdog Service"
+    echo "  6)  🛡️  Watchdog Service"
     echo ""
     echo -e "${YELLOW}Help & Info:${NC}"
-    echo "  12) ❓ Show Help"
-    echo "  13) ℹ️  Show Version"
+    echo "  7)  ❓ Show Help"
+    echo "  8)  ℹ️  Show Version"
     echo ""
     echo -e "${RED}  0)  🚪 Exit${NC}"
     echo ""
@@ -82,39 +73,25 @@ handle_menu_choice() {
             handle_server_uninstall
             ;;
         5)
-            handle_user_management
+            handle_xray_management
             ;;
         6)
-            handle_client_management
-            ;;
-        7)
-            SUB_ACTION="install"
-            handle_client_management
-            ;;
-        8)
-            handle_statistics
-            ;;
-        9)
-            handle_logs
-            ;;
-        10)
-            handle_key_rotation
-            ;;
-        11)
             handle_watchdog_menu
             ;;
-        12)
+        7)
             show_usage
+            read -p "Press Enter to continue..."
             ;;
-        13)
+        8)
             show_version
+            read -p "Press Enter to continue..."
             ;;
         0)
             echo -e "${GREEN}Goodbye!${NC}"
             exit 0
             ;;
         *)
-            warning "Invalid option. Please choose 0-13."
+            warning "Invalid option. Please choose 0-8."
             ;;
     esac
 }
@@ -123,6 +100,34 @@ handle_menu_choice() {
 # SUBMENU HANDLERS
 # =============================================================================
 
+
+handle_xray_management() {
+    # Check if Xray server is installed
+    local vpn_type=$(detect_installed_vpn_type)
+    
+    if [ "$vpn_type" != "xray" ]; then
+        warning "Xray server is not installed. Please install it first."
+        return 1
+    fi
+    
+    echo -e "${BLUE}Xray Server Management:${NC}"
+    echo "1) 👥 User Management"
+    echo "2) 📈 Traffic Statistics"  
+    echo "3) 📋 View Logs"
+    echo "4) 🔐 Rotate Keys"
+    echo "5) 🔧 Configure Logging"
+    echo "0) Back to Main Menu"
+    read -p "Select option: " xray_choice
+    case "$xray_choice" in
+        1) handle_user_management ;;
+        2) handle_statistics ;;
+        3) handle_logs ;;
+        4) handle_key_rotation ;;
+        5) handle_logging_config ;;
+        0) return ;;
+        *) warning "Invalid option" ;;
+    esac
+}
 
 handle_watchdog_menu() {
     echo -e "${BLUE}Watchdog Service:${NC}"
@@ -159,7 +164,7 @@ run_interactive_menu() {
     
     while true; do
         show_main_menu
-        read -p "Select option (0-13): " choice
+        read -p "Select option (0-8): " choice
         
         # Handle errors gracefully
         handle_menu_choice "$choice" || {
@@ -173,7 +178,10 @@ run_interactive_menu() {
             exit 0
         fi
         
-        if [ "$choice" != "12" ] && [ "$choice" != "13" ]; then
+        if [ "$choice" = "0" ] || [ "$choice" = "7" ] || [ "$choice" = "8" ]; then
+            # Exit or help/version already have their own prompts or exits
+            true
+        else
             echo ""
             read -p "Press Enter to continue..."
         fi
@@ -186,5 +194,6 @@ run_interactive_menu() {
 
 export -f show_main_menu
 export -f handle_menu_choice
+export -f handle_xray_management
 export -f handle_watchdog_menu
 export -f run_interactive_menu
