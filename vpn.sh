@@ -253,41 +253,62 @@ load_additional_libraries() {
 # SERVER INSTALLATION LOGIC
 # =============================================================================
 
+# Detect which VPN server is installed
+detect_installed_vpn_type() {
+    if [ -d "$WORK_DIR" ] && [ -f "$WORK_DIR/docker-compose.yml" ]; then
+        echo "xray"
+    elif [ -d "$OUTLINE_DIR" ] || docker ps -a --format "table {{.Names}}" | grep -q "shadowbox"; then
+        echo "outline"
+    else
+        echo "none"
+    fi
+}
+
 # Check for existing VPN installations
 check_existing_vpn_installation() {
-    local found_xray=false
-    local found_outline=false
-    local existing_servers=""
+    local protocol="${1:-}"
+    local found=false
+    local existing_server=""
     
-    log "Checking for existing VPN installations..."
+    log "Checking for existing $protocol installation..."
     
-    # Check for Xray installation
-    if [ -d "$WORK_DIR" ] && [ -f "$WORK_DIR/docker-compose.yml" ]; then
-        if docker ps --format "table {{.Names}}" | grep -q "xray"; then
-            found_xray=true
-            existing_servers="${existing_servers}• Xray/VLESS server (running)\n"
-        elif docker ps -a --format "table {{.Names}}" | grep -q "xray"; then
-            found_xray=true
-            existing_servers="${existing_servers}• Xray/VLESS server (stopped)\n"
-        fi
-    fi
+    # Check based on protocol
+    case "$protocol" in
+        "vless-reality")
+            # Check for Xray installation
+            if [ -d "$WORK_DIR" ] && [ -f "$WORK_DIR/docker-compose.yml" ]; then
+                if docker ps --format "table {{.Names}}" | grep -q "xray"; then
+                    found=true
+                    existing_server="Xray/VLESS server (running)"
+                elif docker ps -a --format "table {{.Names}}" | grep -q "xray"; then
+                    found=true
+                    existing_server="Xray/VLESS server (stopped)"
+                fi
+            fi
+            ;;
+        "outline")
+            # Check for Outline installation
+            if [ -d "$OUTLINE_DIR" ] || docker ps -a --format "table {{.Names}}" | grep -q "shadowbox"; then
+                if docker ps --format "table {{.Names}}" | grep -q "shadowbox"; then
+                    found=true
+                    existing_server="Outline VPN server (running)"
+                elif docker ps -a --format "table {{.Names}}" | grep -q "shadowbox"; then
+                    found=true
+                    existing_server="Outline VPN server (stopped)"
+                fi
+            fi
+            ;;
+        *)
+            error "Unknown protocol: $protocol"
+            return 1
+            ;;
+    esac
     
-    # Check for Outline installation
-    if [ -d "$OUTLINE_DIR" ] || docker ps -a --format "table {{.Names}}" | grep -q "shadowbox"; then
-        if docker ps --format "table {{.Names}}" | grep -q "shadowbox"; then
-            found_outline=true
-            existing_servers="${existing_servers}• Outline VPN server (running)\n"
-        elif docker ps -a --format "table {{.Names}}" | grep -q "shadowbox"; then
-            found_outline=true
-            existing_servers="${existing_servers}• Outline VPN server (stopped)\n"
-        fi
-    fi
-    
-    # If any server found, prompt user
-    if [ "$found_xray" = true ] || [ "$found_outline" = true ]; then
-        echo -e "\n${YELLOW}⚠️  Existing VPN installation(s) detected:${NC}"
-        echo -e -n "$existing_servers"
-        echo -e "${YELLOW}Installing a new server may cause conflicts.${NC}\n"
+    # If server found, prompt user
+    if [ "$found" = true ]; then
+        echo -e "\n${YELLOW}⚠️  Existing installation detected:${NC}"
+        echo -e "• $existing_server"
+        echo -e "${YELLOW}Installing a new server will replace the existing one.${NC}\n"
         
         echo "Choose an action:"
         echo "1) Reinstall (remove existing and install new)"
@@ -299,27 +320,28 @@ check_existing_vpn_installation() {
                 1)
                     log "User chose to reinstall"
                     
-                    # Remove existing installations
-                    if [ "$found_xray" = true ]; then
-                        log "Removing existing Xray installation..."
-                        if docker ps | grep -q "xray"; then
-                            cd "$WORK_DIR" 2>/dev/null && docker-compose down 2>/dev/null || true
-                        fi
-                        docker rm -f xray 2>/dev/null || true
-                        rm -rf "$WORK_DIR" 2>/dev/null || true
-                    fi
-                    
-                    if [ "$found_outline" = true ]; then
-                        log "Removing existing Outline installation..."
-                        docker rm -f shadowbox watchtower 2>/dev/null || true
-                        rm -rf "$OUTLINE_DIR" 2>/dev/null || true
-                        # Remove any Outline-related firewall rules
-                        if command -v ufw >/dev/null 2>&1; then
-                            ufw status numbered | grep -E "9000|Outline" | awk '{print $2}' | sort -r | while read -r num; do
-                                ufw --force delete "$num" 2>/dev/null || true
-                            done
-                        fi
-                    fi
+                    # Remove existing installation based on protocol
+                    case "$protocol" in
+                        "vless-reality")
+                            log "Removing existing Xray installation..."
+                            if docker ps | grep -q "xray"; then
+                                cd "$WORK_DIR" 2>/dev/null && docker-compose down 2>/dev/null || true
+                            fi
+                            docker rm -f xray 2>/dev/null || true
+                            rm -rf "$WORK_DIR" 2>/dev/null || true
+                            ;;
+                        "outline")
+                            log "Removing existing Outline installation..."
+                            docker rm -f shadowbox watchtower 2>/dev/null || true
+                            rm -rf "$OUTLINE_DIR" 2>/dev/null || true
+                            # Remove any Outline-related firewall rules
+                            if command -v ufw >/dev/null 2>&1; then
+                                ufw status numbered | grep -E "9000|Outline" | awk '{print $2}' | sort -r | while read -r num; do
+                                    ufw --force delete "$num" 2>/dev/null || true
+                                done
+                            fi
+                            ;;
+                    esac
                     
                     log "Existing installations removed"
                     return 0
@@ -344,12 +366,6 @@ check_existing_vpn_installation() {
 # Run complete server installation using modules
 run_server_installation() {
     log "Starting modular VPN server installation..."
-    
-    # Check for existing installations first
-    check_existing_vpn_installation || {
-        error "Failed to check existing installations"
-        return 1
-    }
     
     # Install system dependencies
     install_system_dependencies true || {
@@ -476,6 +492,12 @@ get_server_config_interactive() {
         esac
     done
     
+    # Check for existing installation of selected protocol
+    check_existing_vpn_installation "$PROTOCOL" || {
+        error "Installation cancelled"
+        return 1
+    }
+    
     # Get server port
     echo -e "${BLUE}Choose server port:${NC}"
     echo "1) Automatic free port (10000-65000) - Recommended"
@@ -521,16 +543,18 @@ get_server_config_interactive() {
         generate_reality_keys
     fi
     
-    # Get user name for first user
-    while true; do
-        read -p "Enter username for the first user: " USER_NAME
-        if [ -n "$USER_NAME" ] && [[ "$USER_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-            log "User name: $USER_NAME"
-            break
-        else
-            warning "Invalid username. Use only letters, numbers, hyphens, and underscores"
-        fi
-    done
+    # Get user name for first user (only for VLESS)
+    if [ "$PROTOCOL" = "vless-reality" ]; then
+        while true; do
+            read -p "Enter username for the first user: " USER_NAME
+            if [ -n "$USER_NAME" ] && [[ "$USER_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+                log "User name: $USER_NAME"
+                break
+            else
+                warning "Invalid username. Use only letters, numbers, hyphens, and underscores"
+            fi
+        done
+    fi
     
     return 0
 }
@@ -721,7 +745,22 @@ handle_user_management() {
         return 1
     fi
     
-    # Check if server is installed
+    # Check which VPN type is installed
+    local vpn_type=$(detect_installed_vpn_type)
+    
+    if [ "$vpn_type" = "none" ]; then
+        error "No VPN server is installed. Run '$0 install' first."
+        return 1
+    elif [ "$vpn_type" = "outline" ]; then
+        echo -e "${YELLOW}Outline VPN user management is done through the Outline Manager app.${NC}"
+        echo -e "${BLUE}Download Outline Manager from:${NC}"
+        echo -e "${WHITE}https://getoutline.org/get-started/#step-1${NC}"
+        echo ""
+        read -p "Press Enter to return to main menu..."
+        return 0
+    fi
+    
+    # For Xray, continue with normal user management
     if [ ! -d "$WORK_DIR" ]; then
         error "VPN server is not installed. Run '$0 install' first."
         return 1
