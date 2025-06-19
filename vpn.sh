@@ -588,8 +588,8 @@ create_xray_config_and_user() {
     fi
     
     if [ -z "$SERVER_PORT" ]; then
-        SERVER_PORT="10443"
-        log "Server port not set, defaulting to: $SERVER_PORT"
+        error "SERVER_PORT is not set. This should have been configured during installation."
+        return 1
     fi
     
     if [ -z "$SERVER_IP" ]; then
@@ -619,8 +619,13 @@ create_xray_config_and_user() {
     fi
     
     if [ -z "$SERVER_SNI" ]; then
-        SERVER_SNI="addons.mozilla.org"
-        log "SNI not set, defaulting to: $SERVER_SNI"
+        error "SERVER_SNI is not set. This should have been configured during installation."
+        return 1
+    fi
+    
+    if [ -z "$USER_NAME" ]; then
+        error "USER_NAME is not set. This should have been configured during installation."
+        return 1
     fi
     
     # Debug information
@@ -701,6 +706,343 @@ show_installation_results() {
     fi
     
     echo -e "\n${GREEN}Installation completed successfully!${NC}\n"
+    return 0
+}
+
+# =============================================================================
+# MAIN INSTALLATION FUNCTION 
+# =============================================================================
+
+# Main server installation function
+run_server_installation() {
+    log "Starting VPN server installation process..."
+    
+    # Check system requirements
+    echo -e "${BLUE}=== VPN Server Installation ===${NC}\n"
+    
+    # Install dependencies first
+    echo -e "${YELLOW}Step 1: Installing system dependencies...${NC}"
+    log "Starting system dependencies installation..."
+    if ! install_system_dependencies true; then
+        error "Failed to install system dependencies"
+        error "Check above logs for specific package installation errors"
+        return 1
+    fi
+    log "System dependencies installed successfully"
+    
+    # Verify dependencies
+    echo -e "${YELLOW}Step 1.5: Verifying dependencies...${NC}"
+    log "Verifying all required dependencies are available..."
+    if ! verify_dependencies true; then
+        error "Dependency verification failed"
+        error "Some required tools are missing. Please check the installation logs above."
+        return 1
+    fi
+    log "All dependencies verified successfully"
+    
+    # Protocol selection
+    echo -e "\n${YELLOW}Step 2: Select VPN Protocol${NC}"
+    log "Starting protocol selection process..."
+    if ! select_vpn_protocol; then
+        error "Protocol selection failed"
+        error "User failed to select a valid protocol or process was interrupted"
+        return 1
+    fi
+    log "Protocol selection completed: $PROTOCOL"
+    
+    # Check for existing installations
+    echo -e "\n${YELLOW}Step 3: Checking for existing installations...${NC}"
+    log "Checking for existing $PROTOCOL installations..."
+    if ! check_existing_installation "$PROTOCOL"; then
+        error "Installation check failed"
+        error "Failed to check for existing installations or user cancelled"
+        return 1
+    fi
+    log "Installation check completed"
+    
+    # Configure protocol-specific settings
+    echo -e "\n${YELLOW}Step 4: Configuring $PROTOCOL settings...${NC}"
+    case "$PROTOCOL" in
+        "vless-reality")
+            # SNI configuration
+            log "Starting SNI domain configuration..."
+            if ! get_sni_config_interactive; then
+                error "SNI configuration failed"
+                error "Failed to configure SNI domain or user cancelled"
+                return 1
+            fi
+            log "SNI configuration completed: $SERVER_SNI"
+            
+            # Port configuration
+            log "Starting port configuration..."
+            if ! get_port_config_interactive; then
+                error "Port configuration failed"
+                error "Failed to configure server port or user cancelled"
+                return 1
+            fi
+            log "Port configuration completed: $SERVER_PORT"
+            
+            # User name configuration
+            log "Starting user configuration..."
+            if ! get_user_config_interactive; then
+                error "User configuration failed"
+                error "Failed to configure first user or user cancelled"
+                return 1
+            fi
+            log "User configuration completed: $USER_NAME"
+            
+            # Reality keys generation
+            echo -e "\n${YELLOW}Step 5: Generating Reality encryption keys...${NC}"
+            log "Starting Reality key generation..."
+            if ! generate_reality_keys; then
+                error "Reality keys generation failed"
+                error "Failed to generate X25519 keypair or extract keys"
+                return 1
+            fi
+            log "Reality keys generated successfully: Private key ${PRIVATE_KEY:0:10}..., Public key ${PUBLIC_KEY:0:10}..., Short ID: $SHORT_ID"
+            
+            # Final configuration display
+            echo -e "\n${GREEN}=== Final Configuration ===${NC}"
+            echo -e "${BLUE}Protocol:${NC} $PROTOCOL"
+            echo -e "${BLUE}Server Port:${NC} $SERVER_PORT"
+            echo -e "${BLUE}SNI Domain:${NC} $SERVER_SNI"
+            echo -e "${BLUE}First User:${NC} $USER_NAME"
+            echo -e "${BLUE}Private Key:${NC} ${PRIVATE_KEY:0:10}..."
+            echo -e "${BLUE}Public Key:${NC} ${PUBLIC_KEY:0:10}..."
+            echo -e "${BLUE}Short ID:${NC} $SHORT_ID"
+            
+            read -p "Proceed with installation? (y/N): " confirm
+            if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+                log "Installation cancelled by user"
+                return 0
+            fi
+            
+            # Create Xray configuration and Docker setup
+            echo -e "\n${YELLOW}Step 6: Setting up Xray server...${NC}"
+            log "Starting Xray configuration creation..."
+            if ! create_xray_config_and_user; then
+                error "Xray configuration creation failed"
+                error "Failed to create Xray config files, check parameters above"
+                return 1
+            fi
+            log "Xray configuration created successfully"
+            
+            # Setup Docker containers
+            echo -e "\n${YELLOW}Step 7: Setting up Docker containers...${NC}"
+            log "Starting Docker environment setup..."
+            if ! setup_docker_xray; then
+                error "Docker setup failed"
+                error "Failed to setup Docker containers, check Docker status"
+                return 1
+            fi
+            log "Docker environment setup completed"
+            ;;
+            
+        "outline")
+            echo -e "\n${YELLOW}Step 5: Setting up Outline VPN server...${NC}"
+            setup_outline_server || {
+                error "Outline setup failed"
+                return 1
+            }
+            ;;
+            
+        *)
+            error "Unsupported protocol: $PROTOCOL"
+            return 1
+            ;;
+    esac
+    
+    # Setup firewall
+    echo -e "\n${YELLOW}Step 8: Configuring firewall...${NC}"
+    log "Starting firewall configuration..."
+    if ! setup_firewall; then
+        error "Firewall setup failed"
+        error "Failed to configure UFW firewall rules"
+        return 1
+    fi
+    log "Firewall configuration completed successfully"
+    
+    # Show final results
+    echo -e "\n${YELLOW}Step 9: Installation complete!${NC}"
+    log "Showing installation results..."
+    show_installation_results
+    
+    log "VPN server installation completed successfully"
+    return 0
+}
+
+# =============================================================================
+# INSTALLATION CONFIGURATION FUNCTIONS
+# =============================================================================
+
+# Protocol selection with enhanced logging
+select_vpn_protocol() {
+    echo -e "${BLUE}Available VPN Protocols:${NC}"
+    echo "1) VLESS+Reality (Recommended for security)"
+    echo "2) Outline VPN (Shadowsocks-based)"
+    echo ""
+    
+    while true; do
+        read -p "Select VPN protocol (1-2): " protocol_choice
+        case $protocol_choice in
+            1)
+                PROTOCOL="vless-reality"
+                WORK_DIR="/opt/v2ray"
+                log "Selected protocol: VLESS+Reality"
+                echo -e "${GREEN}Selected: VLESS+Reality Protocol${NC}"
+                echo -e "${BLUE}✓ Enhanced anti-detection technology${NC}"
+                echo -e "${BLUE}✓ TLS 1.3 masquerading${NC}"
+                echo -e "${BLUE}✓ X25519 cryptography${NC}"
+                break
+                ;;
+            2)
+                PROTOCOL="outline"
+                WORK_DIR="/opt/outline"
+                log "Selected protocol: Outline VPN"
+                echo -e "${GREEN}Selected: Outline VPN Protocol${NC}"
+                echo -e "${BLUE}✓ Shadowsocks-based${NC}"
+                echo -e "${BLUE}✓ Easy client management${NC}"
+                echo -e "${BLUE}✓ Web management interface${NC}"
+                break
+                ;;
+            *)
+                warning "Please choose 1 or 2"
+                ;;
+        esac
+    done
+    
+    return 0
+}
+
+# Port configuration with improved logic
+get_port_config_interactive() {
+    echo -e "${BLUE}Port Configuration for Reality:${NC}"
+    echo "1) Random port (10000-65000) - Recommended"
+    echo "2) Standard port (10443)"
+    echo "3) Custom port"
+    echo ""
+    
+    while true; do
+        read -p "Select port option (1-3): " port_choice
+        case $port_choice in
+            1)
+                # Generate random port between 10000-65000
+                SERVER_PORT=$((RANDOM % 55000 + 10000))
+                log "Generated random port: $SERVER_PORT"
+                echo -e "${GREEN}Random port selected: $SERVER_PORT${NC}"
+                break
+                ;;
+            2)
+                SERVER_PORT="10443"
+                log "Selected standard port: $SERVER_PORT"
+                echo -e "${GREEN}Standard port selected: $SERVER_PORT${NC}"
+                break
+                ;;
+            3)
+                while true; do
+                    read -p "Enter custom port (1024-65535): " custom_port
+                    if [[ "$custom_port" =~ ^[0-9]+$ ]] && [ "$custom_port" -ge 1024 ] && [ "$custom_port" -le 65535 ]; then
+                        SERVER_PORT="$custom_port"
+                        log "Selected custom port: $SERVER_PORT"
+                        echo -e "${GREEN}Custom port selected: $SERVER_PORT${NC}"
+                        break
+                    else
+                        warning "Please enter a valid port number (1024-65535)"
+                    fi
+                done
+                break
+                ;;
+            *)
+                warning "Please choose 1, 2, or 3"
+                ;;
+        esac
+    done
+    
+    return 0
+}
+
+# User configuration
+get_user_config_interactive() {
+    echo -e "${BLUE}First User Configuration:${NC}"
+    while true; do
+        read -p "Enter username for first user: " username
+        if [ -n "$username" ] && [[ "$username" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            USER_NAME="$username"
+            log "First user configured: $USER_NAME"
+            echo -e "${GREEN}User '$USER_NAME' will be created${NC}"
+            break
+        else
+            warning "Please enter a valid username (alphanumeric, underscore, and hyphen only)"
+        fi
+    done
+    
+    return 0
+}
+
+# Docker setup for Xray
+setup_docker_xray() {
+    log "Setting up Docker environment for Xray..."
+    
+    # Source Docker module
+    source "$SCRIPT_DIR/modules/install/docker_setup.sh" || {
+        error "Failed to load Docker setup module"
+        return 1
+    }
+    
+    # Setup Docker environment
+    setup_docker_environment "$WORK_DIR" "$PROTOCOL" true || {
+        error "Failed to setup Docker environment"
+        return 1
+    }
+    
+    log "Docker setup completed successfully"
+    return 0
+}
+
+# Outline server setup
+setup_outline_server() {
+    log "Setting up Outline VPN server..."
+    
+    # Source Outline module
+    source "$SCRIPT_DIR/modules/install/outline_setup.sh" || {
+        error "Failed to load Outline setup module"
+        return 1
+    }
+    
+    # Run Outline installation
+    install_outline_server true || {
+        error "Failed to install Outline server"
+        return 1
+    }
+    
+    log "Outline server setup completed successfully"
+    return 0
+}
+
+# Firewall setup
+setup_firewall() {
+    log "Configuring firewall rules..."
+    
+    # Source firewall module
+    source "$SCRIPT_DIR/modules/install/firewall.sh" || {
+        error "Failed to load firewall module"
+        return 1
+    }
+    
+    # Configure firewall for the selected protocol
+    if [ "$PROTOCOL" = "vless-reality" ]; then
+        setup_xray_firewall "$SERVER_PORT" true || {
+            error "Failed to configure Xray firewall"
+            return 1
+        }
+    elif [ "$PROTOCOL" = "outline" ]; then
+        setup_outline_firewall true || {
+            error "Failed to configure Outline firewall"
+            return 1
+        }
+    fi
+    
+    log "Firewall configuration completed successfully"
     return 0
 }
 
