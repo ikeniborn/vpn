@@ -71,6 +71,7 @@ source "$SCRIPT_DIR/lib/docker.sh" || {
 # =============================================================================
 
 WORK_DIR="/opt/v2ray"
+OUTLINE_DIR="/opt/outline"
 CLIENT_WORK_DIR="/opt/v2raya"
 SCRIPT_VERSION="3.0"
 ACTION=""
@@ -252,9 +253,103 @@ load_additional_libraries() {
 # SERVER INSTALLATION LOGIC
 # =============================================================================
 
+# Check for existing VPN installations
+check_existing_vpn_installation() {
+    local found_xray=false
+    local found_outline=false
+    local existing_servers=""
+    
+    log "Checking for existing VPN installations..."
+    
+    # Check for Xray installation
+    if [ -d "$WORK_DIR" ] && [ -f "$WORK_DIR/docker-compose.yml" ]; then
+        if docker ps --format "table {{.Names}}" | grep -q "xray"; then
+            found_xray=true
+            existing_servers="${existing_servers}• Xray/VLESS server (running)\n"
+        elif docker ps -a --format "table {{.Names}}" | grep -q "xray"; then
+            found_xray=true
+            existing_servers="${existing_servers}• Xray/VLESS server (stopped)\n"
+        fi
+    fi
+    
+    # Check for Outline installation
+    if [ -d "$OUTLINE_DIR" ] || docker ps -a --format "table {{.Names}}" | grep -q "shadowbox"; then
+        if docker ps --format "table {{.Names}}" | grep -q "shadowbox"; then
+            found_outline=true
+            existing_servers="${existing_servers}• Outline VPN server (running)\n"
+        elif docker ps -a --format "table {{.Names}}" | grep -q "shadowbox"; then
+            found_outline=true
+            existing_servers="${existing_servers}• Outline VPN server (stopped)\n"
+        fi
+    fi
+    
+    # If any server found, prompt user
+    if [ "$found_xray" = true ] || [ "$found_outline" = true ]; then
+        echo -e "\n${YELLOW}⚠️  Existing VPN installation(s) detected:${NC}"
+        echo -e -n "$existing_servers"
+        echo -e "${YELLOW}Installing a new server may cause conflicts.${NC}\n"
+        
+        echo "Choose an action:"
+        echo "1) Reinstall (remove existing and install new)"
+        echo "2) Cancel installation"
+        
+        while true; do
+            read -p "Select option (1-2): " choice
+            case $choice in
+                1)
+                    log "User chose to reinstall"
+                    
+                    # Remove existing installations
+                    if [ "$found_xray" = true ]; then
+                        log "Removing existing Xray installation..."
+                        if docker ps | grep -q "xray"; then
+                            cd "$WORK_DIR" 2>/dev/null && docker-compose down 2>/dev/null || true
+                        fi
+                        docker rm -f xray 2>/dev/null || true
+                        rm -rf "$WORK_DIR" 2>/dev/null || true
+                    fi
+                    
+                    if [ "$found_outline" = true ]; then
+                        log "Removing existing Outline installation..."
+                        docker rm -f shadowbox watchtower 2>/dev/null || true
+                        rm -rf "$OUTLINE_DIR" 2>/dev/null || true
+                        # Remove any Outline-related firewall rules
+                        if command -v ufw >/dev/null 2>&1; then
+                            ufw status numbered | grep -E "9000|Outline" | awk '{print $2}' | sort -r | while read -r num; do
+                                ufw --force delete "$num" 2>/dev/null || true
+                            done
+                        fi
+                    fi
+                    
+                    log "Existing installations removed"
+                    return 0
+                    ;;
+                2)
+                    log "Installation cancelled by user"
+                    echo -e "${YELLOW}Installation cancelled.${NC}"
+                    exit 0
+                    ;;
+                *)
+                    warning "Please choose 1 or 2"
+                    ;;
+            esac
+        done
+    else
+        log "No existing VPN installations found"
+    fi
+    
+    return 0
+}
+
 # Run complete server installation using modules
 run_server_installation() {
     log "Starting modular VPN server installation..."
+    
+    # Check for existing installations first
+    check_existing_vpn_installation || {
+        error "Failed to check existing installations"
+        return 1
+    }
     
     # Install system dependencies
     install_system_dependencies true || {
