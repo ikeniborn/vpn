@@ -1060,26 +1060,24 @@ show_main_menu() {
     echo "  4)  🗑️  Uninstall Server"
     echo ""
     echo -e "${YELLOW}User Management:${NC}"
-    echo "  5)  👥 User Management Menu"
-    echo "  6)  ➕ Add User (Quick)"
-    echo "  7)  📋 List Users"
+    echo "  5)  👥 User Management"
     echo ""
     echo -e "${YELLOW}Client Management:${NC}"
-    echo "  8)  💻 Client Management Menu"
-    echo "  9)  📥 Install Client"
+    echo "  6)  💻 Client Management"
+    echo "  7)  📥 Install Client (Quick)"
     echo ""
     echo -e "${YELLOW}Monitoring & Maintenance:${NC}"
-    echo "  10) 📈 Traffic Statistics"
-    echo "  11) 📋 View Logs"
-    echo "  12) 🔐 Rotate Keys"
+    echo "  8)  📈 Traffic Statistics"
+    echo "  9)  📋 View Logs"
+    echo "  10) 🔐 Rotate Keys"
     echo ""
     echo -e "${YELLOW}Advanced:${NC}"
-    echo "  13) 🚀 Deployment Options"
-    echo "  14) 🛡️  Watchdog Service"
+    echo "  11) 🚀 Deployment Options"
+    echo "  12) 🛡️  Watchdog Service"
     echo ""
     echo -e "${YELLOW}Help & Info:${NC}"
-    echo "  15) ❓ Show Help"
-    echo "  16) ℹ️  Show Version"
+    echo "  13) ❓ Show Help"
+    echo "  14) ℹ️  Show Version"
     echo ""
     echo -e "${RED}  0)  🚪 Exit${NC}"
     echo ""
@@ -1105,36 +1103,22 @@ handle_menu_choice() {
             handle_user_management
             ;;
         6)
-            echo -e "${BLUE}Quick Add User${NC}"
-            read -p "Enter username: " username
-            if [ -n "$username" ]; then
-                SUB_ACTION="add"
-                handle_user_management "$username"
-            else
-                warning "Username cannot be empty"
-            fi
-            ;;
-        7)
-            SUB_ACTION="list"
-            handle_user_management
-            ;;
-        8)
             handle_client_management
             ;;
-        9)
+        7)
             SUB_ACTION="install"
             handle_client_management
             ;;
-        10)
+        8)
             handle_statistics
             ;;
-        11)
+        9)
             handle_logs
             ;;
-        12)
+        10)
             handle_key_rotation
             ;;
-        13)
+        11)
             echo -e "${BLUE}Deployment Options:${NC}"
             echo "1) Install"
             echo "2) Update"
@@ -1151,7 +1135,7 @@ handle_menu_choice() {
                 *) warning "Invalid option" ;;
             esac
             ;;
-        14)
+        12)
             echo -e "${BLUE}Watchdog Service:${NC}"
             echo "1) Install Service"
             echo "2) Start Service"
@@ -1172,10 +1156,10 @@ handle_menu_choice() {
                 *) warning "Invalid option" ;;
             esac
             ;;
-        15)
+        13)
             show_usage
             ;;
-        16)
+        14)
             show_version
             ;;
         0)
@@ -1183,7 +1167,7 @@ handle_menu_choice() {
             exit 0
             ;;
         *)
-            warning "Invalid option. Please choose 0-16."
+            warning "Invalid option. Please choose 0-14."
             ;;
     esac
 }
@@ -1197,7 +1181,7 @@ run_interactive_menu() {
     
     while true; do
         show_main_menu
-        read -p "Select option (0-16): " choice
+        read -p "Select option (0-14): " choice
         
         # Handle errors gracefully
         handle_menu_choice "$choice" || {
