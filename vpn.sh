@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # =============================================================================
-# Unified VPN Management Script
+# Unified VPN Management Script (Modular Version)
 # 
-# This script combines all VPN functionality:
+# This script combines all VPN functionality using a modular architecture:
 # - Server installation and configuration
 # - User management
 # - Client installation
@@ -11,7 +11,7 @@
 # - Deployment and backup operations
 #
 # Author: Claude
-# Version: 3.0 (Unified)
+# Version: 3.1 (Modular)
 # =============================================================================
 
 # Removed 'set -e' to ensure we always exit with 0
@@ -73,132 +73,15 @@ source "$SCRIPT_DIR/lib/docker.sh" || {
 WORK_DIR="/opt/v2ray"
 OUTLINE_DIR="/opt/outline"
 CLIENT_WORK_DIR="/opt/v2raya"
-SCRIPT_VERSION="3.0"
+SCRIPT_VERSION="3.1"
 ACTION=""
 SUB_ACTION=""
 
 # =============================================================================
-# HELP AND USAGE
+# MODULE LOADING FUNCTIONS
 # =============================================================================
 
-show_usage() {
-    echo -e "${GREEN}=== Unified VPN Management Script v${SCRIPT_VERSION} ===${NC}"
-    echo ""
-    echo "Usage: $0 [command] [options]"
-    echo ""
-    echo -e "${YELLOW}Interactive Mode:${NC}"
-    echo "  (no command)         Launch interactive menu"
-    echo "  menu                 Launch interactive menu"
-    echo ""
-    echo -e "${YELLOW}Server Commands:${NC}"
-    echo "  install              Install VPN server"
-    echo "  uninstall            Uninstall VPN server"
-    echo "  status               Show server status"
-    echo "  restart              Restart VPN server"
-    echo ""
-    echo -e "${YELLOW}User Management:${NC}"
-    echo "  users                Interactive user management menu"
-    echo "  user add <name>      Add a new user"
-    echo "  user delete <name>   Delete a user"
-    echo "  user list            List all users"
-    echo "  user show <name>     Show user connection details"
-    echo ""
-    echo -e "${YELLOW}Client Commands:${NC}"
-    echo "  client install       Install VPN client"
-    echo "  client status        Show client status"
-    echo "  client uninstall     Uninstall VPN client"
-    echo ""
-    echo -e "${YELLOW}Monitoring Commands:${NC}"
-    echo "  stats                Show traffic statistics"
-    echo "  logs                 View server logs"
-    echo "  rotate-keys          Rotate Reality encryption keys"
-    echo ""
-    echo -e "${YELLOW}Deployment Commands:${NC}"
-    echo "  deploy install       Deploy fresh installation"
-    echo "  deploy update        Update existing installation"
-    echo "  deploy backup        Create backup"
-    echo "  deploy restore       Restore from backup"
-    echo ""
-    echo -e "${YELLOW}System Commands:${NC}"
-    echo "  watchdog install     Install watchdog service"
-    echo "  watchdog start       Start watchdog service"
-    echo "  watchdog stop        Stop watchdog service"
-    echo "  watchdog restart     Restart watchdog service"
-    echo "  watchdog status      Show watchdog status"
-    echo "  watchdog remove      Remove watchdog service"
-    echo ""
-    echo -e "${YELLOW}Options:${NC}"
-    echo "  --help, -h           Show this help message"
-    echo "  --version, -v        Show version information"
-    echo ""
-    echo -e "${YELLOW}Examples:${NC}"
-    echo "  $0                            # Launch interactive menu"
-    echo "  $0 install                    # Install VPN server"
-    echo "  $0 user add john              # Add user 'john'"
-    echo "  $0 client install             # Install VPN client"
-    echo "  $0 stats                      # Show traffic statistics"
-    echo ""
-}
-
-show_version() {
-    echo -e "${GREEN}Unified VPN Management Script${NC}"
-    echo -e "Version: ${BLUE}${SCRIPT_VERSION}${NC}"
-    echo -e "Architecture: ${BLUE}Modular${NC}"
-    echo -e "Location: ${BLUE}${SCRIPT_DIR}${NC}"
-}
-
-# =============================================================================
-# MODULE LOADING
-# =============================================================================
-
-load_server_modules() {
-    local debug="${1:-false}"
-    
-    [[ "$debug" == true ]] && log "Loading server modules from: $SCRIPT_DIR/modules/"
-    
-    # Set PROJECT_ROOT for modules to use when sourcing libraries
-    export PROJECT_ROOT="$SCRIPT_DIR"
-    
-    # Load installation modules
-    source "$SCRIPT_DIR/modules/install/prerequisites.sh" || {
-        error "Failed to source modules/install/prerequisites.sh"
-        return 1
-    }
-    source "$SCRIPT_DIR/modules/install/docker_setup.sh" || {
-        error "Failed to source modules/install/docker_setup.sh"
-        return 1
-    }
-    source "$SCRIPT_DIR/modules/install/xray_config.sh" || {
-        error "Failed to source modules/install/xray_config.sh"
-        return 1
-    }
-    source "$SCRIPT_DIR/modules/install/firewall.sh" || {
-        error "Failed to source modules/install/firewall.sh"
-        return 1
-    }
-    
-    # Load server management modules
-    source "$SCRIPT_DIR/modules/server/status.sh" || {
-        error "Failed to source modules/server/status.sh"
-        return 1
-    }
-    source "$SCRIPT_DIR/modules/server/restart.sh" || {
-        error "Failed to source modules/server/restart.sh"
-        return 1
-    }
-    source "$SCRIPT_DIR/modules/server/rotate_keys.sh" || {
-        error "Failed to source modules/server/rotate_keys.sh"
-        return 1
-    }
-    source "$SCRIPT_DIR/modules/server/uninstall.sh" || {
-        error "Failed to source modules/server/uninstall.sh"
-        return 1
-    }
-    
-    [[ "$debug" == true ]] && log "Server modules loaded successfully"
-    return 0
-}
-
+# Load user management modules
 load_user_modules() {
     source "$SCRIPT_DIR/modules/users/add.sh" || return 1
     source "$SCRIPT_DIR/modules/users/delete.sh" || return 1
@@ -209,6 +92,7 @@ load_user_modules() {
     return 0
 }
 
+# Load monitoring modules
 load_monitoring_modules() {
     source "$SCRIPT_DIR/modules/monitoring/statistics.sh" || return 1
     source "$SCRIPT_DIR/modules/monitoring/logging.sh" || return 1
@@ -217,6 +101,7 @@ load_monitoring_modules() {
     return 0
 }
 
+# Load additional libraries
 load_additional_libraries() {
     local debug="${1:-false}"
     
@@ -230,27 +115,35 @@ load_additional_libraries() {
         fi
     done
     
-    source "$SCRIPT_DIR/lib/network.sh" || {
-        error "Failed to source lib/network.sh"
-        return 1
-    }
-    
-    source "$SCRIPT_DIR/lib/crypto.sh" || {
-        error "Failed to source lib/crypto.sh"
-        return 1
-    }
-    
-    source "$SCRIPT_DIR/lib/docker.sh" || {
-        error "Failed to source lib/docker.sh"
-        return 1
-    }
-    
+    # Libraries are already sourced above
     [[ "$debug" == true ]] && log "Additional libraries loaded successfully"
     return 0
 }
 
+# Load server modules
+load_server_modules() {
+    local debug="${1:-false}"
+    
+    [[ "$debug" == true ]] && log "Loading server modules from: $SCRIPT_DIR/modules/"
+    
+    # Source server management modules
+    source "$SCRIPT_DIR/modules/server/status.sh" || return 1
+    source "$SCRIPT_DIR/modules/server/restart.sh" || return 1
+    source "$SCRIPT_DIR/modules/server/uninstall.sh" || return 1
+    
+    [[ "$debug" == true ]] && log "Server modules loaded successfully"
+    return 0
+}
+
+# Load menu modules
+load_menu_modules() {
+    local debug="${1:-false}"
+    source "$SCRIPT_DIR/modules/menu/menu_loader.sh" || return 1
+    return 0
+}
+
 # =============================================================================
-# SERVER INSTALLATION LOGIC
+# UTILITY FUNCTIONS
 # =============================================================================
 
 # Detect which VPN server is installed
@@ -264,105 +157,11 @@ detect_installed_vpn_type() {
     fi
 }
 
-# Check for existing VPN installations
-check_existing_vpn_installation() {
-    local protocol="${1:-}"
-    local found=false
-    local existing_server=""
-    
-    log "Checking for existing $protocol installation..."
-    
-    # Check based on protocol
-    case "$protocol" in
-        "vless-reality")
-            # Check for Xray installation
-            if [ -d "$WORK_DIR" ] && [ -f "$WORK_DIR/docker-compose.yml" ]; then
-                if docker ps --format "table {{.Names}}" | grep -q "xray"; then
-                    found=true
-                    existing_server="Xray/VLESS server (running)"
-                elif docker ps -a --format "table {{.Names}}" | grep -q "xray"; then
-                    found=true
-                    existing_server="Xray/VLESS server (stopped)"
-                fi
-            fi
-            ;;
-        "outline")
-            # Check for Outline installation
-            if [ -d "$OUTLINE_DIR" ] || docker ps -a --format "table {{.Names}}" | grep -q "shadowbox"; then
-                if docker ps --format "table {{.Names}}" | grep -q "shadowbox"; then
-                    found=true
-                    existing_server="Outline VPN server (running)"
-                elif docker ps -a --format "table {{.Names}}" | grep -q "shadowbox"; then
-                    found=true
-                    existing_server="Outline VPN server (stopped)"
-                fi
-            fi
-            ;;
-        *)
-            error "Unknown protocol: $protocol"
-            return 1
-            ;;
-    esac
-    
-    # If server found, prompt user
-    if [ "$found" = true ]; then
-        echo -e "\n${YELLOW}⚠️  Existing installation detected:${NC}"
-        echo -e "• $existing_server"
-        echo -e "${YELLOW}Installing a new server will replace the existing one.${NC}\n"
-        
-        echo "Choose an action:"
-        echo "1) Reinstall (remove existing and install new)"
-        echo "2) Cancel installation"
-        
-        while true; do
-            read -p "Select option (1-2): " choice
-            case $choice in
-                1)
-                    log "User chose to reinstall"
-                    
-                    # Remove existing installation based on protocol
-                    case "$protocol" in
-                        "vless-reality")
-                            log "Removing existing Xray installation..."
-                            if docker ps | grep -q "xray"; then
-                                cd "$WORK_DIR" 2>/dev/null && docker-compose down 2>/dev/null || true
-                            fi
-                            docker rm -f xray 2>/dev/null || true
-                            rm -rf "$WORK_DIR" 2>/dev/null || true
-                            ;;
-                        "outline")
-                            log "Removing existing Outline installation..."
-                            docker rm -f shadowbox watchtower 2>/dev/null || true
-                            rm -rf "$OUTLINE_DIR" 2>/dev/null || true
-                            # Remove any Outline-related firewall rules
-                            if command -v ufw >/dev/null 2>&1; then
-                                ufw status numbered | grep -E "9000|Outline" | awk '{print $2}' | sort -r | while read -r num; do
-                                    ufw --force delete "$num" 2>/dev/null || true
-                                done
-                            fi
-                            ;;
-                    esac
-                    
-                    log "Existing installations removed"
-                    return 0
-                    ;;
-                2)
-                    log "Installation cancelled by user"
-                    echo -e "${YELLOW}Installation cancelled.${NC}"
-                    exit 0
-                    ;;
-                *)
-                    warning "Please choose 1 or 2"
-                    ;;
-            esac
-        done
-    else
-        log "No existing VPN installations found"
-    fi
-    
-    return 0
-}
+# =============================================================================
+# CORE FUNCTIONALITY
+# =============================================================================
 
+# Include core installation and configuration functions from original vpn.sh
 # Run complete server installation using modules
 run_server_installation() {
     log "Starting modular VPN server installation..."
@@ -559,183 +358,239 @@ get_server_config_interactive() {
     return 0
 }
 
-# Get SNI configuration
-get_sni_config_interactive() {
-    echo -e "${BLUE}Choose SNI domain:${NC}"
-    echo "1) addons.mozilla.org - Recommended"
-    echo "2) www.lovelive-anime.jp"
-    echo "3) www.swift.org"
-    echo "4) Custom domain"
-    echo "5) Auto-select best domain"
+# Check for existing VPN installations
+check_existing_vpn_installation() {
+    local protocol="${1:-}"
+    local found=false
+    local existing_server=""
     
-    local sni_domains=(
-        "addons.mozilla.org"
-        "www.lovelive-anime.jp"
-        "www.swift.org"
-    )
+    log "Checking for existing $protocol installation..."
+    
+    # Check based on protocol
+    case "$protocol" in
+        "vless-reality")
+            # Check for Xray installation
+            if [ -d "$WORK_DIR" ] && [ -f "$WORK_DIR/docker-compose.yml" ]; then
+                if docker ps --format "table {{.Names}}" | grep -q "xray"; then
+                    found=true
+                    existing_server="Xray/VLESS server (running)"
+                elif docker ps -a --format "table {{.Names}}" | grep -q "xray"; then
+                    found=true
+                    existing_server="Xray/VLESS server (stopped)"
+                fi
+            fi
+            ;;
+        "outline")
+            # Check for Outline installation
+            if [ -d "$OUTLINE_DIR" ] || docker ps -a --format "table {{.Names}}" | grep -q "shadowbox"; then
+                if docker ps --format "table {{.Names}}" | grep -q "shadowbox"; then
+                    found=true
+                    existing_server="Outline VPN server (running)"
+                elif docker ps -a --format "table {{.Names}}" | grep -q "shadowbox"; then
+                    found=true
+                    existing_server="Outline VPN server (stopped)"
+                fi
+            fi
+            ;;
+        *)
+            error "Unknown protocol: $protocol"
+            return 1
+            ;;
+    esac
+    
+    # If server found, prompt user
+    if [ "$found" = true ]; then
+        echo -e "\n${YELLOW}⚠️  Existing installation detected:${NC}"
+        echo -e "• $existing_server"
+        echo -e "${YELLOW}Installing a new server will replace the existing one.${NC}\n"
+        
+        echo "Choose an action:"
+        echo "1) Reinstall (remove existing and install new)"
+        echo "2) Cancel installation"
+        
+        while true; do
+            read -p "Select option (1-2): " choice
+            case $choice in
+                1)
+                    log "User chose to reinstall"
+                    
+                    # Remove existing installation based on protocol
+                    case "$protocol" in
+                        "vless-reality")
+                            log "Removing existing Xray installation..."
+                            if docker ps | grep -q "xray"; then
+                                cd "$WORK_DIR" 2>/dev/null && docker-compose down 2>/dev/null || true
+                            fi
+                            docker rm -f xray 2>/dev/null || true
+                            rm -rf "$WORK_DIR" 2>/dev/null || true
+                            ;;
+                        "outline")
+                            log "Removing existing Outline installation..."
+                            docker rm -f shadowbox watchtower 2>/dev/null || true
+                            rm -rf "$OUTLINE_DIR" 2>/dev/null || true
+                            # Remove any Outline-related firewall rules
+                            if command -v ufw >/dev/null 2>&1; then
+                                ufw status numbered | grep -E "9000|Outline" | awk '{print $2}' | sort -r | while read -r num; do
+                                    ufw --force delete "$num" 2>/dev/null || true
+                                done
+                            fi
+                            ;;
+                    esac
+                    
+                    log "Existing installations removed"
+                    return 0
+                    ;;
+                2)
+                    log "Installation cancelled by user"
+                    echo -e "${YELLOW}Installation cancelled.${NC}"
+                    exit 0
+                    ;;
+                *)
+                    warning "Please choose 1 or 2"
+                    ;;
+            esac
+        done
+    else
+        log "No existing VPN installations found"
+    fi
+    
+    return 0
+}
+
+# Helper functions from original script
+get_sni_config_interactive() {
+    # Source SNI configuration
+    source "$SCRIPT_DIR/modules/install/prerequisites.sh" || {
+        error "Failed to load prerequisites module"
+        return 1
+    }
+    
+    echo -e "${BLUE}Choose SNI domain for Reality:${NC}"
+    echo "1) Pre-configured safe domains (Recommended)"
+    echo "2) Enter custom domain"
     
     while true; do
-        read -p "Select option (1-5): " sni_choice
+        read -p "Select option (1-2): " sni_choice
         case $sni_choice in
-            1|2|3)
-                local selected_domain="${sni_domains[$((sni_choice-1))]}"
-                if check_sni_domain "$selected_domain"; then
-                    SERVER_SNI="$selected_domain"
+            1)
+                # Get pre-configured domain
+                get_sni_domain true
+                if [ -n "$SERVER_SNI" ]; then
                     log "Selected SNI domain: $SERVER_SNI"
                     break
                 else
-                    warning "Domain unavailable, try another"
+                    error "Failed to get SNI domain"
+                    return 1
                 fi
                 ;;
-            4)
-                read -p "Enter domain: " custom_domain
-                if check_sni_domain "$custom_domain"; then
-                    SERVER_SNI="$custom_domain"
-                    log "Selected custom domain: $SERVER_SNI"
+            2)
+                read -p "Enter SNI domain: " custom_sni
+                if validate_sni_domain "$custom_sni"; then
+                    SERVER_SNI="$custom_sni"
+                    log "Custom SNI domain: $SERVER_SNI"
                     break
                 else
-                    warning "Domain unavailable or incorrect"
-                fi
-                ;;
-            5)
-                log "Finding best domain..."
-                for domain in "${sni_domains[@]}"; do
-                    if check_sni_domain "$domain"; then
-                        SERVER_SNI="$domain"
-                        log "Auto-selected domain: $SERVER_SNI"
-                        break
-                    fi
-                done
-                if [ -n "$SERVER_SNI" ]; then
-                    break
-                else
-                    warning "Could not find available domain"
+                    warning "Invalid domain format"
                 fi
                 ;;
             *)
-                warning "Please choose 1-5"
+                warning "Please choose 1 or 2"
                 ;;
         esac
     done
+    
+    return 0
 }
 
-# Generate Reality keys
 generate_reality_keys() {
-    log "Generating Reality keys..."
-    
-    # Generate keys using crypto library
-    local keys=$(generate_reality_keypair)
+    # Generate Reality keys
+    local keys=$(generate_keypair)
     PRIVATE_KEY=$(echo "$keys" | cut -d' ' -f1)
     PUBLIC_KEY=$(echo "$keys" | cut -d' ' -f2)
-    
-    # Generate short ID
     SHORT_ID=$(generate_short_id)
     
-    log "Reality keys generated"
+    log "Generated Reality keys successfully"
+    return 0
 }
 
-# Create Xray configuration and first user
+# Create Xray configuration and prepare for first user
 create_xray_config_and_user() {
     log "Creating Xray configuration..."
     
-    # Generate user UUID
-    USER_UUID=$(generate_uuid)
+    # Generate UUID for first user if not set
+    if [ -z "$USER_UUID" ]; then
+        USER_UUID=$(generate_uuid)
+    fi
     
-    # Use already configured username
-    log "Creating configuration for user: $USER_NAME"
+    # Store configuration values
+    mkdir -p "$WORK_DIR/config"
+    echo "$PRIVATE_KEY" > "$WORK_DIR/config/private_key.txt"
+    echo "$PUBLIC_KEY" > "$WORK_DIR/config/public_key.txt"
+    echo "$SHORT_ID" > "$WORK_DIR/config/short_id.txt"
+    echo "$SERVER_SNI" > "$WORK_DIR/config/sni.txt"
+    echo "$PROTOCOL" > "$WORK_DIR/config/protocol.txt"
     
-    # VLESS always uses Reality protocol now
-    local config_protocol="vless-reality"
-    log "Creating VLESS+Reality configuration"
-    
-    # Create configuration using module
-    setup_xray_configuration "$WORK_DIR" "$config_protocol" "$SERVER_PORT" "$USER_UUID" \
+    # Setup Xray configuration using the module
+    setup_xray_configuration "$WORK_DIR" "$PROTOCOL" "$SERVER_PORT" "$USER_UUID" \
         "$USER_NAME" "$SERVER_IP" "$SERVER_SNI" "$PRIVATE_KEY" "$PUBLIC_KEY" \
         "$SHORT_ID" true || {
-        error "Failed to create Xray configuration"
+        error "Failed to setup Xray configuration"
         return 1
     }
     
-    log "Xray configuration created"
+    log "Xray configuration created successfully"
+    return 0
 }
 
-# Create first user
 create_first_user() {
-    log "Creating first user: $USER_NAME"
+    # Create first user for Xray
+    if [ -z "$USER_NAME" ]; then
+        error "User name is required"
+        return 1
+    fi
     
-    # This will be handled by the configuration creation
-    # User is already created in create_xray_config
+    # Generate UUID for user
+    USER_UUID=$(generate_uuid)
     
-    log "First user created successfully"
+    # Source user management modules
+    load_user_modules || {
+        error "Failed to load user modules"
+        return 1
+    }
+    
+    # Add user using existing module
+    add_user "$USER_NAME" "$USER_UUID" true || {
+        error "Failed to create first user"
+        return 1
+    }
+    
+    log "First user '$USER_NAME' created successfully"
+    return 0
 }
 
-# Show installation results
 show_installation_results() {
-    # Skip for Outline as it has its own results display
-    if [ "$PROTOCOL" = "outline" ]; then
-        return 0
-    fi
-    
-    echo -e "\n${GREEN}=== Installation Complete ===${NC}"
-    echo -e "${BLUE}Server:${NC} $SERVER_IP"
-    echo -e "${BLUE}Port:${NC} $SERVER_PORT"
+    # Show installation completion message
+    echo -e "\n${GREEN}=== VPN Server Installation Complete ===${NC}"
     echo -e "${BLUE}Protocol:${NC} $PROTOCOL"
-    echo -e "${BLUE}User:${NC} $USER_NAME"
+    echo -e "${BLUE}Server IP:${NC} $SERVER_IP"
+    echo -e "${BLUE}Port:${NC} $SERVER_PORT"
     
-    if [ "$USE_REALITY" = true ]; then
-        echo -e "${BLUE}SNI:${NC} $SERVER_SNI"
-        echo -e "${BLUE}Public Key:${NC} $PUBLIC_KEY"
-        echo -e "${BLUE}Short ID:${NC} $SHORT_ID"
+    if [ "$PROTOCOL" = "vless-reality" ]; then
+        echo -e "${BLUE}SNI Domain:${NC} $SERVER_SNI"
+        echo -e "${BLUE}First User:${NC} $USER_NAME"
+        echo -e "\n${YELLOW}Use the 'users' menu to manage users and get connection details.${NC}"
+    elif [ "$PROTOCOL" = "outline" ]; then
+        echo -e "\n${YELLOW}Outline VPN installed successfully!${NC}"
+        echo -e "${YELLOW}Access configuration from:${NC} /opt/outline/access.txt"
+        echo -e "${YELLOW}Use Outline Manager app to manage users.${NC}"
     fi
     
-    # Show connection link
-    if [ -f "$WORK_DIR/users/$USER_NAME.link" ]; then
-        echo -e "\n${GREEN}Connection link:${NC}"
-        cat "$WORK_DIR/users/$USER_NAME.link"
-        echo
-    fi
-    
-    # Show QR code location
-    if [ -f "$WORK_DIR/users/$USER_NAME.png" ]; then
-        echo -e "${GREEN}QR code saved:${NC} $WORK_DIR/users/$USER_NAME.png"
-    fi
-    
-    echo -e "\n${YELLOW}For user management use:${NC}"
-    echo -e "${WHITE}sudo ./vpn.sh users${NC}"
+    echo -e "\n${GREEN}Installation completed successfully!${NC}\n"
+    return 0
 }
 
 # =============================================================================
-# SERVER INSTALLATION (from install_vpn.sh)
-# =============================================================================
-
-handle_server_install() {
-    log "Starting VPN server installation..."
-    
-    # Check root privileges first (built-in check)
-    if [ "$EUID" -ne 0 ]; then
-        error "Root privileges required. Please run with sudo."
-        return 1
-    fi
-    
-    # Load required modules
-    load_additional_libraries true || {
-        error "Failed to load additional libraries"
-        return 1
-    }
-    load_server_modules true || {
-        error "Failed to load server modules"
-        return 1
-    }
-    
-    # Now check system prerequisites using loaded modules
-    detect_system_info true
-    
-    # Run installation using modules
-    run_server_installation
-}
-
-# =============================================================================
-# USER MANAGEMENT (from manage_users.sh)
+# USER MANAGEMENT
 # =============================================================================
 
 handle_user_management() {
@@ -775,529 +630,307 @@ handle_user_management() {
         error "Failed to load monitoring modules"
         return 1
     }
-    load_server_modules || {
+    
+    # Show user management menu
+    show_user_management_menu
+}
+
+# =============================================================================
+# OTHER HANDLERS (Simplified stubs)
+# =============================================================================
+
+handle_client_management() {
+    # Source client installation functionality
+    if [ ! -f "$SCRIPT_DIR/install_client.sh" ]; then
+        error "Client installation script not found"
+        return 1
+    fi
+    
+    echo -e "${BLUE}VPN Client Management${NC}"
+    echo "1) Install VPN client (v2rayA)"
+    echo "2) Check client status"
+    echo "3) Restart client"
+    echo "4) Uninstall client"
+    echo "5) Back to main menu"
+    
+    while true; do
+        read -p "Select option (1-5): " choice
+        case $choice in
+            1)
+                log "Installing VPN client..."
+                bash "$SCRIPT_DIR/install_client.sh"
+                break
+                ;;
+            2)
+                if docker ps | grep -q "v2raya"; then
+                    echo -e "${GREEN}✓ VPN client is running${NC}"
+                    echo -e "${BLUE}Web interface:${NC} http://localhost:2017"
+                else
+                    echo -e "${RED}✗ VPN client is not running${NC}"
+                fi
+                read -p "Press Enter to continue..."
+                break
+                ;;
+            3)
+                log "Restarting VPN client..."
+                docker restart v2raya 2>/dev/null || echo "Client not running"
+                read -p "Press Enter to continue..."
+                break
+                ;;
+            4)
+                log "Uninstalling VPN client..."
+                docker rm -f v2raya 2>/dev/null || true
+                docker rmi mzz2017/v2raya 2>/dev/null || true
+                echo -e "${GREEN}Client uninstalled${NC}"
+                read -p "Press Enter to continue..."
+                break
+                ;;
+            5)
+                return 0
+                ;;
+            *)
+                warning "Please choose 1-5"
+                ;;
+        esac
+    done
+}
+
+handle_statistics() {
+    if [ "$EUID" -ne 0 ]; then
+        error "Statistics require superuser privileges (sudo)"
+        return 1
+    fi
+    
+    load_monitoring_modules || {
+        error "Failed to load monitoring modules"
+        return 1
+    }
+    
+    show_statistics
+}
+
+handle_logs() {
+    if [ "$EUID" -ne 0 ]; then
+        error "Log viewing requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    load_monitoring_modules || {
+        error "Failed to load monitoring modules"
+        return 1
+    }
+    
+    view_logs
+}
+
+handle_key_rotation() {
+    if [ "$EUID" -ne 0 ]; then
+        error "Key rotation requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    # Check if Xray server is installed
+    local vpn_type=$(detect_installed_vpn_type)
+    if [ "$vpn_type" != "xray" ]; then
+        error "Key rotation is only available for Xray/VLESS servers"
+        return 1
+    fi
+    
+    # Load server modules
+    load_server_modules true || {
         error "Failed to load server modules"
         return 1
     }
     
-    case "$SUB_ACTION" in
-        "add")
-            if [ -z "$2" ]; then
-                error "Username required. Usage: $0 user add <username>"
-            fi
-            add_user "$2"
-            ;;
-        "delete")
-            if [ -z "$2" ]; then
-                error "Username required. Usage: $0 user delete <username>"
-            fi
-            delete_user "$2"
-            ;;
-        "list")
-            list_users
-            ;;
-        "show")
-            if [ -z "$2" ]; then
-                error "Username required. Usage: $0 user show <username>"
-            fi
-            show_user "$2"
-            ;;
-        *)
-            # Interactive mode - call users menu directly
-            show_user_management_menu
-            ;;
-    esac
+    # Source and run key rotation
+    source "$SCRIPT_DIR/modules/server/rotate_keys.sh" || {
+        error "Failed to load key rotation module"
+        return 1
+    }
+    
+    rotate_reality_keys true
 }
 
-# Show user management submenu
-show_user_management_menu() {
+handle_deployment() {
+    echo -e "${BLUE}VPN Deployment Management${NC}"
+    echo "1) Backup server configuration"
+    echo "2) Restore from backup"
+    echo "3) Export user configurations"
+    echo "4) Import user configurations"
+    echo "5) Back to main menu"
+    
     while true; do
-        clear
-        echo -e "${GREEN}=== User Management ===${NC}"
-        echo ""
-        echo "1) 📋 List Users"
-        echo "2) ➕ Add User"
-        echo "3) 🗑️  Delete User"
-        echo "4) ✏️  Edit User"
-        echo "5) 👤 Show User Data"
-        echo "0) 🔙 Back to Main Menu"
-        echo ""
-        
-        read -p "Select option (0-5): " choice
+        read -p "Select option (1-5): " choice
         case $choice in
-            1) list_users; read -p "Press Enter to continue..." ;;
-            2) 
-                read -p "Enter username: " username
-                if [ -n "$username" ]; then
-                    add_user "$username"
-                else
-                    warning "Username cannot be empty"
-                fi
+            1)
+                echo "Creating backup..."
+                # TODO: Implement backup functionality
+                echo "Backup functionality not yet implemented"
                 read -p "Press Enter to continue..."
+                break
+                ;;
+            2)
+                echo "Restore functionality not yet implemented"
+                read -p "Press Enter to continue..."
+                break
                 ;;
             3)
-                echo "Current users:"
-                list_users
-                echo ""
-                read -p "Enter username to delete: " username
-                if [ -n "$username" ]; then
-                    echo -e "${YELLOW}Delete user '$username'? [y/N]${NC}"
-                    read -p "Confirm: " confirm
-                    if [[ "$confirm" =~ ^[Yy]$ ]]; then
-                        delete_user "$username"
-                    else
-                        log "Deletion cancelled"
-                    fi
-                else
-                    warning "Username cannot be empty"
-                fi
+                echo "Export functionality not yet implemented"
                 read -p "Press Enter to continue..."
+                break
                 ;;
             4)
-                echo "Current users:"
-                list_users
-                echo ""
-                read -p "Enter username to edit: " username
-                if [ -n "$username" ]; then
-                    edit_user "$username"
-                else
-                    warning "Username cannot be empty"
-                fi
+                echo "Import functionality not yet implemented"
                 read -p "Press Enter to continue..."
+                break
                 ;;
             5)
-                echo "Current users:"
-                list_users
-                echo ""
-                read -p "Enter username to show: " username
-                if [ -n "$username" ]; then
-                    show_user "$username"
+                return 0
+                ;;
+            *)
+                warning "Please choose 1-5"
+                ;;
+        esac
+    done
+}
+
+handle_watchdog() {
+    echo -e "${BLUE}VPN Watchdog Management${NC}"
+    echo "1) Install watchdog service"
+    echo "2) Start watchdog"
+    echo "3) Stop watchdog"
+    echo "4) Check watchdog status"
+    echo "5) Back to main menu"
+    
+    while true; do
+        read -p "Select option (1-5): " choice
+        case $choice in
+            1)
+                # Source watchdog module
+                if [ -f "$SCRIPT_DIR/modules/system/watchdog.sh" ]; then
+                    source "$SCRIPT_DIR/modules/system/watchdog.sh"
+                    install_watchdog_service
                 else
-                    warning "Username cannot be empty"
+                    echo "Watchdog module not found"
                 fi
                 read -p "Press Enter to continue..."
+                break
                 ;;
-            0) break ;;
-            *) warning "Invalid option. Please choose 0-5." ;;
+            2)
+                systemctl start vpn-watchdog 2>/dev/null || echo "Failed to start watchdog"
+                read -p "Press Enter to continue..."
+                break
+                ;;
+            3)
+                systemctl stop vpn-watchdog 2>/dev/null || echo "Failed to stop watchdog"
+                read -p "Press Enter to continue..."
+                break
+                ;;
+            4)
+                systemctl status vpn-watchdog 2>/dev/null || echo "Watchdog not installed"
+                read -p "Press Enter to continue..."
+                break
+                ;;
+            5)
+                return 0
+                ;;
+            *)
+                warning "Please choose 1-5"
+                ;;
         esac
     done
 }
 
 # =============================================================================
-# CLIENT INSTALLATION (from install_client.sh)
+# HELP AND VERSION
 # =============================================================================
 
-handle_client_management() {
-    case "$SUB_ACTION" in
-        "install")
-            log "Client installation not yet implemented in unified script"
-            warning "Please use the original install_client.sh for now"
-            ;;
-        "status")
-            log "Client status check not yet implemented in unified script"
-            warning "Please use the original install_client.sh for now"
-            ;;
-        "uninstall")
-            log "Client uninstall not yet implemented in unified script"
-            warning "Please use the original install_client.sh for now"
-            ;;
-        *)
-            # Interactive mode
-            echo -e "${YELLOW}Client management commands:${NC}"
-            echo "  client install     Install VPN client"
-            echo "  client status      Show client status"
-            echo "  client uninstall   Uninstall client"
-            echo ""
-            warning "Client management not yet fully implemented in unified script"
-            ;;
-    esac
-}
-
-# =============================================================================
-# SERVER MANAGEMENT
-# =============================================================================
-
-handle_server_status() {
-    load_server_modules || {
-        error "Failed to load server modules"
-        return 1
-    }
-    show_server_status
-}
-
-handle_server_restart() {
-    load_server_modules || {
-        error "Failed to load server modules"
-        return 1
-    }
-    restart_server
-}
-
-handle_server_uninstall() {
-    # Check root privileges
-    if [ "$EUID" -ne 0 ]; then
-        error "Uninstall requires superuser privileges (sudo)"
-        return 1
-    fi
-    
-    # Load server modules
-    load_server_modules || {
-        error "Failed to load server modules"
-        return 1
-    }
-    
-    # Use the uninstall module
-    uninstall_vpn_server
-}
-
-# =============================================================================
-# MONITORING COMMANDS
-# =============================================================================
-
-handle_statistics() {
-    load_monitoring_modules || {
-        error "Failed to load monitoring modules"
-        return 1
-    }
-    show_traffic_statistics
-}
-
-handle_logs() {
-    load_monitoring_modules || {
-        error "Failed to load monitoring modules"
-        return 1
-    }
-    view_user_logs
-}
-
-handle_key_rotation() {
-    load_server_modules || {
-        error "Failed to load server modules"
-        return 1
-    }
-    load_additional_libraries || {
-        error "Failed to load additional libraries"
-        return 1
-    }
-    rotate_reality_keys
-}
-
-# =============================================================================
-# DEPLOYMENT COMMANDS
-# =============================================================================
-
-handle_deployment() {
-    case "$SUB_ACTION" in
-        "install"|"update"|"backup"|"restore")
-            source "$SCRIPT_DIR/deploy.sh" || error "Failed to load deploy.sh"
-            # Pass the sub-action as the main action to deploy.sh
-            bash "$SCRIPT_DIR/deploy.sh" "$SUB_ACTION"
-            ;;
-        *)
-            error "Unknown deployment command: $SUB_ACTION"
-            ;;
-    esac
-}
-
-# =============================================================================
-# WATCHDOG COMMANDS
-# =============================================================================
-
-handle_watchdog() {
-    # Load watchdog module
-    source "$SCRIPT_DIR/modules/system/watchdog.sh" || {
-        error "Failed to load watchdog module"
-        return 1
-    }
-    
-    case "$SUB_ACTION" in
-        "install")
-            install_watchdog_service
-            ;;
-        "remove"|"uninstall")
-            remove_watchdog_service
-            ;;
-        "start")
-            start_watchdog_service
-            ;;
-        "stop")
-            stop_watchdog_service
-            ;;
-        "status")
-            get_watchdog_status
-            ;;
-        "restart")
-            stop_watchdog_service
-            sleep 2
-            start_watchdog_service
-            ;;
-        *)
-            echo -e "${YELLOW}Watchdog Commands:${NC}"
-            echo "  watchdog install     Install watchdog service"
-            echo "  watchdog start       Start watchdog service"
-            echo "  watchdog stop        Stop watchdog service"
-            echo "  watchdog restart     Restart watchdog service"
-            echo "  watchdog status      Show watchdog status"
-            echo "  watchdog remove      Remove watchdog service"
-            ;;
-    esac
-}
-
-# =============================================================================
-# INTERACTIVE MENU
-# =============================================================================
-
-show_main_menu() {
-    clear
-    echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║          VPN Management System v${SCRIPT_VERSION}                  ║${NC}"
-    echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
+show_usage() {
+    echo -e "${GREEN}=== Unified VPN Management Script v${SCRIPT_VERSION} ===${NC}"
     echo ""
-    echo -e "${YELLOW}Server Management:${NC}"
-    echo "  1)  📦 Install VPN Server"
-    echo "  2)  📊 Server Status"
-    echo "  3)  🔄 Restart Server"
-    echo "  4)  🗑️  Uninstall Server"
+    echo "Usage: $0 [command] [options]"
+    echo ""
+    echo -e "${YELLOW}Interactive Mode:${NC}"
+    echo "  (no command)         Launch interactive menu"
+    echo "  menu                 Launch interactive menu"
+    echo ""
+    echo -e "${YELLOW}Server Commands:${NC}"
+    echo "  install              Install VPN server"
+    echo "  uninstall            Uninstall VPN server"
+    echo "  status               Show server status"
+    echo "  restart              Restart VPN server"
     echo ""
     echo -e "${YELLOW}User Management:${NC}"
-    echo "  5)  👥 User Management"
-    echo ""
-    echo -e "${YELLOW}Client Management:${NC}"
-    echo "  6)  💻 Client Management"
-    echo "  7)  📥 Install Client (Quick)"
-    echo ""
-    echo -e "${YELLOW}Monitoring & Maintenance:${NC}"
-    echo "  8)  📈 Traffic Statistics"
-    echo "  9)  📋 View Logs"
-    echo "  10) 🔐 Rotate Keys"
-    echo ""
-    echo -e "${YELLOW}Advanced:${NC}"
-    echo "  11) 🚀 Deployment Options"
-    echo "  12) 🛡️  Watchdog Service"
-    echo ""
-    echo -e "${YELLOW}Help & Info:${NC}"
-    echo "  13) ❓ Show Help"
-    echo "  14) ℹ️  Show Version"
-    echo ""
-    echo -e "${RED}  0)  🚪 Exit${NC}"
-    echo ""
+    echo "  users                Interactive user management menu"
+    echo "  user add <name>      Add a new user"
+    echo "  user delete <name>   Delete a user"
+    echo "  user list            List all users"
+    echo "  user show <name>     Show user connection details"
 }
 
-handle_menu_choice() {
-    local choice="$1"
-    
-    case "$choice" in
-        1)
-            handle_server_install
-            ;;
-        2)
-            handle_server_status
-            ;;
-        3)
-            handle_server_restart
-            ;;
-        4)
-            handle_server_uninstall
-            ;;
-        5)
-            handle_user_management
-            ;;
-        6)
-            handle_client_management
-            ;;
-        7)
-            SUB_ACTION="install"
-            handle_client_management
-            ;;
-        8)
-            handle_statistics
-            ;;
-        9)
-            handle_logs
-            ;;
-        10)
-            handle_key_rotation
-            ;;
-        11)
-            echo -e "${BLUE}Deployment Options:${NC}"
-            echo "1) Install"
-            echo "2) Update"
-            echo "3) Backup"
-            echo "4) Restore"
-            echo "0) Back"
-            read -p "Select option: " deploy_choice
-            case "$deploy_choice" in
-                1) SUB_ACTION="install"; handle_deployment ;;
-                2) SUB_ACTION="update"; handle_deployment ;;
-                3) SUB_ACTION="backup"; handle_deployment ;;
-                4) SUB_ACTION="restore"; handle_deployment ;;
-                0) return ;;
-                *) warning "Invalid option" ;;
-            esac
-            ;;
-        12)
-            echo -e "${BLUE}Watchdog Service:${NC}"
-            echo "1) Install Service"
-            echo "2) Start Service"
-            echo "3) Stop Service"
-            echo "4) Restart Service"
-            echo "5) Service Status"
-            echo "6) Remove Service"
-            echo "0) Back"
-            read -p "Select option: " watchdog_choice
-            case "$watchdog_choice" in
-                1) SUB_ACTION="install"; handle_watchdog ;;
-                2) SUB_ACTION="start"; handle_watchdog ;;
-                3) SUB_ACTION="stop"; handle_watchdog ;;
-                4) SUB_ACTION="restart"; handle_watchdog ;;
-                5) SUB_ACTION="status"; handle_watchdog ;;
-                6) SUB_ACTION="remove"; handle_watchdog ;;
-                0) return ;;
-                *) warning "Invalid option" ;;
-            esac
-            ;;
-        13)
-            show_usage
-            ;;
-        14)
-            show_version
-            ;;
-        0)
-            echo -e "${GREEN}Goodbye!${NC}"
-            exit 0
-            ;;
-        *)
-            warning "Invalid option. Please choose 0-14."
-            ;;
-    esac
-}
-
-run_interactive_menu() {
-    # Set interactive mode flag
-    export INTERACTIVE_MODE=1
-    
-    # Trap to ensure we always exit with 0
-    trap 'exit 0' INT TERM EXIT
-    
-    while true; do
-        show_main_menu
-        read -p "Select option (0-14): " choice
-        
-        # Handle errors gracefully
-        handle_menu_choice "$choice" || {
-            # If error occurred, show message and continue
-            echo ""
-            read -p "Press Enter to continue..."
-            continue
-        }
-        
-        if [ "$choice" = "0" ]; then
-            exit 0
-        fi
-        
-        if [ "$choice" != "15" ] && [ "$choice" != "16" ]; then
-            echo ""
-            read -p "Press Enter to continue..."
-        fi
-    done
+show_version() {
+    echo -e "${GREEN}VPN Management System${NC}"
+    echo -e "${BLUE}Version:${NC} $SCRIPT_VERSION (Modular)"
+    echo -e "${BLUE}Author:${NC} Claude"
+    echo -e "${BLUE}Architecture:${NC} Modular"
 }
 
 # =============================================================================
-# MAIN COMMAND ROUTER
+# MAIN EXECUTION LOGIC
 # =============================================================================
 
 main() {
-    # Trap to ensure we always exit with 0
-    trap 'exit 0' INT TERM EXIT
-    
     # Parse command line arguments
-    case "$1" in
-        --help|-h)
-            show_usage
-            exit 0
-            ;;
-        --version|-v)
-            show_version
-            exit 0
-            ;;
-        ""|menu)
-            # Run interactive menu when no arguments or 'menu' command
+    ACTION="${1:-menu}"
+    SUB_ACTION="${2:-}"
+    
+    case "$ACTION" in
+        "menu"|"")
+            # Load menu modules and start interactive menu
+            load_menu_modules true || {
+                error "Failed to load menu modules"
+                exit 1
+            }
             run_interactive_menu
             ;;
-        install)
-            ACTION="install"
-            shift
-            handle_server_install "$@"
+        "install")
+            handle_server_install
             ;;
-        uninstall)
-            ACTION="uninstall"
-            shift
-            handle_server_uninstall "$@"
-            ;;
-        status)
-            ACTION="status"
+        "status")
             handle_server_status
             ;;
-        restart)
-            ACTION="restart"
+        "restart")
             handle_server_restart
             ;;
-        users)
-            ACTION="users"
+        "uninstall")
+            handle_server_uninstall
+            ;;
+        "users")
             handle_user_management
             ;;
-        user)
-            ACTION="user"
-            SUB_ACTION="$2"
-            shift 2
-            handle_user_management "$@"
+        "user")
+            case "$SUB_ACTION" in
+                "add"|"delete"|"list"|"show")
+                    handle_user_management
+                    ;;
+                *)
+                    show_usage
+                    ;;
+            esac
             ;;
-        client)
-            ACTION="client"
-            SUB_ACTION="$2"
-            shift 2
-            handle_client_management "$@"
+        "help"|"--help"|"-h")
+            show_usage
             ;;
-        stats)
-            ACTION="stats"
-            handle_statistics
-            ;;
-        logs)
-            ACTION="logs"
-            handle_logs
-            ;;
-        rotate-keys)
-            ACTION="rotate-keys"
-            handle_key_rotation
-            ;;
-        deploy)
-            ACTION="deploy"
-            SUB_ACTION="$2"
-            shift 2
-            handle_deployment "$@"
-            ;;
-        watchdog)
-            ACTION="watchdog"
-            SUB_ACTION="$2"
-            shift 2
-            handle_watchdog "$@"
+        "version"|"--version"|"-v")
+            show_version
             ;;
         *)
-            warning "Unknown command: $1"
-            echo "Run '$0 --help' for usage information."
-            exit 0
+            error "Unknown command: $ACTION"
+            show_usage
+            exit 1
             ;;
     esac
-    
-    # Always exit with 0
-    exit 0
 }
 
-# =============================================================================
-# SCRIPT EXECUTION
-# =============================================================================
-
-# Run main function if script is executed directly
-if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
-    main "$@"
-fi
+# Run main function with all arguments
+main "$@"

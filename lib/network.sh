@@ -288,6 +288,73 @@ www.lovelive-anime.jp
 EOF
 }
 
+# Get SNI domain (interactive selection)
+get_sni_domain() {
+    local debug="${1:-false}"
+    
+    [ "$debug" = true ] && log "Getting SNI domain for Reality protocol..."
+    
+    # List of pre-configured domains
+    local domains=(
+        "addons.mozilla.org"
+        "www.swift.org"
+        "golang.org"
+        "www.kernel.org"
+        "cdn.jsdelivr.net"
+        "registry.npmjs.org"
+        "api.github.com"
+        "www.lovelive-anime.jp"
+    )
+    
+    echo -e "${BLUE}Available SNI domains:${NC}"
+    local i=1
+    for domain in "${domains[@]}"; do
+        echo "$i) $domain"
+        ((i++))
+    done
+    
+    while true; do
+        read -p "Select domain (1-${#domains[@]}): " choice
+        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#domains[@]}" ]; then
+            SERVER_SNI="${domains[$((choice-1))]}"
+            [ "$debug" = true ] && log "Selected SNI domain: $SERVER_SNI"
+            
+            # Verify selected domain
+            echo -n "Checking domain accessibility... "
+            if check_sni_domain "$SERVER_SNI" 5; then
+                echo -e "${GREEN}✓ Domain is accessible${NC}"
+                return 0
+            else
+                echo -e "${YELLOW}⚠ Domain may not be accessible, but will proceed${NC}"
+                return 0
+            fi
+        else
+            warning "Invalid selection. Please choose 1-${#domains[@]}"
+        fi
+    done
+}
+
+# Validate SNI domain format and accessibility
+validate_sni_domain() {
+    local domain="$1"
+    
+    if [ -z "$domain" ]; then
+        return 1
+    fi
+    
+    # Basic format validation
+    if ! validate_domain_format "$domain"; then
+        return 1
+    fi
+    
+    # Check DNS resolution
+    if ! check_domain_dns "$domain" 3; then
+        return 1
+    fi
+    
+    return 0
+}
+
 # Test multiple domains and return the first working one
 find_working_sni_domain() {
     local timeout="${1:-5}"
