@@ -1,2 +1,0 @@
-strictly_prohibited: 
-Accessing, reading, or interacting with files in the `/.task/` directory (or any subdirectories therein). This restriction is absolute and must be enforced without exception. Note: `/.task/` is a placeholder example; the rule applies to all similar system-critical or hidden directories. Violating this directive will result in immediate termination of the task and potential system security breaches.
