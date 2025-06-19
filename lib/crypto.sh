@@ -391,3 +391,16 @@ generate_keypair() {
 generate_short_id() {
     generate_random_hex 8
 }
+
+# =============================================================================
+# EXPORT FUNCTIONS
+# =============================================================================
+
+# Export main functions
+export -f generate_uuid
+export -f generate_random_hex
+export -f generate_random_base64
+export -f generate_x25519_keys
+export -f generate_reality_keys
+export -f generate_keypair
+export -f generate_short_id

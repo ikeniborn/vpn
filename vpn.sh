@@ -536,19 +536,29 @@ generate_reality_keys() {
         }
     fi
     
-    local keys=$(generate_keypair)
-    if [ -z "$keys" ]; then
-        error "Failed to generate keypair"
-        return 1
+    # Use generate_reality_keys which returns private_key public_key short_id
+    local reality_keys=$(generate_reality_keys 2>/dev/null)
+    if [ -n "$reality_keys" ]; then
+        # If generate_reality_keys worked, extract all three values
+        PRIVATE_KEY=$(echo "$reality_keys" | awk '{print $1}')
+        PUBLIC_KEY=$(echo "$reality_keys" | awk '{print $2}')
+        SHORT_ID=$(echo "$reality_keys" | awk '{print $3}')
+    else
+        # Fallback to separate functions
+        local keys=$(generate_keypair)
+        if [ -z "$keys" ]; then
+            error "Failed to generate keypair"
+            return 1
+        fi
+        
+        PRIVATE_KEY=$(echo "$keys" | cut -d' ' -f1)
+        PUBLIC_KEY=$(echo "$keys" | cut -d' ' -f2)
+        SHORT_ID=$(generate_short_id)
     fi
-    
-    PRIVATE_KEY=$(echo "$keys" | cut -d' ' -f1)
-    PUBLIC_KEY=$(echo "$keys" | cut -d' ' -f2)
-    SHORT_ID=$(generate_short_id)
     
     if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ] || [ -z "$SHORT_ID" ]; then
         error "Failed to extract or generate Reality keys"
-        log "  Keys output: $keys"
+        log "  Reality keys output: $reality_keys"
         log "  PRIVATE_KEY: $PRIVATE_KEY"
         log "  PUBLIC_KEY: $PUBLIC_KEY" 
         log "  SHORT_ID: $SHORT_ID"
