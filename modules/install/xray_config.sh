@@ -287,10 +287,12 @@ create_xray_config() {
     local user_name="$5"
     local server_sni="$6"
     local private_key="$7"
-    local short_id="$8"
-    local debug=${9:-false}
+    local public_key="$8"
+    local short_id="$9"
+    local debug=${10:-false}
     
     [ "$debug" = true ] && log "Creating Xray configuration..."
+    [ "$debug" = true ] && log "Protocol: $protocol"
     
     if [ -z "$work_dir" ] || [ -z "$protocol" ]; then
         error "Missing required parameters: work_dir and protocol"
@@ -519,7 +521,7 @@ setup_xray_configuration() {
     
     # Create Xray configuration
     create_xray_config "$work_dir" "$protocol" "$server_port" "$user_uuid" \
-        "$user_name" "$server_sni" "$private_key" "$short_id" "$debug" || {
+        "$user_name" "$server_sni" "$private_key" "$public_key" "$short_id" "$debug" || {
         error "Failed to create Xray configuration"
         return 1
     }

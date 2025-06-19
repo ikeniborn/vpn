@@ -534,10 +534,13 @@ create_xray_config_and_user() {
     
     # Determine protocol format for configuration
     local config_protocol=""
+    log "USE_REALITY value: '$USE_REALITY'"
     if [ "$USE_REALITY" = true ]; then
         config_protocol="vless-reality"
+        log "Selected config protocol: vless-reality"
     else
         config_protocol="vless-basic"
+        log "Selected config protocol: vless-basic"
     fi
     
     # Create configuration using module
