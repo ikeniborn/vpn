@@ -135,9 +135,7 @@ confirm_user_deletion() {
     local user_uuid="$2"
     
     echo ""
-    echo -e "${RED}╔══════════════════════════════════════════════╗${NC}"
-    echo -e "${RED}║${NC}    ⚠️  ${RED}WARNING: USER DELETION${NC}           ${RED}║${NC}"
-    echo -e "${RED}╚══════════════════════════════════════════════╝${NC}"
+    echo -e "${RED}=== ⚠️  WARNING: USER DELETION ===${NC}"
     echo ""
     echo -e "${RED}❗ This operation will permanently delete:${NC}"
     echo -e "    ${YELLOW}•${NC} User: ${YELLOW}$user_name${NC}"
@@ -255,9 +253,7 @@ batch_delete_users() {
     
     # Show deletion summary
     echo ""
-    echo -e "${RED}╔══════════════════════════════════════════════╗${NC}"
-    echo -e "${RED}║${NC}    ⚠️  ${RED}BATCH USER DELETION${NC}              ${RED}║${NC}"
-    echo -e "${RED}╚══════════════════════════════════════════════╝${NC}"
+    echo -e "${RED}=== ⚠️  BATCH USER DELETION ===${NC}"
     echo ""
     echo -e "${RED}❗ This will delete ${#user_names[@]} users:${NC}"
     for user_name in "${user_names[@]}"; do

@@ -13,34 +13,20 @@ fi
 
 # ========================= MENU COMPONENTS =========================
 
-# Draw a box around text
+# Draw a header around text (no box)
 draw_box() {
     local text="$1"
     local width="${2:-50}"
-    local char="${3:-═}"
+    local char="${3:-=}"
     
-    # Calculate padding
-    local text_length=${#text}
-    local padding=$(( (width - text_length - 2) / 2 ))
-    
-    # Top border
-    echo -e "${BLUE}╔$(printf "%*s" $width "" | tr ' ' "$char")╗${NC}"
-    
-    # Middle with text
-    printf "${BLUE}║${NC}"
-    printf "%*s" $padding ""
-    echo -n "$text"
-    printf "%*s" $(( width - text_length - padding )) ""
-    echo -e "${BLUE}║${NC}"
-    
-    # Bottom border
-    echo -e "${BLUE}╚$(printf "%*s" $width "" | tr ' ' "$char")╝${NC}"
+    # Simple header with separator
+    echo -e "${GREEN}=== $text ===${NC}"
 }
 
 # Create a simple separator line
 separator() {
     local length="${1:-50}"
-    local char="${2:-═}"
+    local char="${2:-=}"
     echo -e "${BLUE}$(printf "%*s" $length "" | tr ' ' "$char")${NC}"
 }
 
@@ -302,9 +288,7 @@ show_status() {
 show_welcome() {
     clear
     echo ""
-    echo -e "${BLUE}╔══════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║${NC}   🎉 ${GREEN}Добро пожаловать в установщик VPN!${NC}   ${BLUE}║${NC}"
-    echo -e "${BLUE}╚══════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}=== 🎉 Добро пожаловать в установщик VPN! ===${NC}"
     echo ""
 }
 
@@ -314,9 +298,7 @@ show_completion() {
     local message="$2"
     
     echo ""
-    echo -e "${GREEN}╔══════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║${NC}         🎉 ${WHITE}$title${NC}         ${GREEN}║${NC}"
-    echo -e "${GREEN}╚══════════════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}=== 🎉 $title ===${NC}"
     echo ""
     
     if [ -n "$message" ]; then
@@ -327,14 +309,12 @@ show_completion() {
 
 # ========================= ERROR DISPLAY =========================
 
-# Show error message with box
+# Show error message with header
 show_error_box() {
     local error_msg="$1"
     
     echo ""
-    echo -e "${RED}╔══════════════════════════════════════════════╗${NC}"
-    echo -e "${RED}║${NC}                 ❌ ОШИБКА                  ${RED}║${NC}"
-    echo -e "${RED}╚══════════════════════════════════════════════╝${NC}"
+    echo -e "${RED}=== ❌ ОШИБКА ===${NC}"
     echo ""
     echo -e "${RED}$error_msg${NC}"
     echo ""

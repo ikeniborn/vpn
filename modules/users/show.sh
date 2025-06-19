@@ -198,9 +198,7 @@ display_user_header() {
     local user_name="$1"
     
     echo ""
-    echo -e "${BLUE}╔════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║${NC}                    ${GREEN}User Information: $user_name${NC}                    ${BLUE}║${NC}"
-    echo -e "${BLUE}╚════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}=== User Information: $user_name ===${NC}"
     echo ""
 }
 
@@ -309,9 +307,7 @@ display_qr_code() {
 show_client_info() {
     debug "Showing client information"
     
-    echo -e "${BLUE}╔════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║${NC}                        ${GREEN}Client Setup Information${NC}                    ${BLUE}║${NC}"
-    echo -e "${BLUE}╚════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}=== Client Setup Information ===${NC}"
     echo ""
     echo -e "  ${GREEN}📱 Client Configuration:${NC}"
     echo -e "    1. Copy the connection link above"

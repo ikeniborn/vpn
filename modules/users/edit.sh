@@ -250,9 +250,7 @@ display_edit_summary() {
     local new_uuid="$4"
     
     echo ""
-    echo -e "${BLUE}╔════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║${NC}          ${GREEN}User Edit Summary${NC}                ${BLUE}║${NC}"
-    echo -e "${BLUE}╚════════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}=== User Edit Summary ===${NC}"
     echo ""
     echo -e "  ${GREEN}Old Information:${NC}"
     echo -e "    Name: ${YELLOW}$old_name${NC}"

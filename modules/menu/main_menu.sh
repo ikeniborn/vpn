@@ -30,9 +30,7 @@ fi
 
 show_main_menu() {
     clear
-    echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║          VPN Management System v${SCRIPT_VERSION:-3.0}                  ║${NC}"
-    echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}=== VPN Management System v${SCRIPT_VERSION:-3.0} ===${NC}"
     echo ""
     echo -e "${YELLOW}Server Management:${NC}"
     echo "  1)  📦 Install VPN Server"
