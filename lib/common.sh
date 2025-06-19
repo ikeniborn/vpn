@@ -9,6 +9,12 @@ export COMMON_SOURCED=true
 # Exit on error
 set -e
 
+# Define project root directory
+if [ -z "$PROJECT_ROOT" ]; then
+    PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    export PROJECT_ROOT
+fi
+
 # ========================= COLOR DEFINITIONS =========================
 
 # Color codes for terminal output

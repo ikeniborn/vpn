@@ -48,6 +48,12 @@ handle_server_install() {
         return 1
     }
     
+    # Load prerequisites module for system checks and installation functions
+    source "$PROJECT_ROOT/modules/install/prerequisites.sh" || {
+        error "Failed to load prerequisites module"
+        return 1
+    }
+    
     # Now check system prerequisites using loaded modules
     detect_system_info true
     
