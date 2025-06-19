@@ -51,6 +51,21 @@ source "$SCRIPT_DIR/lib/ui.sh" || {
     exit 0
 }
 
+source "$SCRIPT_DIR/lib/network.sh" || {
+    error "Cannot source lib/network.sh"
+    exit 0
+}
+
+source "$SCRIPT_DIR/lib/crypto.sh" || {
+    error "Cannot source lib/crypto.sh"
+    exit 0
+}
+
+source "$SCRIPT_DIR/lib/docker.sh" || {
+    error "Cannot source lib/docker.sh"
+    exit 0
+}
+
 # =============================================================================
 # GLOBAL VARIABLES
 # =============================================================================
@@ -273,9 +288,19 @@ run_server_installation() {
             return 1
         }
     else
-        # Setup Xray directories
-        setup_xray_directories "$WORK_DIR" true || {
-            error "Failed to setup Xray directories"
+        # Source required installation modules
+        source "$SCRIPT_DIR/modules/install/xray_config.sh" || {
+            error "Failed to load Xray configuration module"
+            return 1
+        }
+        
+        source "$SCRIPT_DIR/modules/install/docker_setup.sh" || {
+            error "Failed to load Docker setup module"
+            return 1
+        }
+        
+        source "$SCRIPT_DIR/modules/install/firewall.sh" || {
+            error "Failed to load firewall module"
             return 1
         }
         
@@ -509,8 +534,16 @@ create_xray_config() {
     USER_NAME="${input_name:-user1}"
     log "Username: $USER_NAME"
     
+    # Determine protocol format for configuration
+    local config_protocol=""
+    if [ "$USE_REALITY" = true ]; then
+        config_protocol="vless-reality"
+    else
+        config_protocol="vless-basic"
+    fi
+    
     # Create configuration using module
-    setup_xray_configuration "$WORK_DIR" "$PROTOCOL" "$SERVER_PORT" "$USER_UUID" \
+    setup_xray_configuration "$WORK_DIR" "$config_protocol" "$SERVER_PORT" "$USER_UUID" \
         "$USER_NAME" "$SERVER_IP" "$SERVER_SNI" "$PRIVATE_KEY" "$PUBLIC_KEY" \
         "$SHORT_ID" true || {
         error "Failed to create Xray configuration"
