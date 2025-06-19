@@ -46,11 +46,7 @@ The installation script provides smart configuration options:
    - Port Selection: Random (10000-65000), manual, or standard (10443)
    - SNI Domain Options: Pre-validated domains or custom
    
-2. **VLESS Basic** (Standard VLESS protocol)
-   - Simplified configuration
-   - Same port selection options
-   
-3. **Outline VPN** (Shadowsocks-based)
+2. **Outline VPN** (Shadowsocks-based)
    - Easy client setup and management
    - Web-based management interface
    - Automatic updates via Watchtower

@@ -8,12 +8,12 @@
 #
 # Functions exported:
 # - create_xray_config_reality()
-# - create_xray_config_basic()
 # - create_xray_config()
 # - validate_xray_config()
 # - create_user_data()
 # - create_connection_link()
 # - setup_xray_directories()
+# - setup_xray_configuration()
 #
 # Dependencies: lib/common.sh, lib/config.sh
 # =============================================================================
@@ -209,74 +209,6 @@ EOL
     return 0
 }
 
-# Create Xray configuration for basic VLESS protocol
-create_xray_config_basic() {
-    local config_file="$1"
-    local server_port="$2"
-    local user_uuid="$3"
-    local user_name="$4"
-    local debug=${5:-false}
-    
-    [ "$debug" = true ] && log "Creating basic VLESS configuration..."
-    
-    # Validate required parameters
-    if [ -z "$config_file" ] || [ -z "$server_port" ] || [ -z "$user_uuid" ] || \
-       [ -z "$user_name" ]; then
-        error "Missing required parameters for basic VLESS configuration"
-        return 1
-    fi
-    
-    # Create basic VLESS configuration
-    cat > "$config_file" <<EOL
-{
-  "log": {
-    "loglevel": "warning"
-  },
-  "inbounds": [
-    {
-      "port": $server_port,
-      "protocol": "vless",
-      "settings": {
-        "clients": [
-          {
-            "id": "$user_uuid",
-            "flow": "",
-            "email": "$user_name"
-          }
-        ],
-        "decryption": "none"
-      },
-      "streamSettings": {
-        "network": "tcp",
-        "security": "none",
-        "tcpSettings": {
-          "header": {
-            "type": "none"
-          }
-        }
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["http", "tls"]
-      }
-    }
-  ],
-  "outbounds": [
-    {
-      "protocol": "freedom"
-    }
-  ]
-}
-EOL
-    
-    if [ ! -f "$config_file" ]; then
-        error "Failed to create basic VLESS configuration file"
-        return 1
-    fi
-    
-    [ "$debug" = true ] && log "Basic VLESS configuration created successfully"
-    return 0
-}
 
 # Create Xray configuration based on protocol type
 create_xray_config() {
@@ -312,10 +244,6 @@ create_xray_config() {
         "vless-reality")
             create_xray_config_reality "$config_file" "$server_port" "$user_uuid" \
                 "$user_name" "$server_sni" "$private_key" "$short_id" "$debug"
-            ;;
-        "vless-basic")
-            create_xray_config_basic "$config_file" "$server_port" "$user_uuid" \
-                "$user_name" "$debug"
             ;;
         *)
             error "Unsupported protocol: $protocol"
@@ -404,9 +332,8 @@ create_user_data() {
         return 1
     }
     
-    # Create user data based on protocol
-    if [ "$protocol" = "vless-reality" ]; then
-        cat > "$user_file" <<EOL
+    # Create user data for VLESS+Reality
+    cat > "$user_file" <<EOL
 {
   "name": "$user_name",
   "uuid": "$user_uuid",
@@ -419,17 +346,6 @@ create_user_data() {
   "protocol": "$protocol"
 }
 EOL
-    else
-        cat > "$user_file" <<EOL
-{
-  "name": "$user_name",
-  "uuid": "$user_uuid",
-  "port": $server_port,
-  "server": "$server_ip",
-  "protocol": "$protocol"
-}
-EOL
-    fi
     
     if [ ! -f "$user_file" ]; then
         error "Failed to create user data file"
@@ -464,12 +380,8 @@ create_connection_link() {
     local link_file="$work_dir/users/$user_name.link"
     local connection_link=""
     
-    # Create connection link based on protocol
-    if [ "$protocol" = "vless-reality" ]; then
-        connection_link="vless://$user_uuid@$server_ip:$server_port?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$server_sni&fp=chrome&pbk=$public_key&sid=$short_id&type=tcp&headerType=none#$user_name"
-    else
-        connection_link="vless://$user_uuid@$server_ip:$server_port?encryption=none&security=none&type=tcp&headerType=none#$user_name"
-    fi
+    # Create connection link for VLESS+Reality
+    connection_link="vless://$user_uuid@$server_ip:$server_port?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$server_sni&fp=chrome&pbk=$public_key&sid=$short_id&type=tcp&headerType=none#$user_name"
     
     # Save connection link
     echo "$connection_link" > "$link_file"
@@ -559,7 +471,6 @@ setup_xray_configuration() {
 # Export functions for use by other modules
 export -f setup_xray_directories
 export -f create_xray_config_reality
-export -f create_xray_config_basic
 export -f create_xray_config
 export -f validate_xray_config
 export -f create_user_data
@@ -570,6 +481,6 @@ export -f setup_xray_configuration
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     # Script is being run directly, show usage
     echo "Usage: $0 <work_dir> <protocol> <server_port> <user_uuid> <user_name> <server_ip> [server_sni] [private_key] [public_key] [short_id]"
-    echo "Protocols: vless-reality, vless-basic"
+    echo "Protocol: vless-reality"
     exit 1
 fi

@@ -453,11 +453,10 @@ get_server_config_interactive() {
     # Choose VPN type
     echo -e "${BLUE}Choose VPN type:${NC}"
     echo "1) VLESS+Reality (Recommended)"
-    echo "2) VLESS Basic"
-    echo "3) Outline VPN (Shadowsocks)"
+    echo "2) Outline VPN (Shadowsocks)"
     
     while true; do
-        read -p "Select option (1-3): " choice
+        read -p "Select option (1-2): " choice
         case $choice in
             1)
                 PROTOCOL="vless-reality"
@@ -466,19 +465,13 @@ get_server_config_interactive() {
                 break
                 ;;
             2)
-                PROTOCOL="vless-basic"
-                USE_REALITY=false
-                log "Selected protocol: VLESS Basic"
-                break
-                ;;
-            3)
                 PROTOCOL="outline"
                 USE_REALITY=false
                 log "Selected protocol: Outline VPN"
                 break
                 ;;
             *)
-                warning "Please choose 1, 2, or 3"
+                warning "Please choose 1 or 2"
                 ;;
         esac
     done
@@ -627,34 +620,17 @@ create_xray_config_and_user() {
     # Use already configured username
     log "Creating configuration for user: $USER_NAME"
     
-    # Determine protocol format for configuration
-    local config_protocol=""
-    log "USE_REALITY value: '$USE_REALITY'"
-    if [ "$USE_REALITY" = true ]; then
-        config_protocol="vless-reality"
-        log "Selected config protocol: vless-reality"
-    else
-        config_protocol="vless-basic"
-        log "Selected config protocol: vless-basic"
-    fi
+    # VLESS always uses Reality protocol now
+    local config_protocol="vless-reality"
+    log "Creating VLESS+Reality configuration"
     
     # Create configuration using module
-    # For basic VLESS, pass empty strings for Reality-specific parameters
-    if [ "$USE_REALITY" = true ]; then
-        setup_xray_configuration "$WORK_DIR" "$config_protocol" "$SERVER_PORT" "$USER_UUID" \
-            "$USER_NAME" "$SERVER_IP" "$SERVER_SNI" "$PRIVATE_KEY" "$PUBLIC_KEY" \
-            "$SHORT_ID" true || {
-            error "Failed to create Xray configuration"
-            return 1
-        }
-    else
-        setup_xray_configuration "$WORK_DIR" "$config_protocol" "$SERVER_PORT" "$USER_UUID" \
-            "$USER_NAME" "$SERVER_IP" "" "" "" \
-            "" true || {
-            error "Failed to create Xray configuration"
-            return 1
-        }
-    fi
+    setup_xray_configuration "$WORK_DIR" "$config_protocol" "$SERVER_PORT" "$USER_UUID" \
+        "$USER_NAME" "$SERVER_IP" "$SERVER_SNI" "$PRIVATE_KEY" "$PUBLIC_KEY" \
+        "$SHORT_ID" true || {
+        error "Failed to create Xray configuration"
+        return 1
+    }
     
     log "Xray configuration created"
 }

@@ -121,11 +121,7 @@ When installing, you can choose from:
    - Port Selection: Random (10000-65000), manual, or standard (10443)
    - SNI Domains: Pre-validated domains or custom
    
-2. **VLESS Basic**
-   - Standard VLESS protocol
-   - Simplified configuration
-   
-3. **Outline VPN** (Shadowsocks)
+2. **Outline VPN** (Shadowsocks)
    - Easy client setup
    - ARM architecture support (ARM64/ARMv7)
    - Automatic updates via Watchtower
