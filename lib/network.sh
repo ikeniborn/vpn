@@ -231,44 +231,53 @@ check_sni_domain() {
         return 1
     fi
     
-    log "Проверка доступности домена $domain..."
+    echo -e "   ${YELLOW}📋 Testing domain:${NC} ${WHITE}$domain${NC}"
+    echo ""
     
     # Step 1: Validate domain format
-    if ! validate_domain_format "$domain"; then
-        warning "Некорректный формат домена: $domain"
+    echo -n "   ${BLUE}1/4${NC} Format validation... "
+    if ! validate_domain_format "$domain" 2>/dev/null; then
+        echo -e "${RED}✗ Invalid format${NC}"
         return 1
     fi
+    echo -e "${GREEN}✓ Valid${NC}"
     
     # Step 2: DNS resolution check
-    if ! check_domain_dns "$domain" "$timeout"; then
-        warning "Домен $domain не резолвится в DNS"
+    echo -n "   ${BLUE}2/4${NC} DNS resolution... "
+    if ! check_domain_dns "$domain" "$timeout" 2>/dev/null; then
+        echo -e "${RED}✗ Failed${NC}"
         return 1
     fi
+    echo -e "${GREEN}✓ Resolved${NC}"
     
     # Step 3: TCP connection to port 443
-    if ! check_domain_port "$domain" 443 "$timeout"; then
-        warning "Домен $domain недоступен на порту 443"
+    echo -n "   ${BLUE}3/4${NC} TCP connectivity (port 443)... "
+    if ! check_domain_port "$domain" 443 "$timeout" 2>/dev/null; then
+        echo -e "${RED}✗ Unreachable${NC}"
         return 1
     fi
+    echo -e "${GREEN}✓ Connected${NC}"
     
     # Step 4: HTTPS accessibility check
-    if ! check_domain_https "$domain" "$timeout"; then
-        warning "Домен $domain не отвечает на HTTPS запросы"
+    echo -n "   ${BLUE}4/4${NC} HTTPS response... "
+    if ! check_domain_https "$domain" "$timeout" 2>/dev/null; then
+        echo -e "${RED}✗ No response${NC}"
         return 1
     fi
+    echo -e "${GREEN}✓ Responding${NC}"
     
-    # Step 5: Optional TLS check
+    # Step 5: Optional TLS check (silent)
     if command_exists openssl; then
         local tls_check=$(timeout "$timeout" bash -c "echo | openssl s_client -connect '$domain:443' -servername '$domain' -quiet 2>/dev/null | head -n 1" | grep -i "verify\|protocol\|cipher" 2>/dev/null || echo "")
         
-        if [ -z "$tls_check" ]; then
-            debug "Could not verify TLS details for $domain, but basic checks passed"
-        else
+        if [ -n "$tls_check" ]; then
             debug "TLS connection verified for $domain"
         fi
     fi
     
-    log "✓ Домен $domain прошел все проверки"
+    echo ""
+    echo -e "   ${GREEN}🎉 Domain verification successful!${NC}"
+    echo ""
     return 0
 }
 
@@ -306,26 +315,32 @@ get_sni_domain() {
         "www.lovelive-anime.jp"
     )
     
-    echo -e "${BLUE}Available SNI domains:${NC}"
+    echo -e "${GREEN}=== SNI Domain Selection ===${NC}"
+    echo ""
+    echo -e "${YELLOW}📡 Available pre-configured domains:${NC}"
+    echo ""
     local i=1
     for domain in "${domains[@]}"; do
-        echo "$i) $domain"
+        echo -e "   ${BLUE}$i)${NC} ${WHITE}$domain${NC}"
         ((i++))
     done
+    echo ""
     
     while true; do
         read -p "Select domain (1-${#domains[@]}): " choice
         if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#domains[@]}" ]; then
             SERVER_SNI="${domains[$((choice-1))]}"
-            [ "$debug" = true ] && log "Selected SNI domain: $SERVER_SNI"
+            echo ""
+            echo -e "${GREEN}✓ Selected domain:${NC} ${WHITE}$SERVER_SNI${NC}"
             
             # Verify selected domain
-            echo -n "Checking domain accessibility... "
+            echo ""
+            echo -e "${BLUE}🔍 Verifying domain connectivity...${NC}"
             if check_sni_domain "$SERVER_SNI" 5; then
-                echo -e "${GREEN}✓ Domain is accessible${NC}"
+                echo -e "${GREEN}✓ Domain verification completed successfully${NC}"
                 return 0
             else
-                echo -e "${YELLOW}⚠ Domain may not be accessible, but will proceed${NC}"
+                echo -e "${YELLOW}⚠ Domain verification failed, but will proceed${NC}"
                 return 0
             fi
         else
