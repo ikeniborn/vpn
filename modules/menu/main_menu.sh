@@ -53,12 +53,11 @@ show_main_menu() {
     echo "  10) 🔐 Rotate Keys"
     echo ""
     echo -e "${YELLOW}Advanced:${NC}"
-    echo "  11) 🚀 Deployment Options"
-    echo "  12) 🛡️  Watchdog Service"
+    echo "  11) 🛡️  Watchdog Service"
     echo ""
     echo -e "${YELLOW}Help & Info:${NC}"
-    echo "  13) ❓ Show Help"
-    echo "  14) ℹ️  Show Version"
+    echo "  12) ❓ Show Help"
+    echo "  13) ℹ️  Show Version"
     echo ""
     echo -e "${RED}  0)  🚪 Exit${NC}"
     echo ""
@@ -104,15 +103,12 @@ handle_menu_choice() {
             handle_key_rotation
             ;;
         11)
-            handle_deployment_menu
-            ;;
-        12)
             handle_watchdog_menu
             ;;
-        13)
+        12)
             show_usage
             ;;
-        14)
+        13)
             show_version
             ;;
         0)
@@ -120,7 +116,7 @@ handle_menu_choice() {
             exit 0
             ;;
         *)
-            warning "Invalid option. Please choose 0-14."
+            warning "Invalid option. Please choose 0-13."
             ;;
     esac
 }
@@ -129,23 +125,6 @@ handle_menu_choice() {
 # SUBMENU HANDLERS
 # =============================================================================
 
-handle_deployment_menu() {
-    echo -e "${BLUE}Deployment Options:${NC}"
-    echo "1) Install"
-    echo "2) Update"
-    echo "3) Backup"
-    echo "4) Restore"
-    echo "0) Back"
-    read -p "Select option: " deploy_choice
-    case "$deploy_choice" in
-        1) SUB_ACTION="install"; handle_deployment ;;
-        2) SUB_ACTION="update"; handle_deployment ;;
-        3) SUB_ACTION="backup"; handle_deployment ;;
-        4) SUB_ACTION="restore"; handle_deployment ;;
-        0) return ;;
-        *) warning "Invalid option" ;;
-    esac
-}
 
 handle_watchdog_menu() {
     echo -e "${BLUE}Watchdog Service:${NC}"
@@ -182,7 +161,7 @@ run_interactive_menu() {
     
     while true; do
         show_main_menu
-        read -p "Select option (0-14): " choice
+        read -p "Select option (0-13): " choice
         
         # Handle errors gracefully
         handle_menu_choice "$choice" || {
@@ -196,7 +175,7 @@ run_interactive_menu() {
             exit 0
         fi
         
-        if [ "$choice" != "13" ] && [ "$choice" != "14" ]; then
+        if [ "$choice" != "12" ] && [ "$choice" != "13" ]; then
             echo ""
             read -p "Press Enter to continue..."
         fi
@@ -209,6 +188,5 @@ run_interactive_menu() {
 
 export -f show_main_menu
 export -f handle_menu_choice
-export -f handle_deployment_menu
 export -f handle_watchdog_menu
 export -f run_interactive_menu

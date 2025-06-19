@@ -10,6 +10,9 @@
 - [x] Implemented create_xray_config_and_user function
 - [x] Added SNI validation functions to network.sh
 - [x] Verified module syntax and basic functionality
+- [x] Removed CI/CD deployment functionality
+- [x] Cleaned up deployment menu items and handlers
+- [x] Updated documentation to reflect removed features
 
 ### In Progress
 - [ ] Performance optimization for module loading

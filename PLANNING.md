@@ -110,9 +110,9 @@
    - Extension marketplace
 
 2. **Integration**
-   - CI/CD pipelines
    - Kubernetes support
    - Cloud provider integration
+   - Third-party monitoring tools
 
 3. **Community**
    - Documentation portal

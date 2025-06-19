@@ -136,9 +136,11 @@ load_server_modules() {
 }
 
 # Load menu modules
-load_menu_modules() {
+load_menu_system() {
     local debug="${1:-false}"
     source "$SCRIPT_DIR/modules/menu/menu_loader.sh" || return 1
+    # Call the load_menu_modules function from the loaded file
+    load_menu_modules "$debug" || return 1
     return 0
 }
 
@@ -751,48 +753,6 @@ handle_key_rotation() {
     rotate_reality_keys true
 }
 
-handle_deployment() {
-    echo -e "${BLUE}VPN Deployment Management${NC}"
-    echo "1) Backup server configuration"
-    echo "2) Restore from backup"
-    echo "3) Export user configurations"
-    echo "4) Import user configurations"
-    echo "5) Back to main menu"
-    
-    while true; do
-        read -p "Select option (1-5): " choice
-        case $choice in
-            1)
-                echo "Creating backup..."
-                # TODO: Implement backup functionality
-                echo "Backup functionality not yet implemented"
-                read -p "Press Enter to continue..."
-                break
-                ;;
-            2)
-                echo "Restore functionality not yet implemented"
-                read -p "Press Enter to continue..."
-                break
-                ;;
-            3)
-                echo "Export functionality not yet implemented"
-                read -p "Press Enter to continue..."
-                break
-                ;;
-            4)
-                echo "Import functionality not yet implemented"
-                read -p "Press Enter to continue..."
-                break
-                ;;
-            5)
-                return 0
-                ;;
-            *)
-                warning "Please choose 1-5"
-                ;;
-        esac
-    done
-}
 
 handle_watchdog() {
     echo -e "${BLUE}VPN Watchdog Management${NC}"
@@ -887,7 +847,7 @@ main() {
     case "$ACTION" in
         "menu"|"")
             # Load menu modules and start interactive menu
-            load_menu_modules true || {
+            load_menu_system true || {
                 error "Failed to load menu modules"
                 exit 1
             }
