@@ -343,6 +343,12 @@ get_server_config_interactive() {
         esac
     done
     
+    # Debug: Show current configuration state
+    log "Current configuration after port selection:"
+    log "  SERVER_IP: $SERVER_IP"
+    log "  SERVER_PORT: $SERVER_PORT"
+    log "  PROTOCOL: $PROTOCOL"
+    
     # Get SNI configuration for Reality
     if [ "$USE_REALITY" = true ]; then
         get_sni_config_interactive
@@ -361,6 +367,17 @@ get_server_config_interactive() {
             fi
         done
     fi
+    
+    # Final debug: Show all configuration
+    log "Final configuration:"
+    log "  SERVER_IP: $SERVER_IP"
+    log "  SERVER_PORT: $SERVER_PORT" 
+    log "  SERVER_SNI: $SERVER_SNI"
+    log "  PROTOCOL: $PROTOCOL"
+    log "  USER_NAME: $USER_NAME"
+    log "  PRIVATE_KEY: ${PRIVATE_KEY:0:10}..."
+    log "  PUBLIC_KEY: ${PUBLIC_KEY:0:10}..."
+    log "  SHORT_ID: $SHORT_ID"
     
     return 0
 }
@@ -520,11 +537,28 @@ generate_reality_keys() {
     fi
     
     local keys=$(generate_keypair)
+    if [ -z "$keys" ]; then
+        error "Failed to generate keypair"
+        return 1
+    fi
+    
     PRIVATE_KEY=$(echo "$keys" | cut -d' ' -f1)
     PUBLIC_KEY=$(echo "$keys" | cut -d' ' -f2)
     SHORT_ID=$(generate_short_id)
     
+    if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ] || [ -z "$SHORT_ID" ]; then
+        error "Failed to extract or generate Reality keys"
+        log "  Keys output: $keys"
+        log "  PRIVATE_KEY: $PRIVATE_KEY"
+        log "  PUBLIC_KEY: $PUBLIC_KEY" 
+        log "  SHORT_ID: $SHORT_ID"
+        return 1
+    fi
+    
     log "Generated Reality keys successfully"
+    log "  PRIVATE_KEY: ${PRIVATE_KEY:0:10}..."
+    log "  PUBLIC_KEY: ${PUBLIC_KEY:0:10}..."
+    log "  SHORT_ID: $SHORT_ID"
     return 0
 }
 
@@ -543,6 +577,16 @@ create_xray_config_and_user() {
         log "Work directory not set, defaulting to: $WORK_DIR"
     fi
     
+    if [ -z "$SERVER_PORT" ]; then
+        SERVER_PORT="10443"
+        log "Server port not set, defaulting to: $SERVER_PORT"
+    fi
+    
+    if [ -z "$SERVER_IP" ]; then
+        SERVER_IP=$(get_external_ip) || SERVER_IP="127.0.0.1"
+        log "Server IP not set, detected/defaulting to: $SERVER_IP"
+    fi
+    
     # Generate UUID for first user if not set
     if [ -z "$USER_UUID" ]; then
         # Ensure crypto library is loaded for UUID generation
@@ -555,6 +599,20 @@ create_xray_config_and_user() {
         USER_UUID=$(generate_uuid)
     fi
     
+    # Ensure Reality keys are set
+    if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ] || [ -z "$SHORT_ID" ]; then
+        log "Reality keys not set, generating them now..."
+        generate_reality_keys || {
+            error "Failed to generate Reality keys"
+            return 1
+        }
+    fi
+    
+    if [ -z "$SERVER_SNI" ]; then
+        SERVER_SNI="addons.mozilla.org"
+        log "SNI not set, defaulting to: $SERVER_SNI"
+    fi
+    
     # Debug information
     log "Configuration parameters:"
     log "  WORK_DIR: $WORK_DIR"
@@ -562,6 +620,11 @@ create_xray_config_and_user() {
     log "  SERVER_PORT: $SERVER_PORT"
     log "  USER_NAME: $USER_NAME"
     log "  USER_UUID: $USER_UUID"
+    log "  SERVER_IP: $SERVER_IP"
+    log "  SERVER_SNI: $SERVER_SNI"
+    log "  PRIVATE_KEY: ${PRIVATE_KEY:0:10}..."
+    log "  PUBLIC_KEY: ${PUBLIC_KEY:0:10}..."
+    log "  SHORT_ID: $SHORT_ID"
     
     # Store configuration values
     mkdir -p "$WORK_DIR/config"
