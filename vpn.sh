@@ -2008,15 +2008,35 @@ main() {
             run_interactive_menu
             ;;
         "install")
+            # Load server handlers module
+            load_module_lazy "menu/server_handlers.sh" || {
+                error "Failed to load server handlers module"
+                exit 1
+            }
             handle_server_install
             ;;
         "status")
+            # Load server handlers module
+            load_module_lazy "menu/server_handlers.sh" || {
+                error "Failed to load server handlers module"
+                exit 1
+            }
             handle_server_status
             ;;
         "restart")
+            # Load server handlers module
+            load_module_lazy "menu/server_handlers.sh" || {
+                error "Failed to load server handlers module"
+                exit 1
+            }
             handle_server_restart
             ;;
         "uninstall")
+            # Load server handlers module
+            load_module_lazy "menu/server_handlers.sh" || {
+                error "Failed to load server handlers module"
+                exit 1
+            }
             handle_server_uninstall
             ;;
         "fix-reality")

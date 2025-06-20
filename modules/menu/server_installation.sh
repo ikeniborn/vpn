@@ -533,7 +533,7 @@ setup_docker_xray() {
     load_module_lazy "install/docker_setup.sh" || return 1
     
     # Setup Docker environment
-    setup_docker_environment "$WORK_DIR" "$PROTOCOL" true || {
+    setup_docker_environment "$WORK_DIR" "$SERVER_PORT" true || {
         error "Failed to setup Docker environment"
         return 1
     }

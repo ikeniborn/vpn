@@ -312,10 +312,16 @@ handle_server_uninstall() {
         return 1
     }
     
+    # Load uninstall module
+    load_module_lazy "server/uninstall.sh" || {
+        error "Failed to load uninstall module"
+        return 1
+    }
+    
     # Call appropriate uninstall function
     case "$vpn_type" in
         "xray")
-            uninstall_server
+            uninstall_vpn
             ;;
         "outline")
             echo -e "${BLUE}Uninstalling Outline VPN server...${NC}"
