@@ -917,8 +917,11 @@ fix_reality() {
     local new_private_key
     local new_public_key
     
-    if new_private_key=$(docker run --rm teddysun/xray:latest xray x25519 2>/dev/null); then
-        new_public_key=$(echo "$new_private_key" | docker run --rm -i teddysun/xray:latest xray x25519 -i base64 2>/dev/null)
+    local key_output=$(docker run --rm teddysun/xray:latest xray x25519 2>/dev/null)
+    
+    if [ -n "$key_output" ] && echo "$key_output" | grep -q "Private key:"; then
+        new_private_key=$(echo "$key_output" | grep "Private key:" | awk '{print $3}')
+        new_public_key=$(echo "$key_output" | grep "Public key:" | awk '{print $3}')
         
         if [ -n "$new_private_key" ] && [ -n "$new_public_key" ]; then
             log "✓ New Reality keys generated"
