@@ -84,7 +84,7 @@ show_user_management_menu() {
                 echo ""
                 read -p "Enter username to show: " username
                 if [ -n "$username" ]; then
-                    show_user "$username"
+                    show_user_by_name "$username"
                 else
                     warning "Username cannot be empty"
                 fi
