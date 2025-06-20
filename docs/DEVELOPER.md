@@ -23,23 +23,39 @@ The modular architecture follows SOLID principles and clean code practices:
 - **Dependency Inversion**: High-level modules don't depend on low-level modules
 - **Interface Segregation**: Modules export only necessary functions
 - **DRY (Don't Repeat Yourself)**: Common functionality is centralized in libraries
+- **Performance First**: Lazy loading, caching, and optimization throughout
 
 ### System Layers
 
 ```
 ┌─────────────────────────────────────┐
-│           Main Scripts              │  ← User Interface Layer
-│  install_vpn.sh, manage_users.sh    │
+│        Main Script (vpn.sh)         │  ← Single Entry Point
+├─────────────────────────────────────┤
+│          Menu System                │  ← User Interface Layer
+│      menu/, server_handlers         │
 ├─────────────────────────────────────┤
 │          Feature Modules            │  ← Business Logic Layer
 │    users/, server/, monitoring/,    │
-│           install/                  │
+│        install/, system/            │
 ├─────────────────────────────────────┤
 │          Core Libraries             │  ← Infrastructure Layer
 │  common.sh, config.sh, docker.sh,  │
-│      network.sh, crypto.sh          │
+│  network.sh, crypto.sh, ui.sh,     │
+│        performance.sh              │
 └─────────────────────────────────────┘
 ```
+
+### Performance Architecture
+
+The system implements comprehensive performance optimizations:
+
+- **Lazy Module Loading**: Modules loaded only when needed
+- **Caching Strategy**: 
+  - Docker operations: 5-second TTL
+  - Configuration data: 30-second TTL
+  - Automatic cache cleanup when size limits exceeded
+- **Parallel Processing**: Concurrent health checks and operations
+- **Optimized I/O**: Batch file reads, efficient string operations
 
 ## 🧩 Module System
 
@@ -101,6 +117,28 @@ source "lib/network.sh"
 if check_port_available 8080; then
     echo "Port 8080 is available"
 fi
+```
+
+#### `lib/performance.sh`
+- **Purpose**: Performance optimizations and monitoring
+- **Key Functions**:
+  - `get_container_status_cached()` - Cached Docker status checks
+  - `time_function()` - Function execution timing
+  - `monitor_resources()` - Resource usage monitoring
+  - `benchmark_modules()` - Module loading benchmarks
+  - `cleanup_resources()` - Memory optimization
+- **Usage**: Performance optimization
+
+```bash
+source "lib/performance.sh"
+# Time a function execution
+time_function some_heavy_operation
+
+# Use cached container status
+status=$(get_container_status_cached "xray")
+
+# Monitor current resource usage
+monitor_resources
 ```
 
 #### `lib/crypto.sh`
@@ -320,7 +358,8 @@ test/
 ├── test_install_modules.sh # Test modules/install/ modules
 ├── test_user_modules.sh    # Test modules/users/ modules
 ├── test_server_modules.sh  # Test modules/server/ modules
-└── test_monitoring_modules.sh # Test modules/monitoring/ modules
+├── test_monitoring_modules.sh # Test modules/monitoring/ modules
+└── test_performance.sh     # Test performance optimizations
 ```
 
 ### Writing Tests
@@ -664,6 +703,105 @@ bash -x script.sh
 - `develop` - Integration branch
 - `feature/module-name` - Feature development
 - `hotfix/issue-description` - Critical fixes
+
+## ⚡ Performance Guidelines
+
+### Lazy Loading Implementation
+
+Always use lazy loading for modules that aren't immediately needed:
+
+```bash
+# In vpn.sh or menu handlers
+load_module_lazy() {
+    local module="$1"
+    [ -z "${LOADED_MODULES[$module]}" ] && {
+        source "$SCRIPT_DIR/modules/$module" || return 1
+        LOADED_MODULES[$module]=1
+    }
+}
+
+# Usage
+handle_user_operation() {
+    # Load user modules only when needed
+    load_module_lazy "users/add.sh" || return 1
+    add_user "$@"
+}
+```
+
+### Caching Strategy
+
+Implement caching for expensive operations:
+
+```bash
+# Use performance library caching
+source "lib/performance.sh"
+
+# Cache container status
+status=$(get_container_status_cached "xray")
+
+# Cache configuration data
+config_value=$(get_config_cached "/path/to/config.json" "key.path")
+```
+
+### Optimization Checklist
+
+- [ ] Use lazy loading for non-critical modules
+- [ ] Cache Docker operations (5-second TTL)
+- [ ] Cache configuration reads (30-second TTL)
+- [ ] Use batch file operations
+- [ ] Prefer built-in string operations over external commands
+- [ ] Implement parallel processing where applicable
+- [ ] Monitor memory usage and cleanup caches
+
+### Performance Testing
+
+```bash
+# Run performance benchmarks
+./vpn.sh benchmark
+
+# Test specific performance metrics
+./test/test_performance.sh
+
+# Monitor resource usage during development
+./vpn.sh debug
+```
+
+### Best Practices for Performance
+
+1. **Avoid Repeated Operations**
+   ```bash
+   # Bad: Multiple docker calls
+   if docker ps | grep xray; then
+       docker logs xray
+   fi
+   
+   # Good: Single cached call
+   if [ "$(get_container_status_cached xray)" = "running" ]; then
+       docker logs xray
+   fi
+   ```
+
+2. **Optimize String Operations**
+   ```bash
+   # Bad: String concatenation in loop
+   result=""
+   for item in "${items[@]}"; do
+       result="$result$item\n"
+   done
+   
+   # Good: Use printf
+   printf "%s\n" "${items[@]}"
+   ```
+
+3. **Batch File Operations**
+   ```bash
+   # Bad: Multiple reads
+   port=$(cat /opt/v2ray/config/port.txt)
+   protocol=$(cat /opt/v2ray/config/protocol.txt)
+   
+   # Good: Single batch read
+   readarray -t configs < <(read_multiple_files port.txt protocol.txt)
+   ```
 
 ## 📞 Support
 
