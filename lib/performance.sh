@@ -305,7 +305,12 @@ get_config_cached() {
        [ $((now - CONFIG_CACHE_TIME[$cache_key])) -gt $CONFIG_CACHE_TTL ]; then
         
         if [ -f "$config_file" ] && command -v jq >/dev/null 2>&1; then
-            CONFIG_CACHE[$cache_key]=$(jq -r ".$key // empty" "$config_file" 2>/dev/null)
+            # Handle complex jq queries (with pipes, etc.)
+            if [[ "$key" =~ \| ]]; then
+                CONFIG_CACHE[$cache_key]=$(jq -r "$key // empty" "$config_file" 2>/dev/null)
+            else
+                CONFIG_CACHE[$cache_key]=$(jq -r ".$key // empty" "$config_file" 2>/dev/null)
+            fi
         else
             CONFIG_CACHE[$cache_key]=""
         fi

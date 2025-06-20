@@ -120,7 +120,7 @@ handle_server_status() {
             if [ -f "/opt/v2ray/config/config.json" ]; then
                 local user_count
                 if command -v get_config_cached >/dev/null 2>&1; then
-                    user_count=$(get_config_cached "/opt/v2ray/config/config.json" "inbounds[0].settings.clients | length")
+                    user_count=$(get_config_cached "/opt/v2ray/config/config.json" ".inbounds[0].settings.clients | length")
                 else
                     user_count=$(jq -r '.inbounds[0].settings.clients | length' /opt/v2ray/config/config.json 2>/dev/null || echo "0")
                 fi

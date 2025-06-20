@@ -1,0 +1,33 @@
+version: '3'
+services:
+  xray:
+    image: teddysun/xray:latest
+    container_name: xray
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./config:/etc/xray
+      - ./logs:/var/log/xray
+      - /home/ikeniborn/Documents/Project/vpn/config/healthcheck.sh:/usr/local/bin/healthcheck.sh:ro
+    environment:
+      - TZ=Europe/Moscow
+    command: ["xray", "run", "-c", "/etc/xray/config.json"]
+    healthcheck:
+      test: ["CMD", "/bin/bash", "/usr/local/bin/healthcheck.sh", "37276"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 45s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.8'
+          memory: 1g
+        reservations:
+          cpus: '0.2'
+          memory: 512m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
