@@ -116,8 +116,14 @@ create_xray_config_reality() {
     
     # Check if TCP_FASTOPEN is supported (to avoid warnings)
     local tcp_fastopen_supported=""
-    if [ -f "/proc/sys/net/ipv4/tcp_fastopen" ] && [ "$(cat /proc/sys/net/ipv4/tcp_fastopen 2>/dev/null)" != "0" ]; then
+    local tcp_fastopen_value=$(cat /proc/sys/net/ipv4/tcp_fastopen 2>/dev/null || echo "0")
+    
+    # TCP Fast Open должен быть включен (значение 1 или 3 для сервера)
+    if [ "$tcp_fastopen_value" = "1" ] || [ "$tcp_fastopen_value" = "3" ]; then
         tcp_fastopen_supported='"tcpFastOpen": true,'
+        debug "TCP Fast Open enabled (value: $tcp_fastopen_value)"
+    else
+        debug "TCP Fast Open disabled or not supported (value: $tcp_fastopen_value)"
     fi
     
     cat > "$config_file" <<EOL

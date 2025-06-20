@@ -873,7 +873,28 @@ handle_logs() {
         return 1
     }
     
-    view_logs
+    view_user_logs
+}
+
+validate_config() {
+    if [ "$EUID" -ne 0 ]; then
+        error "Configuration validation requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    load_server_modules || {
+        error "Failed to load server modules"
+        return 1
+    }
+    
+    # Load validation module
+    if [ -f "$SCRIPT_DIR/modules/server/validate_config.sh" ]; then
+        source "$SCRIPT_DIR/modules/server/validate_config.sh"
+        validate_server_config true
+    else
+        error "Validation module not found"
+        return 1
+    fi
 }
 
 handle_key_rotation() {

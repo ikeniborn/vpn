@@ -38,8 +38,8 @@ show_main_menu() {
     echo "  3)  🔄 Restart Server"
     echo "  4)  🗑️  Uninstall Server"
     echo ""
-    echo -e "${YELLOW}Xray Server Management:${NC}"
-    echo "  5)  ⚙️  Manage Xray Server"
+    echo -e "${YELLOW}User Management:${NC}"
+    echo "  5)  👥 User Management"
     echo ""
     echo -e "${YELLOW}Advanced:${NC}"
     echo "  6)  🛡️  Watchdog Service"
@@ -73,7 +73,7 @@ handle_menu_choice() {
             handle_server_uninstall
             ;;
         5)
-            handle_xray_management
+            handle_user_management
             ;;
         6)
             handle_watchdog_menu
@@ -101,33 +101,7 @@ handle_menu_choice() {
 # =============================================================================
 
 
-handle_xray_management() {
-    # Check if Xray server is installed
-    local vpn_type=$(detect_installed_vpn_type)
-    
-    if [ "$vpn_type" != "xray" ]; then
-        warning "Xray server is not installed. Please install it first."
-        return 1
-    fi
-    
-    echo -e "${BLUE}Xray Server Management:${NC}"
-    echo "1) 👥 User Management"
-    echo "2) 📈 Traffic Statistics"  
-    echo "3) 📋 View Logs"
-    echo "4) 🔐 Rotate Keys"
-    echo "5) 🔧 Configure Logging"
-    echo "0) Back to Main Menu"
-    read -p "Select option: " xray_choice
-    case "$xray_choice" in
-        1) handle_user_management ;;
-        2) handle_statistics ;;
-        3) handle_logs ;;
-        4) handle_key_rotation ;;
-        5) handle_logging_config ;;
-        0) return ;;
-        *) warning "Invalid option" ;;
-    esac
-}
+# Removed duplicate Xray management menu - functionality moved to main menu options
 
 handle_watchdog_menu() {
     echo -e "${BLUE}Watchdog Service:${NC}"
@@ -194,6 +168,6 @@ run_interactive_menu() {
 
 export -f show_main_menu
 export -f handle_menu_choice
-export -f handle_xray_management
+# handle_xray_management removed - functionality integrated into main menu
 export -f handle_watchdog_menu
 export -f run_interactive_menu
