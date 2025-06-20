@@ -268,9 +268,14 @@ check_sni_domain() {
     
     # Step 5: Optional TLS check (silent) - fixed working directory issue
     if command_exists openssl; then
-        # Preserve working directory and use proper command execution
-        local current_dir=$(pwd)
-        local tls_check=$(cd "$current_dir" && timeout "$timeout" sh -c "echo | openssl s_client -connect '$domain:443' -servername '$domain' -quiet 2>/dev/null" | head -n 1 | grep -i "verify\|protocol\|cipher" 2>/dev/null || echo "")
+        # Use safe working directory and proper command execution
+        local safe_dir="${PROJECT_ROOT:-/tmp}"
+        local tls_check
+        (
+            cd "$safe_dir" 2>/dev/null || cd /tmp
+            tls_check=$(timeout "$timeout" sh -c "echo | openssl s_client -connect '$domain:443' -servername '$domain' -quiet 2>/dev/null" | head -n 1 | grep -i "verify\|protocol\|cipher" 2>/dev/null || echo "")
+            echo "$tls_check"
+        )
         
         if [ -n "$tls_check" ]; then
             debug "TLS connection verified for $domain"
