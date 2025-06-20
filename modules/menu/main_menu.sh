@@ -46,10 +46,11 @@ show_main_menu() {
     echo "  7)  🔧 Fix Reality Issues"
     echo "  8)  ✅ Validate Configuration"
     echo "  9)  🔍 Diagnose Reality Issues"
+    echo "  10) 🧹 Clean Up Unused Ports"
     echo ""
     echo -e "${YELLOW}Help & Info:${NC}"
-    echo "  10) ❓ Show Help"
-    echo "  11) ℹ️  Show Version"
+    echo "  11) ❓ Show Help"
+    echo "  12) ℹ️  Show Version"
     echo ""
     echo -e "${RED}  0)  🚪 Exit${NC}"
     echo ""
@@ -91,10 +92,13 @@ handle_menu_choice() {
             handle_diagnose_reality
             ;;
         10)
+            handle_cleanup_ports
+            ;;
+        11)
             show_usage
             read -p "Press Enter to continue..."
             ;;
-        11)
+        12)
             show_version
             read -p "Press Enter to continue..."
             ;;
@@ -232,6 +236,23 @@ handle_diagnose_reality() {
     read
 }
 
+# Handler for Cleanup Ports option
+handle_cleanup_ports() {
+    echo -e "${BLUE}🧹 Очистка неиспользуемых VPN портов...${NC}"
+    echo
+    
+    # Call the cleanup function from vpn.sh
+    if cleanup_vpn_ports_interactive; then
+        echo -e "${GREEN}✅ Очистка портов завершена${NC}"
+    else
+        echo -e "${RED}❌ Ошибка при очистке портов${NC}"
+    fi
+    
+    echo
+    echo -e "${CYAN}Нажмите Enter для продолжения...${NC}"
+    read
+}
+
 # =============================================================================
 # EXPORT FUNCTIONS
 # =============================================================================
@@ -243,4 +264,5 @@ export -f handle_watchdog_menu
 export -f handle_fix_reality
 export -f handle_validate_config
 export -f handle_diagnose_reality
+export -f handle_cleanup_ports
 export -f run_interactive_menu

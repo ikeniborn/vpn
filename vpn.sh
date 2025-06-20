@@ -1990,6 +1990,124 @@ show_version() {
 }
 
 # =============================================================================
+# VPN ROUTING FIX FUNCTION
+# =============================================================================
+
+# Fix VPN routing and traffic forwarding issues
+fix_vpn_routing() {
+    log "🔧 Fixing VPN routing and traffic forwarding..."
+    
+    # Check root privileges
+    if [ "$EUID" -ne 0 ]; then
+        error "VPN routing fix requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    # Get current server port
+    local server_port=""
+    if [ -f "/opt/v2ray/config/config.json" ]; then
+        server_port=$(jq -r '.inbounds[0].port' /opt/v2ray/config/config.json 2>/dev/null || echo "")
+    fi
+    
+    if [ -z "$server_port" ] || [ "$server_port" = "null" ]; then
+        error "Could not determine server port. Is VPN server installed?"
+        return 1
+    fi
+    
+    log "Detected server port: $server_port"
+    
+    # Load firewall module
+    load_module_lazy "install/firewall.sh" || {
+        error "Failed to load firewall module"
+        return 1
+    }
+    
+    echo -e "${GREEN}=== Fixing VPN Routing Configuration ===${NC}"
+    echo ""
+    
+    # Apply complete network setup
+    setup_vpn_network "$server_port" true || {
+        error "Failed to setup VPN network configuration"
+        return 1
+    }
+    
+    echo ""
+    echo -e "${GREEN}=== Verifying Configuration ===${NC}"
+    
+    # Verify IP forwarding
+    local forwarding=$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo "0")
+    if [ "$forwarding" = "1" ]; then
+        log "✓ IP forwarding is enabled"
+    else
+        error "✗ IP forwarding is disabled"
+    fi
+    
+    # Verify FORWARD policy
+    local forward_policy=$(iptables -L FORWARD -n | head -1 | grep -o "policy [A-Z]*" | cut -d' ' -f2)
+    if [ "$forward_policy" = "ACCEPT" ]; then
+        log "✓ FORWARD policy is ACCEPT"
+    else
+        warning "✗ FORWARD policy is $forward_policy"
+    fi
+    
+    # Verify masquerading rules
+    local masq_rules=$(iptables -t nat -L POSTROUTING -n | grep -c MASQUERADE || echo "0")
+    if [ "$masq_rules" -gt 0 ]; then
+        log "✓ Masquerading rules are configured ($masq_rules rules)"
+    else
+        warning "✗ No masquerading rules found"
+    fi
+    
+    echo ""
+    log "✅ VPN routing fix completed"
+    log "Please test VPN connection now - internet access should work"
+    
+    return 0
+}
+
+# =============================================================================
+# VPN PORTS CLEANUP FUNCTION
+# =============================================================================
+
+# Interactive cleanup of unused VPN ports
+cleanup_vpn_ports_interactive() {
+    log "🧹 Cleaning up unused VPN ports from firewall..."
+    
+    # Check root privileges
+    if [ "$EUID" -ne 0 ]; then
+        error "Port cleanup requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    # Get current server port
+    local current_port=""
+    if [ -f "/opt/v2ray/config/config.json" ]; then
+        current_port=$(jq -r '.inbounds[0].port' /opt/v2ray/config/config.json 2>/dev/null || echo "")
+    fi
+    
+    if [ -z "$current_port" ] || [ "$current_port" = "null" ]; then
+        warning "Could not determine current server port"
+        current_port=""
+    else
+        log "Current active VPN port: $current_port"
+    fi
+    
+    # Load firewall module
+    load_module_lazy "install/firewall.sh" || {
+        error "Failed to load firewall module"
+        return 1
+    }
+    
+    echo -e "${GREEN}=== VPN Port Cleanup ===${NC}"
+    echo ""
+    
+    # Run interactive cleanup
+    cleanup_unused_vpn_ports "$current_port" true true  # interactive mode
+    
+    return 0
+}
+
+# =============================================================================
 # MAIN EXECUTION LOGIC
 # =============================================================================
 
@@ -2069,13 +2187,29 @@ main() {
         "debug-connections")
             debug_reality_connections
             ;;
+        "fix-routing")
+            fix_vpn_routing
+            ;;
+        "cleanup-ports")
+            cleanup_vpn_ports_interactive
+            ;;
         "users")
-            handle_user_management
+            # Load user menu module
+            load_module_lazy "menu/user_menu.sh" || {
+                error "Failed to load user menu module"
+                exit 1
+            }
+            show_user_management_menu
             ;;
         "user")
+            # Load user menu module
+            load_module_lazy "menu/user_menu.sh" || {
+                error "Failed to load user menu module"
+                exit 1
+            }
             case "$SUB_ACTION" in
                 "add"|"delete"|"list"|"show")
-                    handle_user_management
+                    show_user_management_menu
                     ;;
                 *)
                     show_usage

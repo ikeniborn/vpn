@@ -394,6 +394,231 @@ show_firewall_status() {
 }
 
 # =============================================================================
+# VPN TRAFFIC ROUTING AND IP FORWARDING
+# =============================================================================
+
+# Enable IP forwarding for VPN traffic routing
+enable_ip_forwarding() {
+    local debug=${1:-false}
+    
+    [ "$debug" = true ] && log "Enabling IP forwarding for VPN traffic..."
+    
+    # Check current IP forwarding status
+    local current_forwarding=$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo "0")
+    
+    if [ "$current_forwarding" = "1" ]; then
+        [ "$debug" = true ] && log "IP forwarding already enabled"
+    else
+        # Enable IP forwarding temporarily
+        if echo 1 > /proc/sys/net/ipv4/ip_forward 2>/dev/null; then
+            [ "$debug" = true ] && log "IP forwarding enabled temporarily"
+        else
+            error "Failed to enable IP forwarding temporarily"
+            return 1
+        fi
+    fi
+    
+    # Make IP forwarding permanent
+    local sysctl_conf="/etc/sysctl.conf"
+    if grep -q "^net.ipv4.ip_forward=1" "$sysctl_conf" 2>/dev/null; then
+        [ "$debug" = true ] && log "IP forwarding already configured in sysctl.conf"
+    else
+        # Add or update IP forwarding setting
+        if grep -q "^#net.ipv4.ip_forward=1" "$sysctl_conf" 2>/dev/null; then
+            # Uncomment existing line
+            sed -i 's/^#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' "$sysctl_conf"
+            [ "$debug" = true ] && log "Uncommented IP forwarding in sysctl.conf"
+        elif grep -q "^net.ipv4.ip_forward=" "$sysctl_conf" 2>/dev/null; then
+            # Update existing line
+            sed -i 's/^net.ipv4.ip_forward=.*/net.ipv4.ip_forward=1/' "$sysctl_conf"
+            [ "$debug" = true ] && log "Updated IP forwarding in sysctl.conf"
+        else
+            # Add new line
+            echo "net.ipv4.ip_forward=1" >> "$sysctl_conf"
+            [ "$debug" = true ] && log "Added IP forwarding to sysctl.conf"
+        fi
+    fi
+    
+    # Apply sysctl changes
+    if sysctl -p >/dev/null 2>&1; then
+        [ "$debug" = true ] && log "Sysctl changes applied successfully"
+    else
+        warning "Failed to apply sysctl changes, but IP forwarding is enabled"
+    fi
+    
+    log "✓ IP forwarding enabled for VPN traffic routing"
+    return 0
+}
+
+# Setup VPN traffic routing and masquerading
+setup_vpn_routing() {
+    local debug=${1:-false}
+    
+    [ "$debug" = true ] && log "Setting up VPN traffic routing..."
+    
+    # Get primary network interface
+    local primary_interface=$(ip route | grep '^default' | grep -o 'dev [^ ]*' | head -1 | cut -d' ' -f2)
+    if [ -z "$primary_interface" ]; then
+        primary_interface="eth0"  # Fallback
+        warning "Could not detect primary interface, using $primary_interface"
+    fi
+    [ "$debug" = true ] && log "Primary network interface: $primary_interface"
+    
+    # Setup iptables rules for VPN traffic masquerading
+    [ "$debug" = true ] && log "Adding iptables masquerading rules..."
+    
+    # Add masquerading rules for common VPN networks
+    local vpn_networks=("10.0.0.0/8" "192.168.0.0/16" "172.16.0.0/12")
+    
+    for network in "${vpn_networks[@]}"; do
+        # Check if rule already exists
+        if ! iptables -t nat -C POSTROUTING -s "$network" -o "$primary_interface" -j MASQUERADE 2>/dev/null; then
+            if iptables -t nat -A POSTROUTING -s "$network" -o "$primary_interface" -j MASQUERADE; then
+                [ "$debug" = true ] && log "Added masquerading rule for $network"
+            else
+                warning "Failed to add masquerading rule for $network"
+            fi
+        else
+            [ "$debug" = true ] && log "Masquerading rule for $network already exists"
+        fi
+    done
+    
+    # Ensure FORWARD policy allows VPN traffic
+    [ "$debug" = true ] && log "Configuring FORWARD policy..."
+    
+    # Change UFW forward policy to ACCEPT
+    local ufw_defaults="/etc/default/ufw"
+    if [ -f "$ufw_defaults" ]; then
+        if grep -q '^DEFAULT_FORWARD_POLICY="DROP"' "$ufw_defaults"; then
+            sed -i 's/^DEFAULT_FORWARD_POLICY="DROP"/DEFAULT_FORWARD_POLICY="ACCEPT"/' "$ufw_defaults"
+            [ "$debug" = true ] && log "Changed UFW forward policy to ACCEPT"
+            
+            # Reload UFW to apply changes
+            if ufw reload >/dev/null 2>&1; then
+                [ "$debug" = true ] && log "UFW reloaded with new forward policy"
+            else
+                warning "Failed to reload UFW"
+            fi
+        else
+            [ "$debug" = true ] && log "UFW forward policy already set to ACCEPT"
+        fi
+    fi
+    
+    # Set iptables FORWARD policy to ACCEPT
+    if iptables -P FORWARD ACCEPT 2>/dev/null; then
+        [ "$debug" = true ] && log "Set iptables FORWARD policy to ACCEPT"
+    else
+        warning "Failed to set iptables FORWARD policy"
+    fi
+    
+    # Add FORWARD rules for established connections
+    if ! iptables -C FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null; then
+        if iptables -I FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT; then
+            [ "$debug" = true ] && log "Added FORWARD rule for established connections"
+        else
+            warning "Failed to add FORWARD rule for established connections"
+        fi
+    fi
+    
+    log "✓ VPN traffic routing configured"
+    return 0
+}
+
+# Save iptables rules permanently
+save_iptables_rules() {
+    local debug=${1:-false}
+    
+    [ "$debug" = true ] && log "Saving iptables rules permanently..."
+    
+    # Try different methods to save iptables rules
+    if command -v iptables-save >/dev/null 2>&1 && command -v netfilter-persistent >/dev/null 2>&1; then
+        # Method 1: netfilter-persistent (preferred for Ubuntu/Debian)
+        if netfilter-persistent save >/dev/null 2>&1; then
+            [ "$debug" = true ] && log "Iptables rules saved with netfilter-persistent"
+            return 0
+        fi
+    fi
+    
+    if command -v iptables-save >/dev/null 2>&1; then
+        # Method 2: Manual save to rules file
+        local rules_file="/etc/iptables/rules.v4"
+        mkdir -p "$(dirname "$rules_file")" 2>/dev/null
+        
+        if iptables-save > "$rules_file" 2>/dev/null; then
+            [ "$debug" = true ] && log "Iptables rules saved to $rules_file"
+            
+            # Create restore script for systemd
+            local restore_script="/etc/systemd/system/iptables-restore.service"
+            cat > "$restore_script" << 'EOF'
+[Unit]
+Description=Restore iptables rules
+Before=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/iptables-restore /etc/iptables/rules.v4
+ExecReload=/sbin/iptables-restore /etc/iptables/rules.v4
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+            
+            # Enable the service
+            if systemctl enable iptables-restore.service >/dev/null 2>&1; then
+                [ "$debug" = true ] && log "Iptables restore service enabled"
+            fi
+            
+            return 0
+        fi
+    fi
+    
+    warning "Could not save iptables rules permanently"
+    warning "Rules will be lost on reboot - consider installing iptables-persistent"
+    return 1
+}
+
+# Complete VPN network setup (IP forwarding + routing + firewall)
+setup_vpn_network() {
+    local server_port="$1"
+    local debug=${2:-false}
+    
+    [ "$debug" = true ] && log "Setting up complete VPN network configuration..."
+    
+    if [ -z "$server_port" ]; then
+        error "Missing required parameter: server_port"
+        return 1
+    fi
+    
+    # Step 1: Enable IP forwarding
+    enable_ip_forwarding "$debug" || {
+        error "Failed to enable IP forwarding"
+        return 1
+    }
+    
+    # Step 2: Setup VPN traffic routing
+    setup_vpn_routing "$debug" || {
+        error "Failed to setup VPN routing"
+        return 1
+    }
+    
+    # Step 3: Configure firewall for VPN port
+    setup_xray_firewall "$server_port" "$debug" || {
+        error "Failed to setup VPN firewall"
+        return 1
+    }
+    
+    # Step 4: Save iptables rules
+    save_iptables_rules "$debug" || {
+        warning "Failed to save iptables rules permanently"
+    }
+    
+    log "✓ Complete VPN network configuration completed"
+    return 0
+}
+
+# =============================================================================
 # EXPORT FUNCTIONS
 # =============================================================================
 
@@ -409,6 +634,10 @@ export -f setup_outline_firewall
 export -f verify_port_access
 export -f remove_port_rule
 export -f show_firewall_status
+export -f enable_ip_forwarding
+export -f setup_vpn_routing
+export -f save_iptables_rules
+export -f setup_vpn_network
 
 # =============================================================================
 # FIREWALL CLEANUP FUNCTIONS
@@ -427,8 +656,8 @@ cleanup_unused_vpn_ports() {
         return 0
     fi
     
-    # Get all currently allowed VPN-related ports (exclude standard ports)
-    local allowed_ports=$(ufw status numbered 2>/dev/null | grep -E "ALLOW.*tcp" | grep -v -E "22/tcp|80/tcp|443/tcp|OpenSSH" | awk '{print $2}' | cut -d'/' -f1 | sort -n)
+    # Get all currently allowed VPN-related ports (high ports typically used by VPN)
+    local allowed_ports=$(ufw status numbered 2>/dev/null | grep -E "ALLOW.*tcp" | grep -v -E "22/tcp|80/tcp|443/tcp|OpenSSH|9000/tcp" | awk '{print $2}' | cut -d'/' -f1 | awk '$1 >= 10000' | sort -n)
     
     if [ -z "$allowed_ports" ]; then
         [ "$debug" = true ] && log "No VPN ports found in firewall"
@@ -454,11 +683,17 @@ cleanup_unused_vpn_ports() {
     
     # Method 2: Check actual listening ports on system
     if command -v netstat >/dev/null 2>&1; then
-        local system_ports=$(netstat -tlnp 2>/dev/null | grep ":.*LISTEN" | sed 's/.*:\([0-9]*\) .*/\1/' | sort -n | uniq)
+        local system_ports=$(netstat -tlnp 2>/dev/null | grep ":.*LISTEN" | awk '{print $4}' | sed 's/.*://' | awk '$1 >= 10000' | sort -n | uniq)
         listening_ports="$listening_ports $system_ports"
     elif command -v ss >/dev/null 2>&1; then
-        local system_ports=$(ss -tlnp 2>/dev/null | grep LISTEN | sed 's/.*:\([0-9]*\) .*/\1/' | sort -n | uniq)
+        local system_ports=$(ss -tlnp 2>/dev/null | grep LISTEN | awk '{print $4}' | sed 's/.*://' | awk '$1 >= 10000' | sort -n | uniq)
         listening_ports="$listening_ports $system_ports"
+    fi
+    
+    # Method 3: Check Docker container ports
+    if command -v docker >/dev/null 2>&1; then
+        local docker_ports=$(docker ps --format "table {{.Ports}}" 2>/dev/null | grep -o '[0-9]*->' | sed 's/->//' | awk '$1 >= 10000' | sort -n | uniq)
+        listening_ports="$listening_ports $docker_ports"
     fi
     
     # Add current port if provided

@@ -566,16 +566,14 @@ setup_firewall() {
     # Lazy load firewall module
     load_module_lazy "install/firewall.sh" || return 1
     
-    # Clean up unused VPN ports first (for reinstallation)
-    if [ "$REINSTALL_MODE" = true ]; then
-        log "Cleaning up unused VPN ports from previous installations..."
-        cleanup_unused_vpn_ports "$SERVER_PORT" true false  # non-interactive mode
-    fi
+    # Clean up unused VPN ports first (always check for cleanup)
+    log "Checking for unused VPN ports in firewall..."
+    cleanup_unused_vpn_ports "$SERVER_PORT" true false  # non-interactive mode
     
-    # Configure firewall for the selected protocol
+    # Configure network and firewall for the selected protocol
     if [ "$PROTOCOL" = "vless-reality" ]; then
-        setup_xray_firewall "$SERVER_PORT" true || {
-            error "Failed to configure Xray firewall"
+        setup_vpn_network "$SERVER_PORT" true || {
+            error "Failed to configure VPN network and firewall"
             return 1
         }
     elif [ "$PROTOCOL" = "outline" ]; then
