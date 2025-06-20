@@ -57,6 +57,12 @@ handle_server_install() {
         return 1
     }
     
+    # Load prerequisites module for system detection
+    load_module_lazy "install/prerequisites.sh" || {
+        error "Failed to load prerequisites module"
+        return 1
+    }
+    
     # Now check system prerequisites
     detect_system_info true
     
