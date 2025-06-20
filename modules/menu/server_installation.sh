@@ -100,7 +100,7 @@ run_server_installation() {
     # Step 3: Check existing installations
     echo -e "\n${YELLOW}Step 3: Checking for existing installations...${NC}"
     log "Checking for existing $PROTOCOL installations..."
-    if ! check_existing_installation "$PROTOCOL"; then
+    if ! check_existing_vpn_installation "$PROTOCOL"; then
         error "Installation check failed"
         error "Failed to check for existing installations or user cancelled"
         return 1
@@ -243,6 +243,110 @@ show_final_configuration() {
     echo -e "${BLUE}Private Key:${NC} ${PRIVATE_KEY:0:10}..."
     echo -e "${BLUE}Public Key:${NC} ${PUBLIC_KEY:0:10}..."
     echo -e "${BLUE}Short ID:${NC} $SHORT_ID"
+}
+
+# =============================================================================
+# INSTALLATION CHECKING FUNCTIONS
+# =============================================================================
+
+# Check for existing VPN installations
+check_existing_vpn_installation() {
+    local protocol="${1:-}"
+    local found=false
+    local existing_server=""
+    
+    log "Checking for existing $protocol installation..."
+    
+    # Check based on protocol
+    case "$protocol" in
+        "vless-reality")
+            # Check for Xray installation
+            if [ -d "$WORK_DIR" ] && [ -f "$WORK_DIR/docker-compose.yml" ]; then
+                if docker ps --format "table {{.Names}}" | grep -q "xray"; then
+                    found=true
+                    existing_server="Xray/VLESS server (running)"
+                elif docker ps -a --format "table {{.Names}}" | grep -q "xray"; then
+                    found=true
+                    existing_server="Xray/VLESS server (stopped)"
+                fi
+            fi
+            ;;
+        "outline")
+            # Check for Outline installation
+            local outline_dir="${OUTLINE_DIR:-/opt/outline}"
+            if [ -d "$outline_dir" ] || docker ps -a --format "table {{.Names}}" | grep -q "shadowbox"; then
+                if docker ps --format "table {{.Names}}" | grep -q "shadowbox"; then
+                    found=true
+                    existing_server="Outline VPN server (running)"
+                elif docker ps -a --format "table {{.Names}}" | grep -q "shadowbox"; then
+                    found=true
+                    existing_server="Outline VPN server (stopped)"
+                fi
+            fi
+            ;;
+        *)
+            error "Unknown protocol: $protocol"
+            return 1
+            ;;
+    esac
+    
+    # If server found, prompt user
+    if [ "$found" = true ]; then
+        echo -e "\n${YELLOW}⚠️  Existing installation detected:${NC}"
+        echo -e "• $existing_server"
+        echo -e "${YELLOW}Installing a new server will replace the existing one.${NC}\n"
+        
+        echo "Choose an action:"
+        echo "1) Reinstall (remove existing and install new)"
+        echo "2) Cancel installation"
+        
+        while true; do
+            read -p "Select option (1-2): " choice
+            case $choice in
+                1)
+                    log "User chose to reinstall"
+                    
+                    # Remove existing installation based on protocol
+                    case "$protocol" in
+                        "vless-reality")
+                            log "Removing existing Xray installation..."
+                            if docker ps | grep -q "xray"; then
+                                cd "$WORK_DIR" 2>/dev/null && docker-compose down 2>/dev/null || true
+                            fi
+                            docker rm -f xray 2>/dev/null || true
+                            rm -rf "$WORK_DIR" 2>/dev/null || true
+                            ;;
+                        "outline")
+                            log "Removing existing Outline installation..."
+                            docker rm -f shadowbox watchtower 2>/dev/null || true
+                            rm -rf "${outline_dir}" 2>/dev/null || true
+                            # Remove any Outline-related firewall rules
+                            if command -v ufw >/dev/null 2>&1; then
+                                ufw status numbered | grep -E "9000|Outline" | awk '{print $2}' | sort -r | while read -r num; do
+                                    ufw --force delete "$num" 2>/dev/null || true
+                                done
+                            fi
+                            ;;
+                    esac
+                    
+                    log "Existing installations removed"
+                    return 0
+                    ;;
+                2)
+                    log "Installation cancelled by user"
+                    echo -e "${YELLOW}Installation cancelled.${NC}"
+                    exit 0
+                    ;;
+                *)
+                    warning "Please choose 1 or 2"
+                    ;;
+            esac
+        done
+    else
+        log "No existing VPN installations found"
+    fi
+    
+    return 0
 }
 
 # =============================================================================
@@ -421,6 +525,7 @@ setup_firewall() {
 
 # Export functions for use by other modules
 export -f run_server_installation
+export -f check_existing_vpn_installation
 export -f select_vpn_protocol
 export -f get_port_config_interactive
 export -f get_user_config_interactive
