@@ -114,6 +114,12 @@ create_xray_config_reality() {
         *) secondary_sni="addons.mozilla.org" ;;
     esac
     
+    # Check if TCP_FASTOPEN is supported (to avoid warnings)
+    local tcp_fastopen_supported=""
+    if [ -f "/proc/sys/net/ipv4/tcp_fastopen" ] && [ "$(cat /proc/sys/net/ipv4/tcp_fastopen 2>/dev/null)" != "0" ]; then
+        tcp_fastopen_supported='"tcpFastOpen": true,'
+    fi
+    
     cat > "$config_file" <<EOL
 {
   "log": {
@@ -194,7 +200,7 @@ create_xray_config_reality() {
           "acceptProxyProtocol": false
         },
         "sockopt": {
-          "tcpFastOpen": true,
+          $tcp_fastopen_supported
           "tcpKeepAliveInterval": 30
         }
       },
@@ -214,7 +220,7 @@ create_xray_config_reality() {
       },
       "streamSettings": {
         "sockopt": {
-          "tcpFastOpen": true,
+          $tcp_fastopen_supported
           "tcpKeepAliveInterval": 30
         }
       }

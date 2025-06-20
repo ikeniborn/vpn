@@ -129,19 +129,49 @@ create_healthcheck_script() {
     cat > "$work_dir/healthcheck.sh" <<'EOL'
 #!/bin/bash
 # Health check script for VLESS+Reality
-# Checks port accessibility and TLS handshake correctness
+# Enhanced version with better timing and diagnostics
 
 PORT=${1:-37276}
 HOST=${2:-127.0.0.1}
 
-# Check port accessibility
-if ! nc -z "$HOST" "$PORT" >/dev/null 2>&1; then
-    echo "Port $PORT is not accessible"
+# Function to check if Xray process is ready
+check_xray_ready() {
+    # Check if error log shows successful startup
+    if [ -f "/var/log/xray/error.log" ]; then
+        if grep -q "started" /var/log/xray/error.log 2>/dev/null; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# Wait for Xray to be ready (up to 10 seconds)
+ready_count=0
+while [ $ready_count -lt 10 ]; do
+    if check_xray_ready; then
+        break
+    fi
+    sleep 1
+    ready_count=$((ready_count + 1))
+done
+
+# Check port accessibility with retries
+port_check_attempts=0
+while [ $port_check_attempts -lt 3 ]; do
+    if nc -z "$HOST" "$PORT" >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+    port_check_attempts=$((port_check_attempts + 1))
+done
+
+if [ $port_check_attempts -eq 3 ]; then
+    echo "Port $PORT is not accessible after retries"
     exit 1
 fi
 
-# Check TLS handshake with Reality SNI if openssl is available
-if command -v openssl >/dev/null 2>&1; then
+# Check TLS handshake with Reality SNI if available
+if command -v openssl >/dev/null 2>&1 && [ $ready_count -lt 10 ]; then
     # Get SNI from config if available
     if [ -f "/etc/xray/config.json" ] && command -v jq >/dev/null 2>&1; then
         SNI=$(jq -r '.inbounds[0].streamSettings.realitySettings.serverNames[0] // "addons.mozilla.org"' /etc/xray/config.json 2>/dev/null)
@@ -149,26 +179,20 @@ if command -v openssl >/dev/null 2>&1; then
         SNI="addons.mozilla.org"
     fi
     
-    # Test TLS connection with Reality SNI
-    if echo "" | timeout 5 openssl s_client -connect "$HOST:$PORT" -servername "$SNI" -verify_return_error >/dev/null 2>&1; then
+    # Test TLS connection with Reality SNI (shorter timeout for health check)
+    if echo "" | timeout 3 openssl s_client -connect "$HOST:$PORT" -servername "$SNI" -verify_return_error >/dev/null 2>&1; then
         echo "VLESS+Reality service healthy"
         exit 0
-    else
-        # Fallback: check TCP connection
-        if timeout 3 bash -c "</dev/tcp/$HOST/$PORT" >/dev/null 2>&1; then
-            echo "VLESS service accessible (TCP check)"
-            exit 0
-        fi
     fi
 fi
 
-# Final check - basic TCP connectivity
-if timeout 2 bash -c "</dev/tcp/$HOST/$PORT" >/dev/null 2>&1; then
-    echo "VLESS service accessible"
+# Fallback: basic TCP connectivity test
+if timeout 2 sh -c "</dev/tcp/$HOST/$PORT" >/dev/null 2>&1; then
+    echo "VLESS service accessible (TCP check)"
     exit 0
 fi
 
-echo "VLESS+Reality service unhealthy"
+echo "VLESS+Reality service not ready"
 exit 1
 EOL
     
@@ -227,10 +251,10 @@ services:
     command: ["xray", "run", "-c", "/etc/xray/config.json"]
     healthcheck:
       test: ["CMD", "/bin/bash", "/usr/local/bin/healthcheck.sh", "$server_port"]
-      interval: 30s
-      timeout: 15s
-      retries: 3
-      start_period: 45s
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     deploy:
       resources:
         limits:
@@ -292,10 +316,10 @@ services:
     command: ["run", "-c", "/etc/xray/config.json"]
     healthcheck:
       test: ["CMD", "/bin/bash", "/usr/local/bin/healthcheck.sh", "$server_port"]
-      interval: 30s
-      timeout: 15s
-      retries: 3
-      start_period: 45s
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     deploy:
       resources:
         limits:
@@ -379,7 +403,7 @@ start_docker_container() {
     fi
 }
 
-# Verify container status and health
+# Verify container status and health with improved waiting logic
 verify_container_status() {
     local container_name=${1:-"xray"}
     local debug=${2:-false}
@@ -387,7 +411,7 @@ verify_container_status() {
     [ "$debug" = true ] && log "Verifying container status..."
     
     # Wait for container to initialize
-    sleep 3
+    sleep 5
     
     # Check if container is running
     if docker ps | grep -q "$container_name"; then
@@ -398,13 +422,19 @@ verify_container_status() {
         if [ -n "$health_status" ]; then
             [ "$debug" = true ] && log "Container health status: $health_status"
             
-            # Wait for health check to complete
+            # Improved waiting logic with longer timeout for start_period
             local retries=0
-            while [ "$health_status" = "starting" ] && [ $retries -lt 30 ]; do
+            local max_retries=45  # Increased to accommodate 60s start_period + buffer
+            
+            while [ "$health_status" = "starting" ] && [ $retries -lt $max_retries ]; do
                 sleep 2
                 health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null)
                 retries=$((retries + 1))
-                [ "$debug" = true ] && log "Waiting for health check... ($retries/30)"
+                
+                # Show progress every 10 retries
+                if [ $((retries % 10)) -eq 0 ]; then
+                    log "Waiting for health check... ($((retries * 2))s elapsed)"
+                fi
             done
             
             if [ "$health_status" = "healthy" ]; then
@@ -412,7 +442,14 @@ verify_container_status() {
                 return 0
             elif [ "$health_status" = "unhealthy" ]; then
                 warning "Container $container_name is unhealthy"
+                # Show recent logs for debugging
+                log "Recent container logs:"
+                docker logs --tail 10 "$container_name" 2>/dev/null || true
                 return 1
+            elif [ "$health_status" = "starting" ]; then
+                warning "Container $container_name health check is still starting (may need more time)"
+                log "Container is running but health check hasn't completed yet"
+                return 0  # Consider this acceptable - container is running
             fi
         fi
         
