@@ -1649,6 +1649,181 @@ fix_reality_comprehensive() {
     fi
 }
 
+# Check and show configuration validation errors
+check_config_errors() {
+    if [ "$EUID" -ne 0 ]; then
+        error "Config check requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    log "🔍 Checking Xray configuration for errors..."
+    
+    if [ ! -f "/opt/v2ray/config/config.json" ]; then
+        error "Configuration file not found"
+        return 1
+    fi
+    
+    # Test configuration with detailed output
+    log "Running configuration validation..."
+    echo ""
+    
+    # Run validation and capture output
+    local validation_output=$(docker run --rm -v /opt/v2ray/config:/etc/xray teddysun/xray:latest xray test -c /etc/xray/config.json 2>&1)
+    local validation_result=$?
+    
+    if [ $validation_result -eq 0 ]; then
+        log "✅ Configuration is valid!"
+        echo "$validation_output"
+    else
+        error "❌ Configuration validation failed:"
+        echo "$validation_output"
+        echo ""
+        
+        # Try to identify common issues
+        log "🔍 Analyzing configuration issues..."
+        
+        # Check for common problems
+        if echo "$validation_output" | grep -q "json:"; then
+            error "JSON syntax error detected"
+        fi
+        
+        if echo "$validation_output" | grep -q "privateKey"; then
+            error "Private key format issue"
+        fi
+        
+        if echo "$validation_output" | grep -q "shortIds"; then
+            error "Short IDs format issue"
+        fi
+        
+        # Show current configuration structure
+        echo ""
+        log "📋 Current Reality configuration:"
+        jq '.inbounds[0].streamSettings.realitySettings' /opt/v2ray/config/config.json 2>/dev/null || {
+            error "Failed to read Reality settings"
+        }
+        
+        # Offer to fix
+        echo ""
+        read -p "Would you like to regenerate configuration with safe defaults? (y/n): " fix_choice
+        if [ "$fix_choice" = "y" ] || [ "$fix_choice" = "Y" ]; then
+            fix_config_safe_defaults
+        fi
+    fi
+    
+    return 0
+}
+
+# Fix configuration with safe defaults
+fix_config_safe_defaults() {
+    log "🔧 Regenerating configuration with safe defaults..."
+    
+    # Generate new keys using docker
+    local key_output=$(docker run --rm teddysun/xray:latest xray x25519 2>/dev/null)
+    if [ -z "$key_output" ]; then
+        error "Failed to generate keys"
+        return 1
+    fi
+    
+    local new_private_key=$(echo "$key_output" | grep "Private key:" | awk '{print $3}')
+    local new_public_key=$(echo "$key_output" | grep "Public key:" | awk '{print $3}')
+    
+    # Get current port
+    local port=$(jq -r '.inbounds[0].port' /opt/v2ray/config/config.json 2>/dev/null || echo "443")
+    
+    # Create minimal working configuration
+    cat > /opt/v2ray/config/config.json <<EOF
+{
+  "log": {
+    "loglevel": "warning",
+    "access": "/var/log/xray/access.log",
+    "error": "/var/log/xray/error.log"
+  },
+  "inbounds": [
+    {
+      "port": $port,
+      "protocol": "vless",
+      "settings": {
+        "clients": [],
+        "decryption": "none",
+        "fallbacks": []
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "dest": "www.google.com:443",
+          "xver": 0,
+          "serverNames": [
+            "www.google.com",
+            "google.com"
+          ],
+          "privateKey": "$new_private_key",
+          "shortIds": [
+            "0123456789abcdef"
+          ]
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "settings": {}
+    }
+  ]
+}
+EOF
+
+    # Update key files
+    echo "$new_private_key" > /opt/v2ray/config/private_key.txt
+    echo "$new_public_key" > /opt/v2ray/config/public_key.txt
+    
+    # Add users back
+    log "Re-adding users..."
+    if [ -d "/opt/v2ray/users" ]; then
+        for user_file in /opt/v2ray/users/*.json; do
+            if [ -f "$user_file" ]; then
+                local user_uuid=$(jq -r '.uuid' "$user_file" 2>/dev/null)
+                local user_name=$(basename "$user_file" .json)
+                
+                if [ -n "$user_uuid" ] && [ "$user_uuid" != "null" ]; then
+                    # Add user to config
+                    jq ".inbounds[0].settings.clients += [{\"id\": \"$user_uuid\", \"flow\": \"xtls-rprx-vision\", \"email\": \"$user_name\"}]" \
+                        /opt/v2ray/config/config.json > /opt/v2ray/config/config.json.tmp
+                    mv /opt/v2ray/config/config.json.tmp /opt/v2ray/config/config.json
+                    
+                    # Update user file with new keys
+                    jq ".private_key = \"$new_private_key\" | .public_key = \"$new_public_key\" | .short_id = \"0123456789abcdef\"" \
+                        "$user_file" > "${user_file}.tmp"
+                    mv "${user_file}.tmp" "$user_file"
+                    
+                    log "✓ Re-added user: $user_name"
+                fi
+            fi
+        done
+    fi
+    
+    # Validate new config
+    if docker run --rm -v /opt/v2ray/config:/etc/xray teddysun/xray:latest xray test -c /etc/xray/config.json >/dev/null 2>&1; then
+        log "✅ New configuration is valid!"
+        
+        # Restart server
+        cd /opt/v2ray && docker-compose restart
+        log "✓ Server restarted with safe defaults"
+        
+        echo ""
+        echo "📋 New configuration details:"
+        echo "  Port: $port"
+        echo "  Public key: $new_public_key"
+        echo "  Short ID: 0123456789abcdef"
+        echo ""
+        echo "⚠️  All clients must update their configurations!"
+    else
+        error "New configuration still has errors"
+    fi
+}
+
 # =============================================================================
 # HELP AND VERSION
 # =============================================================================
@@ -1675,6 +1850,7 @@ show_usage() {
     echo "  recreate-docker      Recreate docker-compose with latest healthcheck fixes"
     echo "  test-logging         Test and fix Xray logging configuration"
     echo "  fix-reality-full     Comprehensive Reality fix with new keys and short IDs"
+    echo "  check-config         Check and fix configuration validation errors"
     echo ""
     echo -e "${YELLOW}User Management:${NC}"
     echo "  users                Interactive user management menu"
@@ -1748,6 +1924,9 @@ main() {
             ;;
         "fix-reality-full")
             fix_reality_comprehensive
+            ;;
+        "check-config")
+            check_config_errors
             ;;
         "users")
             handle_user_management
