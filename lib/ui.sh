@@ -48,36 +48,7 @@ show_header() {
 
 # ========================= MENU FUNCTIONS =========================
 
-# Display main VPN management menu
-show_main_menu() {
-    show_header "Управление Xray VPN сервером"
-    
-    echo -e "  ${GREEN}👥 Управление пользователями:${NC}"
-    echo -e "    ${YELLOW}1${NC}  📋 Список пользователей"
-    echo -e "    ${YELLOW}2${NC}  ➕ Добавить пользователя"
-    echo -e "    ${YELLOW}3${NC}  ❌ Удалить пользователя"
-    echo -e "    ${YELLOW}4${NC}  ✏️  Изменить пользователя"
-    echo -e "    ${YELLOW}5${NC}  👤 Показать данные пользователя"
-    echo ""
-    echo -e "  ${GREEN}⚙️  Управление сервером:${NC}"
-    echo -e "    ${YELLOW}6${NC}  📊 Статус сервера"
-    echo -e "    ${YELLOW}7${NC}  🔄 Перезапустить сервер"
-    echo -e "    ${YELLOW}8${NC}  🔐 Ротация Reality ключей"
-    echo ""
-    echo -e "  ${GREEN}📈 Мониторинг и статистика:${NC}"
-    echo -e "    ${YELLOW}9${NC}  📊 Статистика использования"
-    echo -e "    ${YELLOW}10${NC} 📝 Настройка логирования Xray"
-    echo -e "    ${YELLOW}11${NC} 📋 Просмотр логов пользователей"
-    echo -e "    ${YELLOW}12${NC} 🛡️  Управление Watchdog службой"
-    echo ""
-    echo -e "  ${RED}⚠️  Опасная зона:${NC}"
-    echo -e "    ${YELLOW}13${NC} 🗑️  Удалить VPN сервер"
-    echo ""
-    echo -e "    ${YELLOW}0${NC}  🚪 Выход"
-    echo ""
-    separator
-    echo ""
-}
+# Legacy show_main_menu function removed - replaced with modular menu system
 
 # Show installation type selection menu
 show_installation_menu() {
