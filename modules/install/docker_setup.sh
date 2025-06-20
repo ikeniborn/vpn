@@ -127,11 +127,22 @@ create_healthcheck_script() {
     
     # Create healthcheck script
     cat > "$work_dir/healthcheck.sh" <<'EOL'
-#!/bin/bash
+#!/bin/sh
 # Health check script for VLESS+Reality
 # Enhanced version with better timing and diagnostics
 
-PORT=${1:-37276}
+# Get port from config file if not provided as argument
+if [ -n "$1" ] && [ "$1" != "vless-reality" ]; then
+    PORT="$1"
+else
+    # Extract port from Xray config
+    if [ -f "/etc/xray/config.json" ] && command -v jq >/dev/null 2>&1; then
+        PORT=$(jq -r '.inbounds[0].port' /etc/xray/config.json 2>/dev/null)
+    else
+        PORT=37276  # fallback
+    fi
+fi
+
 HOST=${2:-127.0.0.1}
 
 # Function to check if Xray process is ready
@@ -143,8 +154,8 @@ check_xray_ready() {
         fi
     fi
     
-    # Check if Xray process is running
-    if pgrep -f "xray" >/dev/null 2>&1; then
+    # Check if Xray process is running (use ps instead of pgrep for compatibility)
+    if ps aux | grep -v grep | grep -q "xray" >/dev/null 2>&1; then
         return 0
     fi
     
@@ -164,8 +175,16 @@ done
 # Check port accessibility with retries
 port_check_attempts=0
 while [ $port_check_attempts -lt 3 ]; do
-    if nc -z "$HOST" "$PORT" >/dev/null 2>&1; then
-        break
+    # Try netcat first, then fallback to /dev/tcp
+    if command -v nc >/dev/null 2>&1; then
+        if nc -z "$HOST" "$PORT" >/dev/null 2>&1; then
+            break
+        fi
+    else
+        # Fallback: try to connect using /dev/tcp (may not work in all containers)
+        if timeout 2 sh -c "</dev/tcp/$HOST/$PORT" >/dev/null 2>&1; then
+            break
+        fi
     fi
     sleep 1
     port_check_attempts=$((port_check_attempts + 1))
@@ -241,7 +260,7 @@ services:
       - TZ=Europe/Moscow
     command: ["xray", "run", "-c", "/etc/xray/config.json"]
     healthcheck:
-      test: ["CMD", "/bin/sh", "/usr/local/bin/healthcheck.sh", "$server_port"]
+      test: ["CMD", "/bin/sh", "/usr/local/bin/healthcheck.sh"]
       interval: 30s
       timeout: 15s
       retries: 3
@@ -306,7 +325,7 @@ services:
     entrypoint: ["/usr/bin/xray"]
     command: ["run", "-c", "/etc/xray/config.json"]
     healthcheck:
-      test: ["CMD", "/bin/sh", "/usr/local/bin/healthcheck.sh", "$server_port"]
+      test: ["CMD", "/bin/sh", "/usr/local/bin/healthcheck.sh"]
       interval: 30s
       timeout: 15s
       retries: 3
