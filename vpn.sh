@@ -1315,8 +1315,12 @@ recreate_docker() {
         return 1
     }
     
-    # Recreate docker-compose.yml and healthcheck
-    log "Recreating docker-compose configuration..."
+    # Recreate docker-compose.yml and healthcheck with debug
+    log "Recreating docker-compose configuration with debug..."
+    
+    # Create debug healthcheck temporarily
+    create_debug_healthcheck "/opt/v2ray" "$server_port"
+    
     create_docker_compose "/opt/v2ray" "$server_port" true || {
         error "Failed to recreate docker-compose"
         return 1
@@ -1330,6 +1334,114 @@ recreate_docker() {
     log "⏱️  Wait 2-3 minutes for healthcheck to complete"
     
     return 0
+}
+
+# Create debug version of healthcheck for troubleshooting
+create_debug_healthcheck() {
+    local work_dir="$1" 
+    local server_port="$2"
+    
+    cat > "$work_dir/healthcheck.sh" <<'EOF'
+#!/bin/sh
+# Health check script for VLESS+Reality (DEBUG VERSION)
+# Enhanced version with debug logging
+
+# Debug: log all inputs for troubleshooting  
+echo "$(date): DEBUG: Argument 1: '$1'" >> /tmp/healthcheck.log
+echo "$(date): DEBUG: SERVER_PORT env: '$SERVER_PORT'" >> /tmp/healthcheck.log
+
+# Get port from environment variable, argument, or config file
+if [ -n "$SERVER_PORT" ]; then
+    PORT="$SERVER_PORT"
+    echo "$(date): DEBUG: Using SERVER_PORT: $PORT" >> /tmp/healthcheck.log
+elif [ -n "$1" ] && [ "$1" != "vless-reality" ]; then
+    PORT="$1"
+    echo "$(date): DEBUG: Using argument: $PORT" >> /tmp/healthcheck.log
+else
+    # Extract port from Xray config using multiple methods
+    if [ -f "/etc/xray/config.json" ]; then
+        # Try jq first
+        if command -v jq >/dev/null 2>&1; then
+            PORT=$(jq -r '.inbounds[0].port' /etc/xray/config.json 2>/dev/null)
+            echo "$(date): DEBUG: From jq: $PORT" >> /tmp/healthcheck.log
+        fi
+        
+        # Fallback: use grep/sed to extract port
+        if [ -z "$PORT" ] || [ "$PORT" = "null" ]; then
+            PORT=$(grep -o '"port"[[:space:]]*:[[:space:]]*[0-9]*' /etc/xray/config.json | head -1 | sed 's/.*:[[:space:]]*//')
+            echo "$(date): DEBUG: From grep: $PORT" >> /tmp/healthcheck.log
+        fi
+    fi
+    
+    # Final fallback
+    if [ -z "$PORT" ] || [ "$PORT" = "null" ]; then
+        PORT=37276
+        echo "$(date): DEBUG: Using fallback: $PORT" >> /tmp/healthcheck.log
+    fi
+fi
+
+echo "$(date): DEBUG: Final PORT: $PORT" >> /tmp/healthcheck.log
+
+HOST=${2:-127.0.0.1}
+
+# Function to check if Xray process is ready
+check_xray_ready() {
+    if [ -f "/var/log/xray/error.log" ]; then
+        if grep -q "started" /var/log/xray/error.log 2>/dev/null; then
+            return 0
+        fi
+    fi
+    
+    if ps aux | grep -v grep | grep -q "xray" >/dev/null 2>&1; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# Wait for Xray to be ready (up to 10 seconds)
+ready_count=0
+while [ $ready_count -lt 10 ]; do
+    if check_xray_ready; then
+        break
+    fi
+    sleep 1
+    ready_count=$((ready_count + 1))
+done
+
+# Check port accessibility with retries
+port_check_attempts=0
+while [ $port_check_attempts -lt 3 ]; do
+    if command -v nc >/dev/null 2>&1; then
+        if nc -z "$HOST" "$PORT" >/dev/null 2>&1; then
+            break
+        fi
+    else
+        if timeout 2 sh -c "</dev/tcp/$HOST/$PORT" >/dev/null 2>&1; then
+            break
+        fi
+    fi
+    sleep 1
+    port_check_attempts=$((port_check_attempts + 1))
+done
+
+echo "$(date): DEBUG: Port check attempts: $port_check_attempts, Ready count: $ready_count" >> /tmp/healthcheck.log
+
+if [ $port_check_attempts -eq 3 ]; then
+    echo "Port $PORT is not accessible after retries"
+    exit 1
+fi
+
+if [ $port_check_attempts -lt 3 ] && [ $ready_count -lt 10 ]; then
+    echo "VLESS+Reality service healthy (port accessible, process running)"
+    exit 0
+fi
+
+echo "VLESS+Reality service not ready (port: $port_check_attempts/3, process: $ready_count/10)"
+exit 1
+EOF
+
+    chmod +x "$work_dir/healthcheck.sh"
 }
 
 # =============================================================================
