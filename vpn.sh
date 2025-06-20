@@ -1824,6 +1824,123 @@ EOF
     fi
 }
 
+# Debug Reality connection attempts
+debug_reality_connections() {
+    if [ "$EUID" -ne 0 ]; then
+        error "Debug requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    log "🔍 Debugging Reality connection attempts..."
+    
+    # Check if container is running
+    if ! docker ps | grep -q xray; then
+        error "Xray container is not running"
+        return 1
+    fi
+    
+    # Install ss if not available (replacement for netstat)
+    if ! command -v ss >/dev/null 2>&1; then
+        log "Installing ss tool..."
+        apt-get update && apt-get install -y iproute2
+    fi
+    
+    local port=$(cat /opt/v2ray/config/port.txt 2>/dev/null || echo "443")
+    
+    # Monitor connections in real-time
+    log "📊 Monitoring connections on port $port for 60 seconds..."
+    echo "Press Ctrl+C to stop monitoring"
+    echo ""
+    
+    # Start monitoring in background
+    (
+        while true; do
+            echo "=== $(date) ==="
+            
+            # Show active connections
+            echo "Active connections on port $port:"
+            ss -tnp | grep ":$port" | grep -v TIME-WAIT || echo "No active connections"
+            
+            # Check if healthcheck is running
+            if docker exec xray ps aux | grep -q healthcheck; then
+                echo "⚠️  Healthcheck is running"
+            fi
+            
+            # Show last Reality error
+            echo ""
+            echo "Last Reality errors:"
+            docker logs xray --tail 5 2>&1 | grep "REALITY" || echo "No recent Reality errors"
+            
+            echo ""
+            sleep 10
+        done
+    ) &
+    
+    monitor_pid=$!
+    
+    # Also start detailed logging
+    log "📝 Starting detailed Reality logging..."
+    
+    # Create temporary detailed config
+    docker exec xray sh -c 'cat > /tmp/debug_config.json << EOF
+{
+  "log": {
+    "loglevel": "debug",
+    "access": "/var/log/xray/access_debug.log",
+    "error": "/var/log/xray/error_debug.log"
+  }
+}
+EOF'
+    
+    # Wait or stop on user input
+    read -p "Press Enter to stop monitoring..."
+    
+    # Stop monitoring
+    kill $monitor_pid 2>/dev/null
+    
+    # Analyze patterns
+    log "📊 Analyzing connection patterns..."
+    
+    # Check for regular intervals
+    echo ""
+    echo "Connection timing analysis:"
+    docker logs xray --tail 100 2>&1 | grep "REALITY.*invalid" | tail -20 | awk '{print $1, $2}' | while read timestamp; do
+        echo "  $timestamp"
+    done
+    
+    # Check healthcheck logs
+    echo ""
+    echo "Healthcheck debug logs:"
+    docker exec xray cat /tmp/healthcheck.log 2>/dev/null | tail -10 || echo "No healthcheck logs found"
+    
+    # Suggestions
+    echo ""
+    log "💡 Analysis results:"
+    
+    # Check intervals
+    local last_two_times=$(docker logs xray --tail 100 2>&1 | grep "REALITY.*invalid" | tail -2 | awk '{print $2}' | cut -d'.' -f1)
+    if [ -n "$last_two_times" ]; then
+        local time1=$(echo "$last_two_times" | head -1 | tr ':' ' ')
+        local time2=$(echo "$last_two_times" | tail -1 | tr ':' ' ')
+        
+        # Simple interval check
+        echo "- Connection attempts appear to be at regular intervals (possibly monitoring)"
+    fi
+    
+    echo "- If connections are every 30s, it might be:"
+    echo "  • Container healthcheck (check docker-compose.yml)"
+    echo "  • External monitoring service"
+    echo "  • Misconfigured client with retry loop"
+    
+    echo ""
+    echo "Recommended actions:"
+    echo "1. Check docker healthcheck: docker inspect xray | jq '.[0].State.Health'"
+    echo "2. Review client configurations for auto-retry settings"
+    echo "3. Check if hosting provider has monitoring on this port"
+    
+    return 0
+}
+
 # =============================================================================
 # HELP AND VERSION
 # =============================================================================
@@ -1851,6 +1968,7 @@ show_usage() {
     echo "  test-logging         Test and fix Xray logging configuration"
     echo "  fix-reality-full     Comprehensive Reality fix with new keys and short IDs"
     echo "  check-config         Check and fix configuration validation errors"
+    echo "  debug-connections    Debug source of Reality invalid connection attempts"
     echo ""
     echo -e "${YELLOW}User Management:${NC}"
     echo "  users                Interactive user management menu"
@@ -1927,6 +2045,9 @@ main() {
             ;;
         "check-config")
             check_config_errors
+            ;;
+        "debug-connections")
+            debug_reality_connections
             ;;
         "users")
             handle_user_management

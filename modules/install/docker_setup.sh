@@ -186,16 +186,18 @@ while [ $ready_count -lt 10 ]; do
 done
 
 # Check port accessibility with retries
+# For Reality protocol, we only check if port is open, not try to connect
 port_check_attempts=0
 while [ $port_check_attempts -lt 3 ]; do
-    # Try netcat first, then fallback to /dev/tcp
+    # Check if port is listening without establishing connection
     if command -v nc >/dev/null 2>&1; then
-        if nc -z "$HOST" "$PORT" >/dev/null 2>&1; then
+        # Use -z flag for zero I/O mode (just check if port is open)
+        if nc -z -w1 "$HOST" "$PORT" >/dev/null 2>&1; then
             break
         fi
     else
-        # Fallback: try to connect using /dev/tcp (may not work in all containers)
-        if timeout 2 sh -c "</dev/tcp/$HOST/$PORT" >/dev/null 2>&1; then
+        # Alternative: check if xray process is listening on the port
+        if ps aux | grep -v grep | grep "xray.*$PORT" >/dev/null 2>&1; then
             break
         fi
     fi
