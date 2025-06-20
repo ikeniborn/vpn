@@ -363,6 +363,7 @@ check_existing_vpn_installation() {
             case $choice in
                 1)
                     log "User chose to reinstall"
+                    export REINSTALL_MODE=true
                     
                     # Remove existing installation based on protocol
                     case "$protocol" in
@@ -564,6 +565,12 @@ setup_firewall() {
     
     # Lazy load firewall module
     load_module_lazy "install/firewall.sh" || return 1
+    
+    # Clean up unused VPN ports first (for reinstallation)
+    if [ "$REINSTALL_MODE" = true ]; then
+        log "Cleaning up unused VPN ports from previous installations..."
+        cleanup_unused_vpn_ports "$SERVER_PORT" true
+    fi
     
     # Configure firewall for the selected protocol
     if [ "$PROTOCOL" = "vless-reality" ]; then

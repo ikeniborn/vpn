@@ -45,10 +45,11 @@ show_main_menu() {
     echo "  6)  🛡️  Watchdog Service"
     echo "  7)  🔧 Fix Reality Issues"
     echo "  8)  ✅ Validate Configuration"
+    echo "  9)  🔍 Diagnose Reality Issues"
     echo ""
     echo -e "${YELLOW}Help & Info:${NC}"
-    echo "  9)  ❓ Show Help"
-    echo "  10) ℹ️  Show Version"
+    echo "  10) ❓ Show Help"
+    echo "  11) ℹ️  Show Version"
     echo ""
     echo -e "${RED}  0)  🚪 Exit${NC}"
     echo ""
@@ -87,10 +88,13 @@ handle_menu_choice() {
             handle_validate_config
             ;;
         9)
+            handle_diagnose_reality
+            ;;
+        10)
             show_usage
             read -p "Press Enter to continue..."
             ;;
-        10)
+        11)
             show_version
             read -p "Press Enter to continue..."
             ;;
@@ -99,7 +103,7 @@ handle_menu_choice() {
             exit 0
             ;;
         *)
-            warning "Invalid option. Please choose 0-10."
+            warning "Invalid option. Please choose 0-11."
             ;;
     esac
 }
@@ -146,7 +150,7 @@ run_interactive_menu() {
     
     while true; do
         show_main_menu
-        read -p "Select option (0-10): " choice
+        read -p "Select option (0-11): " choice
         
         # Handle errors gracefully
         handle_menu_choice "$choice" || {
@@ -211,6 +215,23 @@ handle_validate_config() {
     read
 }
 
+# Handler for Diagnose Reality Issues option
+handle_diagnose_reality() {
+    echo -e "${BLUE}🔍 Запуск диагностики Reality соединений...${NC}"
+    echo
+    
+    # Call the diagnose function from vpn.sh
+    if diagnose_reality; then
+        echo -e "${GREEN}✅ Диагностика завершена${NC}"
+    else
+        echo -e "${RED}❌ Ошибка при выполнении диагностики${NC}"
+    fi
+    
+    echo
+    echo -e "${CYAN}Нажмите Enter для продолжения...${NC}"
+    read
+}
+
 # =============================================================================
 # EXPORT FUNCTIONS
 # =============================================================================
@@ -221,4 +242,5 @@ export -f handle_menu_choice
 export -f handle_watchdog_menu
 export -f handle_fix_reality
 export -f handle_validate_config
+export -f handle_diagnose_reality
 export -f run_interactive_menu

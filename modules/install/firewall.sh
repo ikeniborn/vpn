@@ -410,6 +410,87 @@ export -f verify_port_access
 export -f remove_port_rule
 export -f show_firewall_status
 
+# =============================================================================
+# FIREWALL CLEANUP FUNCTIONS
+# =============================================================================
+
+# Clean up unused VPN ports from firewall
+cleanup_unused_vpn_ports() {
+    local current_port="$1"
+    local debug=${2:-false}
+    
+    [ "$debug" = true ] && log "Cleaning up unused VPN ports from firewall..."
+    
+    if ! command -v ufw >/dev/null 2>&1; then
+        [ "$debug" = true ] && log "UFW not available, skipping port cleanup"
+        return 0
+    fi
+    
+    # Get list of currently allowed ports for VPN services
+    local allowed_ports=$(ufw status numbered 2>/dev/null | grep -E "ALLOW.*tcp" | grep -v "22\|80\|443" | awk '{print $2}' | cut -d'/' -f1)
+    
+    # Get listening ports from running containers
+    local listening_ports=""
+    if command -v docker >/dev/null 2>&1; then
+        # Check Xray container
+        if docker ps | grep -q xray; then
+            local xray_port=$(docker port xray 2>/dev/null | head -1 | cut -d':' -f2)
+            [ -n "$xray_port" ] && listening_ports="$listening_ports $xray_port"
+        fi
+        
+        # Check Outline/Shadowbox container  
+        if docker ps | grep -q shadowbox; then
+            local outline_ports=$(docker port shadowbox 2>/dev/null | cut -d':' -f2)
+            [ -n "$outline_ports" ] && listening_ports="$listening_ports $outline_ports"
+        fi
+    fi
+    
+    # Add current port if provided
+    [ -n "$current_port" ] && listening_ports="$listening_ports $current_port"
+    
+    [ "$debug" = true ] && log "Listening ports: $listening_ports"
+    [ "$debug" = true ] && log "Allowed ports: $allowed_ports"
+    
+    # Remove unused ports
+    local removed_count=0
+    for port in $allowed_ports; do
+        if [ -n "$port" ] && ! echo "$listening_ports" | grep -q "$port"; then
+            [ "$debug" = true ] && log "Removing unused port from firewall: $port"
+            if ufw delete allow "$port/tcp" 2>/dev/null; then
+                log "Removed unused VPN port from firewall: $port/tcp"
+                removed_count=$((removed_count + 1))
+            else
+                warning "Failed to remove port $port from firewall"
+            fi
+        fi
+    done
+    
+    if [ $removed_count -gt 0 ]; then
+        log "Cleaned up $removed_count unused VPN ports from firewall"
+    else
+        [ "$debug" = true ] && log "No unused VPN ports found in firewall"
+    fi
+    
+    return 0
+}
+
+# Get all VPN-related ports from firewall
+get_vpn_firewall_ports() {
+    local debug=${1:-false}
+    
+    if ! command -v ufw >/dev/null 2>&1; then
+        [ "$debug" = true ] && log "UFW not available"
+        return 1
+    fi
+    
+    # List all allowed ports excluding standard ones (SSH, HTTP, HTTPS)
+    ufw status numbered 2>/dev/null | grep -E "ALLOW.*tcp" | grep -v -E "22|80|443" | awk '{print $2}' | cut -d'/' -f1
+}
+
+# Export new functions
+export -f cleanup_unused_vpn_ports
+export -f get_vpn_firewall_ports
+
 # Debug mode check
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     # Script is being run directly, show current status
