@@ -1444,6 +1444,85 @@ EOF
     chmod +x "$work_dir/healthcheck.sh"
 }
 
+# Test and fix logging configuration
+test_logging() {
+    if [ "$EUID" -ne 0 ]; then
+        error "Logging test requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    log "🔍 Testing Xray logging configuration..."
+    
+    if [ ! -d "/opt/v2ray" ]; then
+        error "No Xray installation found"
+        return 1
+    fi
+    
+    # Check if container is running
+    if ! docker ps | grep -q xray; then
+        error "Xray container is not running"
+        return 1
+    fi
+    
+    # Check log directory on host
+    log "Checking host log directory..."
+    if [ -d "/opt/v2ray/logs" ]; then
+        log "✓ Host logs directory exists: /opt/v2ray/logs"
+        ls -la /opt/v2ray/logs/
+    else
+        log "❌ Host logs directory missing, creating..."
+        mkdir -p /opt/v2ray/logs
+        chmod 755 /opt/v2ray/logs
+        chown root:root /opt/v2ray/logs
+    fi
+    
+    # Check container log directory
+    log "Checking container log directory..."
+    if docker exec xray ls -la /var/log/xray/ 2>/dev/null; then
+        log "✓ Container logs directory accessible"
+    else
+        log "❌ Container logs directory issue, creating..."
+        docker exec xray mkdir -p /var/log/xray 2>/dev/null || true
+        docker exec xray chmod 755 /var/log/xray 2>/dev/null || true
+    fi
+    
+    # Test writing to logs
+    log "Testing log writing..."
+    docker exec xray touch /var/log/xray/test.log 2>/dev/null || {
+        warning "Cannot create test log file in container"
+    }
+    
+    # Check if logs are being written
+    log "Current log files:"
+    docker exec xray ls -la /var/log/xray/ 2>/dev/null || log "No log files found"
+    
+    # Check Xray process and config
+    log "Checking Xray configuration logs section..."
+    if docker exec xray cat /etc/xray/config.json | grep -A 5 '"log"' 2>/dev/null; then
+        log "✓ Log configuration found in config"
+    else
+        warning "Log configuration not found or not readable"
+    fi
+    
+    # Restart container to apply log fixes
+    read -p "Restart container to apply log fixes? (y/n): " restart_choice
+    if [ "$restart_choice" = "y" ] || [ "$restart_choice" = "Y" ]; then
+        log "Restarting container..."
+        cd /opt/v2ray && docker-compose restart
+        sleep 5
+        log "✓ Container restarted"
+        
+        # Check logs after restart
+        log "Checking logs after restart..."
+        sleep 2
+        if docker exec xray ls -la /var/log/xray/ 2>/dev/null; then
+            log "✓ Logs directory accessible after restart"
+        fi
+    fi
+    
+    return 0
+}
+
 # =============================================================================
 # HELP AND VERSION
 # =============================================================================
@@ -1468,6 +1547,7 @@ show_usage() {
     echo "  update-users         Update all user configs with current server keys"
     echo "  cleanup-firewall     Interactive cleanup of unused VPN ports from firewall"
     echo "  recreate-docker      Recreate docker-compose with latest healthcheck fixes"
+    echo "  test-logging         Test and fix Xray logging configuration"
     echo ""
     echo -e "${YELLOW}User Management:${NC}"
     echo "  users                Interactive user management menu"
@@ -1535,6 +1615,9 @@ main() {
             ;;
         "recreate-docker")
             recreate_docker
+            ;;
+        "test-logging")
+            test_logging
             ;;
         "users")
             handle_user_management

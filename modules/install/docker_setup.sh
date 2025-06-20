@@ -256,6 +256,10 @@ create_docker_compose() {
     # Create healthcheck script for VLESS+Reality
     create_healthcheck_script "$work_dir" "$debug"
     
+    # Ensure logs directory exists with proper permissions
+    mkdir -p "$work_dir/logs"
+    chmod 755 "$work_dir/logs"
+    
     # Create docker-compose.yml with improved health check
     cat > "$work_dir/docker-compose.yml" <<EOF
 version: '3'
@@ -265,6 +269,7 @@ services:
     container_name: xray
     restart: unless-stopped
     network_mode: host
+    user: "0:0"
     volumes:
       - ./config:/etc/xray
       - ./logs:/var/log/xray
@@ -321,6 +326,10 @@ create_backup_docker_compose() {
         calculate_resource_limits "$debug"
     fi
     
+    # Ensure logs directory exists with proper permissions
+    mkdir -p "$work_dir/logs"
+    chmod 755 "$work_dir/logs"
+    
     # Create backup docker-compose.yml with improved health check
     cat > "$work_dir/docker-compose.backup.yml" <<EOF
 version: '3'
@@ -330,6 +339,7 @@ services:
     container_name: xray
     restart: unless-stopped
     network_mode: host
+    user: "0:0"
     volumes:
       - ./config:/etc/xray
       - ./logs:/var/log/xray
