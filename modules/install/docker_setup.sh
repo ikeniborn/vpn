@@ -131,15 +131,28 @@ create_healthcheck_script() {
 # Health check script for VLESS+Reality
 # Enhanced version with better timing and diagnostics
 
-# Get port from config file if not provided as argument
-if [ -n "$1" ] && [ "$1" != "vless-reality" ]; then
+# Get port from environment variable, argument, or config file
+if [ -n "$SERVER_PORT" ]; then
+    PORT="$SERVER_PORT"
+elif [ -n "$1" ] && [ "$1" != "vless-reality" ]; then
     PORT="$1"
 else
-    # Extract port from Xray config
-    if [ -f "/etc/xray/config.json" ] && command -v jq >/dev/null 2>&1; then
-        PORT=$(jq -r '.inbounds[0].port' /etc/xray/config.json 2>/dev/null)
-    else
-        PORT=37276  # fallback
+    # Extract port from Xray config using multiple methods
+    if [ -f "/etc/xray/config.json" ]; then
+        # Try jq first
+        if command -v jq >/dev/null 2>&1; then
+            PORT=$(jq -r '.inbounds[0].port' /etc/xray/config.json 2>/dev/null)
+        fi
+        
+        # Fallback: use grep/sed to extract port
+        if [ -z "$PORT" ] || [ "$PORT" = "null" ]; then
+            PORT=$(grep -o '"port"[[:space:]]*:[[:space:]]*[0-9]*' /etc/xray/config.json | head -1 | sed 's/.*:[[:space:]]*//')
+        fi
+    fi
+    
+    # Final fallback
+    if [ -z "$PORT" ] || [ "$PORT" = "null" ]; then
+        PORT=37276
     fi
 fi
 
@@ -258,6 +271,7 @@ services:
       - ./healthcheck.sh:/usr/local/bin/healthcheck.sh:ro
     environment:
       - TZ=Europe/Moscow
+      - SERVER_PORT=$server_port
     command: ["xray", "run", "-c", "/etc/xray/config.json"]
     healthcheck:
       test: ["CMD", "/bin/sh", "/usr/local/bin/healthcheck.sh"]
@@ -322,6 +336,7 @@ services:
       - ./healthcheck.sh:/usr/local/bin/healthcheck.sh:ro
     environment:
       - TZ=Europe/Moscow
+      - SERVER_PORT=$server_port
     entrypoint: ["/usr/bin/xray"]
     command: ["run", "-c", "/etc/xray/config.json"]
     healthcheck:
