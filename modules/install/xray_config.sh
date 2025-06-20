@@ -97,6 +97,23 @@ create_xray_config_reality() {
     fi
     
     # Create Reality configuration
+    # Generate additional short IDs for better mobile compatibility
+    local additional_short_ids=""
+    if [ -n "$short_id" ]; then
+        # Generate 2 additional short IDs based on the original one
+        local short_id_2=$(echo -n "${short_id}mobile" | sha256sum | cut -c1-16)
+        local short_id_3=$(echo -n "${short_id}backup" | sha256sum | cut -c1-16)
+        additional_short_ids=",\"$short_id_2\",\"$short_id_3\""
+    fi
+    
+    # Determine secondary SNI domain for better compatibility
+    local secondary_sni=""
+    case "$server_sni" in
+        "addons.mozilla.org") secondary_sni="developer.mozilla.org" ;;
+        "developer.mozilla.org") secondary_sni="addons.mozilla.org" ;;
+        *) secondary_sni="addons.mozilla.org" ;;
+    esac
+    
     cat > "$config_file" <<EOL
 {
   "log": {
@@ -117,6 +134,17 @@ create_xray_config_reality() {
       "statsInboundDownlink": true,
       "statsOutboundUplink": true,
       "statsOutboundDownlink": true
+    },
+    "levels": {
+      "0": {
+        "handshake": 4,
+        "connIdle": 300,
+        "uplinkOnly": 2,
+        "downlinkOnly": 5,
+        "statsUserUplink": true,
+        "statsUserDownlink": true,
+        "bufferSize": 10240
+      }
     }
   },
   "inbounds": [
@@ -128,10 +156,17 @@ create_xray_config_reality() {
           {
             "id": "$user_uuid",
             "flow": "xtls-rprx-vision",
-            "email": "$user_name"
+            "email": "$user_name",
+            "level": 0
           }
         ],
-        "decryption": "none"
+        "decryption": "none",
+        "fallbacks": [
+          {
+            "dest": "$server_sni:443",
+            "xver": 1
+          }
+        ]
       },
       "streamSettings": {
         "network": "tcp",
@@ -139,22 +174,35 @@ create_xray_config_reality() {
         "realitySettings": {
           "show": false,
           "dest": "$server_sni:443",
-          "xver": 0,
+          "xver": 1,
           "serverNames": [
-            "$server_sni"
+            "$server_sni",
+            "$secondary_sni"
           ],
           "privateKey": "$private_key",
           "minClientVer": "",
           "maxClientVer": "",
-          "maxTimeDiff": 60000,
+          "maxTimeDiff": 120000,
           "shortIds": [
-            "$short_id"
+            "$short_id"$additional_short_ids
           ]
+        },
+        "tcpSettings": {
+          "header": {
+            "type": "none"
+          },
+          "acceptProxyProtocol": false
+        },
+        "sockopt": {
+          "tcpFastOpen": true,
+          "tcpKeepAliveInterval": 30
         }
       },
       "sniffing": {
         "enabled": true,
-        "destOverride": ["http", "tls", "quic", "fakedns"]
+        "destOverride": ["http", "tls", "quic", "fakedns"],
+        "metadataOnly": false,
+        "routeOnly": false
       }
     }
   ],
@@ -163,6 +211,12 @@ create_xray_config_reality() {
       "protocol": "freedom",
       "settings": {
         "domainStrategy": "UseIPv4"
+      },
+      "streamSettings": {
+        "sockopt": {
+          "tcpFastOpen": true,
+          "tcpKeepAliveInterval": 30
+        }
       }
     },
     {

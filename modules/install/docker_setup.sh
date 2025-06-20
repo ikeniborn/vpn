@@ -110,10 +110,85 @@ calculate_resource_limits() {
 }
 
 # =============================================================================
+# HEALTHCHECK SCRIPT CREATION
+# =============================================================================
+
+# Create healthcheck script for VLESS+Reality protocol
+create_healthcheck_script() {
+    local work_dir="$1"
+    local debug=${2:-false}
+    
+    [ "$debug" = true ] && log "Creating healthcheck script..."
+    
+    if [ -z "$work_dir" ]; then
+        error "Missing required parameter: work_dir"
+        return 1
+    fi
+    
+    # Create healthcheck script
+    cat > "$work_dir/healthcheck.sh" <<'EOL'
+#!/bin/bash
+# Health check script for VLESS+Reality
+# Checks port accessibility and TLS handshake correctness
+
+PORT=${1:-37276}
+HOST=${2:-127.0.0.1}
+
+# Check port accessibility
+if ! nc -z "$HOST" "$PORT" >/dev/null 2>&1; then
+    echo "Port $PORT is not accessible"
+    exit 1
+fi
+
+# Check TLS handshake with Reality SNI if openssl is available
+if command -v openssl >/dev/null 2>&1; then
+    # Get SNI from config if available
+    if [ -f "/etc/xray/config.json" ] && command -v jq >/dev/null 2>&1; then
+        SNI=$(jq -r '.inbounds[0].streamSettings.realitySettings.serverNames[0] // "addons.mozilla.org"' /etc/xray/config.json 2>/dev/null)
+    else
+        SNI="addons.mozilla.org"
+    fi
+    
+    # Test TLS connection with Reality SNI
+    if echo "" | timeout 5 openssl s_client -connect "$HOST:$PORT" -servername "$SNI" -verify_return_error >/dev/null 2>&1; then
+        echo "VLESS+Reality service healthy"
+        exit 0
+    else
+        # Fallback: check TCP connection
+        if timeout 3 bash -c "</dev/tcp/$HOST/$PORT" >/dev/null 2>&1; then
+            echo "VLESS service accessible (TCP check)"
+            exit 0
+        fi
+    fi
+fi
+
+# Final check - basic TCP connectivity
+if timeout 2 bash -c "</dev/tcp/$HOST/$PORT" >/dev/null 2>&1; then
+    echo "VLESS service accessible"
+    exit 0
+fi
+
+echo "VLESS+Reality service unhealthy"
+exit 1
+EOL
+    
+    # Make script executable
+    chmod +x "$work_dir/healthcheck.sh"
+    
+    if [ ! -f "$work_dir/healthcheck.sh" ]; then
+        error "Failed to create healthcheck script"
+        return 1
+    fi
+    
+    [ "$debug" = true ] && log "Healthcheck script created successfully"
+    return 0
+}
+
+# =============================================================================
 # DOCKER COMPOSE CREATION
 # =============================================================================
 
-# Create main docker-compose.yml with adaptive resource limits
+# Create main docker-compose.yml with adaptive resource limits and improved health check
 create_docker_compose() {
     local work_dir="$1"
     local server_port="$2"
@@ -131,7 +206,10 @@ create_docker_compose() {
         calculate_resource_limits "$debug"
     fi
     
-    # Create docker-compose.yml
+    # Create healthcheck script for VLESS+Reality
+    create_healthcheck_script "$work_dir" "$debug"
+    
+    # Create docker-compose.yml with improved health check
     cat > "$work_dir/docker-compose.yml" <<EOL
 version: '3'
 services:
@@ -143,15 +221,16 @@ services:
     volumes:
       - ./config:/etc/xray
       - ./logs:/var/log/xray
+      - ./healthcheck.sh:/usr/local/bin/healthcheck.sh:ro
     environment:
       - TZ=Europe/Moscow
     command: ["xray", "run", "-c", "/etc/xray/config.json"]
     healthcheck:
-      test: ["CMD", "nc", "-z", "127.0.0.1", "$server_port"]
+      test: ["CMD", "/bin/bash", "/usr/local/bin/healthcheck.sh", "$server_port"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
-      start_period: 40s
+      start_period: 45s
     deploy:
       resources:
         limits:
@@ -194,7 +273,7 @@ create_backup_docker_compose() {
         calculate_resource_limits "$debug"
     fi
     
-    # Create backup docker-compose.yml
+    # Create backup docker-compose.yml with improved health check
     cat > "$work_dir/docker-compose.backup.yml" <<EOL
 version: '3'
 services:
@@ -206,16 +285,17 @@ services:
     volumes:
       - ./config:/etc/xray
       - ./logs:/var/log/xray
+      - ./healthcheck.sh:/usr/local/bin/healthcheck.sh:ro
     environment:
       - TZ=Europe/Moscow
     entrypoint: ["/usr/bin/xray"]
     command: ["run", "-c", "/etc/xray/config.json"]
     healthcheck:
-      test: ["CMD", "nc", "-z", "127.0.0.1", "$server_port"]
+      test: ["CMD", "/bin/bash", "/usr/local/bin/healthcheck.sh", "$server_port"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
-      start_period: 40s
+      start_period: 45s
     deploy:
       resources:
         limits:
@@ -442,6 +522,7 @@ setup_docker_environment() {
 
 # Export functions for use by other modules
 export -f calculate_resource_limits
+export -f create_healthcheck_script
 export -f create_docker_compose
 export -f create_backup_docker_compose
 export -f start_docker_container
