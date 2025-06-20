@@ -294,30 +294,31 @@ declare -A CONFIG_CACHE
 declare -A CONFIG_CACHE_TIME
 CONFIG_CACHE_TTL=30
 
-# Get configuration with caching
+# Get configuration with caching - fixed cache key generation
 get_config_cached() {
     local config_file="$1"
     local key="$2"
-    local cache_key="${config_file}:${key}"
+    # Use hash of key to avoid issues with special characters in cache key
+    local cache_key_hash=$(echo -n "${config_file}:${key}" | sha256sum | cut -c1-32)
     local now=$(date +%s)
     
-    if [ -z "${CONFIG_CACHE_TIME[$cache_key]}" ] || 
-       [ $((now - CONFIG_CACHE_TIME[$cache_key])) -gt $CONFIG_CACHE_TTL ]; then
+    if [ -z "${CONFIG_CACHE_TIME[$cache_key_hash]}" ] || 
+       [ $((now - CONFIG_CACHE_TIME[$cache_key_hash])) -gt $CONFIG_CACHE_TTL ]; then
         
         if [ -f "$config_file" ] && command -v jq >/dev/null 2>&1; then
             # Handle complex jq queries (with pipes, etc.)
             if [[ "$key" =~ \| ]]; then
-                CONFIG_CACHE[$cache_key]=$(jq -r "$key // empty" "$config_file" 2>/dev/null)
+                CONFIG_CACHE[$cache_key_hash]=$(jq -r "$key // empty" "$config_file" 2>/dev/null)
             else
-                CONFIG_CACHE[$cache_key]=$(jq -r ".$key // empty" "$config_file" 2>/dev/null)
+                CONFIG_CACHE[$cache_key_hash]=$(jq -r ".$key // empty" "$config_file" 2>/dev/null)
             fi
         else
-            CONFIG_CACHE[$cache_key]=""
+            CONFIG_CACHE[$cache_key_hash]=""
         fi
-        CONFIG_CACHE_TIME[$cache_key]=$now
+        CONFIG_CACHE_TIME[$cache_key_hash]=$now
     fi
     
-    echo "${CONFIG_CACHE[$cache_key]}"
+    echo "${CONFIG_CACHE[$cache_key_hash]}"
 }
 
 # =============================================================================
