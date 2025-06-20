@@ -43,10 +43,12 @@ show_main_menu() {
     echo ""
     echo -e "${YELLOW}Advanced:${NC}"
     echo "  6)  🛡️  Watchdog Service"
+    echo "  7)  🔧 Fix Reality Issues"
+    echo "  8)  ✅ Validate Configuration"
     echo ""
     echo -e "${YELLOW}Help & Info:${NC}"
-    echo "  7)  ❓ Show Help"
-    echo "  8)  ℹ️  Show Version"
+    echo "  9)  ❓ Show Help"
+    echo "  10) ℹ️  Show Version"
     echo ""
     echo -e "${RED}  0)  🚪 Exit${NC}"
     echo ""
@@ -79,10 +81,16 @@ handle_menu_choice() {
             handle_watchdog_menu
             ;;
         7)
+            handle_fix_reality
+            ;;
+        8)
+            handle_validate_config
+            ;;
+        9)
             show_usage
             read -p "Press Enter to continue..."
             ;;
-        8)
+        10)
             show_version
             read -p "Press Enter to continue..."
             ;;
@@ -91,7 +99,7 @@ handle_menu_choice() {
             exit 0
             ;;
         *)
-            warning "Invalid option. Please choose 0-8."
+            warning "Invalid option. Please choose 0-10."
             ;;
     esac
 }
@@ -138,7 +146,7 @@ run_interactive_menu() {
     
     while true; do
         show_main_menu
-        read -p "Select option (0-8): " choice
+        read -p "Select option (0-10): " choice
         
         # Handle errors gracefully
         handle_menu_choice "$choice" || {
@@ -163,6 +171,47 @@ run_interactive_menu() {
 }
 
 # =============================================================================
+# ADVANCED OPTION HANDLERS
+# =============================================================================
+
+# Handler for Fix Reality Issues option
+handle_fix_reality() {
+    echo -e "${BLUE}🔧 Запуск исправления Reality ключей...${NC}"
+    echo
+    
+    # Call the fix_reality function from vpn.sh
+    if fix_reality; then
+        echo -e "${GREEN}✅ Reality ключи успешно исправлены${NC}"
+    else
+        echo -e "${RED}❌ Ошибка при исправлении Reality ключей${NC}"
+    fi
+    
+    echo
+    echo -e "${CYAN}Нажмите Enter для продолжения...${NC}"
+    read
+}
+
+# Handler for Validate Configuration option
+handle_validate_config() {
+    echo -e "${BLUE}✅ Запуск проверки конфигурации...${NC}"
+    echo
+    
+    # Load the validate module if not already loaded
+    load_module_lazy "server/validate_config.sh"
+    
+    # Call the validate configuration function
+    if validate_configuration; then
+        echo -e "${GREEN}✅ Конфигурация прошла проверку${NC}"
+    else
+        echo -e "${RED}❌ Обнаружены проблемы в конфигурации${NC}"
+    fi
+    
+    echo
+    echo -e "${CYAN}Нажмите Enter для продолжения...${NC}"
+    read
+}
+
+# =============================================================================
 # EXPORT FUNCTIONS
 # =============================================================================
 
@@ -170,4 +219,6 @@ export -f show_main_menu
 export -f handle_menu_choice
 # handle_xray_management removed - functionality integrated into main menu
 export -f handle_watchdog_menu
+export -f handle_fix_reality
+export -f handle_validate_config
 export -f run_interactive_menu
