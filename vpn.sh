@@ -2108,6 +2108,133 @@ cleanup_vpn_ports_interactive() {
 }
 
 # =============================================================================
+# TEST PORT FILTERING FUNCTION
+# =============================================================================
+
+# Test port filtering logic
+test_port_filtering() {
+    log "🧪 Testing port filtering logic..."
+    
+    echo -e "${GREEN}=== UFW Status Analysis ===${NC}"
+    echo ""
+    
+    # Show raw UFW output
+    echo "Raw UFW status:"
+    ufw status numbered | head -20
+    echo ""
+    
+    # Test current filter
+    echo "Testing current filter (should exclude 22,80,443,9000 and show only >= 10000):"
+    local test1=$(ufw status numbered 2>/dev/null | grep -E "ALLOW.*tcp" | grep -v -E "22/tcp|80/tcp|443/tcp|OpenSSH|9000/tcp" | awk '{print $2}' | cut -d'/' -f1 | awk '$1 >= 10000' | sort -n)
+    echo "Result: $test1"
+    echo ""
+    
+    # Test alternative filter
+    echo "Testing alternative filter (using line format):"
+    local test2=$(ufw status numbered 2>/dev/null | grep -E "\[[0-9]+\].*ALLOW.*tcp" | grep -v -E "(22|80|443|9000)/tcp" | awk '{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+\/tcp$/) print $i}' | cut -d'/' -f1 | awk '$1 >= 10000' | sort -n)
+    echo "Result: $test2"
+    echo ""
+    
+    # Show what would be considered for removal
+    echo "Ports that would be considered for removal:"
+    ufw status numbered 2>/dev/null | grep -E "\[[0-9]+\].*ALLOW.*tcp" | while read line; do
+        local port=$(echo "$line" | awk '{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+\/tcp$/) print $i}' | cut -d'/' -f1)
+        if [ -n "$port" ] && [ "$port" -ge 10000 ] 2>/dev/null; then
+            echo "  - Port $port: $line"
+        fi
+    done
+    echo ""
+    
+    # Check listening ports
+    echo "Currently listening ports (netstat):"
+    netstat -tlnp 2>/dev/null | grep LISTEN | awk '{print $4}' | sed 's/.*://' | awk '$1 >= 10000' | sort -n | uniq
+    echo ""
+    
+    return 0
+}
+
+# =============================================================================
+# FIX XRAY ROUTING CONFIGURATION
+# =============================================================================
+
+# Fix Xray routing configuration that blocks internet access
+fix_xray_routing_config() {
+    log "🔧 Fixing Xray routing configuration..."
+    
+    # Check root privileges
+    if [ "$EUID" -ne 0 ]; then
+        error "Configuration fix requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    local config_file="/opt/v2ray/config/config.json"
+    
+    if [ ! -f "$config_file" ]; then
+        error "Xray configuration file not found: $config_file"
+        return 1
+    fi
+    
+    # Backup current configuration
+    local backup_file="/opt/v2ray/config/config.json.backup.$(date +%Y%m%d_%H%M%S)"
+    cp "$config_file" "$backup_file" || {
+        error "Failed to backup configuration"
+        return 1
+    }
+    log "Configuration backed up to: $backup_file"
+    
+    echo -e "${GREEN}=== Fixing Xray Routing Configuration ===${NC}"
+    echo ""
+    
+    # Remove the blocking rules for private IPs
+    # Keep only truly local IPs that should be blocked (127.0.0.0/8 and ::1)
+    local temp_file="/tmp/xray_config_temp.json"
+    
+    # Use jq to modify the routing rules
+    jq '.routing.rules[0].ip = ["127.0.0.0/8", "::1/128"]' "$config_file" > "$temp_file" || {
+        error "Failed to modify configuration"
+        return 1
+    }
+    
+    # Verify the new configuration is valid JSON
+    if ! jq empty "$temp_file" 2>/dev/null; then
+        error "Invalid JSON in modified configuration"
+        rm -f "$temp_file"
+        return 1
+    fi
+    
+    # Show the changes
+    echo "Original routing rules:"
+    jq '.routing.rules[0].ip' "$config_file"
+    echo ""
+    echo "New routing rules (only blocking localhost):"
+    jq '.routing.rules[0].ip' "$temp_file"
+    echo ""
+    
+    # Apply the new configuration
+    mv "$temp_file" "$config_file" || {
+        error "Failed to apply new configuration"
+        rm -f "$temp_file"
+        return 1
+    }
+    
+    log "✓ Routing configuration updated"
+    
+    # Restart Xray to apply changes
+    echo -e "${BLUE}Restarting Xray container...${NC}"
+    cd /opt/v2ray && docker-compose restart || {
+        error "Failed to restart Xray container"
+        return 1
+    }
+    
+    log "✅ Xray routing configuration fixed"
+    log "Internet access through VPN should now work properly"
+    echo ""
+    echo "Please test VPN connection again"
+    
+    return 0
+}
+
+# =============================================================================
 # MAIN EXECUTION LOGIC
 # =============================================================================
 
@@ -2192,6 +2319,12 @@ main() {
             ;;
         "cleanup-ports")
             cleanup_vpn_ports_interactive
+            ;;
+        "test-port-filter")
+            test_port_filtering
+            ;;
+        "fix-routing-config")
+            fix_xray_routing_config
             ;;
         "users")
             # Load user menu module
