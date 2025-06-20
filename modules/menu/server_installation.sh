@@ -58,6 +58,15 @@ load_module_lazy() {
 # Main server installation function with optimizations
 run_server_installation() {
     local start_time=$(date +%s.%N)
+    
+    # Ensure we're in a valid working directory
+    if ! pwd >/dev/null 2>&1; then
+        cd "${PROJECT_ROOT:-/home/ikeniborn/Documents/Project/vpn}" || {
+            cd /tmp
+            warning "Working directory issue detected, switched to /tmp"
+        }
+    fi
+    
     log "Starting VPN server installation process..."
     
     # Check system requirements
