@@ -200,7 +200,7 @@ handle_validate_config() {
     load_module_lazy "server/validate_config.sh"
     
     # Call the validate configuration function
-    if validate_configuration; then
+    if validate_server_config; then
         echo -e "${GREEN}✅ Конфигурация прошла проверку${NC}"
     else
         echo -e "${RED}❌ Обнаружены проблемы в конфигурации${NC}"
