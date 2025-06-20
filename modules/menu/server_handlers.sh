@@ -38,27 +38,30 @@ handle_server_install() {
         return 1
     fi
     
-    # Load required modules
+    # Load performance optimization library
+    if [ -z "$PERFORMANCE_LIB_SOURCED" ]; then
+        source "$PROJECT_ROOT/lib/performance.sh" || {
+            warning "Performance optimizations not available"
+        }
+    fi
+    
+    # Lazy load server installation module
+    load_module_lazy "menu/server_installation.sh" || {
+        error "Failed to load server installation module"
+        return 1
+    }
+    
+    # Load additional libraries only when needed
     load_additional_libraries true || {
         error "Failed to load additional libraries"
         return 1
     }
-    load_server_modules true || {
-        error "Failed to load server modules"
-        return 1
-    }
     
-    # Load prerequisites module for system checks and installation functions
-    source "$PROJECT_ROOT/modules/install/prerequisites.sh" || {
-        error "Failed to load prerequisites module"
-        return 1
-    }
-    
-    # Now check system prerequisites using loaded modules
+    # Now check system prerequisites
     detect_system_info true
     
-    # Run installation using modules
-    run_server_installation
+    # Run installation using optimized modules with timing
+    time_function run_server_installation
 }
 
 # =============================================================================
@@ -72,24 +75,55 @@ handle_server_status() {
         return 1
     fi
     
+    # Load performance library for caching
+    if [ -z "$PERFORMANCE_LIB_SOURCED" ]; then
+        source "$PROJECT_ROOT/lib/performance.sh" 2>/dev/null || true
+    fi
+    
     echo -e "${GREEN}=== VPN Server Status ===${NC}"
     echo ""
     
     local servers_found=false
     
-    # Check Xray server
+    # Check Xray server with optimized file operations
     if [ -d "/opt/v2ray" ] && [ -f "/opt/v2ray/docker-compose.yml" ]; then
         servers_found=true
         echo -e "${YELLOW}Xray/VLESS Server:${NC}"
-        if docker ps | grep -q "xray"; then
+        
+        # Use cached container status if available
+        local xray_status
+        if command -v get_container_status_cached >/dev/null 2>&1; then
+            xray_status=$(get_container_status_cached "xray")
+        else
+            xray_status=$(docker inspect -f '{{.State.Status}}' xray 2>/dev/null || echo "not_found")
+        fi
+        
+        if [ "$xray_status" = "running" ]; then
             echo -e "  Status: ${GREEN}✓ Running${NC}"
-            local port=$(cat /opt/v2ray/config/port.txt 2>/dev/null || echo "Unknown")
-            local protocol=$(cat /opt/v2ray/config/protocol.txt 2>/dev/null || echo "VLESS+Reality")
+            
+            # Optimized file reads
+            local config_files=("/opt/v2ray/config/port.txt" "/opt/v2ray/config/protocol.txt")
+            local config_values
+            if command -v read_multiple_files >/dev/null 2>&1; then
+                readarray -t config_values < <(read_multiple_files "${config_files[@]}")
+                local port=${config_values[0]:-"Unknown"}
+                local protocol=${config_values[1]:-"VLESS+Reality"}
+            else
+                local port=$(cat /opt/v2ray/config/port.txt 2>/dev/null || echo "Unknown")
+                local protocol=$(cat /opt/v2ray/config/protocol.txt 2>/dev/null || echo "VLESS+Reality")
+            fi
+            
             echo -e "  Port: ${BLUE}$port${NC}"
             echo -e "  Protocol: ${BLUE}$protocol${NC}"
-            # Count users
+            
+            # Count users with caching
             if [ -f "/opt/v2ray/config/config.json" ]; then
-                local user_count=$(jq -r '.inbounds[0].settings.clients | length' /opt/v2ray/config/config.json 2>/dev/null || echo "0")
+                local user_count
+                if command -v get_config_cached >/dev/null 2>&1; then
+                    user_count=$(get_config_cached "/opt/v2ray/config/config.json" "inbounds[0].settings.clients | length")
+                else
+                    user_count=$(jq -r '.inbounds[0].settings.clients | length' /opt/v2ray/config/config.json 2>/dev/null || echo "0")
+                fi
                 echo -e "  Users: ${BLUE}$user_count${NC}"
             fi
         else
@@ -98,14 +132,23 @@ handle_server_status() {
         echo ""
     fi
     
-    # Check Outline server
-    if [ -d "/opt/outline" ] || docker ps -a | grep -q "shadowbox"; then
+    # Check Outline server with optimized status check
+    if [ -d "/opt/outline" ] || docker ps -a --format "table {{.Names}}" 2>/dev/null | grep -q "shadowbox"; then
         servers_found=true
         echo -e "${YELLOW}Outline VPN Server:${NC}"
-        if docker ps | grep -q "shadowbox"; then
+        
+        # Use cached container status
+        local outline_status
+        if command -v get_container_status_cached >/dev/null 2>&1; then
+            outline_status=$(get_container_status_cached "shadowbox")
+        else
+            outline_status=$(docker inspect -f '{{.State.Status}}' shadowbox 2>/dev/null || echo "not_found")
+        fi
+        
+        if [ "$outline_status" = "running" ]; then
             echo -e "  Status: ${GREEN}✓ Running${NC}"
             if [ -f "/opt/outline/access.txt" ]; then
-                local api_url=$(grep "apiUrl" /opt/outline/access.txt | cut -d'"' -f4)
+                local api_url=$(grep "apiUrl" /opt/outline/access.txt 2>/dev/null | cut -d'"' -f4)
                 echo -e "  API URL: ${BLUE}$api_url${NC}"
             fi
         else
