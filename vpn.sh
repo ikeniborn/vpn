@@ -1523,6 +1523,132 @@ test_logging() {
     return 0
 }
 
+# Comprehensive Reality troubleshooting and fix
+fix_reality_comprehensive() {
+    if [ "$EUID" -ne 0 ]; then
+        error "Reality comprehensive fix requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    log "🔧 Comprehensive Reality troubleshooting and fix..."
+    
+    # Check if server is installed
+    if [ ! -f "/opt/v2ray/config/config.json" ]; then
+        error "No Xray server installation found"
+        return 1
+    fi
+    
+    # Step 1: Backup current configuration
+    log "📦 Creating backup of current configuration..."
+    backup_dir="/opt/v2ray/backup/$(date +%Y%m%d_%H%M%S)"
+    mkdir -p "$backup_dir"
+    cp -r /opt/v2ray/config/* "$backup_dir/" 2>/dev/null || true
+    cp -r /opt/v2ray/users/* "$backup_dir/" 2>/dev/null || true
+    log "✓ Backup created: $backup_dir"
+    
+    # Step 2: Generate completely new Reality keys
+    log "🔑 Generating new Reality keys..."
+    local key_output=$(docker run --rm teddysun/xray:latest xray x25519 2>/dev/null)
+    
+    if [ -n "$key_output" ] && echo "$key_output" | grep -q "Private key:"; then
+        local new_private_key=$(echo "$key_output" | grep "Private key:" | awk '{print $3}')
+        local new_public_key=$(echo "$key_output" | grep "Public key:" | awk '{print $3}')
+        
+        log "✓ New private key: ${new_private_key:0:10}..."
+        log "✓ New public key: ${new_public_key:0:10}..."
+        
+        # Step 3: Update server configuration
+        log "📝 Updating server configuration..."
+        
+        # Update main config.json
+        jq ".inbounds[0].streamSettings.realitySettings.privateKey = \"$new_private_key\"" \
+            /opt/v2ray/config/config.json > /opt/v2ray/config/config.json.tmp
+        mv /opt/v2ray/config/config.json.tmp /opt/v2ray/config/config.json
+        
+        # Update key files
+        echo "$new_private_key" > /opt/v2ray/config/private_key.txt
+        echo "$new_public_key" > /opt/v2ray/config/public_key.txt
+        
+        # Step 4: Generate new short IDs
+        log "🆔 Generating new Short IDs..."
+        local new_short_ids=""
+        for i in 1 2 3; do
+            local short_id=$(openssl rand -hex 8 2>/dev/null || printf "%08x%08x" $RANDOM $RANDOM)
+            new_short_ids="$new_short_ids\"$short_id\""
+            [ $i -lt 3 ] && new_short_ids="$new_short_ids,"
+        done
+        
+        # Update shortIds in config
+        jq ".inbounds[0].streamSettings.realitySettings.shortIds = [$new_short_ids]" \
+            /opt/v2ray/config/config.json > /opt/v2ray/config/config.json.tmp
+        mv /opt/v2ray/config/config.json.tmp /opt/v2ray/config/config.json
+        
+        log "✓ New short IDs generated"
+        
+        # Step 5: Update ALL user configurations
+        log "👥 Updating all user configurations..."
+        local updated_users=0
+        
+        if [ -d "/opt/v2ray/users" ]; then
+            for user_file in /opt/v2ray/users/*.json; do
+                if [ -f "$user_file" ]; then
+                    local user_name=$(basename "$user_file" .json)
+                    local user_uuid=$(jq -r '.uuid' "$user_file" 2>/dev/null)
+                    local first_short_id=$(echo "$new_short_ids" | cut -d'"' -f2)
+                    
+                    # Update user configuration with new keys and first short ID
+                    jq ".private_key = \"$new_private_key\" | .public_key = \"$new_public_key\" | .short_id = \"$first_short_id\"" \
+                        "$user_file" > "${user_file}.tmp"
+                    mv "${user_file}.tmp" "$user_file"
+                    
+                    log "✓ Updated user: $user_name"
+                    updated_users=$((updated_users + 1))
+                fi
+            done
+        fi
+        
+        log "✓ Updated $updated_users user configurations"
+        
+        # Step 6: Validate configuration
+        log "✅ Validating new configuration..."
+        if docker run --rm -v /opt/v2ray/config:/etc/xray teddysun/xray:latest xray test -c /etc/xray/config.json >/dev/null 2>&1; then
+            log "✓ Configuration validation passed"
+        else
+            warning "Configuration validation failed, but continuing..."
+        fi
+        
+        # Step 7: Restart server
+        log "🔄 Restarting Xray server..."
+        cd /opt/v2ray && docker-compose restart
+        sleep 5
+        
+        # Step 8: Show summary
+        echo ""
+        log "🎉 Reality comprehensive fix completed!"
+        echo ""
+        echo "📋 Summary of changes:"
+        echo "  🔑 New private key: ${new_private_key:0:20}..."
+        echo "  🔑 New public key: ${new_public_key:0:20}..."
+        echo "  🆔 New short IDs: $(echo "$new_short_ids" | tr -d '"')"
+        echo "  👥 Updated users: $updated_users"
+        echo "  📦 Backup location: $backup_dir"
+        echo ""
+        echo "⚠️  IMPORTANT: All clients must be reconfigured with new keys!"
+        echo "   Use: sudo ./vpn.sh users -> Show User Data"
+        echo ""
+        
+        # Step 9: Monitor logs briefly
+        log "📊 Monitoring connection attempts for 30 seconds..."
+        timeout 30 docker logs -f xray 2>&1 | grep -E "(REALITY|started|connection)" || true
+        
+        return 0
+        
+    else
+        error "Failed to generate new Reality keys"
+        return 1
+    fi
+}
+
 # =============================================================================
 # HELP AND VERSION
 # =============================================================================
@@ -1548,6 +1674,7 @@ show_usage() {
     echo "  cleanup-firewall     Interactive cleanup of unused VPN ports from firewall"
     echo "  recreate-docker      Recreate docker-compose with latest healthcheck fixes"
     echo "  test-logging         Test and fix Xray logging configuration"
+    echo "  fix-reality-full     Comprehensive Reality fix with new keys and short IDs"
     echo ""
     echo -e "${YELLOW}User Management:${NC}"
     echo "  users                Interactive user management menu"
@@ -1618,6 +1745,9 @@ main() {
             ;;
         "test-logging")
             test_logging
+            ;;
+        "fix-reality-full")
+            fix_reality_comprehensive
             ;;
         "users")
             handle_user_management
