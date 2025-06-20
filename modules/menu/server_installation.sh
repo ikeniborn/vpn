@@ -225,7 +225,14 @@ configure_vless_reality() {
     
     log "Reality keys generated successfully: Private key ${PRIVATE_KEY:0:10}..., Public key ${PUBLIC_KEY:0:10}..., Short ID: $SHORT_ID"
     
-    # Export keys for use in other functions
+    # Export all configuration variables for use in other functions
+    export PROTOCOL
+    export WORK_DIR
+    export SERVER_PORT
+    export SERVER_SNI
+    export USER_NAME
+    export USER_UUID
+    export SERVER_IP
     export PRIVATE_KEY
     export PUBLIC_KEY
     export SHORT_ID
@@ -408,6 +415,7 @@ select_vpn_protocol() {
             1)
                 PROTOCOL="vless-reality"
                 WORK_DIR="/opt/v2ray"
+                export PROTOCOL WORK_DIR
                 log "Selected protocol: VLESS+Reality"
                 echo -e "${GREEN}Selected: VLESS+Reality Protocol${NC}"
                 echo -e "${BLUE}✓ Enhanced anti-detection technology${NC}"
@@ -418,6 +426,7 @@ select_vpn_protocol() {
             2)
                 PROTOCOL="outline"
                 WORK_DIR="/opt/outline"
+                export PROTOCOL WORK_DIR
                 log "Selected protocol: Outline VPN"
                 echo -e "${GREEN}Selected: Outline VPN Protocol${NC}"
                 echo -e "${BLUE}✓ Shadowsocks-based${NC}"
@@ -448,12 +457,14 @@ get_port_config_interactive() {
             1)
                 # Generate random port between 10000-65000
                 SERVER_PORT=$((RANDOM % 55000 + 10000))
+                export SERVER_PORT
                 log "Generated random port: $SERVER_PORT"
                 echo -e "${GREEN}Random port selected: $SERVER_PORT${NC}"
                 break
                 ;;
             2)
                 SERVER_PORT="10443"
+                export SERVER_PORT
                 log "Selected standard port: $SERVER_PORT"
                 echo -e "${GREEN}Standard port selected: $SERVER_PORT${NC}"
                 break
@@ -463,6 +474,7 @@ get_port_config_interactive() {
                     read -p "Enter custom port (1024-65535): " custom_port
                     if [[ "$custom_port" =~ ^[0-9]+$ ]] && [ "$custom_port" -ge 1024 ] && [ "$custom_port" -le 65535 ]; then
                         SERVER_PORT="$custom_port"
+                        export SERVER_PORT
                         log "Selected custom port: $SERVER_PORT"
                         echo -e "${GREEN}Custom port selected: $SERVER_PORT${NC}"
                         break
