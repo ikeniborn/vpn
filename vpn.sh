@@ -650,6 +650,14 @@ create_xray_config_and_user() {
     echo "$PROTOCOL" > "$WORK_DIR/config/protocol.txt"
     echo "$SERVER_PORT" > "$WORK_DIR/config/port.txt"
     
+    # Load xray_config module if not already loaded
+    if ! command -v setup_xray_configuration >/dev/null 2>&1; then
+        source "$SCRIPT_DIR/modules/install/xray_config.sh" || {
+            error "Failed to load xray_config module"
+            return 1
+        }
+    fi
+    
     # Setup Xray configuration using the module
     setup_xray_configuration "$WORK_DIR" "$PROTOCOL" "$SERVER_PORT" "$USER_UUID" \
         "$USER_NAME" "$SERVER_IP" "$SERVER_SNI" "$PRIVATE_KEY" "$PUBLIC_KEY" \

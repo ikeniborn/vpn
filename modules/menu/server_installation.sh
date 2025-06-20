@@ -181,11 +181,34 @@ configure_vless_reality() {
     # Reality keys generation
     echo -e "\n${YELLOW}Generating Reality encryption keys...${NC}"
     log "Starting Reality key generation..."
-    if ! generate_reality_keys; then
-        error "Reality keys generation failed"
-        error "Failed to generate X25519 keypair or extract keys"
+    
+    # Ensure crypto functions are available
+    if ! command -v generate_x25519_keys >/dev/null 2>&1; then
+        source "$PROJECT_ROOT/lib/crypto.sh" || {
+            error "Failed to load crypto library"
+            return 1
+        }
+    fi
+    
+    # Generate Reality keys using crypto library
+    local reality_keys=$(generate_x25519_keys 2>/dev/null)
+    if [ -n "$reality_keys" ]; then
+        # Extract all three values
+        PRIVATE_KEY=$(echo "$reality_keys" | awk '{print $1}')
+        PUBLIC_KEY=$(echo "$reality_keys" | awk '{print $2}')
+        SHORT_ID=$(echo "$reality_keys" | awk '{print $3}')
+    else
+        error "Failed to generate Reality keys"
         return 1
     fi
+    
+    # Verify all keys were generated
+    if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ] || [ -z "$SHORT_ID" ]; then
+        error "Failed to extract Reality keys"
+        error "Keys output: $reality_keys"
+        return 1
+    fi
+    
     log "Reality keys generated successfully: Private key ${PRIVATE_KEY:0:10}..., Public key ${PUBLIC_KEY:0:10}..., Short ID: $SHORT_ID"
     
     # Final configuration display
