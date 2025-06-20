@@ -183,7 +183,7 @@ configure_vless_reality() {
     log "Starting Reality key generation..."
     
     # Ensure crypto functions are available
-    if ! command -v generate_x25519_keys >/dev/null 2>&1; then
+    if ! command -v generate_reality_keys >/dev/null 2>&1; then
         source "$PROJECT_ROOT/lib/crypto.sh" || {
             error "Failed to load crypto library"
             return 1
@@ -191,25 +191,44 @@ configure_vless_reality() {
     fi
     
     # Generate Reality keys using crypto library
-    local reality_keys=$(generate_x25519_keys 2>/dev/null)
-    if [ -n "$reality_keys" ]; then
+    log "Calling generate_reality_keys function..."
+    local reality_keys=$(generate_reality_keys)
+    local gen_result=$?
+    
+    log "Generation result: $gen_result"
+    log "Raw keys output: '$reality_keys'"
+    
+    if [ $gen_result -eq 0 ] && [ -n "$reality_keys" ]; then
         # Extract all three values
         PRIVATE_KEY=$(echo "$reality_keys" | awk '{print $1}')
         PUBLIC_KEY=$(echo "$reality_keys" | awk '{print $2}')
         SHORT_ID=$(echo "$reality_keys" | awk '{print $3}')
+        
+        log "Extracted values:"
+        log "  PRIVATE_KEY: '${PRIVATE_KEY:0:10}...'"
+        log "  PUBLIC_KEY: '${PUBLIC_KEY:0:10}...'"
+        log "  SHORT_ID: '$SHORT_ID'"
     else
-        error "Failed to generate Reality keys"
+        error "Failed to generate Reality keys (exit code: $gen_result)"
         return 1
     fi
     
     # Verify all keys were generated
     if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ] || [ -z "$SHORT_ID" ]; then
         error "Failed to extract Reality keys"
-        error "Keys output: $reality_keys"
+        error "PRIVATE_KEY empty: $([ -z "$PRIVATE_KEY" ] && echo "yes" || echo "no")"
+        error "PUBLIC_KEY empty: $([ -z "$PUBLIC_KEY" ] && echo "yes" || echo "no")"
+        error "SHORT_ID empty: $([ -z "$SHORT_ID" ] && echo "yes" || echo "no")"
+        error "Raw keys output: '$reality_keys'"
         return 1
     fi
     
     log "Reality keys generated successfully: Private key ${PRIVATE_KEY:0:10}..., Public key ${PUBLIC_KEY:0:10}..., Short ID: $SHORT_ID"
+    
+    # Export keys for use in other functions
+    export PRIVATE_KEY
+    export PUBLIC_KEY
+    export SHORT_ID
     
     # Final configuration display
     show_final_configuration
