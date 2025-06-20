@@ -897,6 +897,84 @@ validate_config() {
     fi
 }
 
+fix_reality() {
+    if [ "$EUID" -ne 0 ]; then
+        error "Reality fix requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    log "🔧 Fixing Reality connection issues..."
+    
+    # Check if Xray container is available
+    if ! command -v docker >/dev/null 2>&1; then
+        error "Docker not available"
+        return 1
+    fi
+    
+    # Generate new Reality keys using Xray container
+    log "Generating new Reality keys..."
+    
+    local new_private_key
+    local new_public_key
+    
+    if new_private_key=$(docker run --rm teddysun/xray:latest xray x25519 2>/dev/null); then
+        new_public_key=$(echo "$new_private_key" | docker run --rm -i teddysun/xray:latest xray x25519 -i base64 2>/dev/null)
+        
+        if [ -n "$new_private_key" ] && [ -n "$new_public_key" ]; then
+            log "✓ New Reality keys generated"
+            
+            # Update configuration files
+            if [ -f "/opt/v2ray/config/config.json" ]; then
+                log "Updating configuration..."
+                
+                # Backup current config
+                cp /opt/v2ray/config/config.json /opt/v2ray/config/config.json.backup.$(date +%Y%m%d_%H%M%S)
+                
+                # Update private key in config
+                jq ".inbounds[0].streamSettings.realitySettings.privateKey = \"$new_private_key\"" \
+                    /opt/v2ray/config/config.json > /opt/v2ray/config/config.json.tmp
+                mv /opt/v2ray/config/config.json.tmp /opt/v2ray/config/config.json
+                
+                # Update key files
+                echo "$new_private_key" > /opt/v2ray/config/private_key.txt
+                echo "$new_public_key" > /opt/v2ray/config/public_key.txt
+                
+                # Update user configurations
+                if [ -d "/opt/v2ray/users" ]; then
+                    for user_file in /opt/v2ray/users/*.json; do
+                        if [ -f "$user_file" ]; then
+                            jq ".public_key = \"$new_public_key\"" "$user_file" > "${user_file}.tmp"
+                            mv "${user_file}.tmp" "$user_file"
+                        fi
+                    done
+                fi
+                
+                log "✓ Configuration updated"
+                
+                # Restart container
+                log "Restarting Xray container..."
+                cd /opt/v2ray && docker-compose restart
+                
+                sleep 3
+                
+                log "✅ Reality fix completed!"
+                log "🔑 New public key: $new_public_key"
+                log "📱 Please regenerate client configurations with new keys"
+                
+            else
+                error "Configuration file not found: /opt/v2ray/config/config.json"
+                return 1
+            fi
+        else
+            error "Failed to generate valid keys"
+            return 1
+        fi
+    else
+        error "Failed to generate new Reality keys"
+        return 1
+    fi
+}
+
 handle_key_rotation() {
     if [ "$EUID" -ne 0 ]; then
         error "Key rotation requires superuser privileges (sudo)"
@@ -1014,6 +1092,8 @@ show_usage() {
     echo "  uninstall            Uninstall VPN server"
     echo "  status               Show server status"
     echo "  restart              Restart VPN server"
+    echo "  fix-reality          Fix Reality connection issues"
+    echo "  validate             Validate server configuration"
     echo ""
     echo -e "${YELLOW}User Management:${NC}"
     echo "  users                Interactive user management menu"
@@ -1063,6 +1143,12 @@ main() {
             ;;
         "uninstall")
             handle_server_uninstall
+            ;;
+        "fix-reality")
+            fix_reality
+            ;;
+        "validate")
+            validate_config
             ;;
         "users")
             handle_user_management
