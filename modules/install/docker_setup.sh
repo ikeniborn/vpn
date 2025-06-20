@@ -131,30 +131,41 @@ create_healthcheck_script() {
 # Health check script for VLESS+Reality
 # Enhanced version with better timing and diagnostics
 
+# Debug: log all inputs for troubleshooting
+echo "DEBUG: Argument 1: '$1'" >> /tmp/healthcheck.log
+echo "DEBUG: SERVER_PORT env: '$SERVER_PORT'" >> /tmp/healthcheck.log
+
 # Get port from environment variable, argument, or config file
 if [ -n "$SERVER_PORT" ]; then
     PORT="$SERVER_PORT"
+    echo "DEBUG: Using SERVER_PORT: $PORT" >> /tmp/healthcheck.log
 elif [ -n "$1" ] && [ "$1" != "vless-reality" ]; then
     PORT="$1"
+    echo "DEBUG: Using argument: $PORT" >> /tmp/healthcheck.log
 else
     # Extract port from Xray config using multiple methods
     if [ -f "/etc/xray/config.json" ]; then
         # Try jq first
         if command -v jq >/dev/null 2>&1; then
             PORT=$(jq -r '.inbounds[0].port' /etc/xray/config.json 2>/dev/null)
+            echo "DEBUG: From jq: $PORT" >> /tmp/healthcheck.log
         fi
         
         # Fallback: use grep/sed to extract port
         if [ -z "$PORT" ] || [ "$PORT" = "null" ]; then
             PORT=$(grep -o '"port"[[:space:]]*:[[:space:]]*[0-9]*' /etc/xray/config.json | head -1 | sed 's/.*:[[:space:]]*//')
+            echo "DEBUG: From grep: $PORT" >> /tmp/healthcheck.log
         fi
     fi
     
     # Final fallback
     if [ -z "$PORT" ] || [ "$PORT" = "null" ]; then
         PORT=37276
+        echo "DEBUG: Using fallback: $PORT" >> /tmp/healthcheck.log
     fi
 fi
+
+echo "DEBUG: Final PORT: $PORT" >> /tmp/healthcheck.log
 
 HOST=${2:-127.0.0.1}
 

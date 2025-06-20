@@ -1277,6 +1277,61 @@ cleanup_firewall() {
     cleanup_unused_vpn_ports "" true true
 }
 
+# Recreate docker-compose with latest healthcheck fixes
+recreate_docker() {
+    if [ "$EUID" -ne 0 ]; then
+        error "Docker recreation requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    log "🔄 Recreating docker-compose with latest fixes..."
+    
+    # Check if VPN is installed
+    if [ ! -d "/opt/v2ray" ] || [ ! -f "/opt/v2ray/config/config.json" ]; then
+        error "No Xray VPN installation found in /opt/v2ray"
+        return 1
+    fi
+    
+    # Get current configuration
+    local server_port=$(cat /opt/v2ray/config/port.txt 2>/dev/null)
+    if [ -z "$server_port" ]; then
+        server_port=$(jq -r '.inbounds[0].port' /opt/v2ray/config/config.json 2>/dev/null)
+    fi
+    
+    if [ -z "$server_port" ] || [ "$server_port" = "null" ]; then
+        error "Could not determine server port"
+        return 1
+    fi
+    
+    log "Server port: $server_port"
+    
+    # Stop current container
+    log "Stopping current container..."
+    cd /opt/v2ray && docker-compose down 2>/dev/null || true
+    
+    # Load docker setup module
+    load_module_lazy "install/docker_setup.sh" || {
+        error "Failed to load docker setup module"
+        return 1
+    }
+    
+    # Recreate docker-compose.yml and healthcheck
+    log "Recreating docker-compose configuration..."
+    create_docker_compose "/opt/v2ray" "$server_port" true || {
+        error "Failed to recreate docker-compose"
+        return 1
+    }
+    
+    # Start with new configuration
+    log "Starting container with new configuration..."
+    cd /opt/v2ray && docker-compose up -d
+    
+    log "✅ Docker container recreated successfully"
+    log "⏱️  Wait 2-3 minutes for healthcheck to complete"
+    
+    return 0
+}
+
 # =============================================================================
 # HELP AND VERSION
 # =============================================================================
@@ -1300,6 +1355,7 @@ show_usage() {
     echo "  diagnose             Diagnose Reality connection issues"
     echo "  update-users         Update all user configs with current server keys"
     echo "  cleanup-firewall     Interactive cleanup of unused VPN ports from firewall"
+    echo "  recreate-docker      Recreate docker-compose with latest healthcheck fixes"
     echo ""
     echo -e "${YELLOW}User Management:${NC}"
     echo "  users                Interactive user management menu"
@@ -1364,6 +1420,9 @@ main() {
             ;;
         "cleanup-firewall")
             cleanup_firewall
+            ;;
+        "recreate-docker")
+            recreate_docker
             ;;
         "users")
             handle_user_management
