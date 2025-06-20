@@ -414,62 +414,169 @@ export -f show_firewall_status
 # FIREWALL CLEANUP FUNCTIONS
 # =============================================================================
 
-# Clean up unused VPN ports from firewall
+# Clean up unused VPN ports from firewall with interactive confirmation
 cleanup_unused_vpn_ports() {
     local current_port="$1"
     local debug=${2:-false}
+    local interactive=${3:-true}
     
-    [ "$debug" = true ] && log "Cleaning up unused VPN ports from firewall..."
+    [ "$debug" = true ] && log "Analyzing VPN ports in firewall..."
     
     if ! command -v ufw >/dev/null 2>&1; then
         [ "$debug" = true ] && log "UFW not available, skipping port cleanup"
         return 0
     fi
     
-    # Get list of currently allowed ports for VPN services
-    local allowed_ports=$(ufw status numbered 2>/dev/null | grep -E "ALLOW.*tcp" | grep -v "22\|80\|443" | awk '{print $2}' | cut -d'/' -f1)
+    # Get all currently allowed VPN-related ports (exclude standard ports)
+    local allowed_ports=$(ufw status numbered 2>/dev/null | grep -E "ALLOW.*tcp" | grep -v -E "22/tcp|80/tcp|443/tcp|OpenSSH" | awk '{print $2}' | cut -d'/' -f1 | sort -n)
     
-    # Get listening ports from running containers
+    if [ -z "$allowed_ports" ]; then
+        [ "$debug" = true ] && log "No VPN ports found in firewall"
+        return 0
+    fi
+    
+    # Get currently listening ports from system
     local listening_ports=""
-    if command -v docker >/dev/null 2>&1; then
-        # Check Xray container
-        if docker ps | grep -q xray; then
-            local xray_port=$(docker port xray 2>/dev/null | head -1 | cut -d':' -f2)
-            [ -n "$xray_port" ] && listening_ports="$listening_ports $xray_port"
-        fi
-        
-        # Check Outline/Shadowbox container  
-        if docker ps | grep -q shadowbox; then
-            local outline_ports=$(docker port shadowbox 2>/dev/null | cut -d':' -f2)
-            [ -n "$outline_ports" ] && listening_ports="$listening_ports $outline_ports"
-        fi
+    
+    # Method 1: Check from VPN configuration files
+    if [ -f "/opt/v2ray/config/port.txt" ]; then
+        local xray_port=$(cat /opt/v2ray/config/port.txt 2>/dev/null)
+        [ -n "$xray_port" ] && listening_ports="$listening_ports $xray_port"
+    elif [ -f "/opt/v2ray/config/config.json" ]; then
+        local xray_port=$(jq -r '.inbounds[0].port' /opt/v2ray/config/config.json 2>/dev/null)
+        [ -n "$xray_port" ] && [ "$xray_port" != "null" ] && listening_ports="$listening_ports $xray_port"
+    fi
+    
+    if [ -f "/opt/outline/api_port.txt" ]; then
+        local outline_api_port=$(cat /opt/outline/api_port.txt 2>/dev/null)
+        [ -n "$outline_api_port" ] && listening_ports="$listening_ports $outline_api_port"
+    fi
+    
+    # Method 2: Check actual listening ports on system
+    if command -v netstat >/dev/null 2>&1; then
+        local system_ports=$(netstat -tlnp 2>/dev/null | grep ":.*LISTEN" | sed 's/.*:\([0-9]*\) .*/\1/' | sort -n | uniq)
+        listening_ports="$listening_ports $system_ports"
+    elif command -v ss >/dev/null 2>&1; then
+        local system_ports=$(ss -tlnp 2>/dev/null | grep LISTEN | sed 's/.*:\([0-9]*\) .*/\1/' | sort -n | uniq)
+        listening_ports="$listening_ports $system_ports"
     fi
     
     # Add current port if provided
     [ -n "$current_port" ] && listening_ports="$listening_ports $current_port"
     
-    [ "$debug" = true ] && log "Listening ports: $listening_ports"
-    [ "$debug" = true ] && log "Allowed ports: $allowed_ports"
+    # Remove duplicates and sort
+    listening_ports=$(echo $listening_ports | tr ' ' '\n' | sort -n | uniq | tr '\n' ' ')
     
-    # Remove unused ports
-    local removed_count=0
+    [ "$debug" = true ] && log "Currently listening ports: $listening_ports"
+    [ "$debug" = true ] && log "Allowed VPN ports in firewall: $allowed_ports"
+    
+    # Find unused ports
+    local unused_ports=""
     for port in $allowed_ports; do
-        if [ -n "$port" ] && ! echo "$listening_ports" | grep -q "$port"; then
-            [ "$debug" = true ] && log "Removing unused port from firewall: $port"
-            if ufw delete allow "$port/tcp" 2>/dev/null; then
-                log "Removed unused VPN port from firewall: $port/tcp"
-                removed_count=$((removed_count + 1))
-            else
-                warning "Failed to remove port $port from firewall"
-            fi
+        if [ -n "$port" ] && ! echo " $listening_ports " | grep -q " $port "; then
+            unused_ports="$unused_ports $port"
         fi
     done
     
-    if [ $removed_count -gt 0 ]; then
-        log "Cleaned up $removed_count unused VPN ports from firewall"
-    else
-        [ "$debug" = true ] && log "No unused VPN ports found in firewall"
+    if [ -z "$unused_ports" ]; then
+        log "✅ All VPN ports in firewall are currently in use"
+        return 0
     fi
+    
+    # Show analysis
+    echo ""
+    log "🔍 Firewall port analysis:"
+    echo ""
+    echo "📋 Currently allowed VPN ports in UFW:"
+    for port in $allowed_ports; do
+        if echo " $listening_ports " | grep -q " $port "; then
+            echo "  ✅ $port/tcp (in use)"
+        else
+            echo "  ❌ $port/tcp (unused)"
+        fi
+    done
+    
+    echo ""
+    echo "📊 Currently listening ports: $(echo $listening_ports | tr ' ' ',')"
+    echo "🗑️  Unused ports that can be removed: $(echo $unused_ports | tr ' ' ',')"
+    
+    if [ "$interactive" = false ]; then
+        # Non-interactive mode - remove all unused ports
+        local removed_count=0
+        for port in $unused_ports; do
+            if ufw delete allow "$port/tcp" 2>/dev/null; then
+                log "Removed unused port: $port/tcp"
+                removed_count=$((removed_count + 1))
+            fi
+        done
+        [ $removed_count -gt 0 ] && log "Removed $removed_count unused VPN ports"
+        return 0
+    fi
+    
+    # Interactive mode - ask user what to remove
+    echo ""
+    echo "Would you like to remove unused ports from the firewall?"
+    echo "1) Remove all unused ports automatically"
+    echo "2) Select specific ports to remove"
+    echo "3) Keep all ports (skip cleanup)"
+    echo ""
+    read -p "Select option (1-3): " choice
+    
+    case "$choice" in
+        1)
+            # Remove all unused ports
+            local removed_count=0
+            for port in $unused_ports; do
+                echo "Removing port $port/tcp..."
+                if ufw delete allow "$port/tcp" 2>/dev/null; then
+                    log "✅ Removed: $port/tcp"
+                    removed_count=$((removed_count + 1))
+                else
+                    warning "❌ Failed to remove: $port/tcp"
+                fi
+            done
+            [ $removed_count -gt 0 ] && log "🧹 Cleaned up $removed_count unused VPN ports"
+            ;;
+        2)
+            # Interactive selection
+            echo ""
+            echo "Select ports to remove (enter numbers separated by spaces, or 'all' for all):"
+            local port_array=($unused_ports)
+            local i=1
+            for port in $unused_ports; do
+                echo "  $i) $port/tcp"
+                i=$((i + 1))
+            done
+            echo ""
+            read -p "Enter selection: " selection
+            
+            if [ "$selection" = "all" ]; then
+                selection=$(seq 1 ${#port_array[@]} | tr '\n' ' ')
+            fi
+            
+            local removed_count=0
+            for num in $selection; do
+                if [ "$num" -ge 1 ] && [ "$num" -le ${#port_array[@]} ]; then
+                    local port_index=$((num - 1))
+                    local port=${port_array[$port_index]}
+                    echo "Removing port $port/tcp..."
+                    if ufw delete allow "$port/tcp" 2>/dev/null; then
+                        log "✅ Removed: $port/tcp"
+                        removed_count=$((removed_count + 1))
+                    else
+                        warning "❌ Failed to remove: $port/tcp"
+                    fi
+                fi
+            done
+            [ $removed_count -gt 0 ] && log "🧹 Removed $removed_count selected ports"
+            ;;
+        3)
+            log "Skipping firewall cleanup"
+            ;;
+        *)
+            warning "Invalid selection, skipping cleanup"
+            ;;
+    esac
     
     return 0
 }

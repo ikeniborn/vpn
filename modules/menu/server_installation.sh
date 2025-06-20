@@ -569,7 +569,7 @@ setup_firewall() {
     # Clean up unused VPN ports first (for reinstallation)
     if [ "$REINSTALL_MODE" = true ]; then
         log "Cleaning up unused VPN ports from previous installations..."
-        cleanup_unused_vpn_ports "$SERVER_PORT" true
+        cleanup_unused_vpn_ports "$SERVER_PORT" true false  # non-interactive mode
     fi
     
     # Configure firewall for the selected protocol

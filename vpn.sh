@@ -1258,6 +1258,25 @@ update_user_configs() {
     return 0
 }
 
+# Interactive firewall cleanup command
+cleanup_firewall() {
+    if [ "$EUID" -ne 0 ]; then
+        error "Firewall cleanup requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    log "🧹 Interactive VPN firewall cleanup"
+    
+    # Load firewall module
+    load_module_lazy "install/firewall.sh" || {
+        error "Failed to load firewall module"
+        return 1
+    }
+    
+    # Run interactive cleanup
+    cleanup_unused_vpn_ports "" true true
+}
+
 # =============================================================================
 # HELP AND VERSION
 # =============================================================================
@@ -1280,6 +1299,7 @@ show_usage() {
     echo "  validate             Validate server configuration"
     echo "  diagnose             Diagnose Reality connection issues"
     echo "  update-users         Update all user configs with current server keys"
+    echo "  cleanup-firewall     Interactive cleanup of unused VPN ports from firewall"
     echo ""
     echo -e "${YELLOW}User Management:${NC}"
     echo "  users                Interactive user management menu"
@@ -1341,6 +1361,9 @@ main() {
             ;;
         "update-users")
             update_user_configs
+            ;;
+        "cleanup-firewall")
+            cleanup_firewall
             ;;
         "users")
             handle_user_management
