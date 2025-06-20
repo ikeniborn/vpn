@@ -206,6 +206,7 @@ run_server_installation() {
         }
     else
         # Source required installation modules
+        export PROJECT_ROOT="$SCRIPT_DIR"
         source "$SCRIPT_DIR/modules/install/xray_config.sh" || {
             error "Failed to load Xray configuration module"
             return 1
@@ -652,6 +653,8 @@ create_xray_config_and_user() {
     
     # Load xray_config module if not already loaded
     if ! command -v setup_xray_configuration >/dev/null 2>&1; then
+        # Set PROJECT_ROOT before sourcing module
+        export PROJECT_ROOT="$SCRIPT_DIR"
         source "$SCRIPT_DIR/modules/install/xray_config.sh" || {
             error "Failed to load xray_config module"
             return 1

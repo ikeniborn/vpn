@@ -17,14 +17,15 @@ fi
 # ========================= CONFIGURATION VARIABLES =========================
 
 # Server configuration variables
-export SERVER_IP=""
-export SERVER_PORT=""
-export SERVER_SNI=""
-export USE_REALITY=""
-export PROTOCOL=""
-export PRIVATE_KEY=""
-export PUBLIC_KEY=""
-export SHORT_ID=""
+# Only set if not already defined to avoid overwriting during module loading
+[ -z "$SERVER_IP" ] && export SERVER_IP=""
+[ -z "$SERVER_PORT" ] && export SERVER_PORT=""
+[ -z "$SERVER_SNI" ] && export SERVER_SNI=""
+[ -z "$USE_REALITY" ] && export USE_REALITY=""
+[ -z "$PROTOCOL" ] && export PROTOCOL=""
+[ -z "$PRIVATE_KEY" ] && export PRIVATE_KEY=""
+[ -z "$PUBLIC_KEY" ] && export PUBLIC_KEY=""
+[ -z "$SHORT_ID" ] && export SHORT_ID=""
 
 # ========================= CONFIGURATION FILE MANAGEMENT =========================
 
