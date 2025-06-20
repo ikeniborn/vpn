@@ -241,7 +241,7 @@ services:
       - TZ=Europe/Moscow
     command: ["xray", "run", "-c", "/etc/xray/config.json"]
     healthcheck:
-      test: ["CMD", "/bin/bash", "/usr/local/bin/healthcheck.sh", "$server_port"]
+      test: ["CMD", "/bin/sh", "/usr/local/bin/healthcheck.sh", "$server_port"]
       interval: 30s
       timeout: 15s
       retries: 3
@@ -306,7 +306,7 @@ services:
     entrypoint: ["/usr/bin/xray"]
     command: ["run", "-c", "/etc/xray/config.json"]
     healthcheck:
-      test: ["CMD", "/bin/bash", "/usr/local/bin/healthcheck.sh", "$server_port"]
+      test: ["CMD", "/bin/sh", "/usr/local/bin/healthcheck.sh", "$server_port"]
       interval: 30s
       timeout: 15s
       retries: 3

@@ -946,7 +946,9 @@ fix_reality() {
                 if [ -d "/opt/v2ray/users" ]; then
                     for user_file in /opt/v2ray/users/*.json; do
                         if [ -f "$user_file" ]; then
-                            jq ".public_key = \"$new_public_key\"" "$user_file" > "${user_file}.tmp"
+                            # Update both public_key (for display) and private_key (for client connection)
+                            # In Reality protocol, client uses server's private key as its public key
+                            jq ".public_key = \"$new_public_key\" | .private_key = \"$new_private_key\"" "$user_file" > "${user_file}.tmp"
                             mv "${user_file}.tmp" "$user_file"
                         fi
                     done
@@ -1192,6 +1194,70 @@ diagnose_reality() {
     return 0
 }
 
+# Force update all user configurations with current server keys
+update_user_configs() {
+    if [ "$EUID" -ne 0 ]; then
+        error "User config update requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    log "🔄 Updating all user configurations with current server keys..."
+    
+    local config_file="/opt/v2ray/config/config.json"
+    if [ ! -f "$config_file" ]; then
+        error "Server configuration not found: $config_file"
+        return 1
+    fi
+    
+    # Get current server keys
+    local server_private_key=$(jq -r '.inbounds[0].streamSettings.realitySettings.privateKey' "$config_file" 2>/dev/null)
+    local server_public_key=$(cat /opt/v2ray/config/public_key.txt 2>/dev/null)
+    
+    if [ -z "$server_private_key" ] || [ "$server_private_key" = "null" ]; then
+        error "Could not read server private key"
+        return 1
+    fi
+    
+    if [ -z "$server_public_key" ]; then
+        error "Could not read server public key"
+        return 1
+    fi
+    
+    log "Server private key: ${server_private_key:0:10}..."
+    log "Server public key: ${server_public_key:0:10}..."
+    
+    # Update all user configurations
+    local updated_count=0
+    if [ -d "/opt/v2ray/users" ]; then
+        for user_file in /opt/v2ray/users/*.json; do
+            if [ -f "$user_file" ]; then
+                local user_name=$(basename "$user_file" .json)
+                log "Updating user configuration: $user_name"
+                
+                # Update keys in user file
+                jq ".public_key = \"$server_public_key\" | .private_key = \"$server_private_key\"" "$user_file" > "${user_file}.tmp"
+                if [ $? -eq 0 ]; then
+                    mv "${user_file}.tmp" "$user_file"
+                    updated_count=$((updated_count + 1))
+                    log "✓ Updated: $user_name"
+                else
+                    rm -f "${user_file}.tmp"
+                    warning "Failed to update: $user_name"
+                fi
+            fi
+        done
+    fi
+    
+    if [ $updated_count -gt 0 ]; then
+        log "✅ Updated $updated_count user configurations"
+        log "📱 Users need to regenerate their client configurations"
+    else
+        warning "No user configurations found to update"
+    fi
+    
+    return 0
+}
+
 # =============================================================================
 # HELP AND VERSION
 # =============================================================================
@@ -1213,6 +1279,7 @@ show_usage() {
     echo "  fix-reality          Fix Reality connection issues"
     echo "  validate             Validate server configuration"
     echo "  diagnose             Diagnose Reality connection issues"
+    echo "  update-users         Update all user configs with current server keys"
     echo ""
     echo -e "${YELLOW}User Management:${NC}"
     echo "  users                Interactive user management menu"
@@ -1271,6 +1338,9 @@ main() {
             ;;
         "diagnose")
             diagnose_reality
+            ;;
+        "update-users")
+            update_user_configs
             ;;
         "users")
             handle_user_management
