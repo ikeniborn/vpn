@@ -1078,6 +1078,121 @@ handle_watchdog() {
 }
 
 # =============================================================================
+# DIAGNOSIS AND TROUBLESHOOTING
+# =============================================================================
+
+# Diagnose Reality connection issues
+diagnose_reality() {
+    if [ "$EUID" -ne 0 ]; then
+        error "Reality diagnosis requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    log "🔍 Diagnosing Reality connection issues..."
+    
+    # Check if server is running
+    if ! docker ps | grep -q xray; then
+        error "Xray container is not running"
+        return 1
+    fi
+    
+    # Get server configuration
+    local config_file="/opt/v2ray/config/config.json"
+    local port_file="/opt/v2ray/config/port.txt"
+    
+    if [ ! -f "$config_file" ]; then
+        error "Configuration file not found: $config_file"
+        return 1
+    fi
+    
+    # Check server port
+    local server_port
+    if [ -f "$port_file" ]; then
+        server_port=$(cat "$port_file")
+    else
+        server_port=$(jq -r '.inbounds[0].port' "$config_file" 2>/dev/null)
+    fi
+    
+    log "Server port: $server_port"
+    
+    # Check firewall rules
+    log "Checking firewall rules..."
+    if command -v ufw >/dev/null 2>&1; then
+        local ufw_status=$(ufw status | grep "$server_port")
+        if [ -n "$ufw_status" ]; then
+            log "✓ Port $server_port is allowed in UFW"
+            echo "$ufw_status"
+        else
+            warning "Port $server_port is NOT allowed in UFW"
+            log "Adding firewall rule..."
+            ufw allow "$server_port/tcp" || warning "Failed to add firewall rule"
+        fi
+    else
+        warning "UFW is not installed"
+    fi
+    
+    # Check port accessibility
+    log "Checking port accessibility..."
+    if command -v nc >/dev/null 2>&1; then
+        if nc -z localhost "$server_port" 2>/dev/null; then
+            log "✓ Port $server_port is accessible locally"
+        else
+            warning "Port $server_port is NOT accessible locally"
+        fi
+    fi
+    
+    # Check Reality configuration
+    log "Checking Reality configuration..."
+    local private_key=$(jq -r '.inbounds[0].streamSettings.realitySettings.privateKey' "$config_file" 2>/dev/null)
+    local sni_domains=$(jq -r '.inbounds[0].streamSettings.realitySettings.serverNames[]' "$config_file" 2>/dev/null)
+    local short_ids=$(jq -r '.inbounds[0].streamSettings.realitySettings.shortIds[]' "$config_file" 2>/dev/null)
+    
+    if [ -n "$private_key" ] && [ "$private_key" != "null" ]; then
+        log "✓ Private key is configured"
+    else
+        warning "Private key is missing or invalid"
+    fi
+    
+    if [ -n "$sni_domains" ]; then
+        log "✓ SNI domains configured:"
+        echo "$sni_domains" | while read -r domain; do
+            echo "  - $domain"
+        done
+    else
+        warning "No SNI domains configured"
+    fi
+    
+    if [ -n "$short_ids" ]; then
+        log "✓ Short IDs configured:"
+        echo "$short_ids" | while read -r sid; do
+            echo "  - $sid"
+        done
+    else
+        warning "No short IDs configured"
+    fi
+    
+    # Check recent errors
+    log "Recent error logs:"
+    if [ -f "/opt/v2ray/logs/error.log" ]; then
+        tail -10 /opt/v2ray/logs/error.log | grep -E "(REALITY|invalid|error)" || log "No recent Reality errors found"
+    fi
+    
+    # Suggestions
+    log "💡 Troubleshooting suggestions:"
+    echo "1. If getting 'processed invalid connection' errors:"
+    echo "   - Check client configuration matches server Reality keys"
+    echo "   - Verify SNI domain is accessible from client location"
+    echo "   - Ensure client uses correct short ID"
+    echo "2. If port is blocked:"
+    echo "   - Run: sudo ufw allow $server_port/tcp"
+    echo "   - Check cloud provider security groups"
+    echo "3. If keys are invalid:"
+    echo "   - Run: sudo ./vpn.sh fix-reality"
+    
+    return 0
+}
+
+# =============================================================================
 # HELP AND VERSION
 # =============================================================================
 
@@ -1097,6 +1212,7 @@ show_usage() {
     echo "  restart              Restart VPN server"
     echo "  fix-reality          Fix Reality connection issues"
     echo "  validate             Validate server configuration"
+    echo "  diagnose             Diagnose Reality connection issues"
     echo ""
     echo -e "${YELLOW}User Management:${NC}"
     echo "  users                Interactive user management menu"
@@ -1152,6 +1268,9 @@ main() {
             ;;
         "validate")
             validate_config
+            ;;
+        "diagnose")
+            diagnose_reality
             ;;
         "users")
             handle_user_management
