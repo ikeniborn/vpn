@@ -36,10 +36,11 @@ show_user_management_menu() {
         echo "3) 🗑️  Delete User"
         echo "4) ✏️  Edit User"
         echo "5) 👤 Show User Data"
+        echo "6) 🌐 Manage SNI Domains"
         echo "0) 🔙 Back to Main Menu"
         echo ""
         
-        read -p "Select option (0-5): " choice
+        read -p "Select option (0-6): " choice
         case $choice in
             1) 
                 list_users
@@ -90,11 +91,31 @@ show_user_management_menu() {
                 fi
                 read -p "Press Enter to continue..."
                 ;;
+            6)
+                echo "Current users:"
+                list_users
+                echo ""
+                read -p "Enter username to manage SNI domains: " username
+                if [ -n "$username" ]; then
+                    # Load multi-SNI module if not loaded
+                    if ! type manage_user_sni_interactive &>/dev/null; then
+                        source "$PROJECT_ROOT/modules/users/multi_sni.sh" || {
+                            error "Failed to load multi-SNI module"
+                            read -p "Press Enter to continue..."
+                            continue
+                        }
+                    fi
+                    manage_user_sni_interactive "$username"
+                else
+                    warning "Username cannot be empty"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
             0)
                 break
                 ;;
             *)
-                warning "Invalid option. Please choose 0-5."
+                warning "Invalid option. Please choose 0-6."
                 read -p "Press Enter to continue..."
                 ;;
         esac

@@ -48,9 +48,14 @@ show_main_menu() {
     echo "  9)  🔍 System Diagnostics"
     echo "  10) 🧹 Clean Up Unused Ports"
     echo ""
+    echo -e "${YELLOW}Security & Performance:${NC}"
+    echo "  11) 🔒 Security Hardening"
+    echo "  12) 🚀 Speed Testing"
+    echo "  13) 📊 Monitoring Dashboard"
+    echo ""
     echo -e "${YELLOW}Help & Info:${NC}"
-    echo "  11) ❓ Show Help"
-    echo "  12) ℹ️  Show Version"
+    echo "  14) ❓ Show Help"
+    echo "  15) ℹ️  Show Version"
     echo ""
     echo -e "${RED}  0)  🚪 Exit${NC}"
     echo ""
@@ -95,10 +100,19 @@ handle_menu_choice() {
             handle_cleanup_ports
             ;;
         11)
+            handle_security_hardening
+            ;;
+        12)
+            handle_speed_testing
+            ;;
+        13)
+            handle_monitoring_dashboard
+            ;;
+        14)
             show_usage
             read -p "Press Enter to continue..."
             ;;
-        12)
+        15)
             show_version
             read -p "Press Enter to continue..."
             ;;
@@ -107,7 +121,7 @@ handle_menu_choice() {
             exit 0
             ;;
         *)
-            warning "Invalid option. Please choose 0-11."
+            warning "Invalid option. Please choose 0-15."
             ;;
     esac
 }
@@ -154,7 +168,7 @@ run_interactive_menu() {
     
     while true; do
         show_main_menu
-        read -p "Select option (0-11): " choice
+        read -p "Select option (0-15): " choice
         
         # Handle errors gracefully
         handle_menu_choice "$choice" || {
@@ -256,6 +270,167 @@ handle_cleanup_ports() {
     read
 }
 
+# Handler for Security Hardening option
+handle_security_hardening() {
+    echo -e "${BLUE}🔒 Security Hardening Management${NC}"
+    echo
+    
+    # Load security module if not already loaded
+    load_module_lazy "security/hardening.sh"
+    
+    # Show security menu
+    while true; do
+        echo -e "${BOLD}Security Features:${NC}"
+        echo "1. Run Security Audit"
+        echo "2. Apply Security Hardening"
+        echo "3. Configure Security Features"
+        echo "4. View Security Status"
+        echo "0. Back"
+        echo
+        
+        read -p "Select option: " sec_choice
+        
+        case $sec_choice in
+            1)
+                run_security_audit
+                read -p "Press Enter to continue..."
+                ;;
+            2)
+                apply_security_hardening
+                read -p "Press Enter to continue..."
+                ;;
+            3)
+                echo -e "\n${BOLD}Available Security Features:${NC}"
+                echo "1. Fail2ban (Brute-force protection)"
+                echo "2. Port Knocking"
+                echo "3. Geo-blocking"
+                echo "4. Rate Limiting"
+                echo "5. Connection Limits"
+                echo "6. Intrusion Detection"
+                echo
+                read -p "Select feature to configure: " feature_choice
+                
+                case $feature_choice in
+                    1) feature="fail2ban" ;;
+                    2) feature="port_knocking" ;;
+                    3) feature="geo_blocking" ;;
+                    4) feature="rate_limiting" ;;
+                    5) feature="connection_limits" ;;
+                    6) feature="intrusion_detection" ;;
+                    *) echo "Invalid choice"; continue ;;
+                esac
+                
+                read -p "Enable or disable? (enable/disable): " action
+                if [ "$action" = "enable" ] || [ "$action" = "disable" ]; then
+                    configure_security_feature "$feature" "$action"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            4)
+                if [ -f "/opt/v2ray/config/security.json" ]; then
+                    echo -e "\n${BOLD}Current Security Configuration:${NC}"
+                    jq '.' /opt/v2ray/config/security.json
+                else
+                    echo "Security configuration not found"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            0)
+                break
+                ;;
+            *)
+                warning "Invalid option"
+                ;;
+        esac
+    done
+}
+
+# Handler for Speed Testing option
+handle_speed_testing() {
+    echo -e "${BLUE}🚀 Connection Speed Testing${NC}"
+    echo
+    
+    # Load speed test module if not already loaded
+    load_module_lazy "monitoring/speed_test.sh"
+    
+    # Show speed test menu
+    while true; do
+        echo -e "${BOLD}Speed Test Options:${NC}"
+        echo "1. Run Comprehensive Speed Test"
+        echo "2. Test Latency Only"
+        echo "3. Test Download Speed"
+        echo "4. Test Upload Speed"
+        echo "5. Show Speed Test History"
+        echo "6. Schedule Periodic Tests"
+        echo "7. Export Test Results"
+        echo "0. Back"
+        echo
+        
+        read -p "Select option: " speed_choice
+        
+        case $speed_choice in
+            1)
+                run_comprehensive_speed_test
+                read -p "Press Enter to continue..."
+                ;;
+            2)
+                for endpoint in "8.8.8.8" "1.1.1.1"; do
+                    echo -n "Testing $endpoint: "
+                    result=$(test_connection_latency "$endpoint" 5)
+                    if echo "$result" | jq -e '.avg' >/dev/null 2>&1; then
+                        avg=$(echo "$result" | jq -r '.avg')
+                        echo -e "${GREEN}${avg}ms${NC}"
+                    else
+                        echo -e "${RED}Failed${NC}"
+                    fi
+                done
+                read -p "Press Enter to continue..."
+                ;;
+            3)
+                test_download_speed
+                read -p "Press Enter to continue..."
+                ;;
+            4)
+                test_upload_speed
+                read -p "Press Enter to continue..."
+                ;;
+            5)
+                show_speed_test_history 20
+                read -p "Press Enter to continue..."
+                ;;
+            6)
+                read -p "Test interval in hours (default: 6): " interval
+                read -p "Enable scheduling? (yes/no): " enable
+                schedule_speed_tests "${interval:-6}" "$([[ "$enable" == "yes" ]] && echo "true" || echo "false")"
+                read -p "Press Enter to continue..."
+                ;;
+            7)
+                read -p "Export format (json/csv): " format
+                export_speed_test_results "$format"
+                read -p "Press Enter to continue..."
+                ;;
+            0)
+                break
+                ;;
+            *)
+                warning "Invalid option"
+                ;;
+        esac
+    done
+}
+
+# Handler for Monitoring Dashboard option
+handle_monitoring_dashboard() {
+    echo -e "${BLUE}📊 Monitoring Dashboard Management${NC}"
+    echo
+    
+    # Load dashboard module if not already loaded
+    load_module_lazy "monitoring/dashboard.sh"
+    
+    # Show dashboard menu
+    dashboard_menu
+}
+
 # =============================================================================
 # EXPORT FUNCTIONS
 # =============================================================================
@@ -268,4 +443,7 @@ export -f handle_fix_reality
 export -f handle_validate_config
 export -f handle_system_diagnostics
 export -f handle_cleanup_ports
+export -f handle_security_hardening
+export -f handle_speed_testing
+export -f handle_monitoring_dashboard
 export -f run_interactive_menu
