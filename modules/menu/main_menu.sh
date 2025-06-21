@@ -45,7 +45,7 @@ show_main_menu() {
     echo "  6)  🛡️  Watchdog Service"
     echo "  7)  🔧 Fix Reality Issues"
     echo "  8)  ✅ Validate Configuration"
-    echo "  9)  🔍 Diagnose Reality Issues"
+    echo "  9)  🔍 System Diagnostics"
     echo "  10) 🧹 Clean Up Unused Ports"
     echo ""
     echo -e "${YELLOW}Help & Info:${NC}"
@@ -89,7 +89,7 @@ handle_menu_choice() {
             handle_validate_config
             ;;
         9)
-            handle_diagnose_reality
+            handle_system_diagnostics
             ;;
         10)
             handle_cleanup_ports
@@ -219,16 +219,19 @@ handle_validate_config() {
     read
 }
 
-# Handler for Diagnose Reality Issues option
-handle_diagnose_reality() {
-    echo -e "${BLUE}🔍 Запуск диагностики Reality соединений...${NC}"
+# Handler for System Diagnostics option
+handle_system_diagnostics() {
+    echo -e "${BLUE}🔍 Запуск системной диагностики...${NC}"
     echo
     
-    # Call the diagnose function from vpn.sh
-    if diagnose_reality; then
+    # Load the diagnostics module if not already loaded
+    load_module_lazy "system/diagnostics.sh"
+    
+    # Run full diagnostics
+    if run_full_diagnostics; then
         echo -e "${GREEN}✅ Диагностика завершена${NC}"
     else
-        echo -e "${RED}❌ Ошибка при выполнении диагностики${NC}"
+        echo -e "${YELLOW}⚠️  Обнаружены проблемы, см. отчет выше${NC}"
     fi
     
     echo
@@ -263,6 +266,6 @@ export -f handle_menu_choice
 export -f handle_watchdog_menu
 export -f handle_fix_reality
 export -f handle_validate_config
-export -f handle_diagnose_reality
+export -f handle_system_diagnostics
 export -f handle_cleanup_ports
 export -f run_interactive_menu
