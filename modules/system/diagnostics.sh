@@ -180,8 +180,45 @@ check_docker_health() {
         echo "$containers" | while read -r line; do
             echo "  • $line"
         done
+        
+        # Check for specific issues with Xray container
+        if docker ps -a --format "{{.Names}}" | grep -q "xray"; then
+            local xray_status=$(docker ps -a --format "{{.Names}}\t{{.Status}}" | grep "xray" | awk '{print $2}')
+            if [[ "$xray_status" =~ Exited ]]; then
+                echo ""
+                echo "  ⚠️  Xray container has exited. Recent logs:"
+                docker logs xray 2>&1 | tail -10 | sed 's/^/    /'
+                issues_found=true
+            elif [[ "$xray_status" =~ Up ]]; then
+                # Check if container is healthy
+                local health_check=$(docker inspect xray --format='{{.State.Health.Status}}' 2>/dev/null || echo "none")
+                if [ "$health_check" = "unhealthy" ]; then
+                    echo "  ⚠️  Xray container is unhealthy"
+                    echo "  Recent logs:"
+                    docker logs xray 2>&1 | tail -5 | sed 's/^/    /'
+                    issues_found=true
+                elif [ "$health_check" = "healthy" ]; then
+                    echo "  ✅ Xray container is healthy"
+                else
+                    echo "  ℹ️  Health status: $health_check"
+                fi
+                
+                # Test configuration inside container
+                echo "  Testing Xray configuration inside container..."
+                local config_test=$(docker exec xray xray test -c /etc/xray/config.json 2>&1 || echo "failed")
+                if echo "$config_test" | grep -q "Configuration OK"; then
+                    echo "    ✅ Configuration test passed"
+                else
+                    echo "    ❌ Configuration test failed:"
+                    echo "$config_test" | sed 's/^/      /'
+                    issues_found=true
+                fi
+            fi
+        fi
     else
         echo "  No VPN containers found"
+        echo "  ⚠️  This indicates VPN server is not installed or containers are missing"
+        issues_found=true
     fi
     
     # Check Docker networks
@@ -267,10 +304,42 @@ validate_vpn_configuration() {
                     
                     # Check if port is listening
                     echo -n "✓ Port status: "
+                    local port_listening=false
                     if netstat -tuln 2>/dev/null | grep -q ":$port "; then
+                        port_listening=true
+                    elif ss -tuln 2>/dev/null | grep -q ":$port "; then
+                        port_listening=true
+                    fi
+                    
+                    if [ "$port_listening" = true ]; then
                         echo "Listening"
+                        
+                        # Show which process is using the port
+                        local process=$(netstat -tulnp 2>/dev/null | grep ":$port " | awk '{print $7}' | cut -d'/' -f2 | head -1)
+                        if [ -z "$process" ]; then
+                            process=$(ss -tulnp 2>/dev/null | grep ":$port " | grep -oP 'users:\(\("\K[^"]+' | head -1)
+                        fi
+                        if [ -n "$process" ]; then
+                            echo "    Process: $process"
+                        fi
                     else
                         echo "Not listening"
+                        
+                        # Check if Docker container is running
+                        if docker ps --format "{{.Names}}" 2>/dev/null | grep -q "xray"; then
+                            echo "    Docker: Xray container is running"
+                            echo "    Issue: Container running but port not listening"
+                            
+                            # Check container logs for errors
+                            local container_logs=$(docker logs xray 2>&1 | tail -5)
+                            if [ -n "$container_logs" ]; then
+                                echo "    Recent logs:"
+                                echo "$container_logs" | sed 's/^/      /'
+                            fi
+                        else
+                            echo "    Docker: Xray container is not running"
+                        fi
+                        
                         issues_found=true
                     fi
                 else
@@ -287,10 +356,18 @@ validate_vpn_configuration() {
                     # Check Reality keys
                     echo -n "✓ Private key: "
                     local priv_key=$(jq -r '.inbounds[0].streamSettings.realitySettings.privateKey' /opt/v2ray/config/config.json 2>/dev/null)
-                    if [ -n "$priv_key" ] && [ "$priv_key" != "null" ] && [ ${#priv_key} -eq 44 ]; then
-                        echo "Valid (44 chars)"
+                    if [ -n "$priv_key" ] && [ "$priv_key" != "null" ] && [ ${#priv_key} -ge 32 ]; then
+                        echo "Valid (${#priv_key} chars)"
+                        
+                        # Additional validation - check if it's base64-like
+                        if [[ "$priv_key" =~ ^[A-Za-z0-9+/=_-]+$ ]]; then
+                            echo "    Format: Valid base64"
+                        else
+                            echo "    Format: Invalid base64"
+                            issues_found=true
+                        fi
                     else
-                        echo "Invalid or missing"
+                        echo "Invalid or missing (length: ${#priv_key})"
                         issues_found=true
                     fi
                     
