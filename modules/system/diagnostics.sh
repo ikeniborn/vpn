@@ -541,11 +541,36 @@ test_network_connectivity() {
     echo "NAT Rules (for VPN):"
     if iptables -t nat -L POSTROUTING -n 2>/dev/null | grep -q MASQUERADE; then
         echo "  ✓ Masquerading rules found"
-        iptables -t nat -L POSTROUTING -n 2>/dev/null | grep MASQUERADE | head -3 | while read -r line; do
+        iptables -t nat -L POSTROUTING -n 2>/dev/null | grep MASQUERADE | head -5 | while read -r line; do
             echo "    • $line"
         done
+        
+        # Check specifically for VPN network ranges
+        echo ""
+        echo "VPN Network Rules Check:"
+        local vpn_networks=("10.0.0.0/8" "192.168.0.0/16" "172.16.0.0/12")
+        local missing_rules=()
+        
+        for network in "${vpn_networks[@]}"; do
+            if iptables -t nat -C POSTROUTING -s "$network" -o "$primary_interface" -j MASQUERADE 2>/dev/null; then
+                echo "  ✓ $network masquerading: Configured"
+            else
+                echo "  ⚠️  $network masquerading: Missing"
+                missing_rules+=("$network")
+            fi
+        done
+        
+        if [ ${#missing_rules[@]} -gt 0 ]; then
+            echo ""
+            echo "  💡 Missing VPN masquerading rules. Add with:"
+            for network in "${missing_rules[@]}"; do
+                echo "    iptables -t nat -A POSTROUTING -s $network -o $primary_interface -j MASQUERADE"
+            done
+            issues_found=true
+        fi
     else
         echo "  ⚠️  No masquerading rules found"
+        echo "  💡 VPN traffic routing may not work properly"
         issues_found=true
     fi
     
@@ -701,13 +726,35 @@ diagnose_vpn_issues() {
         suggestions+=("Try using public DNS: 8.8.8.8 or 1.1.1.1")
     fi
     
-    # Check firewall
+    # Check firewall - more intelligent check
     echo "Checking firewall status..."
     if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
-        if ! ufw status 2>/dev/null | grep -qE "10443|10000:65000"; then
-            issues+=("VPN ports might not be allowed in firewall")
-            suggestions+=("Check firewall rules: sudo ufw status")
-            suggestions+=("Allow VPN port if needed: sudo ufw allow <port>/tcp")
+        # Get VPN port from configuration if available
+        local vpn_port=""
+        if [ -f "/opt/v2ray/config/config.json" ]; then
+            vpn_port=$(jq -r '.inbounds[0].port' /opt/v2ray/config/config.json 2>/dev/null)
+        fi
+        
+        # Check if specific VPN port is allowed, or if there are any high ports allowed
+        local firewall_ok=false
+        if [ -n "$vpn_port" ] && [ "$vpn_port" != "null" ]; then
+            if ufw status 2>/dev/null | grep -q "$vpn_port"; then
+                firewall_ok=true
+            fi
+        fi
+        
+        # Also check for common VPN port ranges
+        if ufw status 2>/dev/null | grep -qE "(10000|20000|30000|40000|50000)"; then
+            firewall_ok=true
+        fi
+        
+        if [ "$firewall_ok" = false ]; then
+            # Only add as issue if no VPN-related ports are found at all
+            if ! ufw status 2>/dev/null | grep -qE "[0-9]{4,5}"; then
+                issues+=("No high ports allowed in firewall - VPN might be blocked")
+                suggestions+=("Check firewall rules: sudo ufw status")
+                suggestions+=("Allow VPN port if needed: sudo ufw allow <port>/tcp")
+            fi
         fi
     fi
     
@@ -909,6 +956,31 @@ run_full_diagnostics() {
         echo "❌ Overall Status: ISSUES DETECTED"
     fi
     echo "==================================="
+    
+    # Ask about fixing issues
+    if [ "$overall_status" -ne 0 ]; then
+        echo ""
+        echo "Would you like to automatically fix VPN network issues?"
+        read -p "Fix network issues? (y/n): " -r
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo ""
+            # Load firewall module for fix function
+            if [ -f "$PROJECT_ROOT/modules/install/firewall.sh" ]; then
+                source "$PROJECT_ROOT/modules/install/firewall.sh" || {
+                    error "Failed to load firewall module for fixes"
+                }
+            fi
+            
+            if command -v fix_vpn_network_issues >/dev/null 2>&1; then
+                fix_vpn_network_issues true
+                echo ""
+                echo "Network fixes applied. You may want to restart the VPN server:"
+                echo "  sudo ./vpn.sh restart"
+            else
+                error "Fix function not available"
+            fi
+        fi
+    fi
     
     # Ask about report generation
     if [ "$save_report" = true ]; then

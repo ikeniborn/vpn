@@ -618,6 +618,120 @@ setup_vpn_network() {
     return 0
 }
 
+# Fix VPN network configuration issues
+fix_vpn_network_issues() {
+    local debug=${1:-false}
+    
+    [ "$debug" = true ] && log "Fixing VPN network configuration issues..."
+    
+    echo "🔧 Diagnosing and fixing VPN network issues..."
+    echo ""
+    
+    local issues_fixed=0
+    
+    # Get primary network interface
+    local primary_interface=$(ip route | grep '^default' | grep -o 'dev [^ ]*' | head -1 | cut -d' ' -f2)
+    if [ -z "$primary_interface" ]; then
+        primary_interface="eth0"  # Fallback
+        warning "Could not detect primary interface, using $primary_interface"
+    fi
+    
+    # Check and fix IP forwarding
+    echo "Checking IP forwarding..."
+    if [ "$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null)" != "1" ]; then
+        echo "  ❌ IP forwarding is disabled"
+        if enable_ip_forwarding "$debug"; then
+            echo "  ✅ IP forwarding enabled"
+            issues_fixed=$((issues_fixed + 1))
+        else
+            echo "  ❌ Failed to enable IP forwarding"
+        fi
+    else
+        echo "  ✅ IP forwarding is already enabled"
+    fi
+    
+    # Check and fix VPN masquerading rules
+    echo ""
+    echo "Checking VPN masquerading rules..."
+    local vpn_networks=("10.0.0.0/8" "192.168.0.0/16" "172.16.0.0/12")
+    local missing_rules=()
+    
+    for network in "${vpn_networks[@]}"; do
+        if ! iptables -t nat -C POSTROUTING -s "$network" -o "$primary_interface" -j MASQUERADE 2>/dev/null; then
+            missing_rules+=("$network")
+        fi
+    done
+    
+    if [ ${#missing_rules[@]} -gt 0 ]; then
+        echo "  ❌ Missing masquerading rules for VPN networks"
+        for network in "${missing_rules[@]}"; do
+            echo "    Adding rule for $network..."
+            if iptables -t nat -A POSTROUTING -s "$network" -o "$primary_interface" -j MASQUERADE; then
+                echo "    ✅ Added masquerading rule for $network"
+                issues_fixed=$((issues_fixed + 1))
+            else
+                echo "    ❌ Failed to add masquerading rule for $network"
+            fi
+        done
+    else
+        echo "  ✅ All VPN masquerading rules are present"
+    fi
+    
+    # Check and fix FORWARD policy
+    echo ""
+    echo "Checking FORWARD policy..."
+    local current_forward_policy=$(iptables -L FORWARD | head -1 | grep -o 'policy [A-Z]*' | awk '{print $2}')
+    if [ "$current_forward_policy" != "ACCEPT" ]; then
+        echo "  ❌ FORWARD policy is $current_forward_policy"
+        if iptables -P FORWARD ACCEPT 2>/dev/null; then
+            echo "  ✅ FORWARD policy set to ACCEPT"
+            issues_fixed=$((issues_fixed + 1))
+        else
+            echo "  ❌ Failed to set FORWARD policy"
+        fi
+    else
+        echo "  ✅ FORWARD policy is already ACCEPT"
+    fi
+    
+    # Add FORWARD rules for established connections
+    echo ""
+    echo "Checking FORWARD rules for established connections..."
+    if ! iptables -C FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null; then
+        echo "  ❌ Missing FORWARD rule for established connections"
+        if iptables -I FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT; then
+            echo "  ✅ Added FORWARD rule for established connections"
+            issues_fixed=$((issues_fixed + 1))
+        else
+            echo "  ❌ Failed to add FORWARD rule for established connections"
+        fi
+    else
+        echo "  ✅ FORWARD rule for established connections exists"
+    fi
+    
+    # Save iptables rules
+    if [ $issues_fixed -gt 0 ]; then
+        echo ""
+        echo "Saving iptables rules..."
+        if save_iptables_rules "$debug"; then
+            echo "  ✅ Iptables rules saved"
+        else
+            echo "  ⚠️  Failed to save iptables rules (will be lost on reboot)"
+        fi
+    fi
+    
+    echo ""
+    if [ $issues_fixed -gt 0 ]; then
+        echo "🎉 Fixed $issues_fixed VPN network configuration issues"
+        echo ""
+        echo "VPN network should now be properly configured for traffic routing."
+        echo "You may want to restart the VPN server to ensure all changes take effect."
+    else
+        echo "✅ No VPN network configuration issues found"
+    fi
+    
+    return 0
+}
+
 # =============================================================================
 # EXPORT FUNCTIONS
 # =============================================================================
@@ -638,6 +752,7 @@ export -f enable_ip_forwarding
 export -f setup_vpn_routing
 export -f save_iptables_rules
 export -f setup_vpn_network
+export -f fix_vpn_network_issues
 
 # =============================================================================
 # FIREWALL CLEANUP FUNCTIONS
