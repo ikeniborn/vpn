@@ -52,32 +52,44 @@ The installation script provides smart configuration options:
    - Automatic updates via Watchtower
    - ARM architecture support
 
-### User Management
+### Main Menu Options
 
-User management is available through the unified script:
+The unified VPN management interface (`sudo ./vpn.sh`) provides:
 
-```bash
-sudo ./vpn.sh users        # Interactive menu
-sudo ./vpn.sh user add john    # Add user directly
-sudo ./vpn.sh user list        # List all users
-```
+**Server Management:**
+1. **📦 Install VPN Server** - Complete server installation with protocol selection
+2. **📊 Server Status** - Real-time status, container health, and system metrics
+3. **🔄 Restart Server** - Safe restart with configuration validation
+4. **🗑️ Uninstall Server** - Complete removal with cleanup
 
-This provides a comprehensive menu-driven interface for:
+**User Management:**
+5. **👥 User Management** - Complete user lifecycle management
+   - List Users - Display all configured users with connection status
+   - Add User - Create new user with unique shortID and QR codes
+   - Delete User - Remove user and cleanup configurations
+   - Edit User - Modify user settings and regenerate credentials
+   - Show User Data - Display connection details, QR codes, and links
 
-1. **List Users** - Display all configured users
-2. **Add User** - Create new user with unique shortID
-3. **Delete User** - Remove user and cleanup configs
-4. **Edit User** - Modify user settings
-5. **Show User Data** - Display connection details + QR code
-6. **Server Status** - System and container status
-7. **Restart Server** - Apply configuration changes
-8. **🔄 Key Rotation** - Rotate Reality encryption keys
-9. **📊 Usage Statistics** - Traffic and performance analytics
-10. **🔧 Configure Logging** - Setup Xray logging with multiple levels
-11. **📋 View User Logs** - Analyze connection logs and user activity
-12. **Uninstall Server** - Complete removal with cleanup
+**Advanced Operations:**
+6. **🛡️ Watchdog Service** - Container monitoring and auto-restart service
+7. **🔧 Fix Reality Issues** - Repair Reality key configuration problems
+8. **✅ Validate Configuration** - Comprehensive configuration validation
+9. **🔍 System Diagnostics** - Complete system health check and auto-fix
+10. **🧹 Clean Up Unused Ports** - Remove old firewall rules for unused VPN ports
+
+**Help & Information:**
+11. **❓ Show Help** - Display usage information and commands
+12. **ℹ️ Show Version** - Show script version and system information
 
 ### Advanced Features
+
+#### System Diagnostics (New)
+- **Comprehensive Health Checks**: System requirements, Docker status, VPN configuration
+- **Network Connectivity Tests**: Internet access, DNS resolution, routing analysis
+- **Port Accessibility Validation**: Firewall rules, listening processes, external access
+- **Automatic Issue Detection**: Common VPN problems with suggested solutions
+- **Network Configuration Fixes**: Automatic repair of masquerading rules and routing
+- **Diagnostic Reports**: Detailed system analysis for troubleshooting
 
 #### Key Rotation
 - Automatic backup of current configuration
@@ -101,6 +113,12 @@ This provides a comprehensive menu-driven interface for:
 - **User Activity Analysis**: Per-user connection statistics
 - **Log Search & Filter**: Find specific user activities
 - **Connection Statistics**: Detailed connection metrics per user
+
+#### Network Configuration Management
+- **Automatic VPN Routing Setup**: IP forwarding, masquerading rules, FORWARD policies
+- **Firewall Integration**: UFW configuration with VPN port management
+- **Network Issue Detection**: Missing NAT rules, incorrect policies, port conflicts
+- **One-Click Network Fixes**: Automatic repair of common routing problems
 
 ### Docker Operations
 
