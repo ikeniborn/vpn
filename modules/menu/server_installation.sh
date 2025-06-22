@@ -662,8 +662,10 @@ setup_firewall() {
             return 1
         }
     elif [ "$PROTOCOL" = "outline" ]; then
-        setup_outline_firewall true || {
-            error "Failed to configure Outline firewall"
+        # For Outline, firewall is already configured during installation
+        # Just ensure basic firewall setup is complete
+        setup_basic_firewall true || {
+            error "Failed to configure basic firewall"
             return 1
         }
     fi

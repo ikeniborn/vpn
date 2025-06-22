@@ -369,6 +369,11 @@ install_outline_server() {
         export OUTLINE_DIR="/opt/outline"
     fi
     
+    # Set default OUTLINE_API_PORT if not already set
+    if [ -z "$OUTLINE_API_PORT" ]; then
+        export OUTLINE_API_PORT="9000"
+    fi
+    
     # Check architecture compatibility
     local arch=$(get_system_architecture)
     if [ "$arch" = "unknown" ]; then
@@ -391,6 +396,19 @@ install_outline_server() {
     if [ -z "$SERVER_PORT" ]; then
         warning "SERVER_PORT not set, using default 10443"
         export SERVER_PORT="10443"
+    fi
+    
+    # Ensure SERVER_IP is set
+    if [ -z "$SERVER_IP" ]; then
+        log "Detecting external IP address..."
+        if command -v get_external_ip >/dev/null 2>&1; then
+            SERVER_IP=$(get_external_ip)
+        else
+            # Fallback IP detection
+            SERVER_IP=$(curl -s ifconfig.me 2>/dev/null || curl -s ipinfo.io/ip 2>/dev/null || echo "YOUR_SERVER_IP")
+        fi
+        export SERVER_IP
+        log "Detected external IP: $SERVER_IP"
     fi
     
     # Clear and initialize access file

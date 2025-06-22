@@ -164,6 +164,26 @@ setup_basic_firewall() {
     
     [ "$debug" = true ] && log "Setting up basic firewall..."
     
+    # Install UFW if not present
+    if ! command -v ufw >/dev/null 2>&1; then
+        log "Installing UFW firewall..."
+        if command -v apt-get >/dev/null 2>&1; then
+            apt-get update && apt-get install -y ufw || {
+                error "Failed to install UFW"
+                return 1
+            }
+        elif command -v yum >/dev/null 2>&1; then
+            yum install -y ufw || {
+                error "Failed to install UFW"
+                return 1
+            }
+        else
+            error "Package manager not supported for UFW installation"
+            return 1
+        fi
+        log "UFW installed successfully"
+    fi
+    
     # Ensure SSH access
     if ! check_ssh_rule_exists "$debug"; then
         [ "$debug" = true ] && log "Adding SSH rule..."
