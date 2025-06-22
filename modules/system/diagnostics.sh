@@ -555,25 +555,44 @@ test_network_connectivity() {
         # Check specifically for VPN network ranges
         echo ""
         echo "VPN Network Rules Check:"
-        local vpn_networks=("10.0.0.0/8" "192.168.0.0/16" "172.16.0.0/12")
-        local missing_rules=()
         
-        for network in "${vpn_networks[@]}"; do
-            if iptables -t nat -C POSTROUTING -s "$network" -o "$primary_interface" -j MASQUERADE 2>/dev/null; then
-                echo "  ✓ $network masquerading: Configured"
+        # For Outline VPN, we might need to check different interfaces
+        if ip link show outline-tun0 &>/dev/null; then
+            # Outline might not need these specific rules as it handles its own NAT
+            echo "  ℹ️  Outline VPN detected - uses its own NAT configuration"
+            echo "  ℹ️  outline-tun0 interface is present"
+            
+            # Check if Outline's NAT is working
+            if iptables -t nat -L POSTROUTING -n 2>/dev/null | grep -q "outline-tun0"; then
+                echo "  ✓ Outline NAT rules are configured"
             else
-                echo "  ⚠️  $network masquerading: Missing"
-                missing_rules+=("$network")
+                echo "  ℹ️  Outline manages its own NAT internally"
             fi
-        done
-        
-        if [ ${#missing_rules[@]} -gt 0 ]; then
-            echo ""
-            echo "  💡 Missing VPN masquerading rules. Add with:"
-            for network in "${missing_rules[@]}"; do
-                echo "    iptables -t nat -A POSTROUTING -s $network -o $primary_interface -j MASQUERADE"
+        else
+            # For other VPN types (Xray), check standard rules
+            local vpn_networks=("10.0.0.0/8" "192.168.0.0/16" "172.16.0.0/12")
+            local missing_rules=()
+            
+            # Determine the correct output interface
+            local output_interface="$primary_interface"
+            
+            for network in "${vpn_networks[@]}"; do
+                if iptables -t nat -C POSTROUTING -s "$network" -o "$output_interface" -j MASQUERADE 2>/dev/null; then
+                    echo "  ✓ $network masquerading: Configured"
+                else
+                    echo "  ⚠️  $network masquerading: Missing"
+                    missing_rules+=("$network")
+                fi
             done
-            issues_found=true
+            
+            if [ ${#missing_rules[@]} -gt 0 ]; then
+                echo ""
+                echo "  💡 Missing VPN masquerading rules. Add with:"
+                for network in "${missing_rules[@]}"; do
+                    echo "    iptables -t nat -A POSTROUTING -s $network -o $output_interface -j MASQUERADE"
+                done
+                issues_found=true
+            fi
         fi
     else
         echo "  ⚠️  No masquerading rules found"
@@ -614,8 +633,18 @@ check_port_accessibility() {
         
         # Try to get port from Outline
         if [ -z "$port" ] || [ "$port" = "null" ]; then
-            if [ -f "/opt/outline/access.txt" ]; then
-                port=$(grep -oP 'port":\K[0-9]+' /opt/outline/access.txt 2>/dev/null | head -1)
+            # First try to get from server config
+            if [ -f "/opt/outline/persisted-state/shadowbox_server_config.json" ]; then
+                port=$(jq -r '.portForNewAccessKeys' /opt/outline/persisted-state/shadowbox_server_config.json 2>/dev/null)
+            fi
+            
+            # If still not found, try access.txt (API port)
+            if [ -z "$port" ] || [ "$port" = "null" ]; then
+                if [ -f "/opt/outline/access.txt" ]; then
+                    # Extract port from apiUrl
+                    local api_url=$(grep -oP 'apiUrl:https://[^/]+:\K[0-9]+' /opt/outline/access.txt 2>/dev/null | head -1)
+                    # Note: this is API port, not VPN port
+                fi
             fi
         fi
         

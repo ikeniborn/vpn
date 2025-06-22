@@ -2367,7 +2367,12 @@ main() {
             validate_config
             ;;
         "diagnose")
-            diagnose_reality
+            # Use system diagnostics module instead of legacy diagnose_reality
+            load_module_lazy "system/diagnostics.sh" || {
+                error "Failed to load diagnostics module"
+                exit 1
+            }
+            run_full_diagnostics
             ;;
         "update-users")
             update_user_configs
