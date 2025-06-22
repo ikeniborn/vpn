@@ -790,9 +790,37 @@ show_installation_results() {
         echo -e "${BLUE}First User:${NC} $USER_NAME"
         echo -e "\n${YELLOW}Use the 'users' menu to manage users and get connection details.${NC}"
     elif [ "$PROTOCOL" = "outline" ]; then
-        echo -e "\n${YELLOW}Outline VPN installed successfully!${NC}"
-        echo -e "${YELLOW}Access configuration from:${NC} /opt/outline/access.txt"
-        echo -e "${YELLOW}Use Outline Manager app to manage users.${NC}"
+        echo -e "\n${GREEN}CONGRATULATIONS! Your Outline server is up and running.${NC}"
+        echo ""
+        
+        # Show access key port if available
+        if [ -f "/opt/outline/configured_port.txt" ]; then
+            local configured_port=$(cat "/opt/outline/configured_port.txt")
+            echo -e "${BLUE}Access Key Port:${NC} $configured_port"
+            echo ""
+        fi
+        
+        # Show connection string
+        if [ -f "/opt/outline/api_url.txt" ] && [ -f "/opt/outline/access.txt" ]; then
+            local public_api_url=$(cat "/opt/outline/api_url.txt")
+            local cert_sha256=$(grep "certSha256" "/opt/outline/access.txt" | sed "s/certSha256://")
+            
+            echo "To manage your Outline server, please copy the following line (including curly"
+            echo "brackets) into Step 2 of the Outline Manager interface:"
+            echo ""
+            echo -e "${GREEN}{\"apiUrl\":\"${public_api_url}\",\"certSha256\":\"${cert_sha256}\"}${NC}"
+            echo ""
+        fi
+        
+        # Show firewall status
+        if [ -f "/opt/outline/firewall_status.txt" ]; then
+            cat "/opt/outline/firewall_status.txt"
+            echo ""
+        fi
+        
+        echo -e "${YELLOW}Download Outline Manager:${NC}"
+        echo -e "${WHITE}https://getoutline.org/get-started/#step-1${NC}"
+        echo ""
     fi
     
     echo -e "\n${GREEN}Installation completed successfully!${NC}\n"

@@ -459,11 +459,12 @@ install_outline_server() {
         return 1
     }
     
-    # Check firewall status
+    # Check firewall status and save for later display
     local firewall_status=$(check_outline_firewall "$local_api_url" "$public_api_url" "$api_port" "$SERVER_PORT" "$debug")
     
-    # Display results
-    display_outline_results "$access_file" "$public_api_url" "$firewall_status"
+    # Save results for later display in show_installation_results
+    echo "$public_api_url" > "$OUTLINE_DIR/api_url.txt"
+    echo "$firewall_status" > "$OUTLINE_DIR/firewall_status.txt"
     
     log "Outline VPN server installation completed successfully!"
     return 0
