@@ -153,10 +153,41 @@ handle_server_status() {
         
         if [ "$outline_status" = "running" ]; then
             echo -e "  Status: ${GREEN}✓ Running${NC}"
-            if [ -f "/opt/outline/access.txt" ]; then
-                local api_url=$(grep "apiUrl" /opt/outline/access.txt 2>/dev/null | cut -d'"' -f4)
+            
+            # Get API port and access key port
+            local api_port=$(cat /opt/outline/api_port.txt 2>/dev/null || echo "9000")
+            local access_port=$(cat /opt/outline/configured_port.txt 2>/dev/null || echo "Unknown")
+            
+            echo -e "  API Port: ${BLUE}$api_port${NC}"
+            echo -e "  Access Port: ${BLUE}$access_port${NC}"
+            
+            # Get API URL from saved file or access.txt
+            local api_url=""
+            if [ -f "/opt/outline/api_url.txt" ]; then
+                api_url=$(cat /opt/outline/api_url.txt 2>/dev/null)
+            elif [ -f "/opt/outline/access.txt" ]; then
+                api_url=$(grep "apiUrl:" /opt/outline/access.txt 2>/dev/null | cut -d':' -f2-)
+            fi
+            
+            if [ -n "$api_url" ]; then
                 echo -e "  API URL: ${BLUE}$api_url${NC}"
             fi
+            
+            # Check Watchtower status
+            local watchtower_status
+            if command -v get_container_status_cached >/dev/null 2>&1; then
+                watchtower_status=$(get_container_status_cached "watchtower")
+            else
+                watchtower_status=$(docker inspect -f '{{.State.Status}}' watchtower 2>/dev/null || echo "not_found")
+            fi
+            
+            if [ "$watchtower_status" = "running" ]; then
+                echo -e "  Auto-Update: ${GREEN}✓ Active (Watchtower)${NC}"
+            else
+                echo -e "  Auto-Update: ${YELLOW}⚠ Inactive${NC}"
+            fi
+        elif [ "$outline_status" = "not_found" ]; then
+            echo -e "  Status: ${RED}✗ Not Found${NC}"
         else
             echo -e "  Status: ${RED}✗ Stopped${NC}"
         fi

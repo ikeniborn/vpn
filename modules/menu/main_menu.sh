@@ -51,7 +51,7 @@ show_main_menu() {
     echo "  4)  🗑️  Uninstall Server"
     echo ""
     echo -e "${YELLOW}User Management:${NC}"
-    echo "  5)  👥 User Management"
+    echo "  5)  👥 User Management Xray"
     echo ""
     echo -e "${YELLOW}Advanced:${NC}"
     echo "  6)  🛡️  Watchdog Service"

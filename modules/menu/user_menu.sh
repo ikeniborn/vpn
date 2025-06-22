@@ -37,7 +37,8 @@ show_user_management_menu() {
         echo "4) ✏️  Edit User"
         echo "5) 👤 Show User Data"
         echo "6) 🌐 Manage SNI Domains"
-        echo "0) 🔙 Back to Main Menu"
+        echo ""
+        echo -e "${RED}0) 🔙 Back to Main Menu${NC}"
         echo ""
         
         read -p "Select option (0-6): " choice
