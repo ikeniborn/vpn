@@ -12,6 +12,28 @@ source "$PROJECT_ROOT/lib/common.sh" || exit 1
 source "$PROJECT_ROOT/lib/config.sh" || exit 1
 source "$PROJECT_ROOT/lib/network.sh" || exit 1
 
+# Ensure network functions are available
+if ! type validate_sni_domain &>/dev/null; then
+    # Fallback implementation if network library not properly loaded
+    validate_sni_domain() {
+        local domain="$1"
+        
+        if [ -z "$domain" ]; then
+            return 1
+        fi
+        
+        # Basic format validation
+        if [[ "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$ ]]; then
+            # Check DNS resolution
+            if host "$domain" >/dev/null 2>&1 || nslookup "$domain" >/dev/null 2>&1; then
+                return 0
+            fi
+        fi
+        
+        return 1
+    }
+fi
+
 # SNI domain configuration file
 SNI_CONFIG_FILE="/opt/v2ray/config/multi_sni.json"
 

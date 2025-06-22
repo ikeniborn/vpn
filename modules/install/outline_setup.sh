@@ -329,10 +329,20 @@ display_outline_results() {
     # Get certificate fingerprint
     local cert_sha256=$(grep "certSha256" "$access_file" | sed "s/certSha256://")
     
+    # Get configured port
+    local configured_port=""
+    if [ -f "$OUTLINE_DIR/configured_port.txt" ]; then
+        configured_port=$(cat "$OUTLINE_DIR/configured_port.txt")
+    fi
+    
     # Display results
     echo ""
     echo -e "${GREEN}CONGRATULATIONS! Your Outline server is up and running.${NC}"
     echo ""
+    if [ -n "$configured_port" ]; then
+        echo -e "${BLUE}Access Key Port:${NC} $configured_port"
+        echo ""
+    fi
     echo "To manage your Outline server, please copy the following line (including curly"
     echo "brackets) into Step 2 of the Outline Manager interface:"
     echo ""
@@ -354,6 +364,11 @@ install_outline_server() {
     
     log "Starting Outline VPN server installation..."
     
+    # Set default OUTLINE_DIR if not already set
+    if [ -z "$OUTLINE_DIR" ]; then
+        export OUTLINE_DIR="/opt/outline"
+    fi
+    
     # Check architecture compatibility
     local arch=$(get_system_architecture)
     if [ "$arch" = "unknown" ]; then
@@ -368,8 +383,14 @@ install_outline_server() {
     
     # Set API port
     local api_port="${OUTLINE_API_PORT}"
-    if [[ $api_port == 0 ]]; then
+    if [[ -z "$api_port" ]] || [[ $api_port == 0 ]]; then
         api_port=$(get_random_port)
+    fi
+    
+    # Ensure SERVER_PORT is set
+    if [ -z "$SERVER_PORT" ]; then
+        warning "SERVER_PORT not set, using default 10443"
+        export SERVER_PORT="10443"
     fi
     
     # Clear and initialize access file

@@ -55,19 +55,17 @@ show_main_menu() {
     echo ""
     echo -e "${YELLOW}Advanced:${NC}"
     echo "  6)  🛡️  Watchdog Service"
-    echo "  7)  🔧 Fix Reality Issues"
-    echo "  8)  ✅ Validate Configuration"
-    echo "  9)  🔍 System Diagnostics"
-    echo "  10) 🧹 Clean Up Unused Ports"
+    echo "  7)  ✅ Validate Configuration"
+    echo "  8)  🔍 System Diagnostics"
     echo ""
     echo -e "${YELLOW}Security & Performance:${NC}"
-    echo "  11) 🔒 Security Hardening"
-    echo "  12) 🚀 Speed Testing"
-    echo "  13) 📊 Monitoring Dashboard"
+    echo "  9)  🔒 Security Hardening"
+    echo "  10) 🚀 Speed Testing"
+    echo "  11) 📊 Monitoring Dashboard"
     echo ""
     echo -e "${YELLOW}Help & Info:${NC}"
-    echo "  14) ❓ Show Help"
-    echo "  15) ℹ️  Show Version"
+    echo "  12) ❓ Show Help"
+    echo "  13) ℹ️  Show Version"
     echo ""
     echo -e "${RED}  0)  🚪 Exit${NC}"
     echo ""
@@ -100,40 +98,32 @@ handle_menu_choice() {
             handle_watchdog_menu
             ;;
         7)
-            handle_fix_reality
-            ;;
-        8)
             handle_validate_config
             ;;
-        9)
+        8)
             handle_system_diagnostics
             ;;
-        10)
-            handle_cleanup_ports
-            ;;
-        11)
+        9)
             handle_security_hardening
             ;;
-        12)
+        10)
             handle_speed_testing
             ;;
-        13)
+        11)
             handle_monitoring_dashboard
             ;;
-        14)
+        12)
             show_usage
-            read -p "Press Enter to continue..."
             ;;
-        15)
+        13)
             show_version
-            read -p "Press Enter to continue..."
             ;;
         0)
             echo -e "${GREEN}Goodbye!${NC}"
             exit 0
             ;;
         *)
-            warning "Invalid option. Please choose 0-15."
+            warning "Invalid option. Please choose 0-13."
             ;;
     esac
 }
@@ -180,7 +170,7 @@ run_interactive_menu() {
     
     while true; do
         show_main_menu
-        read -p "Select option (0-15): " choice
+        read -p "Select option (0-13): " choice
         
         # Handle errors gracefully
         handle_menu_choice "$choice" || {
@@ -197,7 +187,7 @@ run_interactive_menu() {
         fi
         
         # Only show continue prompt for non-exit and non-help options
-        if [ "$choice" != "14" ] && [ "$choice" != "15" ]; then
+        if [ "$choice" != "12" ] && [ "$choice" != "13" ]; then
             echo ""
             read -p "Press Enter to continue..."
         fi
@@ -210,23 +200,6 @@ run_interactive_menu() {
 # =============================================================================
 # ADVANCED OPTION HANDLERS
 # =============================================================================
-
-# Handler for Fix Reality Issues option
-handle_fix_reality() {
-    echo -e "${BLUE}🔧 Запуск исправления Reality ключей...${NC}"
-    echo
-    
-    # Call the fix_reality function from vpn.sh
-    if fix_reality; then
-        echo -e "${GREEN}✅ Reality ключи успешно исправлены${NC}"
-    else
-        echo -e "${RED}❌ Ошибка при исправлении Reality ключей${NC}"
-    fi
-    
-    echo
-    echo -e "${CYAN}Нажмите Enter для продолжения...${NC}"
-    read
-}
 
 # Handler for Validate Configuration option
 handle_validate_config() {
@@ -242,10 +215,6 @@ handle_validate_config() {
     else
         echo -e "${RED}❌ Обнаружены проблемы в конфигурации${NC}"
     fi
-    
-    echo
-    echo -e "${CYAN}Нажмите Enter для продолжения...${NC}"
-    read
 }
 
 # Handler for System Diagnostics option
@@ -262,27 +231,6 @@ handle_system_diagnostics() {
     else
         echo -e "${YELLOW}⚠️  Обнаружены проблемы, см. отчет выше${NC}"
     fi
-    
-    echo
-    echo -e "${CYAN}Нажмите Enter для продолжения...${NC}"
-    read
-}
-
-# Handler for Cleanup Ports option
-handle_cleanup_ports() {
-    echo -e "${BLUE}🧹 Очистка неиспользуемых VPN портов...${NC}"
-    echo
-    
-    # Call the cleanup function from vpn.sh
-    if cleanup_vpn_ports_interactive; then
-        echo -e "${GREEN}✅ Очистка портов завершена${NC}"
-    else
-        echo -e "${RED}❌ Ошибка при очистке портов${NC}"
-    fi
-    
-    echo
-    echo -e "${CYAN}Нажмите Enter для продолжения...${NC}"
-    read
 }
 
 # Handler for Security Hardening option
@@ -308,11 +256,9 @@ handle_security_hardening() {
         case $sec_choice in
             1)
                 run_security_audit
-                read -p "Press Enter to continue..."
                 ;;
             2)
                 apply_security_hardening
-                read -p "Press Enter to continue..."
                 ;;
             3)
                 echo -e "\n${BOLD}Available Security Features:${NC}"
@@ -339,7 +285,6 @@ handle_security_hardening() {
                 if [ "$action" = "enable" ] || [ "$action" = "disable" ]; then
                     configure_security_feature "$feature" "$action"
                 fi
-                read -p "Press Enter to continue..."
                 ;;
             4)
                 if [ -f "/opt/v2ray/config/security.json" ]; then
@@ -348,7 +293,6 @@ handle_security_hardening() {
                 else
                     echo "Security configuration not found"
                 fi
-                read -p "Press Enter to continue..."
                 ;;
             0)
                 break
@@ -386,7 +330,6 @@ handle_speed_testing() {
         case $speed_choice in
             1)
                 run_comprehensive_speed_test
-                read -p "Press Enter to continue..."
                 ;;
             2)
                 for endpoint in "8.8.8.8" "1.1.1.1"; do
@@ -399,30 +342,24 @@ handle_speed_testing() {
                         echo -e "${RED}Failed${NC}"
                     fi
                 done
-                read -p "Press Enter to continue..."
                 ;;
             3)
                 test_download_speed
-                read -p "Press Enter to continue..."
                 ;;
             4)
                 test_upload_speed
-                read -p "Press Enter to continue..."
                 ;;
             5)
                 show_speed_test_history 20
-                read -p "Press Enter to continue..."
                 ;;
             6)
                 read -p "Test interval in hours (default: 6): " interval
                 read -p "Enable scheduling? (yes/no): " enable
                 schedule_speed_tests "${interval:-6}" "$([[ "$enable" == "yes" ]] && echo "true" || echo "false")"
-                read -p "Press Enter to continue..."
                 ;;
             7)
                 read -p "Export format (json/csv): " format
                 export_speed_test_results "$format"
-                read -p "Press Enter to continue..."
                 ;;
             0)
                 break
@@ -452,12 +389,9 @@ handle_monitoring_dashboard() {
 
 export -f show_main_menu
 export -f handle_menu_choice
-# handle_xray_management removed - functionality integrated into main menu
 export -f handle_watchdog_menu
-export -f handle_fix_reality
 export -f handle_validate_config
 export -f handle_system_diagnostics
-export -f handle_cleanup_ports
 export -f handle_security_hardening
 export -f handle_speed_testing
 export -f handle_monitoring_dashboard

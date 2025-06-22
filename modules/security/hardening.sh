@@ -512,16 +512,31 @@ run_security_audit() {
     # Check SSH configuration
     echo -n "Checking SSH configuration... "
     local ssh_checks=0
-    grep -q "^PermitRootLogin no" /etc/ssh/sshd_config && ((ssh_checks++))
-    grep -q "^PasswordAuthentication no" /etc/ssh/sshd_config && ((ssh_checks++))
-    grep -q "^PubkeyAuthentication yes" /etc/ssh/sshd_config && ((ssh_checks++))
+    local ssh_config=""
     
-    if [ "$ssh_checks" -eq 3 ]; then
-        echo -e "${GREEN}Secure${NC}"
-        audit_results=$(echo "$audit_results" | jq '.checks.ssh = "secure"')
+    # Find SSH config file
+    for config_path in "/etc/ssh/sshd_config" "/etc/sshd_config" "/etc/openssh/sshd_config"; do
+        if [ -f "$config_path" ]; then
+            ssh_config="$config_path"
+            break
+        fi
+    done
+    
+    if [ -n "$ssh_config" ]; then
+        grep -q "^PermitRootLogin no" "$ssh_config" 2>/dev/null && ((ssh_checks++))
+        grep -q "^PasswordAuthentication no" "$ssh_config" 2>/dev/null && ((ssh_checks++))
+        grep -q "^PubkeyAuthentication yes" "$ssh_config" 2>/dev/null && ((ssh_checks++))
+        
+        if [ "$ssh_checks" -eq 3 ]; then
+            echo -e "${GREEN}Secure${NC}"
+            audit_results=$(echo "$audit_results" | jq '.checks.ssh = "secure"')
+        else
+            echo -e "${YELLOW}Needs hardening${NC}"
+            audit_results=$(echo "$audit_results" | jq '.checks.ssh = "needs_hardening"')
+        fi
     else
-        echo -e "${YELLOW}Needs hardening${NC}"
-        audit_results=$(echo "$audit_results" | jq '.checks.ssh = "needs_hardening"')
+        echo -e "${GRAY}SSH not installed${NC}"
+        audit_results=$(echo "$audit_results" | jq '.checks.ssh = "not_installed"')
     fi
     
     # Check firewall status
@@ -592,7 +607,8 @@ calculate_security_score() {
     local score=100
     
     # Deduct points for issues
-    [ "$(echo "$audit_results" | jq -r '.checks.ssh')" != "secure" ] && ((score-=20))
+    local ssh_status="$(echo "$audit_results" | jq -r '.checks.ssh')"
+    [ "$ssh_status" != "secure" ] && [ "$ssh_status" != "not_installed" ] && ((score-=20))
     [ "$(echo "$audit_results" | jq -r '.checks.firewall')" != "active" ] && ((score-=25))
     [ "$(echo "$audit_results" | jq -r '.checks.unnecessary_services')" != "none" ] && ((score-=15))
     [ "$(echo "$audit_results" | jq -r '.checks.kernel')" != "secure" ] && ((score-=15))

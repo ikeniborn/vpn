@@ -495,3 +495,21 @@ init_network() {
         fi
     fi
 }
+
+# Export functions
+export -f check_port_available
+export -f generate_free_port
+export -f get_used_ports
+export -f validate_domain_format
+export -f check_domain_dns
+export -f check_domain_port
+export -f check_domain_https
+export -f check_sni_domain
+export -f get_default_sni_domains
+export -f get_sni_domain
+export -f validate_sni_domain
+export -f find_working_sni_domain
+export -f get_external_ip
+export -f get_primary_interface
+export -f get_interface_ip
+export -f init_network

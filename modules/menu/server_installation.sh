@@ -281,6 +281,15 @@ configure_vless_reality() {
 
 # Configure Outline VPN protocol
 configure_outline_vpn() {
+    # Port configuration for Outline
+    log "Starting port configuration for Outline..."
+    if ! get_outline_port_config_interactive; then
+        error "Port configuration failed"
+        error "Failed to configure server port or user cancelled"
+        return 1
+    fi
+    log "Port configuration completed: $SERVER_PORT"
+    
     echo -e "\n${YELLOW}Setting up Outline VPN server...${NC}"
     log "Starting Outline server setup..."
     if ! setup_outline_server; then
@@ -503,6 +512,82 @@ get_port_config_interactive() {
     return 0
 }
 
+# Port configuration for Outline VPN with conflict checking
+get_outline_port_config_interactive() {
+    echo -e "${BLUE}Port Configuration for Outline VPN:${NC}"
+    echo "1) Random port (10000-65000) - Recommended"
+    echo "2) Standard port (10443)"
+    echo "3) Custom port"
+    echo ""
+    
+    # Load network library for port checking if not already loaded
+    if ! command -v check_port_available >/dev/null 2>&1; then
+        source "$PROJECT_ROOT/lib/network.sh" || {
+            error "Failed to load network library"
+            return 1
+        }
+    fi
+    
+    while true; do
+        read -p "Select port option (1-3): " port_choice
+        case $port_choice in
+            1)
+                # Generate random port and check availability
+                local attempts=0
+                local max_attempts=20
+                while [ $attempts -lt $max_attempts ]; do
+                    SERVER_PORT=$((RANDOM % 55000 + 10000))
+                    if check_port_available "$SERVER_PORT"; then
+                        export SERVER_PORT
+                        log "Generated available random port: $SERVER_PORT"
+                        echo -e "${GREEN}Random port selected: $SERVER_PORT${NC}"
+                        return 0
+                    fi
+                    ((attempts++))
+                done
+                warning "Could not find available random port after $max_attempts attempts"
+                echo "Please choose a custom port instead."
+                ;;
+            2)
+                SERVER_PORT="10443"
+                # Check if port is available
+                if check_port_available "$SERVER_PORT"; then
+                    export SERVER_PORT
+                    log "Selected standard port: $SERVER_PORT"
+                    echo -e "${GREEN}Standard port selected: $SERVER_PORT${NC}"
+                    return 0
+                else
+                    warning "Port $SERVER_PORT is already in use!"
+                    echo "Please choose another option."
+                fi
+                ;;
+            3)
+                while true; do
+                    read -p "Enter custom port (1024-65535): " custom_port
+                    if [[ "$custom_port" =~ ^[0-9]+$ ]] && [ "$custom_port" -ge 1024 ] && [ "$custom_port" -le 65535 ]; then
+                        # Check if port is available
+                        if check_port_available "$custom_port"; then
+                            SERVER_PORT="$custom_port"
+                            export SERVER_PORT
+                            log "Selected custom port: $SERVER_PORT"
+                            echo -e "${GREEN}Custom port selected: $SERVER_PORT${NC}"
+                            return 0
+                        else
+                            warning "Port $custom_port is already in use!"
+                            echo "Please choose another port."
+                        fi
+                    else
+                        warning "Please enter a valid port number (1024-65535)"
+                    fi
+                done
+                ;;
+            *)
+                warning "Please choose 1, 2, or 3"
+                ;;
+        esac
+    done
+}
+
 # User configuration
 get_user_config_interactive() {
     echo -e "${BLUE}First User Configuration:${NC}"
@@ -596,6 +681,7 @@ export -f run_server_installation
 export -f check_existing_vpn_installation
 export -f select_vpn_protocol
 export -f get_port_config_interactive
+export -f get_outline_port_config_interactive
 export -f get_user_config_interactive
 export -f setup_docker_xray
 export -f setup_outline_server
