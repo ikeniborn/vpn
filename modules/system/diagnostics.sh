@@ -205,9 +205,16 @@ check_docker_health() {
                 
                 # Test configuration inside container
                 echo "  Testing Xray configuration inside container..."
-                local config_test=$(docker exec xray xray test -c /etc/xray/config.json 2>&1 || echo "failed")
-                if echo "$config_test" | grep -q "Configuration OK"; then
+                local config_test=$(docker exec xray xray run -test -c /etc/xray/config.json 2>&1)
+                local test_exit_code=$?
+                
+                if [ $test_exit_code -eq 0 ] && echo "$config_test" | grep -q "Configuration OK"; then
                     echo "    ✅ Configuration test passed"
+                    # Show version info from the output
+                    local version_info=$(echo "$config_test" | grep "Xray.*Custom" | head -1)
+                    if [ -n "$version_info" ]; then
+                        echo "    📋 $version_info"
+                    fi
                 else
                     echo "    ❌ Configuration test failed:"
                     echo "$config_test" | sed 's/^/      /'

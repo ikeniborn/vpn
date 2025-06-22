@@ -1686,7 +1686,7 @@ fix_reality_comprehensive() {
         
         # Step 6: Validate configuration
         log "✅ Validating new configuration..."
-        if docker run --rm -v /opt/v2ray/config:/etc/xray teddysun/xray:latest xray test -c /etc/xray/config.json >/dev/null 2>&1; then
+        if docker run --rm -v /opt/v2ray/config:/etc/xray teddysun/xray:latest xray run -test -c /etc/xray/config.json >/dev/null 2>&1; then
             log "✓ Configuration validation passed"
         else
             warning "Configuration validation failed, but continuing..."
@@ -1743,7 +1743,7 @@ check_config_errors() {
     echo ""
     
     # Run validation and capture output
-    local validation_output=$(docker run --rm -v /opt/v2ray/config:/etc/xray teddysun/xray:latest xray test -c /etc/xray/config.json 2>&1)
+    local validation_output=$(docker run --rm -v /opt/v2ray/config:/etc/xray teddysun/xray:latest xray run -test -c /etc/xray/config.json 2>&1)
     local validation_result=$?
     
     if [ $validation_result -eq 0 ]; then
@@ -1880,7 +1880,7 @@ EOF
     fi
     
     # Validate new config
-    if docker run --rm -v /opt/v2ray/config:/etc/xray teddysun/xray:latest xray test -c /etc/xray/config.json >/dev/null 2>&1; then
+    if docker run --rm -v /opt/v2ray/config:/etc/xray teddysun/xray:latest xray run -test -c /etc/xray/config.json >/dev/null 2>&1; then
         log "✅ New configuration is valid!"
         
         # Restart server
