@@ -264,7 +264,6 @@ create_docker_compose() {
     
     # Create docker-compose.yml with improved health check
     cat > "$work_dir/docker-compose.yml" <<EOF
-version: '3'
 services:
   xray:
     image: teddysun/xray:latest
@@ -334,7 +333,6 @@ create_backup_docker_compose() {
     
     # Create backup docker-compose.yml with improved health check
     cat > "$work_dir/docker-compose.backup.yml" <<EOF
-version: '3'
 services:
   xray:
     image: teddysun/xray:latest

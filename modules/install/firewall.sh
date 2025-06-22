@@ -239,7 +239,7 @@ setup_xray_firewall() {
     # Add Xray server port
     if ! check_port_rule_exists "$server_port" "tcp" "$debug"; then
         [ "$debug" = true ] && log "Adding Xray server port: $server_port/tcp"
-        if ufw allow "$server_port/tcp"; then
+        if ufw allow "$server_port/tcp" comment "Xray VLESS+Reality VPN"; then
             log "Xray server port allowed: $server_port/tcp"
         else
             error "Failed to allow Xray server port: $server_port/tcp"
@@ -281,7 +281,7 @@ setup_outline_firewall() {
     # Add Outline API port
     if ! check_port_rule_exists "$api_port" "tcp" "$debug"; then
         [ "$debug" = true ] && log "Adding Outline API port: $api_port/tcp"
-        if ufw allow "$api_port/tcp"; then
+        if ufw allow "$api_port/tcp" comment "Outline VPN Management API"; then
             log "Outline API port allowed: $api_port/tcp"
         else
             error "Failed to allow Outline API port: $api_port/tcp"
@@ -294,7 +294,7 @@ setup_outline_firewall() {
     # Add Outline access key port (TCP)
     if ! check_port_rule_exists "$access_key_port" "tcp" "$debug"; then
         [ "$debug" = true ] && log "Adding Outline access key port: $access_key_port/tcp"
-        if ufw allow "$access_key_port/tcp"; then
+        if ufw allow "$access_key_port/tcp" comment "Outline VPN Client Access"; then
             log "Outline access key port (TCP) allowed: $access_key_port/tcp"
         else
             error "Failed to allow Outline access key port (TCP): $access_key_port/tcp"
@@ -307,7 +307,7 @@ setup_outline_firewall() {
     # Add Outline access key port (UDP)
     if ! check_port_rule_exists "$access_key_port" "udp" "$debug"; then
         [ "$debug" = true ] && log "Adding Outline access key port: $access_key_port/udp"
-        if ufw allow "$access_key_port/udp"; then
+        if ufw allow "$access_key_port/udp" comment "Outline VPN Client Access"; then
             log "Outline access key port (UDP) allowed: $access_key_port/udp"
         else
             error "Failed to allow Outline access key port (UDP): $access_key_port/udp"

@@ -249,13 +249,6 @@ configure_vless_reality() {
     # Final configuration display
     show_final_configuration
     
-    # User confirmation
-    read -p "Proceed with installation? (y/N): " confirm
-    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
-        log "Installation cancelled by user"
-        return 0
-    fi
-    
     # Create Xray configuration
     echo -e "\n${YELLOW}Setting up Xray server...${NC}"
     log "Starting Xray configuration creation..."
