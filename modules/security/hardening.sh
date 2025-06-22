@@ -503,16 +503,20 @@ disable_intrusion_detection() {
     success "Intrusion detection disabled"
 }
 
-# Security audit
+# Security audit with detailed results
 run_security_audit() {
-    info "Running security audit..."
+    echo -e "${BLUE}🔒 Running comprehensive security audit...${NC}"
+    echo ""
     
     local audit_results="{\"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\", \"checks\": {}}"
+    local issues_found=()
+    local recommendations=()
     
     # Check SSH configuration
-    echo -n "Checking SSH configuration... "
+    echo -e "${YELLOW}1. SSH Security Configuration${NC}"
     local ssh_checks=0
     local ssh_config=""
+    local ssh_issues=()
     
     # Find SSH config file
     for config_path in "/etc/ssh/sshd_config" "/etc/sshd_config" "/etc/openssh/sshd_config"; do
@@ -523,82 +527,199 @@ run_security_audit() {
     done
     
     if [ -n "$ssh_config" ]; then
-        grep -q "^PermitRootLogin no" "$ssh_config" 2>/dev/null && ((ssh_checks++))
-        grep -q "^PasswordAuthentication no" "$ssh_config" 2>/dev/null && ((ssh_checks++))
-        grep -q "^PubkeyAuthentication yes" "$ssh_config" 2>/dev/null && ((ssh_checks++))
+        echo "   📂 Config file: $ssh_config"
+        
+        # Check PermitRootLogin
+        if grep -q "^PermitRootLogin no" "$ssh_config" 2>/dev/null; then
+            echo -e "   ${GREEN}✓${NC} Root login disabled"
+            ((ssh_checks++))
+        else
+            echo -e "   ${RED}✗${NC} Root login not disabled"
+            ssh_issues+=("Root login should be disabled")
+        fi
+        
+        # Check PasswordAuthentication  
+        if grep -q "^PasswordAuthentication no" "$ssh_config" 2>/dev/null; then
+            echo -e "   ${GREEN}✓${NC} Password authentication disabled"
+            ((ssh_checks++))
+        else
+            echo -e "   ${RED}✗${NC} Password authentication enabled"
+            ssh_issues+=("Password authentication should be disabled")
+        fi
+        
+        # Check PubkeyAuthentication
+        if grep -q "^PubkeyAuthentication yes" "$ssh_config" 2>/dev/null; then
+            echo -e "   ${GREEN}✓${NC} Public key authentication enabled"
+            ((ssh_checks++))
+        else
+            echo -e "   ${RED}✗${NC} Public key authentication not enabled"
+            ssh_issues+=("Public key authentication should be enabled")
+        fi
         
         if [ "$ssh_checks" -eq 3 ]; then
-            echo -e "${GREEN}Secure${NC}"
+            echo -e "   ${GREEN}Result: SSH is properly secured${NC}"
             audit_results=$(echo "$audit_results" | jq '.checks.ssh = "secure"')
         else
-            echo -e "${YELLOW}Needs hardening${NC}"
+            echo -e "   ${YELLOW}Result: SSH needs hardening (${ssh_checks}/3 checks passed)${NC}"
             audit_results=$(echo "$audit_results" | jq '.checks.ssh = "needs_hardening"')
+            issues_found+=("SSH: ${ssh_issues[*]}")
+            recommendations+=("Run: sudo nano $ssh_config and apply SSH hardening")
         fi
     else
-        echo -e "${GRAY}SSH not installed${NC}"
+        echo -e "   ${GRAY}SSH service not installed${NC}"
         audit_results=$(echo "$audit_results" | jq '.checks.ssh = "not_installed"')
     fi
+    echo ""
     
     # Check firewall status
-    echo -n "Checking firewall... "
+    echo -e "${YELLOW}2. Firewall Configuration${NC}"
     if ufw status | grep -q "Status: active"; then
-        echo -e "${GREEN}Active${NC}"
+        echo -e "   ${GREEN}✓${NC} UFW firewall is active"
+        local rules_count=$(ufw status | grep -c "ALLOW")
+        echo "   📊 Active rules: $rules_count"
         audit_results=$(echo "$audit_results" | jq '.checks.firewall = "active"')
     else
-        echo -e "${RED}Inactive${NC}"
+        echo -e "   ${RED}✗${NC} UFW firewall is inactive"
         audit_results=$(echo "$audit_results" | jq '.checks.firewall = "inactive"')
+        issues_found+=("Firewall: UFW is not active")
+        recommendations+=("Run: sudo ufw enable")
     fi
+    echo ""
     
     # Check for unnecessary services
-    echo -n "Checking for unnecessary services... "
+    echo -e "${YELLOW}3. System Services${NC}"
     local unnecessary_services=0
-    for service in telnet rsh rlogin; do
-        systemctl is-enabled "$service" >/dev/null 2>&1 && ((unnecessary_services++))
+    local unsafe_services=()
+    
+    for service in telnet rsh rlogin finger; do
+        if systemctl is-enabled "$service" >/dev/null 2>&1; then
+            ((unnecessary_services++))
+            unsafe_services+=("$service")
+            echo -e "   ${RED}✗${NC} Unsafe service enabled: $service"
+        fi
     done
     
     if [ "$unnecessary_services" -eq 0 ]; then
-        echo -e "${GREEN}None found${NC}"
+        echo -e "   ${GREEN}✓${NC} No unsafe services found"
         audit_results=$(echo "$audit_results" | jq '.checks.unnecessary_services = "none"')
     else
-        echo -e "${YELLOW}$unnecessary_services found${NC}"
+        echo -e "   ${YELLOW}Result: $unnecessary_services unsafe services found${NC}"
         audit_results=$(echo "$audit_results" | jq --arg count "$unnecessary_services" '.checks.unnecessary_services = $count')
+        issues_found+=("Services: ${unsafe_services[*]} should be disabled")
+        recommendations+=("Run: sudo systemctl disable ${unsafe_services[*]}")
     fi
+    echo ""
     
     # Check kernel parameters
-    echo -n "Checking kernel security parameters... "
+    echo -e "${YELLOW}4. Kernel Security Parameters${NC}"
     local kernel_checks=0
-    sysctl net.ipv4.conf.all.rp_filter | grep -q "= 1" && ((kernel_checks++))
-    sysctl net.ipv4.conf.all.accept_source_route | grep -q "= 0" && ((kernel_checks++))
-    sysctl net.ipv4.tcp_syncookies | grep -q "= 1" && ((kernel_checks++))
+    local kernel_issues=()
+    
+    # Check IP forwarding protection
+    if sysctl net.ipv4.conf.all.rp_filter 2>/dev/null | grep -q "= 1"; then
+        echo -e "   ${GREEN}✓${NC} IP spoofing protection enabled"
+        ((kernel_checks++))
+    else
+        echo -e "   ${RED}✗${NC} IP spoofing protection disabled"
+        kernel_issues+=("rp_filter should be set to 1")
+    fi
+    
+    # Check source routing
+    if sysctl net.ipv4.conf.all.accept_source_route 2>/dev/null | grep -q "= 0"; then
+        echo -e "   ${GREEN}✓${NC} Source routing disabled"
+        ((kernel_checks++))
+    else
+        echo -e "   ${RED}✗${NC} Source routing enabled"
+        kernel_issues+=("accept_source_route should be set to 0")
+    fi
+    
+    # Check SYN cookies
+    if sysctl net.ipv4.tcp_syncookies 2>/dev/null | grep -q "= 1"; then
+        echo -e "   ${GREEN}✓${NC} SYN flood protection enabled"
+        ((kernel_checks++))
+    else
+        echo -e "   ${RED}✗${NC} SYN flood protection disabled"
+        kernel_issues+=("tcp_syncookies should be set to 1")
+    fi
     
     if [ "$kernel_checks" -eq 3 ]; then
-        echo -e "${GREEN}Secure${NC}"
+        echo -e "   ${GREEN}Result: Kernel parameters are secure${NC}"
         audit_results=$(echo "$audit_results" | jq '.checks.kernel = "secure"')
     else
-        echo -e "${YELLOW}Needs tuning${NC}"
+        echo -e "   ${YELLOW}Result: Kernel needs hardening (${kernel_checks}/3 checks passed)${NC}"
         audit_results=$(echo "$audit_results" | jq '.checks.kernel = "needs_tuning"')
+        issues_found+=("Kernel: ${kernel_issues[*]}")
+        recommendations+=("Run security hardening to apply kernel parameters")
     fi
+    echo ""
     
     # Check file permissions
-    echo -n "Checking critical file permissions... "
+    echo -e "${YELLOW}5. Critical File Permissions${NC}"
     local perm_issues=0
-    [ -f /opt/v2ray/config/private_key.txt ] && [ "$(stat -c %a /opt/v2ray/config/private_key.txt)" != "600" ] && ((perm_issues++))
-    [ -f "$SECURITY_CONFIG" ] && [ "$(stat -c %a "$SECURITY_CONFIG")" != "600" ] && ((perm_issues++))
+    local perm_problems=()
     
-    if [ "$perm_issues" -eq 0 ]; then
-        echo -e "${GREEN}Correct${NC}"
-        audit_results=$(echo "$audit_results" | jq '.checks.file_permissions = "correct"')
-    else
-        echo -e "${RED}$perm_issues issues found${NC}"
-        audit_results=$(echo "$audit_results" | jq --arg count "$perm_issues" '.checks.file_permissions = $count')
+    # Check VPN private key
+    if [ -f /opt/v2ray/config/private_key.txt ]; then
+        local key_perms=$(stat -c %a /opt/v2ray/config/private_key.txt)
+        if [ "$key_perms" = "600" ]; then
+            echo -e "   ${GREEN}✓${NC} VPN private key permissions correct (600)"
+        else
+            echo -e "   ${RED}✗${NC} VPN private key permissions incorrect ($key_perms, should be 600)"
+            ((perm_issues++))
+            perm_problems+=("private_key.txt has permissions $key_perms")
+        fi
     fi
     
-    # Save audit results
-    echo "$audit_results" | jq '.' > /opt/v2ray/security_audit_$(date +%Y%m%d_%H%M%S).json
+    # Check security config
+    if [ -f "$SECURITY_CONFIG" ]; then
+        local sec_perms=$(stat -c %a "$SECURITY_CONFIG")
+        if [ "$sec_perms" = "600" ]; then
+            echo -e "   ${GREEN}✓${NC} Security config permissions correct (600)"
+        else
+            echo -e "   ${RED}✗${NC} Security config permissions incorrect ($sec_perms, should be 600)"
+            ((perm_issues++))
+            perm_problems+=("security.json has permissions $sec_perms")
+        fi
+    fi
     
-    # Calculate security score
+    if [ "$perm_issues" -eq 0 ]; then
+        echo -e "   ${GREEN}Result: File permissions are correct${NC}"
+        audit_results=$(echo "$audit_results" | jq '.checks.file_permissions = "correct"')
+    else
+        echo -e "   ${RED}Result: $perm_issues permission issues found${NC}"
+        audit_results=$(echo "$audit_results" | jq --arg count "$perm_issues" '.checks.file_permissions = $count')
+        issues_found+=("Permissions: ${perm_problems[*]}")
+        recommendations+=("Run: chmod 600 /opt/v2ray/config/*.txt /opt/v2ray/config/*.json")
+    fi
+    echo ""
+    
+    # Save audit results
+    ensure_dir "/opt/v2ray/security"
+    echo "$audit_results" | jq '.' > "/opt/v2ray/security/audit_$(date +%Y%m%d_%H%M%S).json"
+    
+    # Calculate and display security score
     local score=$(calculate_security_score "$audit_results")
-    echo -e "\n${BOLD}Security Score: $(get_security_score_color "$score")${NC}"
+    echo -e "${BOLD}=== SECURITY AUDIT SUMMARY ===${NC}"
+    echo -e "${BOLD}Security Score: $(get_security_score_color "$score")${NC}"
+    echo ""
+    
+    # Display issues and recommendations
+    if [ ${#issues_found[@]} -gt 0 ]; then
+        echo -e "${BOLD}🚨 Issues Found:${NC}"
+        for issue in "${issues_found[@]}"; do
+            echo -e "   ${RED}•${NC} $issue"
+        done
+        echo ""
+        
+        echo -e "${BOLD}💡 Recommendations:${NC}"
+        for rec in "${recommendations[@]}"; do
+            echo -e "   ${YELLOW}•${NC} $rec"
+        done
+        echo ""
+        echo -e "${BLUE}💡 Quick Fix: Use option 2 'Apply Security Hardening' to fix most issues automatically${NC}"
+    else
+        echo -e "${GREEN}✅ No security issues found! Your system is well secured.${NC}"
+    fi
 }
 
 # Calculate security score

@@ -55,17 +55,16 @@ show_main_menu() {
     echo ""
     echo -e "${YELLOW}Advanced:${NC}"
     echo "  6)  🛡️  Watchdog Service"
-    echo "  7)  ✅ Validate Configuration"
-    echo "  8)  🔍 System Diagnostics"
+    echo "  7)  🔍 System Diagnostics"
     echo ""
     echo -e "${YELLOW}Security & Performance:${NC}"
-    echo "  9)  🔒 Security Hardening"
-    echo "  10) 🚀 Speed Testing"
-    echo "  11) 📊 Monitoring Dashboard"
+    echo "  8)  🔒 Security Hardening"
+    echo "  9)  🚀 Speed Testing"
+    echo "  10) 📊 Monitoring Dashboard"
     echo ""
     echo -e "${YELLOW}Help & Info:${NC}"
-    echo "  12) ❓ Show Help"
-    echo "  13) ℹ️  Show Version"
+    echo "  11) ❓ Show Help"
+    echo "  12) ℹ️  Show Version"
     echo ""
     echo -e "${RED}  0)  🚪 Exit${NC}"
     echo ""
@@ -98,24 +97,21 @@ handle_menu_choice() {
             handle_watchdog_menu
             ;;
         7)
-            handle_validate_config
-            ;;
-        8)
             handle_system_diagnostics
             ;;
-        9)
+        8)
             handle_security_hardening
             ;;
-        10)
+        9)
             handle_speed_testing
             ;;
-        11)
+        10)
             handle_monitoring_dashboard
             ;;
-        12)
+        11)
             show_usage
             ;;
-        13)
+        12)
             show_version
             ;;
         0)
@@ -123,7 +119,7 @@ handle_menu_choice() {
             exit 0
             ;;
         *)
-            warning "Invalid option. Please choose 0-13."
+            warning "Invalid option. Please choose 0-12."
             ;;
     esac
 }
@@ -170,7 +166,7 @@ run_interactive_menu() {
     
     while true; do
         show_main_menu
-        read -p "Select option (0-13): " choice
+        read -p "Select option (0-12): " choice
         
         # Handle errors gracefully
         handle_menu_choice "$choice" || {
@@ -187,7 +183,7 @@ run_interactive_menu() {
         fi
         
         # Only show continue prompt for non-exit and non-help options
-        if [ "$choice" != "12" ] && [ "$choice" != "13" ]; then
+        if [ "$choice" != "11" ] && [ "$choice" != "12" ]; then
             echo ""
             read -p "Press Enter to continue..."
         fi
@@ -201,22 +197,6 @@ run_interactive_menu() {
 # ADVANCED OPTION HANDLERS
 # =============================================================================
 
-# Handler for Validate Configuration option
-handle_validate_config() {
-    echo -e "${BLUE}✅ Запуск проверки конфигурации...${NC}"
-    echo
-    
-    # Load the validate module if not already loaded
-    load_module_lazy "server/validate_config.sh"
-    
-    # Call the validate configuration function
-    if validate_server_config; then
-        echo -e "${GREEN}✅ Конфигурация прошла проверку${NC}"
-    else
-        echo -e "${RED}❌ Обнаружены проблемы в конфигурации${NC}"
-    fi
-}
-
 # Handler for System Diagnostics option
 handle_system_diagnostics() {
     echo -e "${BLUE}🔍 Запуск системной диагностики...${NC}"
@@ -225,7 +205,18 @@ handle_system_diagnostics() {
     # Load the diagnostics module if not already loaded
     load_module_lazy "system/diagnostics.sh"
     
-    # Run full diagnostics
+    # Run configuration validation as part of diagnostics
+    echo -e "${YELLOW}1. Проверка конфигурации VPN сервера...${NC}"
+    load_module_lazy "server/validate_config.sh"
+    if validate_server_config; then
+        echo -e "${GREEN}✅ Конфигурация прошла проверку${NC}"
+    else
+        echo -e "${RED}❌ Обнаружены проблемы в конфигурации${NC}"
+    fi
+    echo ""
+    
+    # Run full system diagnostics
+    echo -e "${YELLOW}2. Полная системная диагностика...${NC}"
     if run_full_diagnostics; then
         echo -e "${GREEN}✅ Диагностика завершена${NC}"
     else
@@ -243,15 +234,19 @@ handle_security_hardening() {
     
     # Show security menu
     while true; do
-        echo -e "${BOLD}Security Features:${NC}"
-        echo "1. Run Security Audit"
-        echo "2. Apply Security Hardening"
-        echo "3. Configure Security Features"
-        echo "4. View Security Status"
-        echo "0. Back"
-        echo
+        clear
+        echo -e "${GREEN}=== Security Hardening Management ===${NC}"
+        echo ""
+        echo -e "${YELLOW}Security Features:${NC}"
+        echo "  1)  🔍 Run Security Audit"
+        echo "  2)  🛡️  Apply Security Hardening"
+        echo "  3)  ⚙️  Configure Security Features"
+        echo "  4)  📊 View Security Status"
+        echo ""
+        echo -e "${RED}  0)  🔙 Back${NC}"
+        echo ""
         
-        read -p "Select option: " sec_choice
+        read -p "Select option (0-4): " sec_choice
         
         case $sec_choice in
             1)
@@ -390,7 +385,6 @@ handle_monitoring_dashboard() {
 export -f show_main_menu
 export -f handle_menu_choice
 export -f handle_watchdog_menu
-export -f handle_validate_config
 export -f handle_system_diagnostics
 export -f handle_security_hardening
 export -f handle_speed_testing
