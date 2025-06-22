@@ -15,6 +15,23 @@ source "$PROJECT_ROOT/lib/network.sh" || exit 1
 # SNI domain configuration file
 SNI_CONFIG_FILE="/opt/v2ray/config/multi_sni.json"
 
+# Test SNI domain quality (simple implementation)
+test_sni_quality() {
+    local domain="$1"
+    
+    # Simple DNS resolution test
+    if host "$domain" >/dev/null 2>&1 || nslookup "$domain" >/dev/null 2>&1; then
+        # Test HTTPS connectivity
+        if curl -sI -m 5 "https://$domain" >/dev/null 2>&1; then
+            echo "good"
+        else
+            echo "medium"
+        fi
+    else
+        echo "poor"
+    fi
+}
+
 # Initialize multi-SNI configuration
 init_multi_sni() {
     if [ ! -f "$SNI_CONFIG_FILE" ]; then
@@ -35,7 +52,7 @@ add_user_sni_domain() {
     }
     
     # Validate SNI domain
-    if ! validate_sni "$sni_domain"; then
+    if ! validate_sni_domain "$sni_domain"; then
         error "Invalid SNI domain: $sni_domain"
         return 1
     fi

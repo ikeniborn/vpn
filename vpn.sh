@@ -264,7 +264,8 @@ run_server_installation() {
             return 1
         }
         
-        # Install Outline VPN server
+        # Install Outline VPN server with selected port
+        export SERVER_PORT  # Make sure port is available to the module
         install_outline_server true || {
             error "Failed to install Outline VPN server"
             return 1
@@ -370,8 +371,13 @@ get_server_config_interactive() {
         return 1
     }
     
-    # Get server port
-    echo -e "${BLUE}Choose server port:${NC}"
+    # Get server port (applies to both VPN types)
+    if [ "$PROTOCOL" = "outline" ]; then
+        echo -e "${BLUE}Choose Outline VPN server port:${NC}"
+        echo -e "${YELLOW}Note: This port will be used for VPN connections${NC}"
+    else
+        echo -e "${BLUE}Choose server port:${NC}"
+    fi
     echo "1) Automatic free port (10000-65000) - Recommended"
     echo "2) Manual port"
     echo "3) Standard port (10443)"
