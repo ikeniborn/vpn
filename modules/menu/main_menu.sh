@@ -28,7 +28,19 @@ fi
 # MAIN MENU DISPLAY
 # =============================================================================
 
+# Cache for menu display to avoid excessive screen updates
+LAST_MENU_DISPLAY_TIME=0
+
 show_main_menu() {
+    local current_time=$(date +%s)
+    
+    # Prevent excessive menu refreshes (max once per second)
+    if [ $((current_time - LAST_MENU_DISPLAY_TIME)) -lt 1 ]; then
+        return
+    fi
+    
+    LAST_MENU_DISPLAY_TIME=$current_time
+    
     clear
     echo -e "${GREEN}=== VPN Management System v${SCRIPT_VERSION:-3.0} ===${NC}"
     echo ""
@@ -178,17 +190,20 @@ run_interactive_menu() {
             continue
         }
         
+        # Exit immediately on exit choice
         if [ "$choice" = "0" ]; then
+            echo -e "${GREEN}Goodbye!${NC}"
             exit 0
         fi
         
-        if [ "$choice" = "0" ] || [ "$choice" = "7" ] || [ "$choice" = "8" ]; then
-            # Exit or help/version already have their own prompts or exits
-            true
-        else
+        # Only show continue prompt for non-exit and non-help options
+        if [ "$choice" != "14" ] && [ "$choice" != "15" ]; then
             echo ""
             read -p "Press Enter to continue..."
         fi
+        
+        # Add small delay to prevent CPU spinning in tight loops
+        sleep 0.1
     done
 }
 

@@ -41,6 +41,9 @@ show_user_management_menu() {
         echo ""
         
         read -p "Select option (0-6): " choice
+        
+        # Add delay to prevent CPU spinning
+        sleep 0.1
         case $choice in
             1) 
                 list_users

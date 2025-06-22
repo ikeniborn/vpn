@@ -153,15 +153,80 @@ load_menu_system() {
 # UTILITY FUNCTIONS
 # =============================================================================
 
-# Detect which VPN server is installed
-detect_installed_vpn_type() {
-    if [ -d "$WORK_DIR" ] && [ -f "$WORK_DIR/docker-compose.yml" ]; then
-        echo "xray"
-    elif [ -d "$OUTLINE_DIR" ] || docker ps -a --format "table {{.Names}}" | grep -q "shadowbox"; then
-        echo "outline"
-    else
-        echo "none"
+# Global caching variables to reduce CPU usage
+VPN_TYPE_CACHE=""
+VPN_TYPE_CACHE_TIME=0
+DOCKER_STATUS_CACHE=""
+DOCKER_STATUS_CACHE_TIME=0
+
+# Rate limiting for expensive operations
+LAST_HEAVY_OP_TIME=0
+HEAVY_OP_COOLDOWN=2  # Minimum 2 seconds between heavy operations
+
+# Check if we can perform a heavy operation (rate limiting)
+can_perform_heavy_operation() {
+    local current_time=$(date +%s)
+    if [ $((current_time - LAST_HEAVY_OP_TIME)) -ge $HEAVY_OP_COOLDOWN ]; then
+        LAST_HEAVY_OP_TIME=$current_time
+        return 0
     fi
+    return 1
+}
+
+# Get Docker container status with caching
+get_docker_status_cached() {
+    local current_time=$(date +%s)
+    local cache_validity=10  # Cache for 10 seconds
+    
+    # Use cache if still valid
+    if [ -n "$DOCKER_STATUS_CACHE" ] && [ $((current_time - DOCKER_STATUS_CACHE_TIME)) -lt $cache_validity ]; then
+        echo "$DOCKER_STATUS_CACHE"
+        return
+    fi
+    
+    # Get fresh Docker status with timeout
+    local status=""
+    if command -v docker >/dev/null 2>&1; then
+        status=$(timeout 3 docker ps --format "{{.Names}}" 2>/dev/null || echo "")
+    fi
+    
+    # Update cache
+    DOCKER_STATUS_CACHE="$status"
+    DOCKER_STATUS_CACHE_TIME=$current_time
+    
+    echo "$status"
+}
+
+# Detect which VPN server is installed (with caching)
+detect_installed_vpn_type() {
+    local current_time=$(date +%s)
+    local cache_validity=30  # Cache for 30 seconds
+    
+    # Use cache if still valid
+    if [ -n "$VPN_TYPE_CACHE" ] && [ $((current_time - VPN_TYPE_CACHE_TIME)) -lt $cache_validity ]; then
+        echo "$VPN_TYPE_CACHE"
+        return
+    fi
+    
+    # Detect VPN type using file system checks first (much faster)
+    local vpn_type="none"
+    if [ -d "$WORK_DIR" ] && [ -f "$WORK_DIR/docker-compose.yml" ]; then
+        vpn_type="xray"
+    elif [ -d "$OUTLINE_DIR" ]; then
+        vpn_type="outline"
+    else
+        # Only check Docker if file system checks fail
+        local containers=$(get_docker_status_cached)
+        if echo "$containers" | grep -q "shadowbox"; then
+            vpn_type="outline"
+        fi
+    fi
+    
+    # Update cache
+    VPN_TYPE_CACHE="$vpn_type"
+    VPN_TYPE_CACHE_TIME=$current_time
+    
+    echo "$vpn_type"
 }
 
 # =============================================================================
@@ -383,7 +448,7 @@ get_server_config_interactive() {
     return 0
 }
 
-# Check for existing VPN installations
+# Check for existing VPN installations (optimized)
 check_existing_vpn_installation() {
     local protocol="${1:-}"
     local found=false
@@ -391,15 +456,22 @@ check_existing_vpn_installation() {
     
     log "Checking for existing $protocol installation..."
     
+    # Get Docker containers info using cached function
+    local running_containers=$(get_docker_status_cached)
+    local all_containers=""
+    if command -v docker >/dev/null 2>&1; then
+        all_containers=$(timeout 3 docker ps -a --format "{{.Names}}" 2>/dev/null || echo "")
+    fi
+    
     # Check based on protocol
     case "$protocol" in
         "vless-reality")
             # Check for Xray installation
             if [ -d "$WORK_DIR" ] && [ -f "$WORK_DIR/docker-compose.yml" ]; then
-                if docker ps --format "table {{.Names}}" | grep -q "xray"; then
+                if echo "$running_containers" | grep -q "xray"; then
                     found=true
                     existing_server="Xray/VLESS server (running)"
-                elif docker ps -a --format "table {{.Names}}" | grep -q "xray"; then
+                elif echo "$all_containers" | grep -q "xray"; then
                     found=true
                     existing_server="Xray/VLESS server (stopped)"
                 fi
@@ -407,11 +479,11 @@ check_existing_vpn_installation() {
             ;;
         "outline")
             # Check for Outline installation
-            if [ -d "$OUTLINE_DIR" ] || docker ps -a --format "table {{.Names}}" | grep -q "shadowbox"; then
-                if docker ps --format "table {{.Names}}" | grep -q "shadowbox"; then
+            if [ -d "$OUTLINE_DIR" ]; then
+                if echo "$running_containers" | grep -q "shadowbox"; then
                     found=true
                     existing_server="Outline VPN server (running)"
-                elif docker ps -a --format "table {{.Names}}" | grep -q "shadowbox"; then
+                elif echo "$all_containers" | grep -q "shadowbox"; then
                     found=true
                     existing_server="Outline VPN server (stopped)"
                 fi
@@ -443,7 +515,8 @@ check_existing_vpn_installation() {
                     case "$protocol" in
                         "vless-reality")
                             log "Removing existing Xray installation..."
-                            if docker ps | grep -q "xray"; then
+                            local containers=$(get_docker_status_cached)
+                            if echo "$containers" | grep -q "xray"; then
                                 cd "$WORK_DIR" 2>/dev/null && docker-compose down 2>/dev/null || true
                             fi
                             docker rm -f xray 2>/dev/null || true
@@ -815,7 +888,8 @@ handle_client_management() {
                 break
                 ;;
             2)
-                if docker ps | grep -q "v2raya"; then
+                local containers=$(get_docker_status_cached)
+                if echo "$containers" | grep -q "v2raya"; then
                     echo -e "${GREEN}✓ VPN client is running${NC}"
                     echo -e "${BLUE}Web interface:${NC} http://localhost:2017"
                 else
@@ -1092,9 +1166,9 @@ diagnose_reality() {
     
     log "🔍 Diagnosing Reality connection issues..."
     
-    # Check if server is running
-    if ! docker ps | grep -q xray; then
-        error "Xray container is not running"
+    # Check if server is running (with timeout to prevent hanging)
+    if ! timeout 5 docker ps 2>/dev/null | grep -q xray; then
+        error "Xray container is not running or Docker is not responding"
         return 1
     fi
     
@@ -1458,8 +1532,9 @@ test_logging() {
         return 1
     fi
     
-    # Check if container is running
-    if ! docker ps | grep -q xray; then
+    # Check if container is running using cached function
+    local containers=$(get_docker_status_cached)
+    if ! echo "$containers" | grep -q xray; then
         error "Xray container is not running"
         return 1
     fi
@@ -1833,8 +1908,9 @@ debug_reality_connections() {
     
     log "🔍 Debugging Reality connection attempts..."
     
-    # Check if container is running
-    if ! docker ps | grep -q xray; then
+    # Check if container is running using cached function
+    local containers=$(get_docker_status_cached)
+    if ! echo "$containers" | grep -q xray; then
         error "Xray container is not running"
         return 1
     fi
@@ -2356,25 +2432,33 @@ main() {
             show_version
             ;;
         "benchmark")
-            # Load performance library and run benchmarks
-            source "$SCRIPT_DIR/lib/performance.sh" 2>/dev/null || {
-                error "Performance library not available"
-                exit 1
-            }
-            echo "=== VPN System Performance Benchmarks ==="
-            benchmark_modules
-            test_command_performance "$0"
-            monitor_resources
+            # Load performance library and run benchmarks (rate limited)
+            if can_perform_heavy_operation; then
+                source "$SCRIPT_DIR/lib/performance.sh" 2>/dev/null || {
+                    error "Performance library not available"
+                    exit 1
+                }
+                echo "=== VPN System Performance Benchmarks ==="
+                benchmark_modules
+                test_command_performance "$0"
+                monitor_resources
+            else
+                echo "Benchmark is rate limited. Please wait $HEAVY_OP_COOLDOWN seconds between calls."
+            fi
             ;;
         "debug")
-            # Debug mode with performance monitoring
-            source "$SCRIPT_DIR/lib/performance.sh" 2>/dev/null || true
-            echo "=== Debug Information ==="
-            monitor_resources
-            echo -e "\n=== Loaded Modules ==="
-            for module in "${!LOADED_MODULES[@]}"; do
-                echo "  ✓ $module"
-            done
+            # Debug mode with performance monitoring (rate limited)
+            if can_perform_heavy_operation; then
+                source "$SCRIPT_DIR/lib/performance.sh" 2>/dev/null || true
+                echo "=== Debug Information ==="
+                monitor_resources 2>/dev/null || echo "Performance monitoring not available"
+                echo -e "\n=== Loaded Modules ==="
+                for module in "${!LOADED_MODULES[@]}"; do
+                    echo "  ✓ $module"
+                done
+            else
+                echo "Debug mode is rate limited. Please wait $HEAVY_OP_COOLDOWN seconds between calls."
+            fi
             ;;
         *)
             error "Unknown command: $ACTION"
