@@ -52,6 +52,58 @@ load_module_lazy() {
 }
 
 # =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
+
+# Cleanup Outline firewall rules safely
+cleanup_outline_firewall_rules() {
+    if ! command -v ufw >/dev/null 2>&1; then
+        log "UFW not available, skipping firewall cleanup"
+        return 0
+    fi
+    
+    log "Cleaning up Outline firewall rules..."
+    
+    # Get current firewall status
+    local ufw_status
+    ufw_status=$(ufw status numbered 2>/dev/null)
+    
+    if [ $? -eq 0 ] && [ -n "$ufw_status" ]; then
+        # Look for rules containing port 9000 (default Outline management port)
+        echo "$ufw_status" | grep -E "\[[0-9]+\].*9000" | sed 's/\[\([0-9]*\).*/\1/' | sort -rn | while read -r num; do
+            if [ -n "$num" ] && [[ "$num" =~ ^[0-9]+$ ]]; then
+                log "Removing firewall rule #$num (port 9000)"
+                ufw --force delete "$num" 2>/dev/null || log "Failed to remove rule #$num"
+            fi
+        done
+        
+        # Look for rules containing custom management ports (if OUTLINE_API_PORT is set and not 9000)
+        if [ -n "$OUTLINE_API_PORT" ] && [ "$OUTLINE_API_PORT" != "9000" ]; then
+            echo "$ufw_status" | grep -E "\[[0-9]+\].*$OUTLINE_API_PORT" | sed 's/\[\([0-9]*\).*/\1/' | sort -rn | while read -r num; do
+                if [ -n "$num" ] && [[ "$num" =~ ^[0-9]+$ ]]; then
+                    log "Removing firewall rule #$num (custom management port $OUTLINE_API_PORT)"
+                    ufw --force delete "$num" 2>/dev/null || log "Failed to remove rule #$num"
+                fi
+            done
+        fi
+        
+        # Look for rules with "Outline" in description
+        echo "$ufw_status" | grep -i "outline" | sed 's/\[\([0-9]*\).*/\1/' | sort -rn | while read -r num; do
+            if [ -n "$num" ] && [[ "$num" =~ ^[0-9]+$ ]]; then
+                log "Removing firewall rule #$num (Outline)"
+                ufw --force delete "$num" 2>/dev/null || log "Failed to remove rule #$num"
+            fi
+        done
+        
+        log "Outline firewall cleanup completed"
+    else
+        log "Could not get firewall status, skipping cleanup"
+    fi
+    
+    return 0
+}
+
+# =============================================================================
 # MAIN INSTALLATION FUNCTION 
 # =============================================================================
 
@@ -187,6 +239,24 @@ configure_vless_reality() {
     fi
     log "User configuration completed: $USER_NAME"
     
+    # IP address configuration
+    log "Starting IP address configuration..."
+    # Ensure network library is loaded
+    if ! command -v select_server_ip >/dev/null 2>&1; then
+        local lib_path="${PROJECT_ROOT:-$MODULE_DIR/../..}/lib/network.sh"
+        source "$lib_path" || {
+            error "Failed to load network library from $lib_path"
+            return 1
+        }
+    fi
+    
+    if ! select_server_ip; then
+        error "IP address configuration failed"
+        error "Failed to configure server IP address"
+        return 1
+    fi
+    log "IP address configuration completed: $SERVER_IP"
+    
     # Reality keys generation
     echo -e "\n${YELLOW}Generating Reality encryption keys...${NC}"
     log "Starting Reality key generation..."
@@ -274,14 +344,41 @@ configure_vless_reality() {
 
 # Configure Outline VPN protocol
 configure_outline_vpn() {
-    # Port configuration for Outline
-    log "Starting port configuration for Outline..."
+    # Management port configuration for Outline
+    log "Starting management port configuration for Outline..."
+    if ! get_outline_management_port_config; then
+        error "Management port configuration failed"
+        error "Failed to configure management port or user cancelled"
+        return 1
+    fi
+    log "Management port configuration completed: $OUTLINE_API_PORT"
+    
+    # VPN port configuration for Outline
+    log "Starting VPN port configuration for Outline..."
     if ! get_outline_port_config_interactive; then
-        error "Port configuration failed"
+        error "VPN port configuration failed"
         error "Failed to configure server port or user cancelled"
         return 1
     fi
-    log "Port configuration completed: $SERVER_PORT"
+    log "VPN port configuration completed: $SERVER_PORT"
+    
+    # IP address configuration
+    log "Starting IP address configuration..."
+    # Ensure network library is loaded
+    if ! command -v select_server_ip >/dev/null 2>&1; then
+        local lib_path="${PROJECT_ROOT:-$MODULE_DIR/../..}/lib/network.sh"
+        source "$lib_path" || {
+            error "Failed to load network library from $lib_path"
+            return 1
+        }
+    fi
+    
+    if ! select_server_ip; then
+        error "IP address configuration failed"
+        error "Failed to configure server IP address"
+        return 1
+    fi
+    log "IP address configuration completed: $SERVER_IP"
     
     echo -e "\n${YELLOW}Setting up Outline VPN server...${NC}"
     log "Starting Outline server setup..."
@@ -297,12 +394,20 @@ configure_outline_vpn() {
 show_final_configuration() {
     echo -e "\n${GREEN}=== Final Configuration ===${NC}"
     echo -e "${BLUE}Protocol:${NC} $PROTOCOL"
+    echo -e "${BLUE}Server IP:${NC} $SERVER_IP"
     echo -e "${BLUE}Server Port:${NC} $SERVER_PORT"
-    echo -e "${BLUE}SNI Domain:${NC} $SERVER_SNI"
-    echo -e "${BLUE}First User:${NC} $USER_NAME"
-    echo -e "${BLUE}Private Key:${NC} ${PRIVATE_KEY:0:10}..."
-    echo -e "${BLUE}Public Key:${NC} ${PUBLIC_KEY:0:10}..."
-    echo -e "${BLUE}Short ID:${NC} $SHORT_ID"
+    
+    # Show protocol-specific configuration
+    if [ "$PROTOCOL" = "vless-reality" ]; then
+        echo -e "${BLUE}SNI Domain:${NC} $SERVER_SNI"
+        echo -e "${BLUE}First User:${NC} $USER_NAME"
+        echo -e "${BLUE}Private Key:${NC} ${PRIVATE_KEY:0:10}..."
+        echo -e "${BLUE}Public Key:${NC} ${PUBLIC_KEY:0:10}..."
+        echo -e "${BLUE}Short ID:${NC} $SHORT_ID"
+    elif [ "$PROTOCOL" = "outline" ]; then
+        echo -e "${BLUE}Management Port:${NC} $OUTLINE_API_PORT"
+        echo -e "${BLUE}Management URL:${NC} https://$SERVER_IP:$OUTLINE_API_PORT"
+    fi
 }
 
 # =============================================================================
@@ -379,18 +484,23 @@ check_existing_vpn_installation() {
                             ;;
                         "outline")
                             log "Removing existing Outline installation..."
-                            docker rm -f shadowbox watchtower 2>/dev/null || true
-                            rm -rf "${outline_dir}" 2>/dev/null || true
-                            # Remove any Outline-related firewall rules
-                            if command -v ufw >/dev/null 2>&1; then
-                                ufw status numbered | grep -E "9000|Outline" | awk '{print $2}' | sort -r | while read -r num; do
-                                    ufw --force delete "$num" 2>/dev/null || true
-                                done
+                            echo -e "${YELLOW}Stopping Outline containers...${NC}"
+                            if docker ps | grep -q "shadowbox"; then
+                                docker stop shadowbox 2>/dev/null || true
                             fi
+                            if docker ps | grep -q "watchtower"; then
+                                docker stop watchtower 2>/dev/null || true
+                            fi
+                            echo -e "${YELLOW}Removing Outline containers...${NC}"
+                            docker rm -f shadowbox watchtower 2>/dev/null || true
+                            echo -e "${YELLOW}Removing Outline directories...${NC}"
+                            rm -rf "${outline_dir}" 2>/dev/null || true
+                            echo -e "${YELLOW}Cleaning up firewall rules...${NC}"
+                            cleanup_outline_firewall_rules
                             ;;
                     esac
                     
-                    log "Existing installations removed"
+                    log "Existing installations removed successfully"
                     return 0
                     ;;
                 2)
@@ -505,9 +615,67 @@ get_port_config_interactive() {
     return 0
 }
 
+# Management port configuration for Outline VPN
+get_outline_management_port_config() {
+    echo -e "${BLUE}Management Port Configuration for Outline VPN:${NC}"
+    echo "1) Standard management port (9000) - Recommended"
+    echo "2) Custom management port"
+    echo ""
+    
+    # Load network library for port checking if not already loaded
+    if ! command -v check_port_available >/dev/null 2>&1; then
+        source "$PROJECT_ROOT/lib/network.sh" || {
+            error "Failed to load network library"
+            return 1
+        }
+    fi
+    
+    while true; do
+        read -p "Select management port option (1-2): " mgmt_port_choice
+        case $mgmt_port_choice in
+            1)
+                OUTLINE_API_PORT="9000"
+                # Check if port is available
+                if check_port_available "$OUTLINE_API_PORT"; then
+                    export OUTLINE_API_PORT
+                    log "Selected standard management port: $OUTLINE_API_PORT"
+                    echo -e "${GREEN}Standard management port selected: $OUTLINE_API_PORT${NC}"
+                    return 0
+                else
+                    warning "Port $OUTLINE_API_PORT is already in use!"
+                    echo "Please choose custom port instead."
+                fi
+                ;;
+            2)
+                while true; do
+                    read -p "Enter custom management port (1024-65535): " custom_mgmt_port
+                    if [[ "$custom_mgmt_port" =~ ^[0-9]+$ ]] && [ "$custom_mgmt_port" -ge 1024 ] && [ "$custom_mgmt_port" -le 65535 ]; then
+                        # Check if port is available
+                        if check_port_available "$custom_mgmt_port"; then
+                            OUTLINE_API_PORT="$custom_mgmt_port"
+                            export OUTLINE_API_PORT
+                            log "Selected custom management port: $OUTLINE_API_PORT"
+                            echo -e "${GREEN}Custom management port selected: $OUTLINE_API_PORT${NC}"
+                            return 0
+                        else
+                            warning "Port $custom_mgmt_port is already in use!"
+                            echo "Please choose another port."
+                        fi
+                    else
+                        warning "Please enter a valid port number (1024-65535)"
+                    fi
+                done
+                ;;
+            *)
+                warning "Please choose 1 or 2"
+                ;;
+        esac
+    done
+}
+
 # Port configuration for Outline VPN with conflict checking
 get_outline_port_config_interactive() {
-    echo -e "${BLUE}Port Configuration for Outline VPN:${NC}"
+    echo -e "${BLUE}VPN Port Configuration for Outline VPN:${NC}"
     echo "1) Random port (10000-65000) - Recommended"
     echo "2) Standard port (10443)"
     echo "3) Custom port"
@@ -677,6 +845,7 @@ export -f check_existing_vpn_installation
 export -f select_vpn_protocol
 export -f get_port_config_interactive
 export -f get_outline_port_config_interactive
+export -f get_outline_management_port_config
 export -f get_user_config_interactive
 export -f setup_docker_xray
 export -f setup_outline_server
@@ -685,6 +854,12 @@ export -f load_module_lazy
 export -f configure_vless_reality
 export -f configure_outline_vpn
 export -f show_final_configuration
+export -f cleanup_outline_firewall_rules
+
+# Also export IP selection function from network library
+if command -v select_server_ip >/dev/null 2>&1; then
+    export -f select_server_ip
+fi
 
 # Mark module as loaded
 LOADED_MODULES["menu/server_installation.sh"]=1

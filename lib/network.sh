@@ -442,6 +442,116 @@ get_external_ip() {
     return 1
 }
 
+# Select IP address (automatic or manual)
+select_server_ip() {
+    local auto_ip
+    local manual_ip
+    local selected_ip
+    
+    # Load UI library if needed
+    if ! command -v print_separator >/dev/null 2>&1; then
+        # Source UI library
+        local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        if [ -f "$script_dir/ui.sh" ]; then
+            source "$script_dir/ui.sh" 2>/dev/null || true
+        fi
+        
+        # Always define fallback functions if still not available
+        if ! command -v print_separator >/dev/null 2>&1; then
+            print_separator() { echo "========================================"; }
+            print_info() { echo -e "\033[0;34mℹ️  [INFO]\033[0m $1"; }
+            print_menu() { echo "$1) $2"; }
+            print_colored() { local color="$1"; shift; echo -e "$color$*\033[0m"; }
+            print_error() { echo -e "\033[0;31m✗ [ERROR]\033[0m $1" >&2; }
+            print_success() { echo -e "\033[0;32m✓\033[0m $1"; }
+            print_warning() { echo -e "\033[1;33m⚠️  [WARNING]\033[0m $1" >&2; }
+            # Define color constants
+            CYAN="\033[0;36m"
+        fi
+    fi
+    
+    print_separator
+    print_info "IP Address Configuration"
+    print_separator
+    
+    # Get automatic IP
+    auto_ip=$(get_external_ip)
+    if [ -z "$auto_ip" ]; then
+        auto_ip="Unable to detect"
+    fi
+    
+    echo
+    print_info "Detected external IP: $auto_ip"
+    echo
+    print_menu "1" "Use automatic IP detection (recommended)"
+    print_menu "2" "Enter IP address manually"
+    echo
+    
+    read -p "$(print_colored "$CYAN" "Select option [1-2] (default: 1): ")" choice
+    choice=${choice:-1}
+    
+    case $choice in
+        1)
+            if [ "$auto_ip" = "Unable to detect" ]; then
+                print_error "Automatic IP detection failed"
+                echo
+                read -p "$(print_colored "$CYAN" "Enter IP address manually: ")" manual_ip
+                selected_ip="$manual_ip"
+            else
+                selected_ip="$auto_ip"
+                print_success "Using automatic IP: $selected_ip"
+            fi
+            ;;
+        2)
+            echo
+            print_info "Available network interfaces and IPs:"
+            echo
+            
+            # Show available IPs
+            if command_exists ip; then
+                ip -4 addr show | grep -E "inet " | grep -v "127.0.0.1" | awk '{printf "  %-15s %s\n", $2, $NF}' | sed 's|/[0-9]*||'
+            elif command_exists ifconfig; then
+                ifconfig | grep -E "inet " | grep -v "127.0.0.1" | awk '{print "  " $2}'
+            fi
+            
+            echo
+            read -p "$(print_colored "$CYAN" "Enter IP address: ")" manual_ip
+            
+            # Validate IP format
+            if echo "$manual_ip" | grep -qE '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'; then
+                selected_ip="$manual_ip"
+                print_success "Using manual IP: $selected_ip"
+            else
+                print_error "Invalid IP address format"
+                # Retry with automatic detection
+                if [ "$auto_ip" != "Unable to detect" ]; then
+                    selected_ip="$auto_ip"
+                    print_warning "Falling back to automatic IP: $selected_ip"
+                else
+                    print_error "No valid IP address available"
+                    return 1
+                fi
+            fi
+            ;;
+        *)
+            # Default to automatic
+            if [ "$auto_ip" != "Unable to detect" ]; then
+                selected_ip="$auto_ip"
+                print_success "Using automatic IP: $selected_ip"
+            else
+                print_error "Invalid option and automatic detection failed"
+                return 1
+            fi
+            ;;
+    esac
+    
+    # Export for use in other functions
+    export SERVER_IP="$selected_ip"
+    echo
+    
+    return 0
+}
+
 # Get primary network interface
 get_primary_interface() {
     # Method 1: Default route interface
@@ -512,4 +622,5 @@ export -f find_working_sni_domain
 export -f get_external_ip
 export -f get_primary_interface
 export -f get_interface_ip
+export -f select_server_ip
 export -f init_network
