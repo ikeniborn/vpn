@@ -201,14 +201,23 @@ create_xray_config_reality() {
       },
       "sniffing": {
         "enabled": true,
-        "destOverride": ["http", "tls", "quic", "fakedns"],
+        "destOverride": ["http", "tls", "quic"],
         "metadataOnly": false,
         "routeOnly": false
       }
+    },
+    {
+      "port": 10085,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1"
+      },
+      "tag": "api"
     }
   ],
   "outbounds": [
     {
+      "tag": "direct",
       "protocol": "freedom",
       "settings": {
         "domainStrategy": "UseIPv4"
@@ -230,11 +239,20 @@ create_xray_config_reality() {
     "rules": [
       {
         "type": "field",
+        "inboundTag": ["api"],
+        "outboundTag": "api"
+      },
+      {
+        "type": "field",
         "ip": [
-          "127.0.0.0/8",
-          "::1/128"
+          "geoip:private"
         ],
         "outboundTag": "blocked"
+      },
+      {
+        "type": "field",
+        "network": "tcp,udp",
+        "outboundTag": "direct"
       }
     ]
   }

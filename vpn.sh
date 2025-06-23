@@ -673,8 +673,11 @@ create_xray_config_and_user() {
     fi
     
     if [ -z "$SERVER_IP" ]; then
+        # This should not happen if installation was done properly
+        error "SERVER_IP is not set. IP address should have been configured during installation."
+        # Try to recover by getting current IP
         SERVER_IP=$(get_external_ip) || SERVER_IP="127.0.0.1"
-        log "Server IP not set, detected/defaulting to: $SERVER_IP"
+        warning "Attempting to recover with detected IP: $SERVER_IP"
     fi
     
     # Generate UUID for first user if not set

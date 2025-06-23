@@ -146,7 +146,7 @@ install_packages() {
                 if ! dpkg -l "$package" 2>/dev/null | grep -q "^ii"; then
                     log "Installing $package..."
                     if DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$package"; then
-                        success "Installed $package"
+                        log "Installed $package"
                     else
                         failed_packages+=("$package")
                         warning "Failed to install $package"
@@ -165,7 +165,7 @@ install_packages() {
                 if ! rpm -q "$mapped_package" >/dev/null 2>&1; then
                     log "Installing $mapped_package..."
                     if $package_manager install -y "$mapped_package" >/dev/null 2>&1; then
-                        success "Installed $mapped_package"
+                        log "Installed $mapped_package"
                     else
                         failed_packages+=("$mapped_package")
                         warning "Failed to install $mapped_package"
@@ -184,7 +184,7 @@ install_packages() {
                 if ! apk info -e "$package" >/dev/null 2>&1; then
                     log "Installing $package..."
                     if apk add --no-cache "$package" >/dev/null 2>&1; then
-                        success "Installed $package"
+                        log "Installed $package"
                     else
                         failed_packages+=("$package")
                         warning "Failed to install $package"
@@ -203,7 +203,7 @@ install_packages() {
                 if ! pacman -Q "$package" >/dev/null 2>&1; then
                     log "Installing $package..."
                     if pacman -S --noconfirm "$package" >/dev/null 2>&1; then
-                        success "Installed $package"
+                        log "Installed $package"
                     else
                         failed_packages+=("$package")
                         warning "Failed to install $package"
@@ -219,7 +219,7 @@ install_packages() {
                 if ! rpm -q "$package" >/dev/null 2>&1; then
                     log "Installing $package..."
                     if zypper install -y "$package" >/dev/null 2>&1; then
-                        success "Installed $package"
+                        log "Installed $package"
                     else
                         failed_packages+=("$package")
                         warning "Failed to install $package"
@@ -281,7 +281,7 @@ install_dependencies() {
         install_packages "$package_manager" "${OPTIONAL_PACKAGES[@]}" || true
     fi
     
-    success "Dependency installation completed"
+    log "Dependency installation completed"
     return 0
 }
 
@@ -303,14 +303,14 @@ check_and_install_docker() {
         
         # Check if Docker daemon is running
         if docker info >/dev/null 2>&1; then
-            [ "$verbose" = true ] && success "Docker daemon is running"
+            [ "$verbose" = true ] && log "Docker daemon is running"
             return 0
         else
             warning "Docker daemon is not running"
             
             # Try to start Docker
             if systemctl start docker 2>/dev/null; then
-                success "Started Docker daemon"
+                log "Started Docker daemon"
                 
                 # Enable Docker to start on boot
                 systemctl enable docker 2>/dev/null || true
@@ -338,7 +338,7 @@ check_and_install_docker() {
         if curl -fsSL "${DOCKER_INSTALL_SCRIPTS[$os_type]}" -o "$temp_script"; then
             if bash "$temp_script"; then
                 rm -f "$temp_script"
-                success "Docker installed successfully"
+                log "Docker installed successfully"
                 
                 # Add current user to docker group
                 if [ -n "$SUDO_USER" ]; then
@@ -403,7 +403,7 @@ check_and_install_docker() {
     
     # Verify installation
     if docker --version >/dev/null 2>&1; then
-        success "Docker installed successfully"
+        log "Docker installed successfully"
         return 0
     else
         error "Docker installation failed"
@@ -436,7 +436,7 @@ install_optional_tools() {
             
             if curl -L "$compose_url" -o /usr/local/bin/docker-compose; then
                 chmod +x /usr/local/bin/docker-compose
-                success "Docker Compose installed"
+                log "Docker Compose installed"
             else
                 warning "Failed to install Docker Compose"
             fi
@@ -523,7 +523,7 @@ update_system_packages() {
             ;;
     esac
     
-    [ "$verbose" = true ] && success "System packages updated"
+    [ "$verbose" = true ] && log "System packages updated"
     return 0
 }
 
@@ -572,7 +572,7 @@ configure_package_repositories() {
             ;;
     esac
     
-    [ "$verbose" = true ] && success "Package repositories configured"
+    [ "$verbose" = true ] && log "Package repositories configured"
     return 0
 }
 
@@ -609,7 +609,7 @@ verify_dependencies() {
         [ "$verbose" = true ] && error "Missing dependencies: ${missing_deps[*]}"
         return 1
     else
-        [ "$verbose" = true ] && success "All dependencies verified"
+        [ "$verbose" = true ] && log "All dependencies verified"
         return 0
     fi
 }
