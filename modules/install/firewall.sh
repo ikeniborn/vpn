@@ -503,6 +503,26 @@ setup_vpn_routing() {
         fi
     done
     
+    # Add special rules for VLESS+Reality with TUN interface optimization
+    [ "$debug" = true ] && log "Adding VLESS+Reality specific routing rules..."
+    
+    # Allow all traffic from/to local interfaces (important for Xray host networking)
+    if ! iptables -C INPUT -i lo -j ACCEPT 2>/dev/null; then
+        iptables -I INPUT -i lo -j ACCEPT
+        [ "$debug" = true ] && log "Added loopback input rule"
+    fi
+    
+    if ! iptables -C OUTPUT -o lo -j ACCEPT 2>/dev/null; then
+        iptables -I OUTPUT -o lo -j ACCEPT
+        [ "$debug" = true ] && log "Added loopback output rule"
+    fi
+    
+    # Optimize for Xray Reality protocol - allow high-performance packet processing
+    if ! iptables -C FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null; then
+        iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
+        [ "$debug" = true ] && log "Added connection tracking rule for FORWARD"
+    fi
+    
     # Ensure FORWARD policy allows VPN traffic
     [ "$debug" = true ] && log "Configuring FORWARD policy..."
     
@@ -752,6 +772,134 @@ fix_vpn_network_issues() {
     return 0
 }
 
+# Optimize kernel settings for VLESS+Reality performance
+optimize_kernel_settings() {
+    local debug=${1:-false}
+    
+    [ "$debug" = true ] && log "Optimizing kernel settings for VLESS+Reality..."
+    
+    local sysctl_conf="/etc/sysctl.conf"
+    local sysctl_backup="/etc/sysctl.conf.vpn.backup"
+    
+    # Backup original sysctl.conf if not already backed up
+    if [ ! -f "$sysctl_backup" ]; then
+        cp "$sysctl_conf" "$sysctl_backup" 2>/dev/null || {
+            warning "Failed to backup sysctl.conf"
+        }
+        [ "$debug" = true ] && log "Backed up original sysctl.conf"
+    fi
+    
+    # Kernel optimizations for high-performance VPN
+    local optimizations=(
+        "# VPN Performance Optimizations"
+        "net.core.rmem_max = 134217728"
+        "net.core.wmem_max = 134217728"
+        "net.ipv4.tcp_rmem = 4096 16384 134217728"
+        "net.ipv4.tcp_wmem = 4096 16384 134217728"
+        "net.core.netdev_max_backlog = 5000"
+        "net.ipv4.tcp_congestion_control = bbr"
+        "net.ipv4.tcp_fastopen = 3"
+        "net.ipv4.tcp_slow_start_after_idle = 0"
+        "net.ipv4.tcp_mtu_probing = 1"
+        "net.ipv4.ip_forward = 1"
+        "net.ipv4.conf.all.forwarding = 1"
+        "net.ipv6.conf.all.forwarding = 1"
+        "net.core.default_qdisc = fq"
+    )
+    
+    local changes_made=false
+    
+    for setting in "${optimizations[@]}"; do
+        # Skip comments
+        if [[ "$setting" =~ ^# ]]; then
+            if ! grep -q "^$setting" "$sysctl_conf" 2>/dev/null; then
+                echo "$setting" >> "$sysctl_conf"
+                [ "$debug" = true ] && log "Added comment: $setting"
+            fi
+            continue
+        fi
+        
+        local key=$(echo "$setting" | cut -d= -f1 | xargs)
+        local value=$(echo "$setting" | cut -d= -f2 | xargs)
+        
+        # Check if setting already exists with correct value
+        if grep -q "^$key = $value" "$sysctl_conf" 2>/dev/null; then
+            [ "$debug" = true ] && log "Setting already optimal: $key = $value"
+            continue
+        fi
+        
+        # Update or add the setting
+        if grep -q "^$key" "$sysctl_conf" 2>/dev/null; then
+            # Update existing setting
+            sed -i "s|^$key.*|$setting|" "$sysctl_conf"
+            [ "$debug" = true ] && log "Updated: $setting"
+        else
+            # Add new setting
+            echo "$setting" >> "$sysctl_conf"
+            [ "$debug" = true ] && log "Added: $setting"
+        fi
+        changes_made=true
+    done
+    
+    # Apply changes immediately
+    if [ "$changes_made" = true ]; then
+        if sysctl -p >/dev/null 2>&1; then
+            [ "$debug" = true ] && log "Applied kernel optimizations"
+        else
+            warning "Failed to apply some kernel settings"
+        fi
+        log "✓ Kernel settings optimized for VLESS+Reality performance"
+    else
+        [ "$debug" = true ] && log "All kernel settings already optimal"
+    fi
+    
+    return 0
+}
+
+# Complete VPN network optimization for VLESS+Reality
+optimize_vless_reality_network() {
+    local server_port="$1"
+    local debug=${2:-false}
+    
+    [ "$debug" = true ] && log "Starting complete VLESS+Reality network optimization..."
+    
+    if [ -z "$server_port" ]; then
+        error "Missing required parameter: server_port"
+        return 1
+    fi
+    
+    # Step 1: Basic network setup
+    setup_vpn_network "$server_port" "$debug" || {
+        error "Failed basic VPN network setup"
+        return 1
+    }
+    
+    # Step 2: Kernel optimizations
+    optimize_kernel_settings "$debug" || {
+        warning "Failed to optimize kernel settings"
+    }
+    
+    # Step 3: Verify configuration
+    [ "$debug" = true ] && log "Verifying network configuration..."
+    
+    # Check if port is accessible
+    if verify_port_access "$server_port" "tcp" "$debug"; then
+        log "✓ Port $server_port is properly configured"
+    else
+        warning "Port $server_port may not be accessible"
+    fi
+    
+    # Check IP forwarding
+    if [ "$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null)" = "1" ]; then
+        [ "$debug" = true ] && log "✓ IP forwarding is enabled"
+    else
+        warning "IP forwarding is not enabled"
+    fi
+    
+    log "✓ VLESS+Reality network optimization completed"
+    return 0
+}
+
 # =============================================================================
 # EXPORT FUNCTIONS
 # =============================================================================
@@ -773,6 +921,8 @@ export -f setup_vpn_routing
 export -f save_iptables_rules
 export -f setup_vpn_network
 export -f fix_vpn_network_issues
+export -f optimize_kernel_settings
+export -f optimize_vless_reality_network
 
 # =============================================================================
 # FIREWALL CLEANUP FUNCTIONS

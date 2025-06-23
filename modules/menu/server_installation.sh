@@ -818,7 +818,7 @@ setup_firewall() {
     
     # Configure network and firewall for the selected protocol
     if [ "$PROTOCOL" = "vless-reality" ]; then
-        setup_vpn_network "$SERVER_PORT" true || {
+        optimize_vless_reality_network "$SERVER_PORT" true || {
             error "Failed to configure VPN network and firewall"
             return 1
         }
