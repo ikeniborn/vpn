@@ -487,40 +487,67 @@ setup_vpn_routing() {
     # Setup iptables rules for VPN traffic masquerading
     [ "$debug" = true ] && log "Adding iptables masquerading rules..."
     
-    # Add masquerading rules for common VPN networks
-    local vpn_networks=("10.0.0.0/8" "192.168.0.0/16" "172.16.0.0/12")
+    # Configure UFW for VPN NAT/MASQUERADE
+    local ufw_before_rules="/etc/ufw/before.rules"
+    local ufw_backup="/etc/ufw/before.rules.vpn.backup"
     
-    for network in "${vpn_networks[@]}"; do
-        # Check if rule already exists
-        if ! iptables -t nat -C POSTROUTING -s "$network" -o "$primary_interface" -j MASQUERADE 2>/dev/null; then
-            if iptables -t nat -A POSTROUTING -s "$network" -o "$primary_interface" -j MASQUERADE; then
-                [ "$debug" = true ] && log "Added masquerading rule for $network"
-            else
-                warning "Failed to add masquerading rule for $network"
-            fi
+    # Backup UFW before.rules if not already backed up
+    if [ -f "$ufw_before_rules" ] && [ ! -f "$ufw_backup" ]; then
+        cp "$ufw_before_rules" "$ufw_backup" 2>/dev/null || {
+            warning "Failed to backup UFW before.rules"
+        }
+        [ "$debug" = true ] && log "Backed up UFW before.rules"
+    fi
+    
+    # Add VPN NAT rules to UFW before.rules
+    if [ -f "$ufw_before_rules" ]; then
+        # Check if VPN NAT section already exists
+        if ! grep -q "# START VPN NAT RULES" "$ufw_before_rules" 2>/dev/null; then
+            [ "$debug" = true ] && log "Adding VPN NAT rules to UFW before.rules..."
+            
+            # Add NAT table rules before the filter rules
+            cat >> "$ufw_before_rules" << EOF
+
+# START VPN NAT RULES
+# NAT table rules for VPN traffic routing
+*nat
+:POSTROUTING ACCEPT [0:0]
+
+# Forward traffic from VPN networks through primary interface
+-A POSTROUTING -s 10.0.0.0/8 -o $primary_interface -j MASQUERADE
+-A POSTROUTING -s 192.168.0.0/16 -o $primary_interface -j MASQUERADE  
+-A POSTROUTING -s 172.16.0.0/12 -o $primary_interface -j MASQUERADE
+
+# Don't delete the 'COMMIT' line or these rules won't be processed
+COMMIT
+# END VPN NAT RULES
+
+EOF
+            [ "$debug" = true ] && log "Added VPN NAT rules to UFW configuration"
         else
-            [ "$debug" = true ] && log "Masquerading rule for $network already exists"
+            [ "$debug" = true ] && log "VPN NAT rules already exist in UFW configuration"
         fi
-    done
-    
-    # Add special rules for VLESS+Reality with TUN interface optimization
-    [ "$debug" = true ] && log "Adding VLESS+Reality specific routing rules..."
-    
-    # Allow all traffic from/to local interfaces (important for Xray host networking)
-    if ! iptables -C INPUT -i lo -j ACCEPT 2>/dev/null; then
-        iptables -I INPUT -i lo -j ACCEPT
-        [ "$debug" = true ] && log "Added loopback input rule"
+    else
+        warning "UFW before.rules file not found, cannot add VPN NAT rules"
     fi
     
-    if ! iptables -C OUTPUT -o lo -j ACCEPT 2>/dev/null; then
-        iptables -I OUTPUT -o lo -j ACCEPT
-        [ "$debug" = true ] && log "Added loopback output rule"
-    fi
+    # Configure UFW for VLESS+Reality optimization
+    [ "$debug" = true ] && log "Configuring UFW for VLESS+Reality..."
     
-    # Optimize for Xray Reality protocol - allow high-performance packet processing
-    if ! iptables -C FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null; then
-        iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
-        [ "$debug" = true ] && log "Added connection tracking rule for FORWARD"
+    # Enable UFW routing for VPN traffic
+    local ufw_sysctl="/etc/ufw/sysctl.conf"
+    if [ -f "$ufw_sysctl" ]; then
+        # Enable IP forwarding in UFW sysctl
+        if ! grep -q "^net/ipv4/ip_forward=1" "$ufw_sysctl" 2>/dev/null; then
+            echo "net/ipv4/ip_forward=1" >> "$ufw_sysctl"
+            [ "$debug" = true ] && log "Enabled IP forwarding in UFW sysctl"
+        fi
+        
+        # Enable IPv6 forwarding for future compatibility
+        if ! grep -q "^net/ipv6/conf/all/forwarding=1" "$ufw_sysctl" 2>/dev/null; then
+            echo "net/ipv6/conf/all/forwarding=1" >> "$ufw_sysctl"
+            [ "$debug" = true ] && log "Enabled IPv6 forwarding in UFW sysctl"
+        fi
     fi
     
     # Ensure FORWARD policy allows VPN traffic
@@ -544,19 +571,24 @@ setup_vpn_routing() {
         fi
     fi
     
-    # Set iptables FORWARD policy to ACCEPT
-    if iptables -P FORWARD ACCEPT 2>/dev/null; then
-        [ "$debug" = true ] && log "Set iptables FORWARD policy to ACCEPT"
-    else
-        warning "Failed to set iptables FORWARD policy"
-    fi
-    
-    # Add FORWARD rules for established connections
-    if ! iptables -C FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null; then
-        if iptables -I FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT; then
-            [ "$debug" = true ] && log "Added FORWARD rule for established connections"
+    # Add FORWARD rules to UFW before.rules for VPN traffic
+    if [ -f "$ufw_before_rules" ]; then
+        # Check if VPN FORWARD section already exists
+        if ! grep -q "# START VPN FORWARD RULES" "$ufw_before_rules" 2>/dev/null; then
+            [ "$debug" = true ] && log "Adding VPN FORWARD rules to UFW before.rules..."
+            
+            # Add FORWARD rules after the filter table start
+            sed -i '/^# allow all on loopback/i\
+# START VPN FORWARD RULES\
+# Allow forwarding for VPN traffic\
+-A ufw-before-forward -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT\
+-A ufw-before-forward -j ACCEPT\
+# END VPN FORWARD RULES\
+' "$ufw_before_rules"
+            
+            [ "$debug" = true ] && log "Added VPN FORWARD rules to UFW configuration"
         else
-            warning "Failed to add FORWARD rule for established connections"
+            [ "$debug" = true ] && log "VPN FORWARD rules already exist in UFW configuration"
         fi
     fi
     
@@ -564,59 +596,37 @@ setup_vpn_routing() {
     return 0
 }
 
-# Save iptables rules permanently
-save_iptables_rules() {
+# Save UFW configuration and ensure persistence
+save_ufw_configuration() {
     local debug=${1:-false}
     
-    [ "$debug" = true ] && log "Saving iptables rules permanently..."
+    [ "$debug" = true ] && log "Ensuring UFW configuration persistence..."
     
-    # Try different methods to save iptables rules
-    if command -v iptables-save >/dev/null 2>&1 && command -v netfilter-persistent >/dev/null 2>&1; then
-        # Method 1: netfilter-persistent (preferred for Ubuntu/Debian)
-        if netfilter-persistent save >/dev/null 2>&1; then
-            [ "$debug" = true ] && log "Iptables rules saved with netfilter-persistent"
-            return 0
-        fi
-    fi
-    
-    if command -v iptables-save >/dev/null 2>&1; then
-        # Method 2: Manual save to rules file
-        local rules_file="/etc/iptables/rules.v4"
-        mkdir -p "$(dirname "$rules_file")" 2>/dev/null
+    # UFW automatically saves its configuration, but we'll verify it's enabled
+    if command -v ufw >/dev/null 2>&1; then
+        # Check if UFW is enabled
+        local ufw_status=$(ufw status 2>/dev/null | grep "Status:" | awk '{print $2}')
         
-        if iptables-save > "$rules_file" 2>/dev/null; then
-            [ "$debug" = true ] && log "Iptables rules saved to $rules_file"
+        if [ "$ufw_status" = "active" ]; then
+            [ "$debug" = true ] && log "UFW is active and configuration will persist"
             
-            # Create restore script for systemd
-            local restore_script="/etc/systemd/system/iptables-restore.service"
-            cat > "$restore_script" << 'EOF'
-[Unit]
-Description=Restore iptables rules
-Before=network-pre.target
-Wants=network-pre.target
-
-[Service]
-Type=oneshot
-ExecStart=/sbin/iptables-restore /etc/iptables/rules.v4
-ExecReload=/sbin/iptables-restore /etc/iptables/rules.v4
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-            
-            # Enable the service
-            if systemctl enable iptables-restore.service >/dev/null 2>&1; then
-                [ "$debug" = true ] && log "Iptables restore service enabled"
+            # Reload UFW to ensure all changes are applied
+            if ufw reload >/dev/null 2>&1; then
+                [ "$debug" = true ] && log "UFW configuration reloaded"
+            else
+                warning "Failed to reload UFW configuration"
+                return 1
             fi
             
             return 0
+        else
+            warning "UFW is not active - configuration may not persist"
+            return 1
         fi
+    else
+        warning "UFW not found - cannot save firewall configuration"
+        return 1
     fi
-    
-    warning "Could not save iptables rules permanently"
-    warning "Rules will be lost on reboot - consider installing iptables-persistent"
-    return 1
 }
 
 # Complete VPN network setup (IP forwarding + routing + firewall)
@@ -649,9 +659,9 @@ setup_vpn_network() {
         return 1
     }
     
-    # Step 4: Save iptables rules
-    save_iptables_rules "$debug" || {
-        warning "Failed to save iptables rules permanently"
+    # Step 4: Save UFW configuration
+    save_ufw_configuration "$debug" || {
+        warning "Failed to ensure UFW configuration persistence"
     }
     
     log "✓ Complete VPN network configuration completed"
@@ -690,72 +700,79 @@ fix_vpn_network_issues() {
         echo "  ✅ IP forwarding is already enabled"
     fi
     
-    # Check and fix VPN masquerading rules
+    # Check and fix VPN masquerading rules in UFW
     echo ""
-    echo "Checking VPN masquerading rules..."
-    local vpn_networks=("10.0.0.0/8" "192.168.0.0/16" "172.16.0.0/12")
-    local missing_rules=()
+    echo "Checking VPN masquerading rules in UFW..."
+    local ufw_before_rules="/etc/ufw/before.rules"
     
-    for network in "${vpn_networks[@]}"; do
-        if ! iptables -t nat -C POSTROUTING -s "$network" -o "$primary_interface" -j MASQUERADE 2>/dev/null; then
-            missing_rules+=("$network")
-        fi
-    done
-    
-    if [ ${#missing_rules[@]} -gt 0 ]; then
-        echo "  ❌ Missing masquerading rules for VPN networks"
-        for network in "${missing_rules[@]}"; do
-            echo "    Adding rule for $network..."
-            if iptables -t nat -A POSTROUTING -s "$network" -o "$primary_interface" -j MASQUERADE; then
-                echo "    ✅ Added masquerading rule for $network"
+    if [ -f "$ufw_before_rules" ]; then
+        if ! grep -q "# START VPN NAT RULES" "$ufw_before_rules" 2>/dev/null; then
+            echo "  ❌ VPN NAT rules missing from UFW configuration"
+            echo "    Adding VPN NAT rules to UFW before.rules..."
+            if setup_vpn_routing "$debug"; then
+                echo "    ✅ Added VPN NAT rules to UFW configuration"
                 issues_fixed=$((issues_fixed + 1))
             else
-                echo "    ❌ Failed to add masquerading rule for $network"
+                echo "    ❌ Failed to add VPN NAT rules"
             fi
-        done
-    else
-        echo "  ✅ All VPN masquerading rules are present"
-    fi
-    
-    # Check and fix FORWARD policy
-    echo ""
-    echo "Checking FORWARD policy..."
-    local current_forward_policy=$(iptables -L FORWARD | head -1 | grep -o 'policy [A-Z]*' | awk '{print $2}')
-    if [ "$current_forward_policy" != "ACCEPT" ]; then
-        echo "  ❌ FORWARD policy is $current_forward_policy"
-        if iptables -P FORWARD ACCEPT 2>/dev/null; then
-            echo "  ✅ FORWARD policy set to ACCEPT"
-            issues_fixed=$((issues_fixed + 1))
         else
-            echo "  ❌ Failed to set FORWARD policy"
+            echo "  ✅ VPN NAT rules are present in UFW configuration"
         fi
     else
-        echo "  ✅ FORWARD policy is already ACCEPT"
+        echo "  ⚠️  UFW before.rules file not found"
     fi
     
-    # Add FORWARD rules for established connections
+    # Check and fix UFW FORWARD policy
     echo ""
-    echo "Checking FORWARD rules for established connections..."
-    if ! iptables -C FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null; then
-        echo "  ❌ Missing FORWARD rule for established connections"
-        if iptables -I FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT; then
-            echo "  ✅ Added FORWARD rule for established connections"
-            issues_fixed=$((issues_fixed + 1))
+    echo "Checking UFW FORWARD policy..."
+    local ufw_defaults="/etc/default/ufw"
+    if [ -f "$ufw_defaults" ]; then
+        if grep -q '^DEFAULT_FORWARD_POLICY="DROP"' "$ufw_defaults"; then
+            echo "  ❌ UFW FORWARD policy is DROP"
+            if sed -i 's/^DEFAULT_FORWARD_POLICY="DROP"/DEFAULT_FORWARD_POLICY="ACCEPT"/' "$ufw_defaults"; then
+                echo "  ✅ UFW FORWARD policy set to ACCEPT"
+                issues_fixed=$((issues_fixed + 1))
+                # Reload UFW to apply changes
+                if ufw reload >/dev/null 2>&1; then
+                    echo "  ✅ UFW reloaded with new FORWARD policy"
+                else
+                    echo "  ⚠️  Failed to reload UFW"
+                fi
+            else
+                echo "  ❌ Failed to set UFW FORWARD policy"
+            fi
         else
-            echo "  ❌ Failed to add FORWARD rule for established connections"
+            echo "  ✅ UFW FORWARD policy is already ACCEPT"
         fi
     else
-        echo "  ✅ FORWARD rule for established connections exists"
+        echo "  ⚠️  UFW defaults file not found"
     fi
     
-    # Save iptables rules
+    # Check FORWARD rules in UFW before.rules
+    echo ""
+    echo "Checking UFW FORWARD rules for VPN traffic..."
+    if [ -f "$ufw_before_rules" ]; then
+        if ! grep -q "# START VPN FORWARD RULES" "$ufw_before_rules" 2>/dev/null; then
+            echo "  ❌ VPN FORWARD rules missing from UFW configuration"
+            if setup_vpn_routing "$debug"; then
+                echo "  ✅ Added VPN FORWARD rules to UFW configuration"
+                issues_fixed=$((issues_fixed + 1))
+            else
+                echo "  ❌ Failed to add VPN FORWARD rules"
+            fi
+        else
+            echo "  ✅ VPN FORWARD rules are present in UFW configuration"
+        fi
+    fi
+    
+    # Reload UFW to apply all changes
     if [ $issues_fixed -gt 0 ]; then
         echo ""
-        echo "Saving iptables rules..."
-        if save_iptables_rules "$debug"; then
-            echo "  ✅ Iptables rules saved"
+        echo "Reloading UFW to apply changes..."
+        if ufw reload >/dev/null 2>&1; then
+            echo "  ✅ UFW reloaded successfully"
         else
-            echo "  ⚠️  Failed to save iptables rules (will be lost on reboot)"
+            echo "  ⚠️  Failed to reload UFW"
         fi
     fi
     
@@ -918,7 +935,7 @@ export -f remove_port_rule
 export -f show_firewall_status
 export -f enable_ip_forwarding
 export -f setup_vpn_routing
-export -f save_iptables_rules
+export -f save_ufw_configuration
 export -f setup_vpn_network
 export -f fix_vpn_network_issues
 export -f optimize_kernel_settings
