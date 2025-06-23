@@ -622,7 +622,7 @@ EOF
         ufw allow "$port/tcp" comment "VPN Dashboard" >/dev/null 2>&1
     fi
     
-    success "Dashboard started at http://$(get_server_ip):$port"
+    log "Dashboard started at http://$(get_server_ip):$port"
     info "Default credentials: No authentication (secure with reverse proxy)"
 }
 
