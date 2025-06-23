@@ -46,14 +46,33 @@ calculate_resource_limits() {
     
     [ "$debug" = true ] && log "Calculating resource limits..."
     
+    # Check if required functions are available
+    if ! command -v get_cpu_cores >/dev/null 2>&1; then
+        error "Function get_cpu_cores not found. Docker library may not be loaded."
+        return 1
+    fi
+    
+    if ! command -v get_available_memory >/dev/null 2>&1; then
+        error "Function get_available_memory not found. Docker library may not be loaded."
+        return 1
+    fi
+    
     # Get system resources
     local cpu_cores=$(get_cpu_cores)
-    local available_mem=$(get_available_memory_mb)
+    local available_mem=$(get_available_memory)
     
     [ "$debug" = true ] && {
         log "Detected CPU cores: $cpu_cores"
         log "Available memory: ${available_mem} MB"
     }
+    
+    # Check if main calculation functions are available
+    for func in calculate_cpu_limits calculate_memory_limits; do
+        if ! command -v "$func" >/dev/null 2>&1; then
+            error "Function $func not found. Docker library may not be loaded."
+            return 1
+        fi
+    done
     
     # Calculate CPU limits
     local cpu_limits=$(calculate_cpu_limits)
@@ -66,17 +85,151 @@ calculate_resource_limits() {
     RESERVE_MEM=$(echo "$mem_limits" | cut -d' ' -f2)
     
     # Calculate backup limits (more conservative)
-    BACKUP_CPU=$(calculate_backup_cpu_limit)
-    BACKUP_MEM=$(calculate_backup_memory_limit)
+    BACKUP_CPU=$(echo "scale=1; $MAX_CPU * 0.5" | bc 2>/dev/null || echo "0.5")
+    BACKUP_MEM=$(echo "scale=0; $MAX_MEM * 0.5 / 1" | bc 2>/dev/null || echo "256")m
     
     [ "$debug" = true ] && {
         log "Primary limits: CPU $MAX_CPU/$RESERVE_CPU, Memory $MAX_MEM/$RESERVE_MEM"
         log "Backup limits: CPU $BACKUP_CPU, Memory $BACKUP_MEM"
     }
     
+    # Set fallback values if calculations failed
+    MAX_CPU="${MAX_CPU:-1.0}"
+    RESERVE_CPU="${RESERVE_CPU:-0.5}"
+    MAX_MEM="${MAX_MEM:-512m}"
+    RESERVE_MEM="${RESERVE_MEM:-256m}"
+    BACKUP_CPU="${BACKUP_CPU:-0.5}"
+    BACKUP_MEM="${BACKUP_MEM:-256m}"
+    
     # Export variables for use in docker-compose
     export MAX_CPU RESERVE_CPU MAX_MEM RESERVE_MEM BACKUP_CPU BACKUP_MEM
     
+    [ "$debug" = true ] && log "Resource limits calculated and exported successfully"
+    
+    return 0
+}
+
+# =============================================================================
+# HEALTHCHECK SCRIPT CREATION
+# =============================================================================
+
+# Create healthcheck script for VLESS+Reality protocol
+create_healthcheck_script() {
+    local work_dir="$1"
+    local debug=${2:-false}
+    
+    [ "$debug" = true ] && log "Creating healthcheck script..."
+    
+    if [ -z "$work_dir" ]; then
+        error "Missing required parameter: work_dir"
+        return 1
+    fi
+    
+    # Create healthcheck script
+    cat > "$work_dir/healthcheck.sh" <<'EOL'
+#!/bin/sh
+# Health check script for VLESS+Reality
+# Enhanced version with better timing and diagnostics
+
+# Get port from environment variable, argument, or config file
+if [ -n "$SERVER_PORT" ]; then
+    PORT="$SERVER_PORT"
+elif [ -n "$1" ] && [ "$1" != "vless-reality" ]; then
+    PORT="$1"
+else
+    # Extract port from Xray config using multiple methods
+    if [ -f "/etc/xray/config.json" ]; then
+        # Try jq first
+        if command -v jq >/dev/null 2>&1; then
+            PORT=$(jq -r '.inbounds[0].port' /etc/xray/config.json 2>/dev/null)
+        fi
+        
+        # Fallback: use grep/sed to extract port
+        if [ -z "$PORT" ] || [ "$PORT" = "null" ]; then
+            PORT=$(grep -o '"port"[[:space:]]*:[[:space:]]*[0-9]*' /etc/xray/config.json | head -1 | sed 's/.*:[[:space:]]*//')
+        fi
+    fi
+    
+    # Final fallback
+    if [ -z "$PORT" ] || [ "$PORT" = "null" ]; then
+        PORT=37276
+    fi
+fi
+
+HOST=${2:-127.0.0.1}
+
+# Function to check if Xray process is ready
+check_xray_ready() {
+    # Check if error log shows successful startup
+    if [ -f "/var/log/xray/error.log" ]; then
+        if grep -q "started" /var/log/xray/error.log 2>/dev/null; then
+            return 0
+        fi
+    fi
+    
+    # Check if Xray process is running (use ps instead of pgrep for compatibility)
+    if ps aux | grep -v grep | grep -q "xray" >/dev/null 2>&1; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# Wait for Xray to be ready (up to 10 seconds)
+ready_count=0
+while [ $ready_count -lt 10 ]; do
+    if check_xray_ready; then
+        break
+    fi
+    sleep 1
+    ready_count=$((ready_count + 1))
+done
+
+# Check port accessibility with retries
+# For Reality protocol, we only check if port is open, not try to connect
+port_check_attempts=0
+while [ $port_check_attempts -lt 3 ]; do
+    # Check if port is listening without establishing connection
+    if command -v nc >/dev/null 2>&1; then
+        # Use -z flag for zero I/O mode (just check if port is open)
+        if nc -z -w1 "$HOST" "$PORT" >/dev/null 2>&1; then
+            break
+        fi
+    else
+        # Alternative: check if xray process is listening on the port
+        if ps aux | grep -v grep | grep "xray.*$PORT" >/dev/null 2>&1; then
+            break
+        fi
+    fi
+    sleep 1
+    port_check_attempts=$((port_check_attempts + 1))
+done
+
+if [ $port_check_attempts -eq 3 ]; then
+    echo "Port $PORT is not accessible after retries"
+    exit 1
+fi
+
+# For Reality protocol, we can't test full TLS handshake easily
+# Instead, verify port is accessible and process is running
+if [ $port_check_attempts -lt 3 ] && [ $ready_count -lt 10 ]; then
+    echo "VLESS+Reality service healthy (port accessible, process running)"
+    exit 0
+fi
+
+echo "VLESS+Reality service not ready (port: $port_check_attempts/3, process: $ready_count/10)"
+exit 1
+EOL
+    
+    # Make script executable
+    chmod +x "$work_dir/healthcheck.sh"
+    
+    if [ ! -f "$work_dir/healthcheck.sh" ]; then
+        error "Failed to create healthcheck script"
+        return 1
+    fi
+    
+    [ "$debug" = true ] && log "Healthcheck script created successfully"
     return 0
 }
 
@@ -84,7 +237,7 @@ calculate_resource_limits() {
 # DOCKER COMPOSE CREATION
 # =============================================================================
 
-# Create main docker-compose.yml with adaptive resource limits
+# Create main docker-compose.yml with adaptive resource limits and improved health check
 create_docker_compose() {
     local work_dir="$1"
     local server_port="$2"
@@ -102,27 +255,36 @@ create_docker_compose() {
         calculate_resource_limits "$debug"
     fi
     
-    # Create docker-compose.yml
-    cat > "$work_dir/docker-compose.yml" <<EOL
-version: '3'
+    # Create healthcheck script for VLESS+Reality
+    create_healthcheck_script "$work_dir" "$debug"
+    
+    # Ensure logs directory exists with proper permissions
+    mkdir -p "$work_dir/logs"
+    chmod 755 "$work_dir/logs"
+    
+    # Create docker-compose.yml with improved health check
+    cat > "$work_dir/docker-compose.yml" <<EOF
 services:
   xray:
     image: teddysun/xray:latest
     container_name: xray
     restart: unless-stopped
     network_mode: host
+    user: "0:0"
     volumes:
       - ./config:/etc/xray
       - ./logs:/var/log/xray
+      - ./healthcheck.sh:/usr/local/bin/healthcheck.sh:ro
     environment:
       - TZ=Europe/Moscow
+      - SERVER_PORT=$server_port
     command: ["xray", "run", "-c", "/etc/xray/config.json"]
     healthcheck:
-      test: ["CMD", "nc", "-z", "127.0.0.1", "$server_port"]
+      test: ["CMD", "/bin/sh", "/usr/local/bin/healthcheck.sh"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
-      start_period: 40s
+      start_period: 90s
     deploy:
       resources:
         limits:
@@ -136,7 +298,7 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-EOL
+EOF
     
     if [ ! -f "$work_dir/docker-compose.yml" ]; then
         error "Failed to create docker-compose.yml"
@@ -165,28 +327,34 @@ create_backup_docker_compose() {
         calculate_resource_limits "$debug"
     fi
     
-    # Create backup docker-compose.yml
-    cat > "$work_dir/docker-compose.backup.yml" <<EOL
-version: '3'
+    # Ensure logs directory exists with proper permissions
+    mkdir -p "$work_dir/logs"
+    chmod 755 "$work_dir/logs"
+    
+    # Create backup docker-compose.yml with improved health check
+    cat > "$work_dir/docker-compose.backup.yml" <<EOF
 services:
   xray:
     image: teddysun/xray:latest
     container_name: xray
     restart: unless-stopped
     network_mode: host
+    user: "0:0"
     volumes:
       - ./config:/etc/xray
       - ./logs:/var/log/xray
+      - ./healthcheck.sh:/usr/local/bin/healthcheck.sh:ro
     environment:
       - TZ=Europe/Moscow
+      - SERVER_PORT=$server_port
     entrypoint: ["/usr/bin/xray"]
     command: ["run", "-c", "/etc/xray/config.json"]
     healthcheck:
-      test: ["CMD", "nc", "-z", "127.0.0.1", "$server_port"]
+      test: ["CMD", "/bin/sh", "/usr/local/bin/healthcheck.sh"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
-      start_period: 40s
+      start_period: 90s
     deploy:
       resources:
         limits:
@@ -197,7 +365,7 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-EOL
+EOF
     
     if [ ! -f "$work_dir/docker-compose.backup.yml" ]; then
         error "Failed to create backup docker-compose.yml"
@@ -270,7 +438,7 @@ start_docker_container() {
     fi
 }
 
-# Verify container status and health
+# Verify container status and health with improved waiting logic
 verify_container_status() {
     local container_name=${1:-"xray"}
     local debug=${2:-false}
@@ -278,7 +446,7 @@ verify_container_status() {
     [ "$debug" = true ] && log "Verifying container status..."
     
     # Wait for container to initialize
-    sleep 3
+    sleep 5
     
     # Check if container is running
     if docker ps | grep -q "$container_name"; then
@@ -289,13 +457,19 @@ verify_container_status() {
         if [ -n "$health_status" ]; then
             [ "$debug" = true ] && log "Container health status: $health_status"
             
-            # Wait for health check to complete
+            # Improved waiting logic with longer timeout for start_period
             local retries=0
-            while [ "$health_status" = "starting" ] && [ $retries -lt 30 ]; do
+            local max_retries=45  # Increased to accommodate 60s start_period + buffer
+            
+            while [ "$health_status" = "starting" ] && [ $retries -lt $max_retries ]; do
                 sleep 2
                 health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null)
                 retries=$((retries + 1))
-                [ "$debug" = true ] && log "Waiting for health check... ($retries/30)"
+                
+                # Show progress every 10 retries
+                if [ $((retries % 10)) -eq 0 ]; then
+                    log "Waiting for health check... ($((retries * 2))s elapsed)"
+                fi
             done
             
             if [ "$health_status" = "healthy" ]; then
@@ -303,7 +477,14 @@ verify_container_status() {
                 return 0
             elif [ "$health_status" = "unhealthy" ]; then
                 warning "Container $container_name is unhealthy"
+                # Show recent logs for debugging
+                log "Recent container logs:"
+                docker logs --tail 10 "$container_name" 2>/dev/null || true
                 return 1
+            elif [ "$health_status" = "starting" ]; then
+                warning "Container $container_name health check is still starting (may need more time)"
+                log "Container is running but health check hasn't completed yet"
+                return 0  # Consider this acceptable - container is running
             fi
         fi
         
@@ -413,6 +594,7 @@ setup_docker_environment() {
 
 # Export functions for use by other modules
 export -f calculate_resource_limits
+export -f create_healthcheck_script
 export -f create_docker_compose
 export -f create_backup_docker_compose
 export -f start_docker_container

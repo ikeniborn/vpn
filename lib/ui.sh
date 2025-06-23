@@ -13,34 +13,20 @@ fi
 
 # ========================= MENU COMPONENTS =========================
 
-# Draw a box around text
+# Draw a header around text (no box)
 draw_box() {
     local text="$1"
     local width="${2:-50}"
-    local char="${3:-═}"
+    local char="${3:-=}"
     
-    # Calculate padding
-    local text_length=${#text}
-    local padding=$(( (width - text_length - 2) / 2 ))
-    
-    # Top border
-    echo -e "${BLUE}╔$(printf "%*s" $width "" | tr ' ' "$char")╗${NC}"
-    
-    # Middle with text
-    printf "${BLUE}║${NC}"
-    printf "%*s" $padding ""
-    echo -n "$text"
-    printf "%*s" $(( width - text_length - padding )) ""
-    echo -e "${BLUE}║${NC}"
-    
-    # Bottom border
-    echo -e "${BLUE}╚$(printf "%*s" $width "" | tr ' ' "$char")╝${NC}"
+    # Simple header with separator
+    echo -e "${GREEN}=== $text ===${NC}"
 }
 
 # Create a simple separator line
 separator() {
     local length="${1:-50}"
-    local char="${2:-═}"
+    local char="${2:-=}"
     echo -e "${BLUE}$(printf "%*s" $length "" | tr ' ' "$char")${NC}"
 }
 
@@ -62,36 +48,7 @@ show_header() {
 
 # ========================= MENU FUNCTIONS =========================
 
-# Display main VPN management menu
-show_main_menu() {
-    show_header "Управление Xray VPN сервером"
-    
-    echo -e "  ${GREEN}👥 Управление пользователями:${NC}"
-    echo -e "    ${YELLOW}1${NC}  📋 Список пользователей"
-    echo -e "    ${YELLOW}2${NC}  ➕ Добавить пользователя"
-    echo -e "    ${YELLOW}3${NC}  ❌ Удалить пользователя"
-    echo -e "    ${YELLOW}4${NC}  ✏️  Изменить пользователя"
-    echo -e "    ${YELLOW}5${NC}  👤 Показать данные пользователя"
-    echo ""
-    echo -e "  ${GREEN}⚙️  Управление сервером:${NC}"
-    echo -e "    ${YELLOW}6${NC}  📊 Статус сервера"
-    echo -e "    ${YELLOW}7${NC}  🔄 Перезапустить сервер"
-    echo -e "    ${YELLOW}8${NC}  🔐 Ротация Reality ключей"
-    echo ""
-    echo -e "  ${GREEN}📈 Мониторинг и статистика:${NC}"
-    echo -e "    ${YELLOW}9${NC}  📊 Статистика использования"
-    echo -e "    ${YELLOW}10${NC} 📝 Настройка логирования Xray"
-    echo -e "    ${YELLOW}11${NC} 📋 Просмотр логов пользователей"
-    echo -e "    ${YELLOW}12${NC} 🛡️  Управление Watchdog службой"
-    echo ""
-    echo -e "  ${RED}⚠️  Опасная зона:${NC}"
-    echo -e "    ${YELLOW}13${NC} 🗑️  Удалить VPN сервер"
-    echo ""
-    echo -e "    ${YELLOW}0${NC}  🚪 Выход"
-    echo ""
-    separator
-    echo ""
-}
+# Legacy show_main_menu function removed - replaced with modular menu system
 
 # Show installation type selection menu
 show_installation_menu() {
@@ -302,9 +259,7 @@ show_status() {
 show_welcome() {
     clear
     echo ""
-    echo -e "${BLUE}╔══════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║${NC}   🎉 ${GREEN}Добро пожаловать в установщик VPN!${NC}   ${BLUE}║${NC}"
-    echo -e "${BLUE}╚══════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}=== 🎉 Добро пожаловать в установщик VPN! ===${NC}"
     echo ""
 }
 
@@ -314,9 +269,7 @@ show_completion() {
     local message="$2"
     
     echo ""
-    echo -e "${GREEN}╔══════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║${NC}         🎉 ${WHITE}$title${NC}         ${GREEN}║${NC}"
-    echo -e "${GREEN}╚══════════════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}=== 🎉 $title ===${NC}"
     echo ""
     
     if [ -n "$message" ]; then
@@ -327,14 +280,12 @@ show_completion() {
 
 # ========================= ERROR DISPLAY =========================
 
-# Show error message with box
+# Show error message with header
 show_error_box() {
     local error_msg="$1"
     
     echo ""
-    echo -e "${RED}╔══════════════════════════════════════════════╗${NC}"
-    echo -e "${RED}║${NC}                 ❌ ОШИБКА                  ${RED}║${NC}"
-    echo -e "${RED}╚══════════════════════════════════════════════╝${NC}"
+    echo -e "${RED}=== ❌ ОШИБКА ===${NC}"
     echo ""
     echo -e "${RED}$error_msg${NC}"
     echo ""

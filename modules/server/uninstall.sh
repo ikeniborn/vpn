@@ -76,6 +76,18 @@ remove_docker_containers() {
     
     log "Stopping Docker containers..."
     
+    # Remove all VPN-related containers (comprehensive cleanup)
+    local vpn_containers=(xray v2ray shadowbox watchtower outline)
+    
+    for container in "${vpn_containers[@]}"; do
+        if docker ps -a --format "{{.Names}}" | grep -q "^$container$"; then
+            log "Removing container: $container"
+            docker stop "$container" 2>/dev/null || true
+            docker rm "$container" 2>/dev/null || true
+        fi
+    done
+    
+    # Traditional docker-compose cleanup if work directory exists
     if [ -d "$WORK_DIR" ]; then
         cd "$WORK_DIR" || {
             warning "Cannot access work directory: $WORK_DIR"
@@ -83,24 +95,24 @@ remove_docker_containers() {
         }
         
         # Stop containers gracefully
-        if docker-compose down 2>/dev/null; then
-            log "✓ Docker containers stopped"
+        if docker-compose down --remove-orphans --volumes 2>/dev/null; then
+            log "✓ Docker containers stopped via compose"
             debug "Docker containers stopped successfully"
         else
             warning "Failed to stop containers gracefully"
-            
-            # Try to stop individual containers
-            local containers
-            containers=$(docker ps -q --filter "name=xray" 2>/dev/null || echo "")
-            
-            if [ -n "$containers" ]; then
-                log "Attempting to stop individual containers..."
-                echo "$containers" | xargs -r docker stop 2>/dev/null || true
-                echo "$containers" | xargs -r docker rm 2>/dev/null || true
-            fi
         fi
     else
         warning "Work directory not found: $WORK_DIR"
+    fi
+    
+    # Force remove any remaining VPN-related containers
+    local remaining_containers
+    remaining_containers=$(docker ps -aq --filter "ancestor=teddysun/xray" --filter "ancestor=quay.io/outline/shadowbox" 2>/dev/null || echo "")
+    
+    if [ -n "$remaining_containers" ]; then
+        log "Force removing remaining VPN containers..."
+        echo "$remaining_containers" | xargs -r docker stop 2>/dev/null || true
+        echo "$remaining_containers" | xargs -r docker rm 2>/dev/null || true
     fi
     
     debug "Docker container removal completed"
@@ -113,17 +125,40 @@ remove_docker_images() {
     
     log "Removing Docker images..."
     
-    # Remove Xray image
-    if docker rmi teddysun/xray:latest 2>/dev/null; then
-        log "✓ Xray Docker image removed"
-        debug "Xray image removal successful"
-    else
-        warning "Failed to remove Xray Docker image (may not exist)"
+    # List of VPN-related images to remove
+    local vpn_images=(
+        "teddysun/xray:latest"
+        "teddysun/xray"
+        "quay.io/outline/shadowbox:stable"
+        "quay.io/outline/shadowbox"
+        "containrrr/watchtower:latest"
+        "containrrr/watchtower"
+        "v2fly/v2fly-core:latest"
+        "v2fly/v2fly-core"
+    )
+    
+    for image in "${vpn_images[@]}"; do
+        if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^$image$"; then
+            if docker rmi "$image" --force 2>/dev/null; then
+                log "✓ Removed Docker image: $image"
+            else
+                warning "Failed to remove Docker image: $image"
+            fi
+        fi
+    done
+    
+    # Remove dangling images
+    local dangling_images
+    dangling_images=$(docker images -f "dangling=true" -q 2>/dev/null || echo "")
+    
+    if [ -n "$dangling_images" ]; then
+        log "Removing dangling images..."
+        echo "$dangling_images" | xargs -r docker rmi 2>/dev/null || true
     fi
     
-    # Clean up unused Docker resources
-    if docker system prune -f 2>/dev/null; then
-        log "✓ Docker system cleaned up"
+    # Clean up unused Docker resources (comprehensive)
+    if docker system prune -af --volumes 2>/dev/null; then
+        log "✓ Docker system cleaned up (all unused resources)"
         debug "Docker system cleanup successful"
     else
         warning "Failed to clean up Docker system"
@@ -133,45 +168,88 @@ remove_docker_images() {
     return 0
 }
 
-# Remove working directory and all data
-remove_working_directory() {
-    debug "Removing working directory and all data"
+# Remove all VPN-related directories and artifacts
+remove_all_artifacts() {
+    debug "Removing all VPN-related artifacts"
     
-    if [ ! -d "$WORK_DIR" ]; then
-        warning "Working directory not found: $WORK_DIR"
+    log "Removing VPN server artifacts and directories..."
+    
+    # List of all possible VPN directories
+    local vpn_directories=(
+        "/opt/v2ray"
+        "/opt/xray"
+        "/opt/outline"
+        "/etc/v2ray"
+        "/etc/xray"
+        "/var/lib/v2ray"
+        "/var/lib/xray"
+        "/var/log/v2ray"
+        "/var/log/xray"
+        "/tmp/v2ray"
+        "/tmp/xray"
+    )
+    
+    # Ask user about removing all artifacts
+    echo ""
+    echo -e "${YELLOW}🗂️  Found VPN-related directories and artifacts:${NC}"
+    
+    local found_dirs=()
+    for dir in "${vpn_directories[@]}"; do
+        if [ -d "$dir" ]; then
+            local dir_size=$(du -sh "$dir" 2>/dev/null | cut -f1 || echo "unknown")
+            echo -e "    📁 $dir (${BLUE}$dir_size${NC})"
+            found_dirs+=("$dir")
+        fi
+    done
+    
+    if [ ${#found_dirs[@]} -eq 0 ]; then
+        log "No VPN directories found to remove"
         return 0
     fi
     
-    log "Removing working directory: $WORK_DIR"
+    echo ""
+    local remove_all_choice
+    read -p "$(echo -e ${RED}Remove ALL VPN artifacts and configurations? [yes/no]:${NC} )" remove_all_choice
     
-    # Create a final backup before deletion (optional safety measure)
-    local backup_dir="/tmp/vpn_backup_$(date +%Y%m%d_%H%M%S)"
-    
-    if [ -f "$CONFIG_FILE" ]; then
-        log "Creating final backup before deletion..."
+    if [ "$remove_all_choice" = "yes" ]; then
+        # Create a comprehensive backup before deletion
+        local backup_dir="/tmp/vpn_complete_backup_$(date +%Y%m%d_%H%M%S)"
+        log "Creating comprehensive backup before deletion..."
         mkdir -p "$backup_dir"
         
-        # Backup essential files
-        cp "$CONFIG_FILE" "$backup_dir/" 2>/dev/null || true
-        cp -r "$USERS_DIR" "$backup_dir/" 2>/dev/null || true
-        cp -r "$WORK_DIR/config" "$backup_dir/" 2>/dev/null || true
+        for dir in "${found_dirs[@]}"; do
+            if [ -d "$dir" ]; then
+                local backup_subdir="$backup_dir$(dirname "$dir")"
+                mkdir -p "$backup_subdir"
+                cp -r "$dir" "$backup_subdir/" 2>/dev/null || true
+                log "Backed up: $dir"
+            fi
+        done
         
-        log "Final backup created in: $backup_dir"
+        log "Comprehensive backup created in: $backup_dir"
         log "(Backup will be automatically removed in 24 hours)"
         
         # Schedule backup cleanup
         echo "rm -rf '$backup_dir'" | at now + 1 day 2>/dev/null || true
-    fi
-    
-    # Remove the working directory
-    if rm -rf "$WORK_DIR" 2>/dev/null; then
-        log "✓ Working directory removed: $WORK_DIR"
-        debug "Working directory removal successful"
+        
+        # Remove all directories
+        for dir in "${found_dirs[@]}"; do
+            if rm -rf "$dir" 2>/dev/null; then
+                log "✓ Removed directory: $dir"
+            else
+                warning "Failed to remove directory: $dir"
+            fi
+        done
     else
-        error "Failed to remove working directory: $WORK_DIR"
+        log "Keeping existing VPN artifacts"
+        
+        # Remove only the main working directory
+        if [ -d "$WORK_DIR" ] && rm -rf "$WORK_DIR" 2>/dev/null; then
+            log "✓ Removed main working directory: $WORK_DIR"
+        fi
     fi
     
-    debug "Working directory removal completed"
+    debug "Artifact removal completed"
     return 0
 }
 
@@ -375,8 +453,8 @@ uninstall_vpn() {
     # Remove Docker images
     remove_docker_images
     
-    # Remove working directory and all data
-    remove_working_directory
+    # Remove all VPN artifacts and directories (with user confirmation)
+    remove_all_artifacts
     
     # Remove management script links
     remove_management_links
@@ -521,7 +599,7 @@ export -f display_uninstall_warning
 export -f get_uninstall_confirmation
 export -f remove_docker_containers
 export -f remove_docker_images
-export -f remove_working_directory
+export -f remove_all_artifacts
 export -f remove_management_links
 export -f close_firewall_ports
 export -f cleanup_systemd_services

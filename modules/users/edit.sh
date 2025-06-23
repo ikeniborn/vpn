@@ -250,9 +250,7 @@ display_edit_summary() {
     local new_uuid="$4"
     
     echo ""
-    echo -e "${BLUE}╔════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║${NC}          ${GREEN}User Edit Summary${NC}                ${BLUE}║${NC}"
-    echo -e "${BLUE}╚════════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}=== User Edit Summary ===${NC}"
     echo ""
     echo -e "  ${GREEN}Old Information:${NC}"
     echo -e "    Name: ${YELLOW}$old_name${NC}"
@@ -276,6 +274,7 @@ display_edit_summary() {
 
 # Main function to edit a user
 edit_user() {
+    local provided_user_name="$1"
     log "Editing user in VPN server..."
     
     # Initialize module
@@ -284,23 +283,28 @@ edit_user() {
     # Get server configuration
     get_server_info
     
-    # Source and show user list
-    if [ -f "$PROJECT_DIR/modules/users/list.sh" ]; then
-        source "$PROJECT_DIR/modules/users/list.sh"
-        list_users
-    else
-        # Fallback: simple user list
-        echo ""
-        log "Current users:"
-        jq -r '.inbounds[0].settings.clients[].email' "$CONFIG_FILE" 2>/dev/null | while read -r user; do
-            echo "  • $user"
-        done
-        echo ""
-    fi
-    
-    # Get user to edit
+    # Get user to edit (use provided or prompt)
     local user_name=""
-    read -p "Enter user name to edit: " user_name
+    if [ -n "$provided_user_name" ]; then
+        user_name="$provided_user_name"
+        log "Using provided user name: $user_name"
+    else
+        # Source and show user list
+        if [ -f "$PROJECT_DIR/modules/users/list.sh" ]; then
+            source "$PROJECT_DIR/modules/users/list.sh"
+            list_users
+        else
+            # Fallback: simple user list
+            echo ""
+            log "Current users:"
+            jq -r '.inbounds[0].settings.clients[].email' "$CONFIG_FILE" 2>/dev/null | while read -r user; do
+                echo "  • $user"
+            done
+            echo ""
+        fi
+        
+        read -p "Enter user name to edit: " user_name
+    fi
     
     # Validate user exists
     validate_user_exists "$user_name"

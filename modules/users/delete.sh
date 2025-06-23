@@ -135,9 +135,7 @@ confirm_user_deletion() {
     local user_uuid="$2"
     
     echo ""
-    echo -e "${RED}╔══════════════════════════════════════════════╗${NC}"
-    echo -e "${RED}║${NC}    ⚠️  ${RED}WARNING: USER DELETION${NC}           ${RED}║${NC}"
-    echo -e "${RED}╚══════════════════════════════════════════════╝${NC}"
+    echo -e "${RED}=== ⚠️  WARNING: USER DELETION ===${NC}"
     echo ""
     echo -e "${RED}❗ This operation will permanently delete:${NC}"
     echo -e "    ${YELLOW}•${NC} User: ${YELLOW}$user_name${NC}"
@@ -163,28 +161,34 @@ confirm_user_deletion() {
 
 # Main function to delete a user
 delete_user() {
+    local provided_user_name="$1"
     log "Deleting user from VPN server..."
     
     # Initialize module
     init_user_delete
     
-    # Source the list module to show users
-    if [ -f "$PROJECT_DIR/modules/users/list.sh" ]; then
-        source "$PROJECT_DIR/modules/users/list.sh"
-        list_users
-    else
-        # Fallback: simple user list
-        echo ""
-        log "Current users:"
-        jq -r '.inbounds[0].settings.clients[].email' "$CONFIG_FILE" 2>/dev/null | while read -r user; do
-            echo "  • $user"
-        done
-        echo ""
-    fi
-    
-    # Get user name to delete
+    # Get user name (use provided or prompt)
     local user_name=""
-    read -p "Enter user name to delete: " user_name
+    if [ -n "$provided_user_name" ]; then
+        user_name="$provided_user_name"
+        log "Using provided user name: $user_name"
+    else
+        # Source the list module to show users
+        if [ -f "$PROJECT_DIR/modules/users/list.sh" ]; then
+            source "$PROJECT_DIR/modules/users/list.sh"
+            list_users
+        else
+            # Fallback: simple user list
+            echo ""
+            log "Current users:"
+            jq -r '.inbounds[0].settings.clients[].email' "$CONFIG_FILE" 2>/dev/null | while read -r user; do
+                echo "  • $user"
+            done
+            echo ""
+        fi
+        
+        read -p "Enter user name to delete: " user_name
+    fi
     
     # Validate user exists
     validate_user_exists "$user_name"
@@ -255,9 +259,7 @@ batch_delete_users() {
     
     # Show deletion summary
     echo ""
-    echo -e "${RED}╔══════════════════════════════════════════════╗${NC}"
-    echo -e "${RED}║${NC}    ⚠️  ${RED}BATCH USER DELETION${NC}              ${RED}║${NC}"
-    echo -e "${RED}╚══════════════════════════════════════════════╝${NC}"
+    echo -e "${RED}=== ⚠️  BATCH USER DELETION ===${NC}"
     echo ""
     echo -e "${RED}❗ This will delete ${#user_names[@]} users:${NC}"
     for user_name in "${user_names[@]}"; do

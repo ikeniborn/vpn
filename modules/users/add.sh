@@ -234,6 +234,7 @@ restart_vpn_server() {
 
 # Main function to add a new user
 add_user() {
+    local provided_user_name="$1"
     log "Adding new user to VPN server..."
     
     # Initialize module
@@ -247,9 +248,14 @@ add_user() {
     local user_uuid=""
     local user_short_id=""
     
-    # Get user name
-    echo ""
-    read -p "Enter new user name: " user_name
+    # Get user name (use provided or prompt)
+    if [ -n "$provided_user_name" ]; then
+        user_name="$provided_user_name"
+        log "Using provided user name: $user_name"
+    else
+        echo ""
+        read -p "Enter new user name: " user_name
+    fi
     
     # Generate UUID
     user_uuid=$(uuid -v 4)

@@ -119,6 +119,10 @@ generate_outline_config() {
     # Save configuration
     echo "$api_prefix" > "$OUTLINE_DIR/api_prefix.txt"
     echo "$api_port" > "$OUTLINE_DIR/api_port.txt"
+    # Save the configured access key port
+    if [[ $keys_port != 0 ]]; then
+        echo "$keys_port" > "$OUTLINE_DIR/configured_port.txt"
+    fi
     
     [ "$debug" = true ] && log "Outline configuration generated"
     return 0
@@ -272,17 +276,26 @@ check_outline_firewall() {
     local api_url="${1}"
     local public_api_url="${2}"
     local api_port="${3}"
-    local debug="${4:-false}"
+    local access_key_port="${4}"
+    local debug="${5:-false}"
     
     [ "$debug" = true ] && log "Checking firewall status..."
     
-    # Get access key port from first user
-    local access_key_port=$(curl --insecure -s "${api_url}/access-keys" | \
-        docker exec -i shadowbox node -e '
-            const fs = require("fs");
-            const accessKeys = JSON.parse(fs.readFileSync(0, {encoding: "utf-8"}));
-            console.log(accessKeys["accessKeys"][0]["port"]);
-        ' 2>/dev/null || echo "")
+    # If no access key port provided, try to get it from the saved configuration
+    if [ -z "$access_key_port" ] || [ "$access_key_port" = "0" ]; then
+        # First check if we have a saved configured port
+        if [ -f "$OUTLINE_DIR/configured_port.txt" ]; then
+            access_key_port=$(cat "$OUTLINE_DIR/configured_port.txt")
+        else
+            # Otherwise get it from the first user
+            access_key_port=$(curl --insecure -s "${api_url}/access-keys" | \
+                docker exec -i shadowbox node -e '
+                    const fs = require("fs");
+                    const accessKeys = JSON.parse(fs.readFileSync(0, {encoding: "utf-8"}));
+                    console.log(accessKeys["accessKeys"][0]["port"]);
+                ' 2>/dev/null || echo "")
+        fi
+    fi
     
     local firewall_status=""
     if ! curl --max-time 5 --cacert "${SB_CERTIFICATE_FILE}" -s "${public_api_url}/access-keys" >/dev/null 2>&1; then
@@ -316,21 +329,29 @@ display_outline_results() {
     # Get certificate fingerprint
     local cert_sha256=$(grep "certSha256" "$access_file" | sed "s/certSha256://")
     
+    # Get configured port
+    local configured_port=""
+    if [ -f "$OUTLINE_DIR/configured_port.txt" ]; then
+        configured_port=$(cat "$OUTLINE_DIR/configured_port.txt")
+    fi
+    
     # Display results
-    cat <<EOF
-
-${GREEN}CONGRATULATIONS! Your Outline server is up and running.${NC}
-
-To manage your Outline server, please copy the following line (including curly
-brackets) into Step 2 of the Outline Manager interface:
-
-$(echo -e "${GREEN}{\"apiUrl\":\"${public_api_url}\",\"certSha256\":\"${cert_sha256}\"}${NC}")
-
-${firewall_status}
-
-${YELLOW}Download Outline Manager:${NC}
-${WHITE}https://getoutline.org/get-started/#step-1${NC}
-EOF
+    echo ""
+    echo -e "${GREEN}CONGRATULATIONS! Your Outline server is up and running.${NC}"
+    echo ""
+    if [ -n "$configured_port" ]; then
+        echo -e "${BLUE}Access Key Port:${NC} $configured_port"
+        echo ""
+    fi
+    echo "To manage your Outline server, please copy the following line (including curly"
+    echo "brackets) into Step 2 of the Outline Manager interface:"
+    echo ""
+    echo -e "${GREEN}{\"apiUrl\":\"${public_api_url}\",\"certSha256\":\"${cert_sha256}\"}${NC}"
+    echo ""
+    echo "${firewall_status}"
+    echo ""
+    echo -e "${YELLOW}Download Outline Manager:${NC}"
+    echo -e "${WHITE}https://getoutline.org/get-started/#step-1${NC}"
     
     # Save management info
     ensure_dir "$OUTLINE_DIR/management"
@@ -342,6 +363,16 @@ install_outline_server() {
     local debug="${1:-false}"
     
     log "Starting Outline VPN server installation..."
+    
+    # Set default OUTLINE_DIR if not already set
+    if [ -z "$OUTLINE_DIR" ]; then
+        export OUTLINE_DIR="/opt/outline"
+    fi
+    
+    # Set default OUTLINE_API_PORT if not already set
+    if [ -z "$OUTLINE_API_PORT" ]; then
+        export OUTLINE_API_PORT="9000"
+    fi
     
     # Check architecture compatibility
     local arch=$(get_system_architecture)
@@ -357,8 +388,27 @@ install_outline_server() {
     
     # Set API port
     local api_port="${OUTLINE_API_PORT}"
-    if [[ $api_port == 0 ]]; then
+    if [[ -z "$api_port" ]] || [[ $api_port == 0 ]]; then
         api_port=$(get_random_port)
+    fi
+    
+    # Ensure SERVER_PORT is set
+    if [ -z "$SERVER_PORT" ]; then
+        warning "SERVER_PORT not set, using default 10443"
+        export SERVER_PORT="10443"
+    fi
+    
+    # Ensure SERVER_IP is set
+    if [ -z "$SERVER_IP" ]; then
+        log "Detecting external IP address..."
+        if command -v get_external_ip >/dev/null 2>&1; then
+            SERVER_IP=$(get_external_ip)
+        else
+            # Fallback IP detection
+            SERVER_IP=$(curl -s ifconfig.me 2>/dev/null || curl -s ipinfo.io/ip 2>/dev/null || echo "YOUR_SERVER_IP")
+        fi
+        export SERVER_IP
+        log "Detected external IP: $SERVER_IP"
     fi
     
     # Clear and initialize access file
@@ -409,11 +459,12 @@ install_outline_server() {
         return 1
     }
     
-    # Check firewall status
-    local firewall_status=$(check_outline_firewall "$local_api_url" "$public_api_url" "$api_port" "$debug")
+    # Check firewall status and save for later display
+    local firewall_status=$(check_outline_firewall "$local_api_url" "$public_api_url" "$api_port" "$SERVER_PORT" "$debug")
     
-    # Display results
-    display_outline_results "$access_file" "$public_api_url" "$firewall_status"
+    # Save results for later display in show_installation_results
+    echo "$public_api_url" > "$OUTLINE_DIR/api_url.txt"
+    echo "$firewall_status" > "$OUTLINE_DIR/firewall_status.txt"
     
     log "Outline VPN server installation completed successfully!"
     return 0

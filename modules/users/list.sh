@@ -71,14 +71,15 @@ get_user_info() {
 
 # Format user table header
 format_table_header() {
-    echo -e "${BLUE}╔════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║${NC} ${GREEN}User Name${NC}                 ${BLUE}║${NC} ${GREEN}UUID${NC}                                   ${BLUE}║${NC}"
-    echo -e "${BLUE}╠════════════════════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${GREEN}=== User List ===${NC}"
+    echo ""
+    echo -e "${BLUE}$(printf '%-25s' 'User Name') | $(printf '%-36s' 'UUID')${NC}"
+    echo -e "${BLUE}$(printf '%25s' '' | tr ' ' '-') | $(printf '%36s' '' | tr ' ' '-')${NC}"
 }
 
 # Format user table footer
 format_table_footer() {
-    echo -e "${BLUE}╚════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
 }
 
 # Format user row
@@ -86,23 +87,12 @@ format_user_row() {
     local user_name="$1"
     local user_uuid="$2"
     
-    # Calculate padding for user name (25 characters max)
-    local name_length=${#user_name}
-    local name_padding=$((25 - name_length))
-    
     # Truncate name if too long
-    if [ $name_length -gt 25 ]; then
+    if [ ${#user_name} -gt 25 ]; then
         user_name="${user_name:0:22}..."
-        name_padding=0
     fi
     
-    # Create padding string
-    local padding=""
-    if [ $name_padding -gt 0 ]; then
-        padding=$(printf "%*s" $name_padding "")
-    fi
-    
-    echo -e "${BLUE}║${NC} ${YELLOW}$user_name${NC}${padding} ${BLUE}║${NC} ${WHITE}$user_uuid${NC} ${BLUE}║${NC}"
+    echo -e "${YELLOW}$(printf '%-25s' "$user_name")${NC} | ${WHITE}$user_uuid${NC}"
 }
 
 # List users in table format
@@ -129,7 +119,7 @@ list_users() {
     format_table_header
     
     # Get and display each user
-    jq -r '.inbounds[0].settings.clients[] | "║ " + (.email // "No Name") + " " * (25 - ((.email // "No Name") | length)) + "║ " + .id + " ║"' "$CONFIG_FILE" 2>/dev/null | while read -r line; do
+    jq -r '.inbounds[0].settings.clients[] | (.email // "No Name") + " " * (25 - ((.email // "No Name") | length)) + " | " + .id' "$CONFIG_FILE" 2>/dev/null | while read -r line; do
         echo -e "${BLUE}${line}${NC}"
     done
     
@@ -188,39 +178,36 @@ list_users_detailed() {
     # Display each user with details
     local counter=1
     get_user_names | while read -r user_name; do
-        echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║${NC} ${GREEN}User #$counter: $user_name${NC}"
-        echo -e "${BLUE}╠═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╣${NC}"
+        echo -e "${GREEN}=== User #$counter: $user_name ===${NC}"
         
         # Get user UUID
         local user_uuid
         user_uuid=$(jq -r ".inbounds[0].settings.clients[] | select(.email == \"$user_name\") | .id" "$CONFIG_FILE" 2>/dev/null)
         
-        echo -e "${BLUE}║${NC}   ${YELLOW}UUID:${NC} $user_uuid"
-        echo -e "${BLUE}║${NC}   ${YELLOW}Server:${NC} $SERVER_IP:$SERVER_PORT"
-        echo -e "${BLUE}║${NC}   ${YELLOW}Protocol:${NC} $PROTOCOL"
-        echo -e "${BLUE}║${NC}   ${YELLOW}SNI:${NC} $SERVER_SNI"
+        echo -e "   ${YELLOW}UUID:${NC} $user_uuid"
+        echo -e "   ${YELLOW}Server:${NC} $SERVER_IP:$SERVER_PORT"
+        echo -e "   ${YELLOW}Protocol:${NC} $PROTOCOL"
+        echo -e "   ${YELLOW}SNI:${NC} $SERVER_SNI"
         
         # Check if user files exist
         if [ -f "$USERS_DIR/$user_name.json" ]; then
-            echo -e "${BLUE}║${NC}   ${YELLOW}Config File:${NC} ✅ Available"
+            echo -e "   ${YELLOW}Config File:${NC} ✅ Available"
         else
-            echo -e "${BLUE}║${NC}   ${YELLOW}Config File:${NC} ❌ Missing"
+            echo -e "   ${YELLOW}Config File:${NC} ❌ Missing"
         fi
         
         if [ -f "$USERS_DIR/$user_name.link" ]; then
-            echo -e "${BLUE}║${NC}   ${YELLOW}Connection Link:${NC} ✅ Available"
+            echo -e "   ${YELLOW}Connection Link:${NC} ✅ Available"
         else
-            echo -e "${BLUE}║${NC}   ${YELLOW}Connection Link:${NC} ❌ Missing"
+            echo -e "   ${YELLOW}Connection Link:${NC} ❌ Missing"
         fi
         
         if [ -f "$USERS_DIR/$user_name.png" ]; then
-            echo -e "${BLUE}║${NC}   ${YELLOW}QR Code:${NC} ✅ Available"
+            echo -e "   ${YELLOW}QR Code:${NC} ✅ Available"
         else
-            echo -e "${BLUE}║${NC}   ${YELLOW}QR Code:${NC} ❌ Missing"
+            echo -e "   ${YELLOW}QR Code:${NC} ❌ Missing"
         fi
         
-        echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝${NC}"
         echo ""
         
         counter=$((counter + 1))

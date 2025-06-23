@@ -8,12 +8,12 @@
 #
 # Functions exported:
 # - create_xray_config_reality()
-# - create_xray_config_basic()
 # - create_xray_config()
 # - validate_xray_config()
 # - create_user_data()
 # - create_connection_link()
 # - setup_xray_directories()
+# - setup_xray_configuration()
 #
 # Dependencies: lib/common.sh, lib/config.sh
 # =============================================================================
@@ -97,6 +97,25 @@ create_xray_config_reality() {
     fi
     
     # Create Reality configuration
+    # Generate additional short IDs for better mobile compatibility
+    local additional_short_ids=""
+    if [ -n "$short_id" ]; then
+        # Generate 2 additional short IDs based on the original one
+        local short_id_2=$(echo -n "${short_id}mobile" | sha256sum | cut -c1-16)
+        local short_id_3=$(echo -n "${short_id}backup" | sha256sum | cut -c1-16)
+        additional_short_ids=",\"$short_id_2\",\"$short_id_3\""
+    fi
+    
+    # Determine secondary SNI domain for better compatibility
+    local secondary_sni=""
+    case "$server_sni" in
+        "addons.mozilla.org") secondary_sni="developer.mozilla.org" ;;
+        "developer.mozilla.org") secondary_sni="addons.mozilla.org" ;;
+        *) secondary_sni="addons.mozilla.org" ;;
+    esac
+    
+    # TCP_FASTOPEN removed to prevent protocol warnings in logs
+    
     cat > "$config_file" <<EOL
 {
   "log": {
@@ -117,6 +136,17 @@ create_xray_config_reality() {
       "statsInboundDownlink": true,
       "statsOutboundUplink": true,
       "statsOutboundDownlink": true
+    },
+    "levels": {
+      "0": {
+        "handshake": 4,
+        "connIdle": 300,
+        "uplinkOnly": 2,
+        "downlinkOnly": 5,
+        "statsUserUplink": true,
+        "statsUserDownlink": true,
+        "bufferSize": 10240
+      }
     }
   },
   "inbounds": [
@@ -128,10 +158,17 @@ create_xray_config_reality() {
           {
             "id": "$user_uuid",
             "flow": "xtls-rprx-vision",
-            "email": "$user_name"
+            "email": "$user_name",
+            "level": 0
           }
         ],
-        "decryption": "none"
+        "decryption": "none",
+        "fallbacks": [
+          {
+            "dest": "$server_sni:443",
+            "xver": 1
+          }
+        ]
       },
       "streamSettings": {
         "network": "tcp",
@@ -139,22 +176,34 @@ create_xray_config_reality() {
         "realitySettings": {
           "show": false,
           "dest": "$server_sni:443",
-          "xver": 0,
+          "xver": 1,
           "serverNames": [
-            "$server_sni"
+            "$server_sni",
+            "$secondary_sni"
           ],
           "privateKey": "$private_key",
           "minClientVer": "",
           "maxClientVer": "",
-          "maxTimeDiff": 60000,
+          "maxTimeDiff": 120000,
           "shortIds": [
-            "$short_id"
+            "$short_id"$additional_short_ids
           ]
+        },
+        "tcpSettings": {
+          "header": {
+            "type": "none"
+          },
+          "acceptProxyProtocol": false
+        },
+        "sockopt": {
+          "tcpKeepAliveInterval": 30
         }
       },
       "sniffing": {
         "enabled": true,
-        "destOverride": ["http", "tls", "quic", "fakedns"]
+        "destOverride": ["http", "tls", "quic", "fakedns"],
+        "metadataOnly": false,
+        "routeOnly": false
       }
     }
   ],
@@ -163,6 +212,11 @@ create_xray_config_reality() {
       "protocol": "freedom",
       "settings": {
         "domainStrategy": "UseIPv4"
+      },
+      "streamSettings": {
+        "sockopt": {
+          "tcpKeepAliveInterval": 30
+        }
       }
     },
     {
@@ -177,21 +231,8 @@ create_xray_config_reality() {
       {
         "type": "field",
         "ip": [
-          "0.0.0.0/8",
-          "10.0.0.0/8",
-          "100.64.0.0/10",
           "127.0.0.0/8",
-          "169.254.0.0/16",
-          "172.16.0.0/12",
-          "192.0.0.0/24",
-          "192.0.2.0/24",
-          "192.168.0.0/16",
-          "198.18.0.0/15",
-          "198.51.100.0/24",
-          "203.0.113.0/24",
-          "::1/128",
-          "fc00::/7",
-          "fe80::/10"
+          "::1/128"
         ],
         "outboundTag": "blocked"
       }
@@ -209,74 +250,6 @@ EOL
     return 0
 }
 
-# Create Xray configuration for basic VLESS protocol
-create_xray_config_basic() {
-    local config_file="$1"
-    local server_port="$2"
-    local user_uuid="$3"
-    local user_name="$4"
-    local debug=${5:-false}
-    
-    [ "$debug" = true ] && log "Creating basic VLESS configuration..."
-    
-    # Validate required parameters
-    if [ -z "$config_file" ] || [ -z "$server_port" ] || [ -z "$user_uuid" ] || \
-       [ -z "$user_name" ]; then
-        error "Missing required parameters for basic VLESS configuration"
-        return 1
-    fi
-    
-    # Create basic VLESS configuration
-    cat > "$config_file" <<EOL
-{
-  "log": {
-    "loglevel": "warning"
-  },
-  "inbounds": [
-    {
-      "port": $server_port,
-      "protocol": "vless",
-      "settings": {
-        "clients": [
-          {
-            "id": "$user_uuid",
-            "flow": "",
-            "email": "$user_name"
-          }
-        ],
-        "decryption": "none"
-      },
-      "streamSettings": {
-        "network": "tcp",
-        "security": "none",
-        "tcpSettings": {
-          "header": {
-            "type": "none"
-          }
-        }
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["http", "tls"]
-      }
-    }
-  ],
-  "outbounds": [
-    {
-      "protocol": "freedom"
-    }
-  ]
-}
-EOL
-    
-    if [ ! -f "$config_file" ]; then
-        error "Failed to create basic VLESS configuration file"
-        return 1
-    fi
-    
-    [ "$debug" = true ] && log "Basic VLESS configuration created successfully"
-    return 0
-}
 
 # Create Xray configuration based on protocol type
 create_xray_config() {
@@ -287,10 +260,12 @@ create_xray_config() {
     local user_name="$5"
     local server_sni="$6"
     local private_key="$7"
-    local short_id="$8"
-    local debug=${9:-false}
+    local public_key="$8"
+    local short_id="$9"
+    local debug=${10:-false}
     
     [ "$debug" = true ] && log "Creating Xray configuration..."
+    [ "$debug" = true ] && log "Protocol: $protocol"
     
     if [ -z "$work_dir" ] || [ -z "$protocol" ]; then
         error "Missing required parameters: work_dir and protocol"
@@ -310,10 +285,6 @@ create_xray_config() {
         "vless-reality")
             create_xray_config_reality "$config_file" "$server_port" "$user_uuid" \
                 "$user_name" "$server_sni" "$private_key" "$short_id" "$debug"
-            ;;
-        "vless-basic")
-            create_xray_config_basic "$config_file" "$server_port" "$user_uuid" \
-                "$user_name" "$debug"
             ;;
         *)
             error "Unsupported protocol: $protocol"
@@ -402,9 +373,8 @@ create_user_data() {
         return 1
     }
     
-    # Create user data based on protocol
-    if [ "$protocol" = "vless-reality" ]; then
-        cat > "$user_file" <<EOL
+    # Create user data for VLESS+Reality
+    cat > "$user_file" <<EOL
 {
   "name": "$user_name",
   "uuid": "$user_uuid",
@@ -417,17 +387,6 @@ create_user_data() {
   "protocol": "$protocol"
 }
 EOL
-    else
-        cat > "$user_file" <<EOL
-{
-  "name": "$user_name",
-  "uuid": "$user_uuid",
-  "port": $server_port,
-  "server": "$server_ip",
-  "protocol": "$protocol"
-}
-EOL
-    fi
     
     if [ ! -f "$user_file" ]; then
         error "Failed to create user data file"
@@ -462,12 +421,8 @@ create_connection_link() {
     local link_file="$work_dir/users/$user_name.link"
     local connection_link=""
     
-    # Create connection link based on protocol
-    if [ "$protocol" = "vless-reality" ]; then
-        connection_link="vless://$user_uuid@$server_ip:$server_port?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$server_sni&fp=chrome&pbk=$public_key&sid=$short_id&type=tcp&headerType=none#$user_name"
-    else
-        connection_link="vless://$user_uuid@$server_ip:$server_port?encryption=none&security=none&type=tcp&headerType=none#$user_name"
-    fi
+    # Create connection link for VLESS+Reality
+    connection_link="vless://$user_uuid@$server_ip:$server_port?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$server_sni&fp=chrome&pbk=$public_key&sid=$short_id&type=tcp&headerType=none#$user_name"
     
     # Save connection link
     echo "$connection_link" > "$link_file"
@@ -519,7 +474,7 @@ setup_xray_configuration() {
     
     # Create Xray configuration
     create_xray_config "$work_dir" "$protocol" "$server_port" "$user_uuid" \
-        "$user_name" "$server_sni" "$private_key" "$short_id" "$debug" || {
+        "$user_name" "$server_sni" "$private_key" "$public_key" "$short_id" "$debug" || {
         error "Failed to create Xray configuration"
         return 1
     }
@@ -557,7 +512,6 @@ setup_xray_configuration() {
 # Export functions for use by other modules
 export -f setup_xray_directories
 export -f create_xray_config_reality
-export -f create_xray_config_basic
 export -f create_xray_config
 export -f validate_xray_config
 export -f create_user_data
@@ -568,6 +522,6 @@ export -f setup_xray_configuration
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     # Script is being run directly, show usage
     echo "Usage: $0 <work_dir> <protocol> <server_port> <user_uuid> <user_name> <server_ip> [server_sni] [private_key] [public_key] [short_id]"
-    echo "Protocols: vless-reality, vless-basic"
+    echo "Protocol: vless-reality"
     exit 1
 fi

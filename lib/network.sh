@@ -231,44 +231,60 @@ check_sni_domain() {
         return 1
     fi
     
-    log "Проверка доступности домена $domain..."
+    printf "   %b📋 Testing domain:%b %b%s%b\n" "$YELLOW" "$NC" "$WHITE" "$domain" "$NC"
+    echo ""
     
     # Step 1: Validate domain format
-    if ! validate_domain_format "$domain"; then
-        warning "Некорректный формат домена: $domain"
+    printf "   %b1/4%b Format validation... " "$BLUE" "$NC"
+    if ! validate_domain_format "$domain" 2>/dev/null; then
+        printf "%b✗ Invalid format%b\n" "$RED" "$NC"
         return 1
     fi
+    printf "%b✓ Valid%b\n" "$GREEN" "$NC"
     
     # Step 2: DNS resolution check
-    if ! check_domain_dns "$domain" "$timeout"; then
-        warning "Домен $domain не резолвится в DNS"
+    printf "   %b2/4%b DNS resolution... " "$BLUE" "$NC"
+    if ! check_domain_dns "$domain" "$timeout" 2>/dev/null; then
+        printf "%b✗ Failed%b\n" "$RED" "$NC"
         return 1
     fi
+    printf "%b✓ Resolved%b\n" "$GREEN" "$NC"
     
     # Step 3: TCP connection to port 443
-    if ! check_domain_port "$domain" 443 "$timeout"; then
-        warning "Домен $domain недоступен на порту 443"
+    printf "   %b3/4%b TCP connectivity (port 443)... " "$BLUE" "$NC"
+    if ! check_domain_port "$domain" 443 "$timeout" 2>/dev/null; then
+        printf "%b✗ Unreachable%b\n" "$RED" "$NC"
         return 1
     fi
+    printf "%b✓ Connected%b\n" "$GREEN" "$NC"
     
     # Step 4: HTTPS accessibility check
-    if ! check_domain_https "$domain" "$timeout"; then
-        warning "Домен $domain не отвечает на HTTPS запросы"
+    printf "   %b4/4%b HTTPS response... " "$BLUE" "$NC"
+    if ! check_domain_https "$domain" "$timeout" 2>/dev/null; then
+        printf "%b✗ No response%b\n" "$RED" "$NC"
         return 1
     fi
+    printf "%b✓ Responding%b\n" "$GREEN" "$NC"
     
-    # Step 5: Optional TLS check
+    # Step 5: Optional TLS check (silent) - fixed working directory issue
     if command_exists openssl; then
-        local tls_check=$(timeout "$timeout" bash -c "echo | openssl s_client -connect '$domain:443' -servername '$domain' -quiet 2>/dev/null | head -n 1" | grep -i "verify\|protocol\|cipher" 2>/dev/null || echo "")
+        # Use safe working directory and proper command execution
+        local safe_dir="${PROJECT_ROOT:-/tmp}"
+        local tls_check
+        (
+            cd "$safe_dir" 2>/dev/null || cd /tmp
+            tls_check=$(timeout "$timeout" sh -c "echo | openssl s_client -connect '$domain:443' -servername '$domain' -quiet 2>/dev/null" | head -n 1 | grep -i "verify\|protocol\|cipher" 2>/dev/null || echo "")
+            echo "$tls_check"
+        )
         
-        if [ -z "$tls_check" ]; then
-            debug "Could not verify TLS details for $domain, but basic checks passed"
-        else
+        if [ -n "$tls_check" ]; then
             debug "TLS connection verified for $domain"
         fi
     fi
     
-    log "✓ Домен $domain прошел все проверки"
+    echo ""
+    printf "   %b🎉 Domain verification successful!%b\n" "$GREEN" "$NC"
+    echo ""
     return 0
 }
 
@@ -286,6 +302,79 @@ registry.npmjs.org
 api.github.com
 www.lovelive-anime.jp
 EOF
+}
+
+# Get SNI domain (interactive selection)
+get_sni_domain() {
+    local debug="${1:-false}"
+    
+    [ "$debug" = true ] && log "Getting SNI domain for Reality protocol..."
+    
+    # List of pre-configured domains
+    local domains=(
+        "addons.mozilla.org"
+        "www.swift.org"
+        "golang.org"
+        "www.kernel.org"
+        "cdn.jsdelivr.net"
+        "registry.npmjs.org"
+        "api.github.com"
+        "www.lovelive-anime.jp"
+    )
+    
+    printf "%b=== SNI Domain Selection ===%b\n" "$GREEN" "$NC"
+    echo ""
+    printf "%b📡 Available pre-configured domains:%b\n" "$YELLOW" "$NC"
+    echo ""
+    local i=1
+    for domain in "${domains[@]}"; do
+        printf "   %b%d)%b %b%s%b\n" "$BLUE" "$i" "$NC" "$WHITE" "$domain" "$NC"
+        ((i++))
+    done
+    echo ""
+    
+    while true; do
+        read -p "Select domain (1-${#domains[@]}): " choice
+        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#domains[@]}" ]; then
+            SERVER_SNI="${domains[$((choice-1))]}"
+            echo ""
+            printf "%b✓ Selected domain:%b %b%s%b\n" "$GREEN" "$NC" "$WHITE" "$SERVER_SNI" "$NC"
+            
+            # Verify selected domain
+            echo ""
+            printf "%b🔍 Verifying domain connectivity...%b\n" "$BLUE" "$NC"
+            if check_sni_domain "$SERVER_SNI" 5; then
+                printf "%b✓ Domain verification completed successfully%b\n" "$GREEN" "$NC"
+                return 0
+            else
+                printf "%b⚠ Domain verification failed, but will proceed%b\n" "$YELLOW" "$NC"
+                return 0
+            fi
+        else
+            warning "Invalid selection. Please choose 1-${#domains[@]}"
+        fi
+    done
+}
+
+# Validate SNI domain format and accessibility
+validate_sni_domain() {
+    local domain="$1"
+    
+    if [ -z "$domain" ]; then
+        return 1
+    fi
+    
+    # Basic format validation
+    if ! validate_domain_format "$domain"; then
+        return 1
+    fi
+    
+    # Check DNS resolution
+    if ! check_domain_dns "$domain" 3; then
+        return 1
+    fi
+    
+    return 0
 }
 
 # Test multiple domains and return the first working one
@@ -406,3 +495,21 @@ init_network() {
         fi
     fi
 }
+
+# Export functions
+export -f check_port_available
+export -f generate_free_port
+export -f get_used_ports
+export -f validate_domain_format
+export -f check_domain_dns
+export -f check_domain_port
+export -f check_domain_https
+export -f check_sni_domain
+export -f get_default_sni_domains
+export -f get_sni_domain
+export -f validate_sni_domain
+export -f find_working_sni_domain
+export -f get_external_ip
+export -f get_primary_interface
+export -f get_interface_ip
+export -f init_network
