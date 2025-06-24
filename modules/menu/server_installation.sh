@@ -179,6 +179,10 @@ run_server_installation() {
             # Configure Outline VPN
             configure_outline_vpn || return 1
             ;;
+        "wireguard")
+            # Configure WireGuard VPN
+            configure_wireguard || return 1
+            ;;
         *)
             error "Unsupported protocol: $PROTOCOL"
             return 1
@@ -390,6 +394,54 @@ configure_outline_vpn() {
     return 0
 }
 
+# Configure WireGuard VPN protocol
+configure_wireguard() {
+    # Port configuration for WireGuard
+    log "Starting port configuration for WireGuard..."
+    if ! get_wireguard_port_config_interactive; then
+        error "Port configuration failed"
+        error "Failed to configure server port or user cancelled"
+        return 1
+    fi
+    log "Port configuration completed: $SERVER_PORT"
+    
+    # IP address configuration
+    log "Starting IP address configuration..."
+    # Ensure network library is loaded
+    if ! command -v select_server_ip >/dev/null 2>&1; then
+        local lib_path="${PROJECT_ROOT:-$MODULE_DIR/../..}/lib/network.sh"
+        source "$lib_path" || {
+            error "Failed to load network library from $lib_path"
+            return 1
+        }
+    fi
+    
+    if ! select_server_ip; then
+        error "IP address configuration failed"
+        error "Failed to configure server IP address"
+        return 1
+    fi
+    log "IP address configuration completed: $SERVER_IP"
+    
+    # Export configuration variables
+    export PROTOCOL
+    export WORK_DIR
+    export SERVER_PORT
+    export SERVER_IP
+    
+    # Final configuration display
+    show_final_configuration
+    
+    echo -e "\n${YELLOW}Setting up WireGuard VPN server...${NC}"
+    log "Starting WireGuard server setup..."
+    if ! setup_wireguard_server; then
+        error "WireGuard setup failed"
+        return 1
+    fi
+    log "WireGuard server setup completed"
+    return 0
+}
+
 # Show final configuration before installation
 show_final_configuration() {
     echo -e "\n${GREEN}=== Final Configuration ===${NC}"
@@ -407,6 +459,10 @@ show_final_configuration() {
     elif [ "$PROTOCOL" = "outline" ]; then
         echo -e "${BLUE}Management Port:${NC} $OUTLINE_API_PORT"
         echo -e "${BLUE}Management URL:${NC} https://$SERVER_IP:$OUTLINE_API_PORT"
+    elif [ "$PROTOCOL" = "wireguard" ]; then
+        echo -e "${BLUE}Network Subnet:${NC} 10.66.66.0/24"
+        echo -e "${BLUE}Protocol:${NC} UDP"
+        echo -e "${BLUE}Configuration:${NC} /opt/wireguard/config/"
     fi
 }
 
@@ -446,6 +502,19 @@ check_existing_vpn_installation() {
                 elif docker ps -a --format "table {{.Names}}" | grep -q "shadowbox"; then
                     found=true
                     existing_server="Outline VPN server (stopped)"
+                fi
+            fi
+            ;;
+        "wireguard")
+            # Check for WireGuard installation
+            local wireguard_dir="${WORK_DIR:-/opt/wireguard}"
+            if [ -d "$wireguard_dir" ] || docker ps -a --format "table {{.Names}}" | grep -q "wireguard"; then
+                if docker ps --format "table {{.Names}}" | grep -q "wireguard"; then
+                    found=true
+                    existing_server="WireGuard VPN server (running)"
+                elif docker ps -a --format "table {{.Names}}" | grep -q "wireguard"; then
+                    found=true
+                    existing_server="WireGuard VPN server (stopped)"
                 fi
             fi
             ;;
@@ -498,6 +567,17 @@ check_existing_vpn_installation() {
                             echo -e "${YELLOW}Cleaning up firewall rules...${NC}"
                             cleanup_outline_firewall_rules
                             ;;
+                        "wireguard")
+                            log "Removing existing WireGuard installation..."
+                            echo -e "${YELLOW}Stopping WireGuard container...${NC}"
+                            if docker ps | grep -q "wireguard"; then
+                                docker stop wireguard 2>/dev/null || true
+                            fi
+                            echo -e "${YELLOW}Removing WireGuard container...${NC}"
+                            docker rm -f wireguard 2>/dev/null || true
+                            echo -e "${YELLOW}Removing WireGuard directories...${NC}"
+                            rm -rf "${wireguard_dir}" 2>/dev/null || true
+                            ;;
                     esac
                     
                     log "Existing installations removed successfully"
@@ -529,10 +609,11 @@ select_vpn_protocol() {
     echo -e "${BLUE}Available VPN Protocols:${NC}"
     echo "1) VLESS+Reality (Recommended for security)"
     echo "2) Outline VPN (Shadowsocks-based)"
+    echo "3) WireGuard (Modern VPN protocol)"
     echo ""
     
     while true; do
-        read -p "Select VPN protocol (1-2): " protocol_choice
+        read -p "Select VPN protocol (1-3): " protocol_choice
         case $protocol_choice in
             1)
                 PROTOCOL="vless-reality"
@@ -556,8 +637,19 @@ select_vpn_protocol() {
                 echo -e "${BLUE}✓ Web management interface${NC}"
                 break
                 ;;
+            3)
+                PROTOCOL="wireguard"
+                WORK_DIR="/opt/wireguard"
+                export PROTOCOL WORK_DIR
+                log "Selected protocol: WireGuard"
+                echo -e "${GREEN}Selected: WireGuard Protocol${NC}"
+                echo -e "${BLUE}✓ Modern cryptography (ChaCha20, Poly1305)${NC}"
+                echo -e "${BLUE}✓ High performance and low latency${NC}"
+                echo -e "${BLUE}✓ Simplified configuration${NC}"
+                break
+                ;;
             *)
-                warning "Please choose 1 or 2"
+                warning "Please choose 1, 2, or 3"
                 ;;
         esac
     done
@@ -749,6 +841,82 @@ get_outline_port_config_interactive() {
     done
 }
 
+# Port configuration for WireGuard VPN
+get_wireguard_port_config_interactive() {
+    echo -e "${BLUE}Port Configuration for WireGuard VPN:${NC}"
+    echo "1) Random port (51820-51920) - Recommended"
+    echo "2) Standard port (51820)"
+    echo "3) Custom port"
+    echo ""
+    
+    # Load network library for port checking if not already loaded
+    if ! command -v check_port_available >/dev/null 2>&1; then
+        source "$PROJECT_ROOT/lib/network.sh" || {
+            error "Failed to load network library"
+            return 1
+        }
+    fi
+    
+    while true; do
+        read -p "Select port option (1-3): " port_choice
+        case $port_choice in
+            1)
+                # Generate random port and check availability
+                local attempts=0
+                local max_attempts=20
+                while [ $attempts -lt $max_attempts ]; do
+                    SERVER_PORT=$((RANDOM % 100 + 51820))
+                    if check_port_available "$SERVER_PORT"; then
+                        export SERVER_PORT
+                        log "Generated available random port: $SERVER_PORT"
+                        echo -e "${GREEN}Random port selected: $SERVER_PORT${NC}"
+                        return 0
+                    fi
+                    ((attempts++))
+                done
+                warning "Could not find available random port after $max_attempts attempts"
+                echo "Please choose a custom port instead."
+                ;;
+            2)
+                SERVER_PORT="51820"
+                # Check if port is available
+                if check_port_available "$SERVER_PORT"; then
+                    export SERVER_PORT
+                    log "Selected standard port: $SERVER_PORT"
+                    echo -e "${GREEN}Standard port selected: $SERVER_PORT${NC}"
+                    return 0
+                else
+                    warning "Port $SERVER_PORT is already in use!"
+                    echo "Please choose another option."
+                fi
+                ;;
+            3)
+                while true; do
+                    read -p "Enter custom port (1024-65535): " custom_port
+                    if [[ "$custom_port" =~ ^[0-9]+$ ]] && [ "$custom_port" -ge 1024 ] && [ "$custom_port" -le 65535 ]; then
+                        # Check if port is available
+                        if check_port_available "$custom_port"; then
+                            SERVER_PORT="$custom_port"
+                            export SERVER_PORT
+                            log "Selected custom port: $SERVER_PORT"
+                            echo -e "${GREEN}Custom port selected: $SERVER_PORT${NC}"
+                            return 0
+                        else
+                            warning "Port $custom_port is already in use!"
+                            echo "Please choose another port."
+                        fi
+                    else
+                        warning "Please enter a valid port number (1024-65535)"
+                    fi
+                done
+                ;;
+            *)
+                warning "Please choose 1, 2, or 3"
+                ;;
+        esac
+    done
+}
+
 # User configuration
 get_user_config_interactive() {
     echo -e "${BLUE}First User Configuration:${NC}"
@@ -805,6 +973,23 @@ setup_outline_server() {
     return 0
 }
 
+# WireGuard server setup
+setup_wireguard_server() {
+    log "Setting up WireGuard VPN server..."
+    
+    # Lazy load WireGuard module
+    load_module_lazy "install/wireguard_setup.sh" || return 1
+    
+    # Run WireGuard installation
+    install_wireguard_server || {
+        error "Failed to install WireGuard server"
+        return 1
+    }
+    
+    log "WireGuard server setup completed successfully"
+    return 0
+}
+
 # Firewall setup
 setup_firewall() {
     log "Configuring firewall rules..."
@@ -829,6 +1014,11 @@ setup_firewall() {
             error "Failed to configure basic firewall"
             return 1
         }
+    elif [ "$PROTOCOL" = "wireguard" ]; then
+        setup_wireguard_firewall "$SERVER_PORT" true || {
+            error "Failed to configure WireGuard firewall"
+            return 1
+        }
     fi
     
     log "Firewall configuration completed successfully"
@@ -846,13 +1036,16 @@ export -f select_vpn_protocol
 export -f get_port_config_interactive
 export -f get_outline_port_config_interactive
 export -f get_outline_management_port_config
+export -f get_wireguard_port_config_interactive
 export -f get_user_config_interactive
 export -f setup_docker_xray
 export -f setup_outline_server
+export -f setup_wireguard_server
 export -f setup_firewall
 export -f load_module_lazy
 export -f configure_vless_reality
 export -f configure_outline_vpn
+export -f configure_wireguard
 export -f show_final_configuration
 export -f cleanup_outline_firewall_rules
 

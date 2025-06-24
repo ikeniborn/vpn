@@ -321,6 +321,119 @@ setup_outline_firewall() {
     return 0
 }
 
+# Setup firewall for WireGuard VPN
+setup_wireguard_firewall() {
+    local server_port="$1"
+    local debug=${2:-false}
+    
+    [ "$debug" = true ] && log "Setting up WireGuard firewall..."
+    
+    if [ -z "$server_port" ]; then
+        error "Missing required parameter: server_port"
+        return 1
+    fi
+    
+    # Setup basic firewall first
+    setup_basic_firewall "$debug" || {
+        error "Failed to setup basic firewall"
+        return 1
+    }
+    
+    # Add WireGuard server port (UDP only)
+    if ! check_port_rule_exists "$server_port" "udp" "$debug"; then
+        [ "$debug" = true ] && log "Adding WireGuard server port: $server_port/udp"
+        if ufw allow "$server_port/udp" comment "WireGuard VPN"; then
+            log "WireGuard server port allowed: $server_port/udp"
+        else
+            error "Failed to allow WireGuard server port: $server_port/udp"
+            return 1
+        fi
+    else
+        [ "$debug" = true ] && log "WireGuard server port already allowed: $server_port/udp"
+    fi
+    
+    # Setup WireGuard-specific routing rules
+    setup_wireguard_routing "$debug" || {
+        error "Failed to setup WireGuard routing"
+        return 1
+    }
+    
+    [ "$debug" = true ] && log "WireGuard firewall setup completed"
+    return 0
+}
+
+# Setup WireGuard-specific routing rules
+setup_wireguard_routing() {
+    local debug=${1:-false}
+    
+    [ "$debug" = true ] && log "Setting up WireGuard routing rules..."
+    
+    # Enable IP forwarding (already handled by enable_ip_forwarding)
+    enable_ip_forwarding "$debug" || {
+        error "Failed to enable IP forwarding"
+        return 1
+    }
+    
+    # Get primary network interface
+    local primary_interface=$(ip route | grep '^default' | grep -o 'dev [^ ]*' | head -1 | cut -d' ' -f2)
+    if [ -z "$primary_interface" ]; then
+        primary_interface="eth0"  # Fallback
+        warning "Could not detect primary interface, using $primary_interface"
+    fi
+    
+    # Add WireGuard NAT rules to UFW before.rules
+    local ufw_before_rules="/etc/ufw/before.rules"
+    
+    if [ -f "$ufw_before_rules" ]; then
+        # Check if WireGuard NAT section already exists
+        if ! grep -q "# WireGuard NAT" "$ufw_before_rules" 2>/dev/null; then
+            [ "$debug" = true ] && log "Adding WireGuard NAT rules to UFW before.rules..."
+            
+            # Find the existing NAT table or create one
+            if grep -q "^\*nat" "$ufw_before_rules"; then
+                # Add WireGuard rule to existing NAT table
+                sed -i '/^COMMIT$/i\
+# WireGuard NAT\
+-A POSTROUTING -s 10.66.66.0/24 -o '"$primary_interface"' -j MASQUERADE' "$ufw_before_rules"
+            else
+                # Add new NAT table section
+                cat >> "$ufw_before_rules" << EOF
+
+# WireGuard NAT table rules
+*nat
+:POSTROUTING ACCEPT [0:0]
+# WireGuard NAT
+-A POSTROUTING -s 10.66.66.0/24 -o $primary_interface -j MASQUERADE
+COMMIT
+
+EOF
+            fi
+            [ "$debug" = true ] && log "Added WireGuard NAT rules to UFW configuration"
+        else
+            [ "$debug" = true ] && log "WireGuard NAT rules already exist in UFW configuration"
+        fi
+    fi
+    
+    # Ensure UFW FORWARD policy allows VPN traffic
+    local ufw_defaults="/etc/default/ufw"
+    if [ -f "$ufw_defaults" ]; then
+        if grep -q '^DEFAULT_FORWARD_POLICY="DROP"' "$ufw_defaults"; then
+            sed -i 's/^DEFAULT_FORWARD_POLICY="DROP"/DEFAULT_FORWARD_POLICY="ACCEPT"/' "$ufw_defaults"
+            [ "$debug" = true ] && log "Changed UFW forward policy to ACCEPT"
+        fi
+    fi
+    
+    # Reload UFW to apply changes
+    if ufw reload >/dev/null 2>&1; then
+        [ "$debug" = true ] && log "UFW reloaded with WireGuard rules"
+    else
+        warning "Failed to reload UFW"
+    fi
+    
+    log "✓ WireGuard routing configured"
+    return 0
+}
+
 # =============================================================================
 # PORT VERIFICATION
 # =============================================================================
@@ -930,6 +1043,8 @@ export -f restore_firewall_rules
 export -f setup_basic_firewall
 export -f setup_xray_firewall
 export -f setup_outline_firewall
+export -f setup_wireguard_firewall
+export -f setup_wireguard_routing
 export -f verify_port_access
 export -f remove_port_rule
 export -f show_firewall_status
