@@ -378,14 +378,19 @@ handle_speed_testing() {
 
 # Handler for Monitoring Dashboard option
 handle_monitoring_dashboard() {
-    echo -e "${BLUE}📊 Monitoring Dashboard Management${NC}"
-    echo
+    if [ "$EUID" -ne 0 ]; then
+        error "Dashboard management requires superuser privileges (sudo)"
+        return 1
+    fi
     
-    # Load dashboard module if not already loaded
-    load_module_lazy "monitoring/dashboard.sh"
+    # Load the unified dashboard module
+    source "$PROJECT_ROOT/modules/monitoring/unified_dashboard.sh" || {
+        error "Failed to load unified dashboard module"
+        return 1
+    }
     
-    # Show dashboard menu
-    dashboard_menu
+    # Launch unified dashboard menu
+    show_unified_dashboard_menu
 }
 
 # =============================================================================

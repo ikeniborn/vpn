@@ -17,7 +17,7 @@ source "$PROJECT_DIR/lib/network.sh"
 # Global variables for monitoring
 MONITOR_ACTIVE=false
 MONITOR_PID=""
-MONITOR_INTERVAL=2  # seconds
+MONITOR_INTERVAL=10  # seconds - increased from 2 to 10
 TRAFFIC_LOG_FILE="/tmp/vpn_traffic_monitor.log"
 
 # Initialize traffic monitoring module
@@ -73,7 +73,49 @@ init_traffic_monitor() {
 
 # Get primary network interface
 get_primary_interface() {
-    ip route | grep '^default' | head -1 | awk '{print $5}' || echo "eth0"
+    local interface=""
+    
+    # Method 1: Find interface with default route (excluding tunnels)
+    interface=$(ip route | grep '^default' | grep -v 'tun\|tap\|wg' | head -1 | awk '{print $5}')
+    
+    # Method 2: If no suitable default route, find interface with public IP route
+    if [ -z "$interface" ] || [[ "$interface" =~ (tun|tap|wg) ]]; then
+        # Look for route to public DNS servers
+        for ip in 8.8.8.8 1.1.1.1; do
+            local route_info=$(ip route get "$ip" 2>/dev/null | head -1)
+            if [ -n "$route_info" ]; then
+                interface=$(echo "$route_info" | grep -oP 'dev \K[^ ]+' | grep -v 'tun\|tap\|wg' | head -1)
+                if [ -n "$interface" ] && ! [[ "$interface" =~ (tun|tap|wg) ]]; then
+                    break
+                fi
+            fi
+        done
+    fi
+    
+    # Method 3: Find first active physical ethernet interface
+    if [ -z "$interface" ] || [[ "$interface" =~ (tun|tap|wg) ]]; then
+        interface=$(ip link show | grep -E '^[0-9]+: (en|eth)' | grep 'state UP' | head -1 | cut -d: -f2 | tr -d ' ')
+    fi
+    
+    # Method 4: Check common interface names
+    if [ -z "$interface" ] || [[ "$interface" =~ (tun|tap|wg) ]]; then
+        for iface in enp1s0 enp0s3 enp0s8 ens3 ens5 eth0 wlan0 wlp2s0; do
+            if ip link show "$iface" >/dev/null 2>&1; then
+                local state=$(ip link show "$iface" | grep -oP 'state \K[^ ]+')
+                if [ "$state" = "UP" ] || [ "$state" = "UNKNOWN" ]; then
+                    interface="$iface"
+                    break
+                fi
+            fi
+        done
+    fi
+    
+    # Final fallback - just get any non-tunnel interface
+    if [ -z "$interface" ] || [[ "$interface" =~ (tun|tap|wg) ]]; then
+        interface=$(ip link show | grep -E '^[0-9]+: ' | grep -v -E '(lo|tun|tap|wg|docker|veth|br-)' | head -1 | cut -d: -f2 | tr -d ' ')
+    fi
+    
+    echo "${interface:-eth0}"
 }
 
 # Get VPN server port
@@ -95,25 +137,36 @@ monitor_active_connections() {
     fi
     
     log "🔍 Monitoring active connections on port $vpn_port for ${duration}s"
-    echo -e "${BLUE}Press Ctrl+C to stop monitoring${NC}"
+    echo -e "${BLUE}Press Ctrl+C to stop monitoring and return to menu${NC}"
+    echo -e "${YELLOW}Update interval: ${MONITOR_INTERVAL} seconds${NC}"
     echo ""
+    
+    # Set up signal handler for clean exit
+    trap 'echo -e "\n${GREEN}Monitoring stopped. Returning to menu...${NC}"; return 0' INT TERM
     
     # Monitor connections
     local end_time=$(($(date +%s) + duration))
     local last_connection_count=0
+    local start_time=$(date +%s)
     
     while [ $(date +%s) -lt $end_time ]; do
         clear
         echo -e "${GREEN}=== Real-time VPN Connection Monitor ===${NC}"
         echo -e "${BLUE}Monitoring port: $vpn_port${NC}"
         echo -e "${BLUE}Time remaining: $((end_time - $(date +%s)))s${NC}"
+        echo -e "${YELLOW}Next update in: $((MONITOR_INTERVAL - (($(date +%s) - start_time) % MONITOR_INTERVAL)))s${NC}"
+        echo -e "${GRAY}Press Ctrl+C to stop and return to menu${NC}"
         echo ""
         
         # Current connections
         local connections
         connections=$(ss -tn 2>/dev/null | grep ":$vpn_port" | grep ESTAB || echo "")
         local connection_count
-        connection_count=$(echo "$connections" | grep -c . || echo "0")
+        if [ -z "$connections" ]; then
+            connection_count=0
+        else
+            connection_count=$(echo "$connections" | wc -l)
+        fi
         
         echo -e "${YELLOW}Active Connections: $connection_count${NC}"
         echo ""
@@ -204,8 +257,12 @@ monitor_user_traffic() {
     fi
     
     log "👤 Monitoring traffic for user: $username (${duration}s)"
-    echo -e "${BLUE}Press Ctrl+C to stop monitoring${NC}"
+    echo -e "${BLUE}Press Ctrl+C to stop monitoring and return to menu${NC}"
+    echo -e "${YELLOW}Update interval: ${MONITOR_INTERVAL} seconds${NC}"
     echo ""
+    
+    # Set up signal handler for clean exit
+    trap 'echo -e "\n${GREEN}Monitoring stopped. Returning to menu...${NC}"; return 0' INT TERM
     
     # Get user UUID from user file
     local user_file="/opt/v2ray/users/${username}.json"
@@ -224,6 +281,8 @@ monitor_user_traffic() {
     local end_time=$(($(date +%s) + duration))
     local last_activity_count=0
     
+    local start_time=$(date +%s)
+    
     while [ $(date +%s) -lt $end_time ]; do
         clear
         echo -e "${GREEN}=== User Traffic Monitor ===${NC}"
@@ -232,6 +291,8 @@ monitor_user_traffic() {
             echo -e "${BLUE}UUID: ${user_uuid:0:8}...${NC}"
         fi
         echo -e "${BLUE}Time remaining: $((end_time - $(date +%s)))s${NC}"
+        echo -e "${YELLOW}Next update in: $((MONITOR_INTERVAL - (($(date +%s) - start_time) % MONITOR_INTERVAL)))s${NC}"
+        echo -e "${GRAY}Press Ctrl+C to stop and return to menu${NC}"
         echo ""
         
         # Check for user activity in logs
@@ -251,7 +312,11 @@ monitor_user_traffic() {
                 echo ""
                 
                 local activity_count
-                activity_count=$(echo "$recent_activity" | grep -c . || echo "0")
+                if [ -z "$recent_activity" ]; then
+                    activity_count=0
+                else
+                    activity_count=$(echo "$recent_activity" | wc -l)
+                fi
                 
                 if [ "$activity_count" -ne "$last_activity_count" ]; then
                     echo -e "${GREEN}📈 New activity detected for $username${NC}"
@@ -269,6 +334,12 @@ monitor_user_traffic() {
         
         sleep $MONITOR_INTERVAL
     done
+    
+    # Clean up trap and show completion message
+    trap - INT TERM
+    echo ""
+    log "✅ Monitoring completed successfully"
+    return 0
 }
 
 # Monitor bandwidth usage in real-time
@@ -278,8 +349,12 @@ monitor_bandwidth() {
     interface=$(get_primary_interface)
     
     log "📊 Monitoring bandwidth usage on $interface (${duration}s)"
-    echo -e "${BLUE}Press Ctrl+C to stop monitoring${NC}"
+    echo -e "${BLUE}Press Ctrl+C to stop monitoring and return to menu${NC}"
+    echo -e "${YELLOW}Update interval: ${MONITOR_INTERVAL} seconds${NC}"
     echo ""
+    
+    # Set up signal handler for clean exit
+    trap 'echo -e "\n${GREEN}Monitoring stopped. Returning to menu...${NC}"; return 0' INT TERM
     
     # Store initial values
     local start_rx start_tx
@@ -298,6 +373,8 @@ monitor_bandwidth() {
         echo -e "${GREEN}=== Real-time Bandwidth Monitor ===${NC}"
         echo -e "${BLUE}Interface: $interface${NC}"
         echo -e "${BLUE}Time remaining: $((end_time - $(date +%s)))s${NC}"
+        echo -e "${YELLOW}Next update in: $((MONITOR_INTERVAL - (($(date +%s) - start_time) % MONITOR_INTERVAL)))s${NC}"
+        echo -e "${GRAY}Press Ctrl+C to stop and return to menu${NC}"
         echo ""
         
         # Current values
@@ -346,7 +423,11 @@ monitor_bandwidth() {
         sleep $MONITOR_INTERVAL
     done
     
-    log "Bandwidth monitoring completed"
+    # Clean up trap and show completion message
+    trap - INT TERM
+    echo ""
+    log "✅ Bandwidth monitoring completed successfully"
+    return 0
 }
 
 # Monitor connection quality
@@ -356,19 +437,26 @@ monitor_connection_quality() {
     vpn_port=$(get_vpn_port)
     
     log "🔍 Monitoring connection quality (${duration}s)"
-    echo -e "${BLUE}Press Ctrl+C to stop monitoring${NC}"
+    echo -e "${BLUE}Press Ctrl+C to stop monitoring and return to menu${NC}"
+    echo -e "${YELLOW}Update interval: ${MONITOR_INTERVAL} seconds${NC}"
     echo ""
+    
+    # Set up signal handler for clean exit
+    trap 'echo -e "\n${GREEN}Monitoring stopped. Returning to menu...${NC}"; return 0' INT TERM
     
     local end_time=$(($(date +%s) + duration))
     local total_checks=0
     local successful_checks=0
     local failed_checks=0
+    local start_time=$(date +%s)
     
     while [ $(date +%s) -lt $end_time ]; do
         clear
         echo -e "${GREEN}=== Connection Quality Monitor ===${NC}"
         echo -e "${BLUE}VPN Port: $vpn_port${NC}"
         echo -e "${BLUE}Time remaining: $((end_time - $(date +%s)))s${NC}"
+        echo -e "${YELLOW}Next update in: $((MONITOR_INTERVAL - (($(date +%s) - start_time) % MONITOR_INTERVAL)))s${NC}"
+        echo -e "${GRAY}Press Ctrl+C to stop and return to menu${NC}"
         echo ""
         
         # Check port accessibility
@@ -416,13 +504,18 @@ monitor_connection_quality() {
         sleep $MONITOR_INTERVAL
     done
     
-    log "Connection quality monitoring completed"
+    # Clean up trap
+    trap - INT TERM
+    
+    echo ""
+    log "✅ Connection quality monitoring completed"
     echo ""
     echo -e "${GREEN}=== Final Quality Report ===${NC}"
     echo "  📊 Overall Success Rate: $((successful_checks * 100 / total_checks))%"
     echo "  ✅ Successful Checks: $successful_checks"
     echo "  ❌ Failed Checks: $failed_checks"
     echo "  📋 Total Checks: $total_checks"
+    return 0
 }
 
 # Generate traffic analysis report
@@ -619,13 +712,12 @@ show_traffic_monitor_menu() {
         *)
             warning "Invalid choice: $choice"
             read -p "Press Enter to continue..." 
-            show_traffic_monitor_menu
             ;;
     esac
     
+    # Don't loop back to menu - let the function return naturally
     echo ""
-    read -p "Press Enter to return to traffic monitoring menu..."
-    show_traffic_monitor_menu
+    return 0
 }
 
 # Export functions for use by other modules

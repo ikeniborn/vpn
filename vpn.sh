@@ -1009,6 +1009,22 @@ handle_traffic_monitoring() {
     show_traffic_monitor_menu
 }
 
+handle_monitoring_dashboard() {
+    if [ "$EUID" -ne 0 ]; then
+        error "Dashboard management requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    # Load the unified dashboard module
+    source "$SCRIPT_DIR/modules/monitoring/unified_dashboard.sh" || {
+        error "Failed to load unified dashboard module"
+        return 1
+    }
+    
+    # Launch unified dashboard menu
+    show_unified_dashboard_menu
+}
+
 validate_config() {
     if [ "$EUID" -ne 0 ]; then
         error "Configuration validation requires superuser privileges (sudo)"
