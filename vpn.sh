@@ -2090,6 +2090,10 @@ show_usage() {
     echo "  user list            List all users"
     echo "  user show <name>     Show user connection details"
     echo ""
+    echo -e "${YELLOW}Monitoring & Logs:${NC}"
+    echo "  logs                 View server logs and log analysis"
+    echo "  statistics           Show server statistics"
+    echo ""
     echo -e "${YELLOW}Performance & Debug:${NC}"
     echo "  benchmark            Run performance benchmarks"
     echo "  debug                Show debug information and loaded modules"
@@ -2431,6 +2435,9 @@ main() {
             ;;
         "debug-connections")
             debug_reality_connections
+            ;;
+        "logs")
+            handle_logs
             ;;
         "fix-routing")
             fix_vpn_routing
