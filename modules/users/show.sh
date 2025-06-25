@@ -105,15 +105,15 @@ EOL
         debug "User configuration file created: $config_file"
     else
         # Update server IP if it has changed
-        local current_server_ip
-        current_server_ip=$(curl -s https://api.ipify.org)
+        # Load server IP from configuration
+        get_server_info
         
         local config_server_ip
         config_server_ip=$(jq -r '.server' "$config_file" 2>/dev/null)
         
-        if [ "$current_server_ip" != "$config_server_ip" ]; then
-            debug "Updating server IP in user config: $current_server_ip"
-            jq ".server = \"$current_server_ip\"" "$config_file" > "$config_file.tmp"
+        if [ "$SERVER_IP" != "$config_server_ip" ]; then
+            debug "Updating server IP in user config: $SERVER_IP"
+            jq ".server = \"$SERVER_IP\"" "$config_file" > "$config_file.tmp"
             mv "$config_file.tmp" "$config_file"
         fi
     fi
@@ -139,9 +139,11 @@ ensure_connection_link() {
     user_public_key=$(jq -r '.public_key' "$config_file" 2>/dev/null)
     user_short_id=$(jq -r '.short_id // ""' "$config_file" 2>/dev/null)
     
-    # Use current server IP
-    local current_server_ip
-    current_server_ip=$(curl -s https://api.ipify.org)
+    # Use server IP from configuration
+    if [ -z "$SERVER_IP" ]; then
+        get_server_info
+    fi
+    local current_server_ip="$SERVER_IP"
     
     # Generate connection link
     local connection_link=""

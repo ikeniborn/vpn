@@ -226,8 +226,11 @@ update_user_files() {
         server_port=$(jq -r '.port' "$user_file" 2>/dev/null)
         server_sni=$(jq -r '.sni' "$user_file" 2>/dev/null)
         
-        # Get current server IP
-        server_ip=$(curl -s --connect-timeout 5 https://api.ipify.org 2>/dev/null || echo "127.0.0.1")
+        # Get server IP from configuration
+        if [ -z "$SERVER_IP" ]; then
+            get_server_info
+        fi
+        server_ip="$SERVER_IP"
         
         # Validate extracted data
         if [ -z "$user_uuid" ] || [ "$user_uuid" = "null" ]; then

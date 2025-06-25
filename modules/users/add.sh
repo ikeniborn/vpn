@@ -79,6 +79,11 @@ generate_connection_link() {
     
     debug "Generating connection link for user: $user_name"
     
+    # Ensure server configuration is loaded
+    if [ -z "$SERVER_IP" ] || [ -z "$SERVER_PORT" ]; then
+        get_server_info
+    fi
+    
     local connection_link=""
     
     if [ "$USE_REALITY" = true ]; then

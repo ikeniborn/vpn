@@ -31,9 +31,16 @@ fi
 
 # Get server IP address
 get_server_ip() {
-    if [ -z "$SERVER_IP" ]; then
+    # Try to load from configuration file first
+    if [ -f "$WORK_DIR/config/server_ip.txt" ]; then
+        SERVER_IP=$(safe_read_file "$WORK_DIR/config/server_ip.txt")
+        debug "Server IP loaded from file: $SERVER_IP"
+    elif [ -z "$SERVER_IP" ]; then
+        # Only determine current IP if not configured
         SERVER_IP=$(get_current_ip)
         debug "Server IP detected: $SERVER_IP"
+        # Save to configuration file for future use
+        safe_write_file "$WORK_DIR/config/server_ip.txt" "$SERVER_IP"
     fi
     echo "$SERVER_IP"
 }
@@ -203,6 +210,7 @@ save_config() {
     ensure_dir "$WORK_DIR/config"
     
     # Save basic configuration
+    safe_write_file "$WORK_DIR/config/server_ip.txt" "$SERVER_IP"
     safe_write_file "$WORK_DIR/config/port.txt" "$SERVER_PORT"
     safe_write_file "$WORK_DIR/config/sni.txt" "$SERVER_SNI"
     safe_write_file "$WORK_DIR/config/protocol.txt" "$PROTOCOL"
@@ -260,6 +268,30 @@ load_config() {
         error "Failed to load configuration"
         return 1
     fi
+}
+
+# Set server IP address
+set_server_ip() {
+    local new_ip="$1"
+    
+    if [ -z "$new_ip" ]; then
+        error "IP address required"
+        return 1
+    fi
+    
+    # Validate IP format
+    if ! [[ "$new_ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        error "Invalid IP address format: $new_ip"
+        return 1
+    fi
+    
+    # Save to configuration
+    SERVER_IP="$new_ip"
+    ensure_dir "$WORK_DIR/config"
+    safe_write_file "$WORK_DIR/config/server_ip.txt" "$SERVER_IP"
+    
+    debug "Server IP set to: $SERVER_IP"
+    return 0
 }
 
 # Display current configuration (for debugging)
