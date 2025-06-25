@@ -97,14 +97,8 @@ create_xray_config_reality() {
     fi
     
     # Create Reality configuration
-    # Generate additional short IDs for better mobile compatibility
+    # Use single consistent short ID to prevent connection issues
     local additional_short_ids=""
-    if [ -n "$short_id" ]; then
-        # Generate 2 additional short IDs based on the original one
-        local short_id_2=$(echo -n "${short_id}mobile" | sha256sum | cut -c1-16)
-        local short_id_3=$(echo -n "${short_id}backup" | sha256sum | cut -c1-16)
-        additional_short_ids=",\"$short_id_2\",\"$short_id_3\""
-    fi
     
     # Determine secondary SNI domain for better compatibility
     local secondary_sni=""
@@ -186,7 +180,7 @@ create_xray_config_reality() {
           "maxClientVer": "",
           "maxTimeDiff": 120000,
           "shortIds": [
-            "$short_id"$additional_short_ids
+            "$short_id"
           ]
         },
         "tcpSettings": {
