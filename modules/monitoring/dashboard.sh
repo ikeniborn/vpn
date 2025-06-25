@@ -566,11 +566,11 @@ start_dashboard() {
     
     # Start metrics collector
     info "Starting metrics collector..."
-    (crontab -l 2>/dev/null | grep -v "collect_metrics.sh"; 
-     echo "* * * * * $DASHBOARD_DIR/collect_metrics.sh") | crontab -
+    (crontab -l 2>/dev/null | grep -v "collect_metrics"; 
+     echo "* * * * * $DASHBOARD_DIR/collect_metrics_simple.sh") | crontab -
     
     # Run initial collection
-    "$DASHBOARD_DIR/collect_metrics.sh"
+    "$DASHBOARD_DIR/collect_metrics_simple.sh"
     
     # Start simple HTTP server
     info "Starting dashboard server on port $port..."
@@ -622,7 +622,7 @@ EOF
         ufw allow "$port/tcp" comment "VPN Dashboard" >/dev/null 2>&1
     fi
     
-    log "Dashboard started at http://$(get_server_ip):$port"
+    log "✓ Dashboard started at http://127.0.0.1:$port (localhost only)"
     info "Default credentials: No authentication (secure with reverse proxy)"
 }
 
@@ -637,9 +637,9 @@ stop_dashboard() {
     fi
     
     # Remove cron job
-    crontab -l 2>/dev/null | grep -v "collect_metrics.sh" | crontab -
+    crontab -l 2>/dev/null | grep -v "collect_metrics" | crontab -
     
-    success "Dashboard stopped"
+    log "✓ Dashboard stopped"
 }
 
 # Restart dashboard
@@ -651,11 +651,28 @@ restart_dashboard() {
 
 # Get dashboard status
 dashboard_status() {
-    if [ -f "$DASHBOARD_PID_FILE" ] && kill -0 $(cat "$DASHBOARD_PID_FILE") 2>/dev/null; then
-        local port=$(ps aux | grep -E "python.*dashboard/server.py" | grep -v grep | \
-            grep -oP 'DASHBOARD_PORT=\K\d+' || echo "$DASHBOARD_PORT")
-        success "Dashboard is running on port $port"
-        echo "Access URL: http://$(get_server_ip):$port"
+    # Check if process is actually running via PID file first
+    if [ -f "$DASHBOARD_PID_FILE" ]; then
+        local pid=$(cat "$DASHBOARD_PID_FILE" 2>/dev/null)
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            # Check if it's actually our server process
+            if ps -p "$pid" -o args --no-headers 2>/dev/null | grep -q "server.py"; then
+                local port=$(ps eww -p "$pid" 2>/dev/null | grep -oP 'DASHBOARD_PORT=\K\d+' || echo "$DASHBOARD_PORT")
+                log "✓ Dashboard is running on port $port (PID: $pid)"
+                echo "Access URL: http://127.0.0.1:$port (localhost only)"
+                return 0
+            fi
+        fi
+        # Clean up stale PID file
+        rm -f "$DASHBOARD_PID_FILE"
+    fi
+    
+    # Fallback: check for any python server.py process
+    if ps aux | grep -E "python.*server\.py" | grep -v grep >/dev/null 2>&1; then
+        local port=$(ps aux | grep -E "python.*server\.py" | grep -v grep | \
+            head -1 | grep -oP 'DASHBOARD_PORT=\K\d+' 2>/dev/null || echo "$DASHBOARD_PORT")
+        warning "Dashboard process found but PID file missing (port $port)"
+        echo "Access URL: http://127.0.0.1:$port (localhost only)"
     else
         info "Dashboard is not running"
     fi
@@ -703,7 +720,7 @@ export_dashboard_data() {
             ;;
     esac
     
-    success "Dashboard data exported to $output_file"
+    log "✓ Dashboard data exported to $output_file"
 }
 
 # Configure dashboard authentication (basic auth with nginx)
@@ -753,7 +770,7 @@ EOF
     ln -sf /etc/nginx/sites-available/vpn-dashboard /etc/nginx/sites-enabled/
     nginx -t && systemctl reload nginx
     
-    success "Dashboard authentication configured"
+    log "✓ Dashboard authentication configured"
     info "Access dashboard at http://$(get_server_ip) with username: $username"
 }
 

@@ -701,10 +701,16 @@ check_port_accessibility() {
     
     # Check iptables
     echo -n "✓ iptables: "
+    # Check both direct rules and UFW chains
     if iptables -L INPUT -n 2>/dev/null | grep -q "dpt:$port"; then
-        echo "Port $port has rules"
+        echo "Port $port has direct rules"
+    elif iptables -L ufw-user-input -n 2>/dev/null | grep -q "dpt:$port"; then
+        echo "Port $port managed by UFW"
+    elif command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "$port"; then
+        echo "Port $port allowed (UFW handles iptables)"
     else
         echo "No specific rules for port $port"
+        issues_found=true
     fi
     
     # Test external accessibility (optional)
