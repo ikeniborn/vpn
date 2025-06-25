@@ -987,6 +987,28 @@ handle_logs() {
     view_user_logs
 }
 
+handle_traffic_monitoring() {
+    if [ "$EUID" -ne 0 ]; then
+        error "Traffic monitoring requires superuser privileges (sudo)"
+        return 1
+    fi
+    
+    # Load monitoring modules including the new traffic monitor
+    load_monitoring_modules || {
+        error "Failed to load monitoring modules"
+        return 1
+    }
+    
+    # Load the traffic monitoring module
+    source "$SCRIPT_DIR/modules/monitoring/traffic_monitor.sh" || {
+        error "Failed to load traffic monitoring module"
+        return 1
+    }
+    
+    # Launch traffic monitoring menu
+    show_traffic_monitor_menu
+}
+
 validate_config() {
     if [ "$EUID" -ne 0 ]; then
         error "Configuration validation requires superuser privileges (sudo)"
@@ -2092,6 +2114,7 @@ show_usage() {
     echo ""
     echo -e "${YELLOW}Monitoring & Logs:${NC}"
     echo "  logs                 View server logs and log analysis"
+    echo "  traffic-monitor      Real-time traffic monitoring and diagnostics"
     echo "  statistics           Show server statistics"
     echo ""
     echo -e "${YELLOW}Performance & Debug:${NC}"
@@ -2438,6 +2461,9 @@ main() {
             ;;
         "logs")
             handle_logs
+            ;;
+        "traffic-monitor"|"traffic")
+            handle_traffic_monitoring
             ;;
         "fix-routing")
             fix_vpn_routing

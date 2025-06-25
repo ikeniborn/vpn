@@ -57,14 +57,18 @@ show_main_menu() {
     echo "  6)  🛡️  Watchdog Service"
     echo "  7)  🔍 System Diagnostics"
     echo ""
+    echo -e "${YELLOW}Monitoring & Analytics:${NC}"
+    echo "  8)  📊 Monitoring Dashboard"
+    echo "  9)  📈 Real-time Traffic Monitor"
+    echo "  10) 📋 Server Logs"
+    echo ""
     echo -e "${YELLOW}Security & Performance:${NC}"
-    echo "  8)  🔒 Security Hardening"
-    echo "  9)  🚀 Speed Testing"
-    echo "  10) 📊 Monitoring Dashboard"
+    echo "  11) 🔒 Security Hardening"
+    echo "  12) 🚀 Speed Testing"
     echo ""
     echo -e "${YELLOW}Help & Info:${NC}"
-    echo "  11) ❓ Show Help"
-    echo "  12) ℹ️  Show Version"
+    echo "  13) ❓ Show Help"
+    echo "  14) ℹ️  Show Version"
     echo ""
     echo -e "${RED}  0)  🚪 Exit${NC}"
     echo ""
@@ -100,18 +104,24 @@ handle_menu_choice() {
             handle_system_diagnostics
             ;;
         8)
-            handle_security_hardening
-            ;;
-        9)
-            handle_speed_testing
-            ;;
-        10)
             handle_monitoring_dashboard
             ;;
+        9)
+            handle_traffic_monitoring
+            ;;
+        10)
+            handle_logs
+            ;;
         11)
-            show_usage
+            handle_security_hardening
             ;;
         12)
+            handle_speed_testing
+            ;;
+        13)
+            show_usage
+            ;;
+        14)
             show_version
             ;;
         0)
@@ -119,7 +129,7 @@ handle_menu_choice() {
             exit 0
             ;;
         *)
-            warning "Invalid option. Please choose 0-12."
+            warning "Invalid option. Please choose 0-14."
             ;;
     esac
 }
@@ -166,7 +176,7 @@ run_interactive_menu() {
     
     while true; do
         show_main_menu
-        read -p "Select option (0-12): " choice
+        read -p "Select option (0-14): " choice
         
         # Handle errors gracefully
         handle_menu_choice "$choice" || {
@@ -183,7 +193,7 @@ run_interactive_menu() {
         fi
         
         # Only show continue prompt for non-exit and non-help options
-        if [ "$choice" != "11" ] && [ "$choice" != "12" ]; then
+        if [ "$choice" != "13" ] && [ "$choice" != "14" ]; then
             echo ""
             read -p "Press Enter to continue..."
         fi
