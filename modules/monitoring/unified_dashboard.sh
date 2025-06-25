@@ -65,7 +65,7 @@ get_primary_interface() {
     fi
     
     # Check common interface names
-    if [ -z "$interface" ] || [[ "$interface" =~ (tun|tap|wg) ]]; then
+    if [ -z "$interface" ] || [[ "$interface" =~ (tun|tap|wg|outline) ]]; then
         for iface in enp1s0 enp0s3 ens3 eth0 wlan0; do
             if ip link show "$iface" >/dev/null 2>&1; then
                 local state=$(ip link show "$iface" | grep -oP 'state \K[^ ]+')
@@ -77,14 +77,34 @@ get_primary_interface() {
         done
     fi
     
-    echo "${interface:-eth0}"
+    # Final fallback - return the first UP interface
+    if [ -z "$interface" ]; then
+        interface=$(ip link show | grep -E "state UP" | head -1 | grep -oP ': \K[^:]+' | grep -v "lo" || echo "enp1s0")
+    fi
+    
+    echo "${interface:-enp1s0}"
 }
 
 # Get VPN port
 get_vpn_port() {
+    local port=""
+    
+    # Try to get port from config.json
     if [ -f "/opt/v2ray/config/config.json" ]; then
-        jq -r '.inbounds[0].port' /opt/v2ray/config/config.json 2>/dev/null
+        port=$(jq -r '.inbounds[0].port // empty' /opt/v2ray/config/config.json 2>/dev/null)
     fi
+    
+    # Fallback: try to find port from docker inspect
+    if [ -z "$port" ] || [ "$port" = "null" ]; then
+        port=$(docker inspect xray 2>/dev/null | jq -r '.[0].NetworkSettings.Ports | keys[0] // empty' 2>/dev/null | cut -d'/' -f1)
+    fi
+    
+    # Fallback: try netstat for listening ports
+    if [ -z "$port" ] || [ "$port" = "null" ]; then
+        port=$(netstat -tlnp 2>/dev/null | grep -E ":(443|8443|1080|8080|9999)" | head -1 | awk '{print $4}' | cut -d':' -f2)
+    fi
+    
+    echo "${port:-443}"
 }
 
 # Collect comprehensive metrics
@@ -182,10 +202,9 @@ collect_unified_metrics() {
                     fi
                 fi
                 
-                user_list=$(echo "$user_list" | jq --arg user "$username" --arg online "$online" \
-                    --arg conns "$user_conns" --arg seen "$last_seen" \
-                    '. + [{"username": $user, "online": ($online == "true"), 
-                           "connections": ($conns | tonumber), "last_seen": $seen}]' 2>/dev/null) || user_list='[]'
+                user_list=$(echo "$user_list" | jq --arg user "$username" --argjson online "$([ "$online" = "true" ] && echo true || echo false)" \
+                    --argjson conns "$user_conns" --arg seen "$last_seen" \
+                    '. + [{"username": $user, "online": $online, "connections": $conns, "last_seen": $seen}]' 2>/dev/null) || user_list='[]'
             fi
         done
     fi
@@ -199,9 +218,11 @@ collect_unified_metrics() {
     
     # Add current data point
     local current_time=$(date +%H:%M)
-    traffic_history=$(echo "$traffic_history" | jq --arg time "$current_time" \
-        --arg rx "$rx_bytes" --arg tx "$tx_bytes" \
-        '. + [{"time": $time, "download": ($rx | tonumber), "upload": ($tx | tonumber)}] | .[-60:]' 2>/dev/null) || traffic_history='[]'
+    if [[ "$rx_bytes" =~ ^[0-9]+$ ]] && [[ "$tx_bytes" =~ ^[0-9]+$ ]]; then
+        traffic_history=$(echo "$traffic_history" | jq --arg time "$current_time" \
+            --argjson rx "$rx_bytes" --argjson tx "$tx_bytes" \
+            '. + [{"time": $time, "download": $rx, "upload": $tx}] | .[-60:]' 2>/dev/null) || traffic_history='[]'
+    fi
     
     # Save traffic history
     echo "$traffic_history" > "$history_file" 2>/dev/null || true
@@ -214,45 +235,78 @@ collect_unified_metrics() {
     fi
     
     # Add current connection count
-    conn_history=$(echo "$conn_history" | jq --arg time "$current_time" --arg count "$active_connections" \
-        '. + [{"time": $time, "count": ($count | tonumber)}] | .[-60:]' 2>/dev/null) || conn_history='[]'
+    conn_history=$(echo "$conn_history" | jq --arg time "$current_time" --argjson count "$active_connections" \
+        '. + [{"time": $time, "count": $count}] | .[-60:]' 2>/dev/null) || conn_history='[]'
     
     # Save connection history
     echo "$conn_history" > "$conn_history_file" 2>/dev/null || true
     
-    # Generate final JSON
-    cat > "$METRICS_FILE" << JSON_END
-{
-    "timestamp": "$timestamp",
-    "server": {
-        "status": "$server_status",
-        "uptime": "$uptime",
-        "version": "$version",
-        "protocol": "VLESS+Reality"
-    },
-    "performance": {
-        "cpu": "$cpu",
-        "memory": "$memory",
-        "disk": "$disk"
-    },
-    "network": {
-        "interface": "$interface",
-        "total_bytes": $((rx_bytes + tx_bytes)),
-        "rx_bytes": $rx_bytes,
-        "tx_bytes": $tx_bytes,
-        "traffic_history": $traffic_history
-    },
-    "connections": {
-        "active": $active_connections,
-        "port": "$vpn_port",
-        "connection_history": $conn_history
-    },
-    "users": {
-        "total": $total_users,
-        "list": $user_list
-    }
-}
-JSON_END
+    # Sanitize variables for JSON
+    timestamp=${timestamp:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
+    server_status=${server_status:-offline}
+    uptime=${uptime:-N/A}
+    version=${version:-Unknown}
+    cpu=${cpu:-0}
+    memory=${memory:-0}
+    disk=${disk:-0}
+    interface=${interface:-unknown}
+    rx_bytes=${rx_bytes:-0}
+    tx_bytes=${tx_bytes:-0}
+    active_connections=${active_connections:-0}
+    vpn_port=${vpn_port:-N/A}
+    total_users=${total_users:-0}
+    
+    # Validate JSON arrays
+    if ! echo "$traffic_history" | jq empty 2>/dev/null || [ -z "$traffic_history" ]; then
+        traffic_history='[]'
+    fi
+    if ! echo "$conn_history" | jq empty 2>/dev/null; then
+        conn_history='[]'
+    fi
+    if ! echo "$user_list" | jq empty 2>/dev/null; then
+        user_list='[]'
+    fi
+    
+    # Ensure numeric values are valid
+    if ! [[ "$rx_bytes" =~ ^[0-9]+$ ]]; then rx_bytes=0; fi
+    if ! [[ "$tx_bytes" =~ ^[0-9]+$ ]]; then tx_bytes=0; fi
+    if ! [[ "$active_connections" =~ ^[0-9]+$ ]]; then active_connections=0; fi
+    if ! [[ "$total_users" =~ ^[0-9]+$ ]]; then total_users=0; fi
+    
+    # Calculate total bytes safely
+    local total_bytes=$((rx_bytes + tx_bytes))
+    
+    # Generate final JSON using printf for better control
+    printf '{\n' > "$METRICS_FILE"
+    printf '    "timestamp": "%s",\n' "$timestamp" >> "$METRICS_FILE"
+    printf '    "server": {\n' >> "$METRICS_FILE"
+    printf '        "status": "%s",\n' "$server_status" >> "$METRICS_FILE"
+    printf '        "uptime": "%s",\n' "$uptime" >> "$METRICS_FILE"
+    printf '        "version": "%s",\n' "$version" >> "$METRICS_FILE"
+    printf '        "protocol": "VLESS+Reality"\n' >> "$METRICS_FILE"
+    printf '    },\n' >> "$METRICS_FILE"
+    printf '    "performance": {\n' >> "$METRICS_FILE"
+    printf '        "cpu": "%s",\n' "$cpu" >> "$METRICS_FILE"
+    printf '        "memory": "%s",\n' "$memory" >> "$METRICS_FILE"
+    printf '        "disk": "%s"\n' "$disk" >> "$METRICS_FILE"
+    printf '    },\n' >> "$METRICS_FILE"
+    printf '    "network": {\n' >> "$METRICS_FILE"
+    printf '        "interface": "%s",\n' "$interface" >> "$METRICS_FILE"
+    printf '        "total_bytes": %d,\n' "$total_bytes" >> "$METRICS_FILE"
+    printf '        "rx_bytes": %d,\n' "$rx_bytes" >> "$METRICS_FILE"
+    printf '        "tx_bytes": %d,\n' "$tx_bytes" >> "$METRICS_FILE"
+    printf '        "traffic_history": %s\n' "$traffic_history" >> "$METRICS_FILE"
+    printf '    },\n' >> "$METRICS_FILE"
+    printf '    "connections": {\n' >> "$METRICS_FILE"
+    printf '        "active": %d,\n' "$active_connections" >> "$METRICS_FILE"
+    printf '        "port": "%s",\n' "$vpn_port" >> "$METRICS_FILE"
+    printf '        "connection_history": %s\n' "$conn_history" >> "$METRICS_FILE"
+    printf '    },\n' >> "$METRICS_FILE"
+    printf '    "users": {\n' >> "$METRICS_FILE"
+    printf '        "total": %d,\n' "$total_users" >> "$METRICS_FILE"
+    printf '        "list": %s\n' "$user_list" >> "$METRICS_FILE"
+    printf '    }\n' >> "$METRICS_FILE"
+    printf '}\n' >> "$METRICS_FILE"
     
     # Validate JSON
     if ! jq empty "$METRICS_FILE" 2>/dev/null; then
@@ -694,26 +748,40 @@ stop_unified_dashboard() {
         rm -f "$SERVER_PID_FILE"
     fi
     
+    # Stop metrics collector
+    if [ -f "$DASHBOARD_DIR/metrics_collector.pid" ]; then
+        local metrics_pid
+        metrics_pid=$(cat "$DASHBOARD_DIR/metrics_collector.pid")
+        if kill -0 "$metrics_pid" 2>/dev/null; then
+            kill "$metrics_pid" 2>/dev/null
+            log "Metrics collector stopped"
+        fi
+        rm -f "$DASHBOARD_DIR/metrics_collector.pid"
+    fi
+    
     # Remove cron job
     crontab -l 2>/dev/null | grep -v "collect_metrics.sh" | crontab - 2>/dev/null || true
 }
 
 # Setup metrics collection cron job
 setup_metrics_cron() {
-    # Create improved metrics collection script
+    # Create metrics collection script
     cat > "$DASHBOARD_DIR/collect_metrics.sh" << 'METRICS_END'
 #!/bin/bash
 cd /home/ikeniborn/Documents/Project/vpn
 source modules/monitoring/unified_dashboard.sh
 collect_unified_metrics
 METRICS_END
-    
     chmod +x "$DASHBOARD_DIR/collect_metrics.sh"
     
-    # Add to cron (every minute)
-    (crontab -l 2>/dev/null | grep -v "collect_metrics.sh"; echo "* * * * * $DASHBOARD_DIR/collect_metrics.sh >/dev/null 2>&1") | crontab -
+    # Add to cron (every 5 seconds via background process)
+    (crontab -l 2>/dev/null | grep -v "collect_metrics.sh") | crontab -
     
-    log "✓ Metrics collection scheduled every minute"
+    # Start background metrics collection process
+    nohup sh -c 'while true; do /opt/v2ray/dashboard/collect_metrics.sh >/dev/null 2>&1; sleep 5; done' > "$DASHBOARD_DIR/metrics_collector.log" 2>&1 &
+    echo $! > "$DASHBOARD_DIR/metrics_collector.pid"
+    
+    log "✓ Metrics collection started (every 5 seconds)"
 }
 
 # Dashboard status
