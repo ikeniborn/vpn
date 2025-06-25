@@ -63,11 +63,22 @@ show_user_management_menu() {
                 echo "Current users:"
                 list_users
                 echo ""
-                read -p "Enter username to delete: " username
-                if [ -n "$username" ]; then
-                    delete_user "$username"
+                read -p "Enter user number or username to delete: " user_input
+                if [ -n "$user_input" ]; then
+                    # Try to get user by number first
+                    if [[ "$user_input" =~ ^[0-9]+$ ]]; then
+                        username=$(get_user_by_number "$user_input")
+                        if [ $? -eq 0 ] && [ -n "$username" ]; then
+                            delete_user "$username"
+                        else
+                            warning "Invalid user number: $user_input"
+                        fi
+                    else
+                        # Treat as username
+                        delete_user "$user_input"
+                    fi
                 else
-                    warning "Username cannot be empty"
+                    warning "User input cannot be empty"
                 fi
                 read -p "Press Enter to continue..."
                 ;;
@@ -75,11 +86,22 @@ show_user_management_menu() {
                 echo "Current users:"
                 list_users
                 echo ""
-                read -p "Enter username to edit: " username
-                if [ -n "$username" ]; then
-                    edit_user "$username"
+                read -p "Enter user number or username to edit: " user_input
+                if [ -n "$user_input" ]; then
+                    # Try to get user by number first
+                    if [[ "$user_input" =~ ^[0-9]+$ ]]; then
+                        username=$(get_user_by_number "$user_input")
+                        if [ $? -eq 0 ] && [ -n "$username" ]; then
+                            edit_user "$username"
+                        else
+                            warning "Invalid user number: $user_input"
+                        fi
+                    else
+                        # Treat as username
+                        edit_user "$user_input"
+                    fi
                 else
-                    warning "Username cannot be empty"
+                    warning "User input cannot be empty"
                 fi
                 read -p "Press Enter to continue..."
                 ;;
@@ -87,11 +109,22 @@ show_user_management_menu() {
                 echo "Current users:"
                 list_users
                 echo ""
-                read -p "Enter username to show: " username
-                if [ -n "$username" ]; then
-                    show_user_by_name "$username"
+                read -p "Enter user number or username to show: " user_input
+                if [ -n "$user_input" ]; then
+                    # Try to get user by number first
+                    if [[ "$user_input" =~ ^[0-9]+$ ]]; then
+                        username=$(get_user_by_number "$user_input")
+                        if [ $? -eq 0 ] && [ -n "$username" ]; then
+                            show_user_by_name "$username"
+                        else
+                            warning "Invalid user number: $user_input"
+                        fi
+                    else
+                        # Treat as username
+                        show_user_by_name "$user_input"
+                    fi
                 else
-                    warning "Username cannot be empty"
+                    warning "User input cannot be empty"
                 fi
                 read -p "Press Enter to continue..."
                 ;;
@@ -99,19 +132,38 @@ show_user_management_menu() {
                 echo "Current users:"
                 list_users
                 echo ""
-                read -p "Enter username to manage SNI domains: " username
-                if [ -n "$username" ]; then
-                    # Load multi-SNI module if not loaded
-                    if ! type manage_user_sni_interactive &>/dev/null; then
-                        source "$PROJECT_ROOT/modules/users/multi_sni.sh" || {
-                            error "Failed to load multi-SNI module"
-                            read -p "Press Enter to continue..."
-                            continue
-                        }
+                read -p "Enter user number or username to manage SNI domains: " user_input
+                if [ -n "$user_input" ]; then
+                    # Try to get user by number first
+                    if [[ "$user_input" =~ ^[0-9]+$ ]]; then
+                        username=$(get_user_by_number "$user_input")
+                        if [ $? -eq 0 ] && [ -n "$username" ]; then
+                            # Load multi-SNI module if not loaded
+                            if ! type manage_user_sni_interactive &>/dev/null; then
+                                source "$PROJECT_ROOT/modules/users/multi_sni.sh" || {
+                                    error "Failed to load multi-SNI module"
+                                    read -p "Press Enter to continue..."
+                                    continue
+                                }
+                            fi
+                            manage_user_sni_interactive "$username"
+                        else
+                            warning "Invalid user number: $user_input"
+                        fi
+                    else
+                        # Treat as username
+                        # Load multi-SNI module if not loaded
+                        if ! type manage_user_sni_interactive &>/dev/null; then
+                            source "$PROJECT_ROOT/modules/users/multi_sni.sh" || {
+                                error "Failed to load multi-SNI module"
+                                read -p "Press Enter to continue..."
+                                continue
+                            }
+                        fi
+                        manage_user_sni_interactive "$user_input"
                     fi
-                    manage_user_sni_interactive "$username"
                 else
-                    warning "Username cannot be empty"
+                    warning "User input cannot be empty"
                 fi
                 read -p "Press Enter to continue..."
                 ;;

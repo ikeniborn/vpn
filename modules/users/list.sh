@@ -32,6 +32,11 @@ get_user_count() {
     local count
     count=$(jq '.inbounds[0].settings.clients | length' "$CONFIG_FILE" 2>/dev/null || echo "0")
     
+    # Ensure count is a valid integer
+    if ! [[ "$count" =~ ^[0-9]+$ ]]; then
+        count="0"
+    fi
+    
     debug "User count: $count"
     echo "$count"
 }
@@ -73,8 +78,8 @@ get_user_info() {
 format_table_header() {
     echo -e "${GREEN}=== User List ===${NC}"
     echo ""
-    echo -e "${BLUE}$(printf '%-25s' 'User Name') | $(printf '%-36s' 'UUID')${NC}"
-    echo -e "${BLUE}$(printf '%25s' '' | tr ' ' '-') | $(printf '%36s' '' | tr ' ' '-')${NC}"
+    echo -e "${BLUE}$(printf '%-3s' '#') | $(printf '%-25s' 'User Name') | $(printf '%-36s' 'UUID')${NC}"
+    echo -e "${BLUE}$(printf '%3s' '' | tr ' ' '-') | $(printf '%25s' '' | tr ' ' '-') | $(printf '%36s' '' | tr ' ' '-')${NC}"
 }
 
 # Format user table footer
@@ -118,9 +123,11 @@ list_users() {
     # Display table header
     format_table_header
     
-    # Get and display each user
-    jq -r '.inbounds[0].settings.clients[] | (.email // "No Name") + " " * (25 - ((.email // "No Name") | length)) + " | " + .id' "$CONFIG_FILE" 2>/dev/null | while read -r line; do
-        echo -e "${BLUE}${line}${NC}"
+    # Get and display each user with numbering
+    local counter=1
+    jq -r '.inbounds[0].settings.clients[] | (.email // "No Name") + " | " + .id' "$CONFIG_FILE" 2>/dev/null | while IFS=' | ' read -r user_name user_uuid; do
+        printf "${BLUE}%-3s | %-25s | %-36s${NC}\n" "$counter" "$user_name" "$user_uuid"
+        counter=$((counter + 1))
     done
     
     # Display table footer
@@ -360,6 +367,37 @@ select_user_interactive() {
     echo "$selected_user"
 }
 
+# Get user name by number
+get_user_by_number() {
+    local number="$1"
+    
+    debug "Getting user by number: $number"
+    
+    if ! [[ "$number" =~ ^[0-9]+$ ]]; then
+        debug "Invalid number format: $number"
+        return 1
+    fi
+    
+    local user_count
+    user_count=$(get_user_count)
+    
+    if [ "$number" -lt 1 ] || [ "$number" -gt "$user_count" ]; then
+        debug "Number out of range: $number (max: $user_count)"
+        return 1
+    fi
+    
+    # Get user name by index (jq arrays are 0-based)
+    local user_name
+    user_name=$(jq -r ".inbounds[0].settings.clients[$((number - 1))].email" "$CONFIG_FILE" 2>/dev/null)
+    
+    if [ "$user_name" = "null" ] || [ -z "$user_name" ]; then
+        debug "User not found at position: $number"
+        return 1
+    fi
+    
+    echo "$user_name"
+}
+
 # Export functions for use by other modules
 export -f init_user_list
 export -f get_user_count
@@ -374,3 +412,4 @@ export -f list_users_detailed
 export -f list_users_filtered
 export -f export_user_list
 export -f select_user_interactive
+export -f get_user_by_number
