@@ -31,7 +31,7 @@ impl VolumeManager {
         driver: Option<&str>,
         labels: Option<HashMap<String, String>>,
     ) -> Result<VolumeInfo> {
-        let mut config = CreateVolumeOptions {
+        let config = CreateVolumeOptions {
             name,
             driver: driver.unwrap_or("local"),
             driver_opts: HashMap::new(),

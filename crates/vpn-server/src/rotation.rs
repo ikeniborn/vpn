@@ -153,7 +153,7 @@ impl KeyRotationManager {
         
         // Read new keys
         let private_key = fs::read_to_string(&private_key_file)?;
-        let public_key = fs::read_to_string(&public_key_file)?;
+        let _public_key = fs::read_to_string(&public_key_file)?;
         
         // Read current configuration
         let config_content = fs::read_to_string(&config_file)?;

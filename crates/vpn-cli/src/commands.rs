@@ -4,13 +4,14 @@ use indicatif::{ProgressBar, ProgressStyle};
 use vpn_server::{ServerInstaller, ServerLifecycle, InstallationOptions};
 use vpn_server::installer::LogLevel as ServerLogLevel;
 use vpn_users::{UserManager, BatchOperations};
-use vpn_users::user::{VpnProtocol, UserStatus};
+use vpn_users::user::UserStatus;
 use vpn_users::manager::UserListOptions;
-use vpn_monitor::{TrafficMonitor, HealthMonitor, LogAnalyzer, MetricsCollector, AlertManager};
-use vpn_monitor::traffic::MonitoringConfig;
+// use vpn_monitor::{TrafficMonitor, HealthMonitor, LogAnalyzer, MetricsCollector, AlertManager};
+// use vpn_monitor::traffic::MonitoringConfig;
 use crate::{cli::*, config::ConfigManager, utils::display, CliError, Result};
 
 pub struct CommandHandler {
+    #[allow(dead_code)]
     config_manager: ConfigManager,
     install_path: PathBuf,
     output_format: OutputFormat,
@@ -119,7 +120,7 @@ impl CommandHandler {
             .unwrap());
         pb.set_message("Uninstalling VPN server...");
 
-        let result = installer.uninstall(&self.install_path).await;
+        let result = installer.uninstall(&self.install_path, purge).await;
         pb.finish_and_clear();
 
         match result {
@@ -591,8 +592,134 @@ impl CommandHandler {
         Ok(())
     }
 
-    pub async fn run_diagnostics(&mut self, _fix: bool) -> Result<()> {
-        display::info("Diagnostics not yet implemented");
+    pub async fn run_diagnostics(&mut self, fix: bool) -> Result<()> {
+        display::info("🔍 Running system diagnostics...");
+        println!();
+
+        let mut issues_found = 0;
+        let mut issues_fixed = 0;
+
+        // Check system requirements
+        display::section("System Requirements");
+        
+        // Check Docker
+        if self.check_docker_availability().await {
+            display::success("✓ Docker is installed and running");
+        } else {
+            display::error("✗ Docker is not available");
+            issues_found += 1;
+            if fix {
+                display::warning("  → Cannot auto-fix Docker installation. Please install Docker manually.");
+            }
+        }
+
+        // Check Docker Compose
+        if self.check_docker_compose_availability().await {
+            display::success("✓ Docker Compose is available");
+        } else {
+            display::error("✗ Docker Compose is not available");
+            issues_found += 1;
+            if fix {
+                display::warning("  → Cannot auto-fix Docker Compose installation. Please install it manually.");
+            }
+        }
+
+        // Check network tools
+        display::section("Network Tools");
+        
+        if vpn_network::FirewallManager::is_ufw_installed().await {
+            display::success("✓ UFW firewall is installed");
+        } else if vpn_network::FirewallManager::is_iptables_installed().await {
+            display::success("✓ iptables is installed");
+        } else {
+            display::warning("⚠ No firewall management tools found");
+            display::info("  → Consider installing ufw or iptables for firewall management");
+        }
+
+        // Check port availability
+        display::section("Port Availability");
+        let common_ports = [80, 443, 8080, 8443, 9443];
+        for &port in &common_ports {
+            if vpn_network::PortChecker::is_port_available(port) {
+                display::success(&format!("✓ Port {} is available", port));
+            } else {
+                display::warning(&format!("⚠ Port {} is in use", port));
+            }
+        }
+
+        // Check installation path
+        display::section("Installation Path");
+        if self.install_path.exists() {
+            if self.install_path.is_dir() {
+                display::success(&format!("✓ Installation directory exists: {}", self.install_path.display()));
+                
+                // Check permissions
+                match std::fs::File::create(self.install_path.join(".permission_test")) {
+                    Ok(_) => {
+                        display::success("✓ Installation directory is writable");
+                        let _ = std::fs::remove_file(self.install_path.join(".permission_test"));
+                    }
+                    Err(_) => {
+                        display::error("✗ Installation directory is not writable");
+                        issues_found += 1;
+                        if fix {
+                            display::info("  → Run with sudo for proper permissions");
+                        }
+                    }
+                }
+            } else {
+                display::error(&format!("✗ Installation path is not a directory: {}", self.install_path.display()));
+                issues_found += 1;
+            }
+        } else {
+            display::warning(&format!("⚠ Installation directory does not exist: {}", self.install_path.display()));
+            if fix {
+                if let Err(e) = std::fs::create_dir_all(&self.install_path) {
+                    display::error(&format!("✗ Failed to create installation directory: {}", e));
+                    issues_found += 1;
+                } else {
+                    display::success("✓ Created installation directory");
+                    issues_fixed += 1;
+                }
+            }
+        }
+
+        // Check existing VPN installation
+        display::section("VPN Installation Status");
+        let docker_compose_path = self.install_path.join("docker-compose.yml");
+        if docker_compose_path.exists() {
+            display::success("✓ VPN server appears to be installed");
+            
+            // Check if containers are running
+            if self.check_containers_running().await {
+                display::success("✓ VPN containers are running");
+            } else {
+                display::warning("⚠ VPN containers are not running");
+                display::info("  → Try: vpn start");
+            }
+        } else {
+            display::info("ℹ VPN server is not installed");
+            display::info("  → Try: vpn install");
+        }
+
+        // Summary
+        println!();
+        display::section("Diagnostic Summary");
+        
+        if issues_found == 0 {
+            display::success("✓ No issues found. System is ready for VPN operations!");
+        } else {
+            display::warning(&format!("⚠ Found {} issue(s)", issues_found));
+            if fix && issues_fixed > 0 {
+                display::info(&format!("✓ Fixed {} issue(s)", issues_fixed));
+            }
+            if fix && issues_found > issues_fixed {
+                display::warning(&format!("⚠ {} issue(s) require manual attention", issues_found - issues_fixed));
+            } else if !fix {
+                display::info("  → Run with --fix to attempt automatic fixes");
+            }
+        }
+
         Ok(())
     }
 
@@ -606,7 +733,46 @@ impl CommandHandler {
         Ok(())
     }
 
-    // Utility methods
+    // Utility methods for diagnostics
+    async fn check_docker_availability(&self) -> bool {
+        use tokio::process::Command;
+        Command::new("docker")
+            .arg("version")
+            .output()
+            .await
+            .map(|output| output.status.success())
+            .unwrap_or(false)
+    }
+
+    async fn check_docker_compose_availability(&self) -> bool {
+        use tokio::process::Command;
+        Command::new("docker-compose")
+            .arg("version")
+            .output()
+            .await
+            .map(|output| output.status.success())
+            .unwrap_or(false)
+    }
+
+    async fn check_containers_running(&self) -> bool {
+        use tokio::process::Command;
+        let compose_path = self.install_path.join("docker-compose.yml");
+        if !compose_path.exists() {
+            return false;
+        }
+
+        Command::new("docker-compose")
+            .arg("-f")
+            .arg(compose_path)
+            .arg("ps")
+            .arg("-q")
+            .output()
+            .await
+            .map(|output| !output.stdout.is_empty())
+            .unwrap_or(false)
+    }
+
+    // Other utility methods
     fn load_server_config(&self) -> Result<vpn_users::config::ServerConfig> {
         // This would load the actual server configuration
         // For now, return a default config
@@ -663,12 +829,12 @@ impl CommandHandler {
         Ok(())
     }
 
-    pub async fn backup_configuration(&mut self, backup_path: Option<PathBuf>) -> Result<()> {
+    pub async fn backup_configuration(&mut self, _backup_path: Option<PathBuf>) -> Result<()> {
         display::info("Backup configuration not yet implemented");
         Ok(())
     }
 
-    pub async fn restore_configuration(&mut self, backup_path: PathBuf) -> Result<()> {
+    pub async fn restore_configuration(&mut self, _backup_path: PathBuf) -> Result<()> {
         display::info("Restore configuration not yet implemented");
         Ok(())
     }
@@ -715,6 +881,19 @@ impl CommandHandler {
 
     pub async fn show_logs(&mut self, lines: usize, follow: bool, pattern: Option<String>) -> Result<()> {
         display::info(&format!("Show logs (lines: {}, follow: {}, pattern: {:?}) not yet implemented", lines, follow, pattern));
+        Ok(())
+    }
+    
+    pub async fn fix_network_conflicts(&mut self) -> Result<()> {
+        display::info("🔧 Fixing Docker network conflicts...");
+        
+        let installer = vpn_server::ServerInstaller::new()
+            .map_err(|e| CliError::ServerError(e))?;
+        
+        installer.fix_network_conflicts().await
+            .map_err(|e| CliError::ServerError(e))?;
+            
+        display::success("Network conflicts resolved. Try running the installation again.");
         Ok(())
     }
 }

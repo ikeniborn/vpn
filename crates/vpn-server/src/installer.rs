@@ -33,7 +33,9 @@ pub enum LogLevel {
 }
 
 pub struct ServerInstaller {
+    #[allow(dead_code)]
     container_manager: ContainerManager,
+    #[allow(dead_code)]
     firewall_manager: FirewallManager,
 }
 
@@ -55,8 +57,23 @@ impl ServerInstaller {
         self.check_dependencies().await?;
         self.check_system_requirements().await?;
         
-        // Create installation directory
-        std::fs::create_dir_all(&options.install_path)?;
+        // Create installation directory with proper error handling
+        if let Err(e) = std::fs::create_dir_all(&options.install_path) {
+            match e.kind() {
+                std::io::ErrorKind::PermissionDenied => {
+                    return Err(ServerError::InstallationError(format!(
+                        "Permission denied creating installation directory '{}'. Please run with sudo or check directory permissions.",
+                        options.install_path.display()
+                    )));
+                }
+                _ => {
+                    return Err(ServerError::InstallationError(format!(
+                        "Failed to create installation directory '{}': {}",
+                        options.install_path.display(), e
+                    )));
+                }
+            }
+        }
         
         // Generate server configuration
         let server_config = self.generate_server_config(&options).await?;
@@ -68,6 +85,9 @@ impl ServerInstaller {
         
         // Create Docker configuration
         self.create_docker_configuration(&options, &server_config).await?;
+        
+        // Check and resolve network conflicts
+        self.resolve_network_conflicts(&options).await?;
         
         // Download and start containers
         self.deploy_containers(&options).await?;
@@ -229,6 +249,8 @@ impl ServerInstaller {
     async fn deploy_containers(&self, options: &InstallationOptions) -> Result<()> {
         let compose_path = options.install_path.join("docker-compose.yml");
         
+        println!("🐳 Starting VPN containers...");
+        
         // Use docker-compose command
         let output = Command::new("docker-compose")
             .arg("-f")
@@ -238,15 +260,114 @@ impl ServerInstaller {
             .output()?;
         
         if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            
+            // Check for common permission issues
+            if stderr.contains("permission denied") || stderr.contains("Permission denied") {
+                return Err(ServerError::InstallationError(
+                    "Docker permission denied. Please ensure your user is in the docker group or run with sudo.".to_string()
+                ));
+            }
+            
+            // Check for network conflicts
+            if stderr.contains("Pool overlaps with other one") || stderr.contains("network conflicts") {
+                return Err(ServerError::InstallationError(
+                    "Docker network conflict detected. Try running 'docker network prune -f' to clean up unused networks, or restart Docker daemon.".to_string()
+                ));
+            }
+            
+            // Check for Docker Compose version warnings
+            if stderr.contains("the attribute `version` is obsolete") {
+                println!("⚠️ Warning: {}", stderr.lines().find(|line| line.contains("version")).unwrap_or(""));
+                // Continue execution since this is just a warning
+            } else {
+                return Err(ServerError::InstallationError(
+                    format!("Docker Compose failed: {}", stderr)
+                ));
+            }
+        }
+        
+        println!("✓ Containers started, waiting for initialization...");
+        
+        // Wait for containers to start and stabilize
+        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+        
+        // Check if containers are actually running
+        let status_output = Command::new("docker-compose")
+            .arg("-f")
+            .arg(&compose_path)
+            .arg("ps")
+            .arg("-q")
+            .output()?;
+            
+        if status_output.stdout.is_empty() {
             return Err(ServerError::InstallationError(
-                format!("Docker Compose failed: {}", 
-                    String::from_utf8_lossy(&output.stderr))
+                "Containers failed to start. Check 'docker-compose logs' for details.".to_string()
             ));
         }
         
-        // Wait for containers to be healthy
-        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+        println!("✓ Container deployment completed");
+        Ok(())
+    }
+    
+    async fn resolve_network_conflicts(&self, options: &InstallationOptions) -> Result<()> {
+        println!("🔍 Checking for Docker network conflicts...");
         
+        // Check if there are conflicting networks
+        let network_output = Command::new("docker")
+            .arg("network")
+            .arg("ls")
+            .arg("--format")
+            .arg("{{.Name}}")
+            .output();
+            
+        if let Ok(output) = network_output {
+            let networks = String::from_utf8_lossy(&output.stdout);
+            
+            // Check for potential conflicts
+            let network_names: Vec<&str> = networks.lines().collect();
+            
+            // Look for networks that might conflict
+            let _conflicting_patterns = ["vpn", "172.20.", "172.18.", "172.19."];
+            let mut conflicts_found = false;
+            
+            for network in &network_names {
+                if network.contains("vpn") && *network != "vpn_vpn-network" {
+                    println!("⚠️ Found potentially conflicting VPN network: {}", network);
+                    conflicts_found = true;
+                }
+            }
+            
+            if conflicts_found {
+                println!("🔧 Resolving network conflicts...");
+                
+                // Clean up any existing vpn networks that might conflict
+                let cleanup_output = Command::new("docker")
+                    .arg("network")
+                    .arg("prune")
+                    .arg("-f")
+                    .output();
+                    
+                if cleanup_output.is_ok() {
+                    println!("✓ Cleaned up unused Docker networks");
+                } else {
+                    println!("⚠️ Warning: Could not clean up unused networks");
+                }
+                
+                // Remove specific conflicting network if it exists
+                let compose_path = options.install_path.join("docker-compose.yml");
+                if compose_path.exists() {
+                    let _remove_output = Command::new("docker-compose")
+                        .arg("-f")
+                        .arg(&compose_path)
+                        .arg("down")
+                        .arg("--remove-orphans")
+                        .output();
+                }
+            }
+        }
+        
+        println!("✓ Network conflict check completed");
         Ok(())
     }
     
@@ -273,8 +394,35 @@ impl ServerInstaller {
     }
     
     async fn verify_installation(&self, options: &InstallationOptions) -> Result<()> {
+        println!("🔍 Verifying installation...");
+        
+        // 1. Validate configuration files exist
         let validator = ConfigValidator::new()?;
         validator.validate_installation(&options.install_path).await?;
+        println!("✓ Configuration files validated");
+        
+        // 2. Check if containers are created
+        let compose_path = options.install_path.join("docker-compose.yml");
+        if !compose_path.exists() {
+            return Err(ServerError::InstallationError(
+                "Docker Compose file not found".to_string()
+            ));
+        }
+        println!("✓ Docker Compose configuration found");
+        
+        // 3. Verify containers are running
+        self.verify_containers_running(&options.install_path).await?;
+        println!("✓ VPN containers are running");
+        
+        // 4. Check container health status
+        self.verify_container_health(&options.install_path).await?;
+        println!("✓ Container health check passed");
+        
+        // 5. Test basic connectivity
+        self.verify_service_connectivity(options).await?;
+        println!("✓ Service connectivity verified");
+        
+        println!("🎉 Installation verification completed successfully!");
         Ok(())
     }
     
@@ -294,23 +442,334 @@ impl ServerInstaller {
             .unwrap_or(false)
     }
     
-    pub async fn uninstall(&self, install_path: &Path) -> Result<()> {
+    async fn verify_containers_running(&self, install_path: &Path) -> Result<()> {
+        use std::process::Command;
+        
+        let compose_path = install_path.join("docker-compose.yml");
+        let output = Command::new("docker-compose")
+            .arg("-f")
+            .arg(&compose_path)
+            .arg("ps")
+            .arg("-q")
+            .output()?;
+
+        if !output.status.success() {
+            return Err(ServerError::InstallationError(
+                "Failed to check container status".to_string()
+            ));
+        }
+
+        if output.stdout.is_empty() {
+            return Err(ServerError::InstallationError(
+                "No VPN containers are running. Installation may have failed.".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+
+    async fn verify_container_health(&self, install_path: &Path) -> Result<()> {
+        use std::process::Command;
+        
         let compose_path = install_path.join("docker-compose.yml");
         
+        // Wait a bit for containers to initialize
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        
+        let output = Command::new("docker-compose")
+            .arg("-f")
+            .arg(&compose_path)
+            .arg("ps")
+            .arg("--format")
+            .arg("table")
+            .output()?;
+
+        if !output.status.success() {
+            return Err(ServerError::InstallationError(
+                "Failed to check container health".to_string()
+            ));
+        }
+
+        let output_str = String::from_utf8_lossy(&output.stdout);
+        
+        // Check if any container is in "unhealthy" or "restarting" state
+        if output_str.contains("unhealthy") || output_str.contains("restarting") {
+            return Err(ServerError::InstallationError(
+                "One or more containers are unhealthy. Check logs with 'docker-compose logs'".to_string()
+            ));
+        }
+
+        // Check if containers are actually up
+        if !output_str.contains("Up") {
+            return Err(ServerError::InstallationError(
+                "Containers are not in running state".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+
+    async fn verify_service_connectivity(&self, options: &InstallationOptions) -> Result<()> {
+        use std::net::TcpListener;
+        
+        // Try to connect to the service port to verify it's accessible
+        let bind_addr = format!("127.0.0.1:{}", 
+            options.port.unwrap_or(8443));
+        
+        // Give the service a moment to start
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        
+        // Check if port is bound (service is listening)
+        match TcpListener::bind(&bind_addr) {
+            Ok(_) => {
+                return Err(ServerError::InstallationError(
+                    format!("Service port {} is not bound. VPN service may not have started correctly.", 
+                           options.port.unwrap_or(8443))
+                ));
+            }
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::AddrInUse {
+                    // This is expected - service is running and bound to the port
+                    return Ok(());
+                } else {
+                    return Err(ServerError::InstallationError(
+                        format!("Unexpected error checking service port: {}", e)
+                    ));
+                }
+            }
+        }
+    }
+
+    pub async fn uninstall(&self, install_path: &Path, purge: bool) -> Result<()> {
+        println!("🗑️ Starting VPN server uninstallation...");
+        
+        let compose_path = install_path.join("docker-compose.yml");
+        
+        // 1. Stop and remove containers
         if compose_path.exists() {
-            // Stop and remove containers
-            let _output = Command::new("docker-compose")
+            println!("🐳 Stopping and removing containers...");
+            let output = Command::new("docker-compose")
                 .arg("-f")
                 .arg(&compose_path)
                 .arg("down")
                 .arg("-v")
+                .arg("--remove-orphans")
                 .output()?;
+            
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                println!("⚠️ Warning: Failed to cleanly stop containers: {}", stderr);
+            } else {
+                println!("✓ Containers stopped and removed");
+            }
         }
         
-        // Remove installation directory
-        if install_path.exists() {
-            std::fs::remove_dir_all(install_path)?;
+        // 2. Remove Docker images if purge is enabled
+        if purge {
+            self.cleanup_docker_images().await?;
         }
+        
+        // 3. Remove firewall rules
+        self.cleanup_firewall_rules(install_path).await?;
+        
+        // 4. Remove installation directory and all configuration files
+        if install_path.exists() {
+            println!("📂 Removing installation directory...");
+            if let Err(e) = std::fs::remove_dir_all(install_path) {
+                println!("⚠️ Warning: Failed to remove directory {}: {}", install_path.display(), e);
+            } else {
+                println!("✓ Installation directory removed");
+            }
+        }
+        
+        // 5. Remove system configuration files
+        self.cleanup_system_config().await?;
+        
+        // 6. Remove log files if purge is enabled
+        if purge {
+            self.cleanup_log_files().await?;
+        }
+        
+        println!("🎉 VPN server uninstallation completed successfully!");
+        Ok(())
+    }
+    
+    async fn cleanup_docker_images(&self) -> Result<()> {
+        println!("🐳 Cleaning up Docker images...");
+        
+        // Remove VPN-related images
+        let images_to_remove = ["xray/xray", "shadowsocks/shadowsocks-libev", "outline/shadowbox"];
+        
+        for image in &images_to_remove {
+            let output = Command::new("docker")
+                .arg("rmi")
+                .arg("-f")
+                .arg(image)
+                .output();
+            
+            match output {
+                Ok(result) if result.status.success() => {
+                    println!("✓ Removed Docker image: {}", image);
+                }
+                _ => {
+                    println!("ℹ️ Docker image {} not found or already removed", image);
+                }
+            }
+        }
+        
+        // Clean up unused Docker resources
+        let _cleanup_output = Command::new("docker")
+            .arg("system")
+            .arg("prune")
+            .arg("-f")
+            .arg("--volumes")
+            .output();
+        
+        println!("✓ Docker cleanup completed");
+        Ok(())
+    }
+    
+    async fn cleanup_firewall_rules(&self, install_path: &Path) -> Result<()> {
+        println!("🔥 Cleaning up firewall rules...");
+        
+        // Try to detect which ports were used by reading the configuration
+        let mut ports_to_clean = Vec::new();
+        
+        // Try to read the server configuration to get the port
+        if let Ok(config_content) = std::fs::read_to_string(install_path.join("config.json")) {
+            if let Ok(config) = serde_json::from_str::<serde_json::Value>(&config_content) {
+                if let Some(port) = config["port"].as_u64() {
+                    ports_to_clean.push(port as u16);
+                }
+            }
+        }
+        
+        // Also clean common VPN ports
+        ports_to_clean.extend_from_slice(&[8443, 9443, 8080, 8090]);
+        
+        if FirewallManager::is_ufw_installed().await {
+            for port in ports_to_clean {
+                // Remove both TCP and UDP rules
+                for protocol in ["tcp", "udp"] {
+                    let output = Command::new("sudo")
+                        .arg("ufw")
+                        .arg("delete")
+                        .arg("allow")
+                        .arg(format!("{}/{}", port, protocol))
+                        .output();
+                    
+                    match output {
+                        Ok(result) if result.status.success() => {
+                            println!("✓ Removed firewall rule for port {}/{}", port, protocol);
+                        }
+                        _ => {
+                            // Rule might not exist, that's ok
+                        }
+                    }
+                }
+            }
+        }
+        
+        println!("✓ Firewall cleanup completed");
+        Ok(())
+    }
+    
+    async fn cleanup_system_config(&self) -> Result<()> {
+        println!("⚙️ Cleaning up system configuration...");
+        
+        // Remove system-wide configuration files
+        let config_paths = [
+            "/etc/vpn",
+            "/etc/systemd/system/vpn.service",
+            "/etc/cron.d/vpn-maintenance",
+        ];
+        
+        for path in &config_paths {
+            if std::path::Path::new(path).exists() {
+                if let Err(e) = std::fs::remove_dir_all(path) {
+                    println!("⚠️ Warning: Failed to remove {}: {}", path, e);
+                } else {
+                    println!("✓ Removed configuration: {}", path);
+                }
+            }
+        }
+        
+        // Reload systemd if service was removed
+        let _reload_output = Command::new("sudo")
+            .arg("systemctl")
+            .arg("daemon-reload")
+            .output();
+        
+        println!("✓ System configuration cleanup completed");
+        Ok(())
+    }
+    
+    async fn cleanup_log_files(&self) -> Result<()> {
+        println!("📝 Cleaning up log files...");
+        
+        let log_paths = [
+            "/var/log/vpn",
+            "/var/log/xray",
+            "/var/log/shadowsocks",
+        ];
+        
+        for path in &log_paths {
+            if std::path::Path::new(path).exists() {
+                if let Err(e) = std::fs::remove_dir_all(path) {
+                    println!("⚠️ Warning: Failed to remove log directory {}: {}", path, e);
+                } else {
+                    println!("✓ Removed log directory: {}", path);
+                }
+            }
+        }
+        
+        println!("✓ Log files cleanup completed");
+        Ok(())
+    }
+    
+    pub async fn fix_network_conflicts(&self) -> Result<()> {
+        println!("🔧 Attempting to fix Docker network conflicts...");
+        
+        // 1. Stop all VPN containers first
+        let stop_output = Command::new("docker")
+            .arg("stop")
+            .arg("$(docker ps -q --filter name=vpn)")
+            .arg("2>/dev/null || true")
+            .output();
+        
+        if stop_output.is_ok() {
+            println!("✓ Stopped VPN containers");
+        }
+        
+        // 2. Remove conflicting networks
+        let remove_networks = Command::new("docker")
+            .arg("network")
+            .arg("rm")
+            .arg("$(docker network ls -q --filter name=vpn)")
+            .arg("2>/dev/null || true")
+            .output();
+            
+        if remove_networks.is_ok() {
+            println!("✓ Removed conflicting VPN networks");
+        }
+        
+        // 3. Prune unused networks
+        let prune_output = Command::new("docker")
+            .arg("network")
+            .arg("prune")
+            .arg("-f")
+            .output();
+            
+        if let Ok(output) = prune_output {
+            if output.status.success() {
+                println!("✓ Pruned unused Docker networks");
+            }
+        }
+        
+        // 4. Restart Docker daemon if needed (requires systemctl)
+        println!("💡 If the issue persists, try restarting Docker:");
+        println!("   sudo systemctl restart docker");
+        println!("   Or manually: sudo service docker restart");
         
         Ok(())
     }

@@ -34,14 +34,22 @@
 - **Performance Benchmarks**: Built-in performance testing and comparison tools
 - **Comprehensive Logging**: Structured logging with multiple output formats
 
+### 🩺 **System Diagnostics**
+- **Automated Diagnostics**: Comprehensive system compatibility checks with `vpn doctor`
+- **Auto-fix Capabilities**: Automatic resolution of common configuration issues
+- **Privilege Management**: Smart privilege escalation with user confirmation
+- **Environment Validation**: Docker, network, and dependency verification
+
 ## 📋 Table of Contents
 
 - [Quick Start](#quick-start)
+- [Privilege Management](#privilege-management--sudo-commands)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Architecture](#architecture)
 - [CLI Reference](#cli-reference)
 - [Configuration](#configuration)
+- [System Diagnostics](#system-diagnostics)
 - [Migration Guide](#migration-guide)
 - [Development](#development)
 - [Performance](#performance)
@@ -96,6 +104,142 @@ vpn users show alice --format qr
 vpn status --detailed
 ```
 
+### 🔐 Privilege Management & Sudo Commands
+
+The VPN system implements intelligent privilege management that automatically requests administrator privileges when needed, while allowing read-only operations without sudo.
+
+#### **Automatic Privilege Escalation**
+
+The system automatically detects when operations require administrator privileges and requests them with user confirmation:
+
+```bash
+# Commands that automatically request sudo when needed:
+vpn install --protocol vless --port 8443    # ⚡ Auto-requests sudo
+vpn uninstall --purge                       # ⚡ Auto-requests sudo  
+vpn users create alice                      # ⚡ Auto-requests sudo
+vpn start                                   # ⚡ Auto-requests sudo
+vpn stop                                    # ⚡ Auto-requests sudo
+vpn restart                                 # ⚡ Auto-requests sudo
+vpn doctor --fix                            # ⚡ Auto-requests sudo
+
+# Read-only commands work without sudo:
+vpn status                                  # ✅ No sudo needed
+vpn users list                              # ✅ No sudo needed
+vpn info                                    # ✅ No sudo needed
+vpn privileges                              # ✅ No sudo needed
+vpn doctor                                  # ✅ No sudo needed (read-only)
+```
+
+#### **Interactive Menu Privilege Handling**
+
+The interactive menu (`vpn menu`) can be launched without sudo. Privilege checks are performed per-operation:
+
+```bash
+# Launch menu without sudo - works fine
+vpn menu
+
+# The menu will request privileges only when needed:
+# ✅ View server status - no sudo needed
+# ✅ List users - no sudo needed  
+# ⚡ Install server - requests sudo automatically
+# ⚡ Create users - requests sudo automatically
+# ⚡ Start/stop server - requests sudo automatically
+```
+
+#### **Manual Sudo Usage**
+
+You can still run commands with sudo manually if preferred:
+
+```bash
+# Manual sudo usage (optional but supported)
+sudo vpn install --protocol vless --port 8443
+sudo vpn users create alice
+sudo vpn menu
+
+# Check your current privilege status
+vpn privileges
+```
+
+#### **Privilege Status Information**
+
+```bash
+# Check current privilege status
+vpn privileges
+
+# Example output:
+Privilege Status:
+  Current user: user
+  Status: Standard (Limited access)
+  Capabilities: Read-only operations only
+
+To perform administrative operations:
+  • VPN CLI will automatically request privileges when needed
+  • You can manually run with: sudo vpn <command>
+  • Or check specific operations: vpn privileges
+```
+
+#### **Commands by Privilege Requirement**
+
+**🔓 No Privileges Required (Read-Only)**
+```bash
+vpn status                    # Server status
+vpn users list               # List users
+vpn users show <name>        # User details
+vpn info                     # System information
+vpn privileges               # Privilege status
+vpn doctor                   # System diagnostics (read-only)
+vpn benchmark                # Performance tests
+vpn config show              # View configuration
+vpn monitor stats            # Traffic statistics
+vpn monitor health           # Health status
+vpn monitor logs             # View logs
+```
+
+**🔒 Administrator Privileges Required**
+```bash
+vpn install                  # Server installation
+vpn uninstall               # Server removal
+vpn start/stop/restart       # Server control
+vpn users create/delete      # User management (write)
+vpn users update             # User modifications
+vpn doctor --fix             # Auto-fix issues
+vpn config edit              # Configuration changes
+vpn security rotate-keys     # Security operations
+```
+
+#### **Privilege Management Features**
+
+- **🤖 Smart Detection**: Automatically detects which operations need privileges
+- **🔔 User Confirmation**: Always asks before requesting sudo access
+- **📊 Status Display**: Shows current privilege level and capabilities
+- **🔄 Graceful Degradation**: Falls back to read-only mode when appropriate
+- **🛡️ Security-First**: Never runs with unnecessary privileges
+
+### 🔍 Installation Validation
+
+The VPN installation process now includes comprehensive validation:
+
+```bash
+# The installer automatically performs:
+# ✓ Configuration files validation
+# ✓ Docker Compose configuration check  
+# ✓ Container startup verification
+# ✓ Health status monitoring
+# ✓ Service connectivity testing
+
+# Installation output example:
+🐳 Starting VPN containers...
+✓ Containers started, waiting for initialization...
+✓ Container deployment completed
+🔍 Verifying installation...
+✓ Configuration files validated
+✓ Docker Compose configuration found
+✓ VPN containers are running
+✓ Container health check passed
+✓ Service connectivity verified
+🎉 Installation verification completed successfully!
+```
+
 ## 🔧 Installation
 
 ### From Binary Releases
@@ -148,7 +292,7 @@ vpn install --protocol vless --port 8443        # Install VPN server
 vpn status                                       # Check server status
 vpn restart                                      # Restart VPN services
 vpn stop                                         # Stop VPN services
-vpn uninstall                                   # Remove VPN server
+vpn uninstall --purge                          # Complete server removal with cleanup
 
 # User Management
 vpn user create <name> --protocol vless         # Create new user
@@ -173,6 +317,14 @@ vpn config show                                 # Display current configuration
 vpn config edit                                 # Edit configuration file
 vpn config validate                             # Validate configuration
 vpn config backup --file backup.toml           # Backup configuration
+
+# System Diagnostics and Information
+vpn doctor                                      # Run comprehensive system diagnostics
+vpn doctor --fix                                # Run diagnostics with automatic fixes
+vpn fix-networks                                # Fix Docker network conflicts
+vpn info                                        # Show detailed system information
+vpn privileges                                  # Display current privilege status
+vpn benchmark                                   # Run performance benchmarks
 
 # Migration Tools
 vpn migrate from-bash --source /path/to/bash   # Migrate from Bash implementation
@@ -312,8 +464,7 @@ vpn stop [OPTIONS]
   --force                  Force stop without graceful shutdown
 
 vpn uninstall [OPTIONS]
-  --keep-data              Keep user data and logs
-  --keep-config            Keep configuration files
+  --purge                  Complete removal including Docker images and logs
   --force                  Skip confirmation prompts
 ```
 
@@ -372,6 +523,21 @@ vpn monitor logs [OPTIONS]
   --tail <N>               Show last N lines
   --level <LEVEL>          Filter by log level
   --component <COMP>       Filter by component: server, docker, network
+```
+
+### Diagnostic Commands
+
+```bash
+vpn doctor [OPTIONS]
+  --fix                    Attempt automatic fixes for detected issues
+  
+vpn diagnostics [OPTIONS]  # Alias for 'doctor'
+  --fix                    Attempt automatic fixes for detected issues
+
+vpn fix-networks           # Fix Docker network conflicts
+vpn info                   # Show system information
+vpn privileges             # Show privilege status
+vpn benchmark              # Run performance benchmarks
 ```
 
 ## ⚙️ Configuration
@@ -441,6 +607,103 @@ enable_ipv6 = true                  # Enable IPv6 support
 dns_servers = ["8.8.8.8", "1.1.1.1"] # DNS servers
 mtu = 1500                          # Maximum transmission unit
 buffer_size = "64KB"                # Network buffer size
+```
+
+## 🩺 System Diagnostics
+
+The VPN system includes comprehensive diagnostic tools to ensure optimal performance and help troubleshoot issues.
+
+### Quick System Check
+
+```bash
+# Run complete system diagnostics
+vpn doctor
+
+# Run diagnostics with automatic fixes
+vpn doctor --fix
+```
+
+### Diagnostic Features
+
+The `vpn doctor` command performs the following checks:
+
+#### **System Requirements**
+- ✅ Docker installation and connectivity
+- ✅ Docker Compose availability
+- ✅ Network tools (UFW/iptables)
+- ✅ Required permissions
+
+#### **Network Configuration**
+- ✅ Port availability check (80, 443, 8080, 8443, 9443)
+- ✅ Firewall status and rules
+- ✅ Network connectivity
+
+#### **Installation Status**
+- ✅ Installation directory permissions
+- ✅ VPN server installation status
+- ✅ Container runtime status
+- ✅ Configuration validity
+
+#### **Performance Monitoring**
+- ✅ System resource usage
+- ✅ Container health status
+- ✅ Service responsiveness
+
+### Example Output
+
+```
+🔍 Running system diagnostics...
+
+System Requirements
+✓ Docker is installed and running
+✓ Docker Compose is available
+
+Network Tools
+✓ UFW firewall is installed
+
+Port Availability
+✓ Port 8443 is available
+⚠ Port 80 is in use
+
+Installation Path
+✓ Installation directory exists: /opt/vpn
+✓ Installation directory is writable
+
+VPN Installation Status
+✓ VPN server appears to be installed
+✓ VPN containers are running
+
+Diagnostic Summary
+✓ No issues found. System is ready for VPN operations!
+```
+
+### Advanced Diagnostics
+
+```bash
+# Show detailed system information
+vpn info
+
+# Check privilege status
+vpn privileges
+
+# Run performance benchmarks
+vpn benchmark
+
+# Validate configuration files
+vpn config validate
+```
+
+### Automatic Issue Resolution
+
+When using `--fix` option, the system automatically attempts to resolve:
+- Missing installation directories
+- Basic permission issues
+- Configuration file problems
+- Container restart requirements
+
+```bash
+# Example with auto-fix
+vpn doctor --fix
 ```
 
 ## 🔄 Migration Guide
@@ -642,6 +905,18 @@ vpn benchmark --concurrent-users 100
 
 ## 🔍 Troubleshooting
 
+Before diving into specific issues, always start with the automated diagnostic tool:
+
+```bash
+# Run comprehensive system diagnostics
+vpn doctor
+
+# Run diagnostics with automatic fixes
+vpn doctor --fix
+```
+
+The `vpn doctor` command will check for common issues and provide specific guidance for resolution.
+
 ### Common Issues
 
 #### Build Issues
@@ -657,17 +932,89 @@ cargo clean
 cargo build --verbose
 ```
 
+#### Installation Issues
+
+```bash
+# Permission denied error during installation
+sudo vpn install --protocol vless --port 8443
+
+# Check Docker permissions
+sudo usermod -aG docker $USER
+# Logout and login again for group changes to take effect
+
+# Installation verification failed
+vpn doctor                    # Check system status
+docker-compose logs          # Check container logs
+docker ps                    # Verify containers are running
+
+# Container health check failed
+docker-compose restart       # Restart containers
+docker system prune          # Clean up Docker resources
+```
+
+#### Privilege and Permission Issues
+
+```bash
+# Check current privilege status
+vpn privileges
+
+# Permission denied error
+# → The system will automatically request sudo when needed
+vpn install --protocol vless --port 8443  # Auto-requests privileges
+
+# Manual privilege elevation if automatic fails
+sudo vpn install --protocol vless --port 8443
+
+# Interactive menu without privileges
+vpn menu                     # Works in read-only mode
+# → Specific operations will request privileges as needed
+
+# Add user to docker group to avoid sudo for Docker operations
+sudo usermod -aG docker $USER
+# Logout and login again for changes to take effect
+
+# Check Docker permissions
+docker ps                    # Should work without sudo after group change
+```
+
+#### Uninstallation Issues
+
+```bash
+# Standard server removal
+vpn uninstall
+
+# Complete cleanup (removes everything)
+vpn uninstall --purge
+
+# Force uninstall without confirmations
+vpn uninstall --purge --force
+
+# Manual cleanup if uninstall fails
+sudo docker-compose -f /opt/vpn/docker-compose.yml down -v
+sudo rm -rf /opt/vpn
+sudo ufw delete allow 8443
+sudo docker system prune -f
+
+# Check for remaining components
+docker ps -a | grep vpn
+docker images | grep -E "(xray|shadowsocks|outline)"
+sudo find / -name "*vpn*" -type d 2>/dev/null
+```
+
 #### Runtime Issues
 
 ```bash
-# Check system requirements
+# Check system requirements and run full diagnostics
 vpn doctor
+
+# Run diagnostics with automatic fixes
+vpn doctor --fix
 
 # Validate configuration
 vpn config validate
 
-# Run diagnostics
-vpn diagnose --full
+# Show detailed system information
+vpn info
 
 # Enable debug logging
 VPN_LOG_LEVEL=debug vpn status
@@ -684,6 +1031,35 @@ sudo usermod -aG docker $USER
 
 # Test Docker connectivity
 vpn docker test
+```
+
+#### Docker Network Conflicts
+
+```bash
+# Automatic fix for network conflicts
+vpn fix-networks
+
+# Manual troubleshooting
+docker network ls                              # List all networks
+docker network prune -f                       # Remove unused networks
+
+# If "Pool overlaps with other one" error occurs:
+docker network rm $(docker network ls -q --filter name=vpn)  # Remove VPN networks
+docker system prune -f                        # Clean up Docker system
+sudo systemctl restart docker                 # Restart Docker daemon
+
+# Check for conflicting subnet ranges
+docker network inspect bridge                 # Check default bridge network
+ip route show                                 # Check system routing table
+
+# Alternative: Use different subnet in compose file
+# Edit docker-compose.yml and add:
+# networks:
+#   vpn-network:
+#     driver: bridge
+#     ipam:
+#       config:
+#         - subnet: 172.30.0.0/16              # Use different subnet
 ```
 
 #### Network Issues

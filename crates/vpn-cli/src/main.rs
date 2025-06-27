@@ -9,11 +9,17 @@ use vpn_cli::{Cli, Commands, InteractiveMenu, CommandHandler, ConfigManager, Cli
 async fn main() {
     let cli = Cli::parse();
     
-    // Check and request privileges if needed
-    if let Err(e) = PrivilegeManager::ensure_root_privileges() {
-        eprintln!("{} {}", "Error:".red(), e);
-        process::exit(1);
+    // Check and request privileges if needed for specific commands
+    if let Some(ref _command) = cli.command {
+        let args: Vec<String> = std::env::args().collect();
+        if PrivilegeManager::command_needs_root(&args) {
+            if let Err(e) = PrivilegeManager::ensure_root_privileges() {
+                eprintln!("{} {}", "Error:".red(), e);
+                process::exit(1);
+            }
+        }
     }
+    // For interactive menu, privilege checks are done per-operation
     
     // Initialize configuration
     let config_manager = match ConfigManager::new(cli.config.clone()) {
@@ -111,6 +117,9 @@ async fn execute_command(
         Commands::Diagnostics { fix } => {
             handler.run_diagnostics(fix).await
         }
+        Commands::Doctor { fix } => {
+            handler.run_diagnostics(fix).await
+        }
         Commands::Info => {
             handler.show_system_info().await
         }
@@ -120,6 +129,9 @@ async fn execute_command(
         Commands::Privileges => {
             PrivilegeManager::show_privilege_status();
             Ok(())
+        }
+        Commands::FixNetworks => {
+            handler.fix_network_conflicts().await
         }
     }
 }

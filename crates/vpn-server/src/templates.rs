@@ -54,9 +54,7 @@ impl DockerComposeTemplate {
     ) -> Result<String> {
         let restart_policy = if options.auto_start { "unless-stopped" } else { "no" };
         
-        let compose = format!(r#"version: '3.8'
-
-services:
+        let compose = format!(r#"services:
   xray:
     image: ghcr.io/xtls/xray-core:latest
     container_name: xray
@@ -95,9 +93,6 @@ services:
 networks:
   vpn-network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
 "#, restart_policy, server_config.port, restart_policy);
         
         Ok(compose)
@@ -110,9 +105,7 @@ networks:
     ) -> Result<String> {
         let restart_policy = if options.auto_start { "unless-stopped" } else { "no" };
         
-        let compose = format!(r#"version: '3.8'
-
-services:
+        let compose = format!(r#"services:
   shadowbox:
     image: quay.io/outline/shadowbox:stable
     container_name: shadowbox

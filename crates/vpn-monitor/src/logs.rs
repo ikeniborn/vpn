@@ -329,7 +329,7 @@ impl LogAnalyzer {
             pattern_filter: None,
         };
         
-        let stats = self.analyze_logs(install_path, options).await?;
+        let _stats = self.analyze_logs(install_path, options).await?;
         
         // This is a simplified implementation - in practice, you'd need to
         // return the actual log entries, not just stats
@@ -340,7 +340,7 @@ impl LogAnalyzer {
         &self,
         install_path: &Path,
         query: &str,
-        limit: Option<usize>,
+        _limit: Option<usize>,
     ) -> Result<Vec<LogEntry>> {
         let options = LogAnalysisOptions {
             time_range: None,

@@ -1,9 +1,9 @@
 use dialoguer::{theme::ColorfulTheme, Select, Input, Confirm, FuzzySelect};
 use console::{style, Term};
 use crossterm::{execute, terminal::{Clear, ClearType}};
-use std::io::{self, Write};
+use std::io;
 
-use crate::{CommandHandler, CliError, Result};
+use crate::{CommandHandler, Result};
 use crate::utils::display;
 
 pub struct InteractiveMenu {
@@ -293,6 +293,7 @@ impl InteractiveMenu {
             .interact()?;
 
         if confirm {
+            self.check_admin_privileges("VPN server installation")?;
             display::info("Starting installation...");
             self.handler.install_server(protocol, port, sni, firewall, auto_start).await?;
             display::success("Server installed successfully!");
@@ -319,6 +320,7 @@ impl InteractiveMenu {
             "Restart Server",
             "Reload Configuration",
             "Show Status",
+            "Uninstall Server",
             "Back to Main Menu",
         ];
 
@@ -330,11 +332,13 @@ impl InteractiveMenu {
 
         match selection {
             0 => {
+                self.check_admin_privileges("Server start")?;
                 display::info("Starting server...");
                 self.handler.start_server().await?;
                 display::success("Server started successfully!");
             }
             1 => {
+                self.check_admin_privileges("Server stop")?;
                 let confirm = Confirm::with_theme(&ColorfulTheme::default())
                     .with_prompt("Are you sure you want to stop the server?")
                     .default(false)
@@ -347,11 +351,13 @@ impl InteractiveMenu {
                 }
             }
             2 => {
+                self.check_admin_privileges("Server restart")?;
                 display::info("Restarting server...");
                 self.handler.restart_server().await?;
                 display::success("Server restarted successfully!");
             }
             3 => {
+                self.check_admin_privileges("Configuration reload")?;
                 display::info("Reloading configuration...");
                 self.handler.reload_server().await?;
                 display::success("Configuration reloaded successfully!");
@@ -359,11 +365,14 @@ impl InteractiveMenu {
             4 => {
                 self.handler.show_status(true, false).await?;
             }
-            5 => return Ok(()),
+            5 => {
+                self.uninstall_server_interactive().await?;
+            }
+            6 => return Ok(()),
             _ => {}
         }
 
-        if selection < 5 {
+        if selection < 6 {
             self.wait_for_keypress()?;
         }
         Ok(())
@@ -474,6 +483,7 @@ impl InteractiveMenu {
             _ => crate::cli::Protocol::Vless,
         };
 
+        self.check_admin_privileges("User creation")?;
         display::info("Creating user...");
         self.handler.create_user(name, email, protocol).await?;
         display::success("User created successfully!");
@@ -681,7 +691,7 @@ impl InteractiveMenu {
 
         match selection {
             0 => {
-                let hours: String = Input::with_theme(&ColorfulTheme::default())
+                let _hours: String = Input::with_theme(&ColorfulTheme::default())
                     .with_prompt("Time period in hours")
                     .default("24".to_string())
                     .validate_with(|input: &String| -> std::result::Result<(), &str> {
@@ -695,7 +705,7 @@ impl InteractiveMenu {
                 self.handler.show_traffic_stats().await?;
             }
             1 => {
-                let watch = Confirm::with_theme(&ColorfulTheme::default())
+                let _watch = Confirm::with_theme(&ColorfulTheme::default())
                     .with_prompt("Continuous monitoring?")
                     .default(false)
                     .interact()?;
@@ -1002,6 +1012,76 @@ impl InteractiveMenu {
 
         self.handler.show_system_info().await?;
         self.wait_for_keypress()?;
+        Ok(())
+    }
+
+    fn check_admin_privileges(&self, operation: &str) -> Result<()> {
+        if !crate::PrivilegeManager::is_root() {
+            display::warning(&format!("{} requires administrator privileges.", operation));
+            return Err(crate::CliError::PermissionError(
+                format!("Please run with administrator privileges: sudo vpn menu")
+            ));
+        }
+        Ok(())
+    }
+
+    async fn uninstall_server_interactive(&mut self) -> Result<()> {
+        println!("{}", style("Server Uninstallation").red().bold());
+        println!();
+        
+        // Check if server is installed
+        if !self.handler.is_server_installed().await? {
+            display::warning("No VPN server installation found!");
+            return Ok(());
+        }
+        
+        display::warning("⚠️  This will completely remove the VPN server!");
+        display::warning("   • All containers will be stopped and removed");
+        display::warning("   • Firewall rules will be cleaned up");
+        display::warning("   • Configuration files will be deleted");
+        println!();
+        
+        // Ask for purge option
+        let purge = Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt("Also remove Docker images and log files? (Complete cleanup)")
+            .default(false)
+            .interact()?;
+        
+        if purge {
+            display::warning("   • Docker images will be removed");
+            display::warning("   • All log files will be deleted");
+            display::warning("   • This cannot be undone!");
+            println!();
+        }
+        
+        // Final confirmation
+        let confirm = Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt("Are you sure you want to proceed with uninstallation?")
+            .default(false)
+            .interact()?;
+        
+        if confirm {
+            self.check_admin_privileges("Server uninstallation")?;
+            display::info("Starting server uninstallation...");
+            
+            match self.handler.uninstall_server(purge).await {
+                Ok(_) => {
+                    display::success("Server uninstalled successfully!");
+                    println!();
+                    display::info("The VPN server has been completely removed from this system.");
+                    if !purge {
+                        display::info("Note: Some Docker images and logs may still remain.");
+                        display::info("Use 'Complete cleanup' option to remove everything.");
+                    }
+                }
+                Err(e) => {
+                    display::error(&format!("Uninstallation failed: {}", e));
+                }
+            }
+        } else {
+            display::info("Uninstallation cancelled.");
+        }
+        
         Ok(())
     }
 

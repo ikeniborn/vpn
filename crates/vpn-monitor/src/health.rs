@@ -93,7 +93,7 @@ impl HealthMonitor {
     }
     
     pub async fn check_overall_health(&self) -> Result<HealthStatus> {
-        let start_time = std::time::Instant::now();
+        let _start_time = std::time::Instant::now();
         
         // Check container health
         let containers = self.check_container_health().await?;

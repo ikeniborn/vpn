@@ -47,7 +47,8 @@ impl FirewallManager {
     }
     
     pub async fn add_ufw_rule(rule: &FirewallRule) -> Result<()> {
-        let mut cmd = Command::new("ufw");
+        let mut cmd = Command::new("sudo");
+        cmd.arg("ufw");
         cmd.arg("allow");
         
         if let Some(source) = &rule.source {
@@ -79,7 +80,8 @@ impl FirewallManager {
     }
     
     pub async fn remove_ufw_rule(rule: &FirewallRule) -> Result<()> {
-        let mut cmd = Command::new("ufw");
+        let mut cmd = Command::new("sudo");
+        cmd.arg("ufw");
         cmd.arg("delete").arg("allow");
         
         cmd.arg("to").arg("any");
@@ -111,7 +113,8 @@ impl FirewallManager {
             )),
         };
         
-        let mut cmd = Command::new("iptables");
+        let mut cmd = Command::new("sudo");
+        cmd.arg("iptables");
         cmd.arg("-A").arg(chain);
         
         if let Some(source) = &rule.source {
@@ -158,7 +161,8 @@ impl FirewallManager {
     }
     
     pub async fn enable_ufw() -> Result<()> {
-        let output = Command::new("ufw")
+        let output = Command::new("sudo")
+            .arg("ufw")
             .arg("--force")
             .arg("enable")
             .output().await?;
@@ -173,7 +177,8 @@ impl FirewallManager {
     }
     
     pub async fn check_ufw_status() -> Result<bool> {
-        let output = Command::new("ufw")
+        let output = Command::new("sudo")
+            .arg("ufw")
             .arg("status")
             .output().await?;
         
@@ -188,7 +193,8 @@ impl FirewallManager {
     }
     
     pub async fn list_ufw_rules() -> Result<Vec<String>> {
-        let output = Command::new("ufw")
+        let output = Command::new("sudo")
+            .arg("ufw")
             .arg("status")
             .arg("numbered")
             .output().await?;
@@ -210,7 +216,8 @@ impl FirewallManager {
     }
     
     pub async fn save_iptables_rules(path: &str) -> Result<()> {
-        let output = Command::new("iptables-save")
+        let output = Command::new("sudo")
+            .arg("iptables-save")
             .output().await?;
         
         if !output.status.success() {

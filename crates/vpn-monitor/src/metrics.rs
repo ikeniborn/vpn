@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use crate::health::{HealthMonitor, HealthStatus};
 use crate::traffic::{TrafficMonitor, TrafficSummary};
-use crate::error::{MonitorError, Result};
+use crate::error::Result;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceMetrics {

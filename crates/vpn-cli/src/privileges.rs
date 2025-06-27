@@ -25,7 +25,7 @@ impl PrivilegeManager {
         // Commands that typically need root access
         let root_commands = [
             "install", "uninstall", "start", "stop", "restart", 
-            "reload", "diagnostics", "security", "menu"
+            "reload", "diagnostics", "security", "fix-networks"
         ];
         
         // User management write operations also need root

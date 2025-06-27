@@ -33,6 +33,11 @@ pub fn subheader(title: &str) {
     println!("{}", "-".repeat(title.len()).yellow());
 }
 
+pub fn section(title: &str) {
+    println!();
+    println!("{}", title.cyan().bold());
+}
+
 pub fn format_bytes(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
     const THRESHOLD: f64 = 1024.0;

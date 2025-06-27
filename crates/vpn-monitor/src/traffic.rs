@@ -4,7 +4,7 @@ use std::process::Command;
 use chrono::{DateTime, Utc, Duration};
 use serde::{Deserialize, Serialize};
 use vpn_docker::{ContainerManager, HealthChecker};
-use vpn_users::UserManager;
+// use vpn_users::UserManager;
 use crate::error::{MonitorError, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,10 +72,10 @@ impl TrafficMonitor {
         };
         
         // Collect Docker container stats
-        let container_stats = self.collect_container_stats().await?;
+        let _container_stats = self.collect_container_stats().await?;
         
         // Collect vnStat data if available
-        let vnstat_data = self.collect_vnstat_data().await.unwrap_or_default();
+        let _vnstat_data = self.collect_vnstat_data().await.unwrap_or_default();
         
         // Parse Xray logs for user-specific data
         let user_stats = self.parse_xray_logs(install_path).await?;
@@ -266,7 +266,7 @@ impl TrafficMonitor {
         // This would typically update a database
         // For Xray, we might need to restart the service or clear logs
         
-        let user_log_pattern = format!("*{}*", user_id);
+        let _user_log_pattern = format!("*{}*", user_id);
         let logs_dir = install_path.join("logs");
         
         // Archive current logs

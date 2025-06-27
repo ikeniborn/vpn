@@ -123,6 +123,13 @@ pub enum Commands {
         fix: bool,
     },
 
+    /// Run system compatibility check (alias for diagnostics)
+    Doctor {
+        /// Fix issues automatically
+        #[arg(short, long)]
+        fix: bool,
+    },
+
     /// Show system information
     Info,
 
@@ -131,6 +138,9 @@ pub enum Commands {
 
     /// Show privilege status
     Privileges,
+    
+    /// Fix Docker network conflicts
+    FixNetworks,
 }
 
 #[derive(Subcommand, Clone)]
