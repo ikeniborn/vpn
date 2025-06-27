@@ -1,0 +1,43 @@
+[package]
+name = "vpn-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "vpn"
+path = "src/main.rs"
+
+[dependencies]
+vpn-docker = { path = "../vpn-docker" }
+vpn-crypto = { path = "../vpn-crypto" }
+vpn-network = { path = "../vpn-network" }
+vpn-users = { path = "../vpn-users" }
+vpn-server = { path = "../vpn-server" }
+vpn-monitor = { path = "../vpn-monitor" }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+clap = { version = "4.4", features = ["derive", "color", "suggestions"] }
+dialoguer = { version = "0.11", features = ["fuzzy-select"] }
+console = "0.15"
+indicatif = "0.17"
+colored = "2.1"
+tabled = "0.15"
+crossterm = "0.27"
+dirs = "5.0"
+toml = { workspace = true }
+base64 = { workspace = true }
+chrono = "0.4"
+regex = "1.10"
+uuid = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3.8"
+tokio-test = "0.4"
+criterion = { version = "0.5", features = ["html_reports"] }

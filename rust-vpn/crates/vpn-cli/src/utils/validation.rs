@@ -1,0 +1,359 @@
+use std::net::{IpAddr, SocketAddr};
+use std::path::Path;
+use regex::Regex;
+use crate::error::{CliError, Result};
+
+pub fn validate_username(username: &str) -> Result<()> {
+    if username.is_empty() {
+        return Err(CliError::ValidationError("Username cannot be empty".to_string()));
+    }
+    
+    if username.len() > 50 {
+        return Err(CliError::ValidationError("Username too long (max 50 characters)".to_string()));
+    }
+    
+    // Check for valid characters (alphanumeric, dash, underscore)
+    let valid_regex = Regex::new(r"^[a-zA-Z0-9_-]+$").unwrap();
+    if !valid_regex.is_match(username) {
+        return Err(CliError::ValidationError(
+            "Username can only contain letters, numbers, dash, and underscore".to_string()
+        ));
+    }
+    
+    // Cannot start with dash or underscore
+    if username.starts_with('-') || username.starts_with('_') {
+        return Err(CliError::ValidationError(
+            "Username cannot start with dash or underscore".to_string()
+        ));
+    }
+    
+    Ok(())
+}
+
+pub fn validate_email(email: &str) -> Result<()> {
+    if email.is_empty() {
+        return Err(CliError::ValidationError("Email cannot be empty".to_string()));
+    }
+    
+    // Basic email validation
+    let email_regex = Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap();
+    if !email_regex.is_match(email) {
+        return Err(CliError::ValidationError("Invalid email format".to_string()));
+    }
+    
+    Ok(())
+}
+
+pub fn validate_port(port: u16) -> Result<()> {
+    if port == 0 {
+        return Err(CliError::ValidationError("Port cannot be 0".to_string()));
+    }
+    
+    if port < 1024 {
+        return Err(CliError::ValidationError(
+            "Port numbers below 1024 are privileged ports".to_string()
+        ));
+    }
+    
+    // Check for commonly used ports that might conflict
+    let reserved_ports = [22, 80, 443, 53, 25, 110, 993, 995];
+    if reserved_ports.contains(&port) {
+        return Err(CliError::ValidationError(
+            format!("Port {} is commonly used by other services", port)
+        ));
+    }
+    
+    Ok(())
+}
+
+pub fn validate_ip_address(ip: &str) -> Result<IpAddr> {
+    ip.parse::<IpAddr>()
+        .map_err(|_| CliError::ValidationError(format!("Invalid IP address: {}", ip)))
+}
+
+pub fn validate_socket_address(addr: &str) -> Result<SocketAddr> {
+    addr.parse::<SocketAddr>()
+        .map_err(|_| CliError::ValidationError(format!("Invalid socket address: {}", addr)))
+}
+
+pub fn validate_domain_name(domain: &str) -> Result<()> {
+    if domain.is_empty() {
+        return Err(CliError::ValidationError("Domain name cannot be empty".to_string()));
+    }
+    
+    if domain.len() > 253 {
+        return Err(CliError::ValidationError("Domain name too long (max 253 characters)".to_string()));
+    }
+    
+    // Check for valid domain format
+    let domain_regex = Regex::new(r"^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$").unwrap();
+    if !domain_regex.is_match(domain) {
+        return Err(CliError::ValidationError("Invalid domain name format".to_string()));
+    }
+    
+    // Must contain at least one dot for FQDN
+    if !domain.contains('.') {
+        return Err(CliError::ValidationError("Domain name must be fully qualified (contain at least one dot)".to_string()));
+    }
+    
+    // Check each label
+    for label in domain.split('.') {
+        if label.is_empty() {
+            return Err(CliError::ValidationError("Domain labels cannot be empty".to_string()));
+        }
+        
+        if label.len() > 63 {
+            return Err(CliError::ValidationError("Domain labels cannot exceed 63 characters".to_string()));
+        }
+        
+        if label.starts_with('-') || label.ends_with('-') {
+            return Err(CliError::ValidationError("Domain labels cannot start or end with dash".to_string()));
+        }
+    }
+    
+    Ok(())
+}
+
+pub fn validate_file_path(path: &str, must_exist: bool) -> Result<()> {
+    let path = Path::new(path);
+    
+    if must_exist && !path.exists() {
+        return Err(CliError::ValidationError(format!("File does not exist: {}", path.display())));
+    }
+    
+    if path.exists() && path.is_dir() {
+        return Err(CliError::ValidationError(format!("Path is a directory, not a file: {}", path.display())));
+    }
+    
+    // Check if parent directory exists
+    if let Some(parent) = path.parent() {
+        if !parent.exists() {
+            return Err(CliError::ValidationError(
+                format!("Parent directory does not exist: {}", parent.display())
+            ));
+        }
+    }
+    
+    Ok(())
+}
+
+pub fn validate_directory_path(path: &str, must_exist: bool) -> Result<()> {
+    let path = Path::new(path);
+    
+    if must_exist && !path.exists() {
+        return Err(CliError::ValidationError(format!("Directory does not exist: {}", path.display())));
+    }
+    
+    if path.exists() && !path.is_dir() {
+        return Err(CliError::ValidationError(format!("Path is not a directory: {}", path.display())));
+    }
+    
+    Ok(())
+}
+
+pub fn validate_json_string(json: &str) -> Result<serde_json::Value> {
+    serde_json::from_str(json)
+        .map_err(|e| CliError::ValidationError(format!("Invalid JSON: {}", e)))
+}
+
+pub fn validate_uuid(uuid: &str) -> Result<()> {
+    uuid::Uuid::parse_str(uuid)
+        .map_err(|_| CliError::ValidationError(format!("Invalid UUID format: {}", uuid)))?;
+    Ok(())
+}
+
+pub fn validate_base64(base64: &str) -> Result<()> {
+    use base64::Engine;
+    base64::prelude::BASE64_STANDARD.decode(base64)
+        .map_err(|_| CliError::ValidationError(format!("Invalid Base64 encoding: {}", base64)))?;
+    Ok(())
+}
+
+pub fn validate_protocol_name(protocol: &str) -> Result<()> {
+    let valid_protocols = ["vless", "vmess", "trojan", "shadowsocks", "socks", "http"];
+    
+    if !valid_protocols.contains(&protocol.to_lowercase().as_str()) {
+        return Err(CliError::ValidationError(
+            format!("Unsupported protocol: {}. Valid protocols: {}", 
+                protocol, valid_protocols.join(", "))
+        ));
+    }
+    
+    Ok(())
+}
+
+pub fn validate_log_level(level: &str) -> Result<()> {
+    let valid_levels = ["trace", "debug", "info", "warn", "error", "off"];
+    
+    if !valid_levels.contains(&level.to_lowercase().as_str()) {
+        return Err(CliError::ValidationError(
+            format!("Invalid log level: {}. Valid levels: {}", 
+                level, valid_levels.join(", "))
+        ));
+    }
+    
+    Ok(())
+}
+
+pub fn validate_output_format(format: &str) -> Result<()> {
+    let valid_formats = ["json", "table", "plain", "yaml"];
+    
+    if !valid_formats.contains(&format.to_lowercase().as_str()) {
+        return Err(CliError::ValidationError(
+            format!("Invalid output format: {}. Valid formats: {}", 
+                format, valid_formats.join(", "))
+        ));
+    }
+    
+    Ok(())
+}
+
+pub fn validate_positive_integer(value: &str, field_name: &str) -> Result<u64> {
+    let num = value.parse::<u64>()
+        .map_err(|_| CliError::ValidationError(
+            format!("{} must be a valid positive integer", field_name)
+        ))?;
+    
+    if num == 0 {
+        return Err(CliError::ValidationError(
+            format!("{} must be greater than 0", field_name)
+        ));
+    }
+    
+    Ok(num)
+}
+
+pub fn validate_percentage(value: f64, field_name: &str) -> Result<()> {
+    if !(0.0..=100.0).contains(&value) {
+        return Err(CliError::ValidationError(
+            format!("{} must be between 0 and 100", field_name)
+        ));
+    }
+    Ok(())
+}
+
+pub fn validate_config_key_path(path: &str) -> Result<()> {
+    // Validate configuration key path like "server.port" or "monitoring.alerts.cpu_threshold"
+    if path.is_empty() {
+        return Err(CliError::ValidationError("Config key path cannot be empty".to_string()));
+    }
+    
+    let key_regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)*$").unwrap();
+    if !key_regex.is_match(path) {
+        return Err(CliError::ValidationError(
+            "Invalid config key path format. Use dot notation like 'section.key'".to_string()
+        ));
+    }
+    
+    Ok(())
+}
+
+pub fn sanitize_filename(filename: &str) -> String {
+    // Remove or replace invalid filename characters
+    let invalid_chars_regex = Regex::new(r#"[<>:"/\\|?*]"#).unwrap();
+    let sanitized = invalid_chars_regex.replace_all(filename, "_");
+    
+    // Trim whitespace and dots from ends
+    sanitized.trim_matches(|c: char| c.is_whitespace() || c == '.').to_string()
+}
+
+pub fn validate_backup_retention_days(days: u32) -> Result<()> {
+    if days == 0 {
+        return Err(CliError::ValidationError(
+            "Backup retention must be at least 1 day".to_string()
+        ));
+    }
+    
+    if days > 365 {
+        return Err(CliError::ValidationError(
+            "Backup retention cannot exceed 365 days".to_string()
+        ));
+    }
+    
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_username() {
+        assert!(validate_username("valid_user123").is_ok());
+        assert!(validate_username("user-name").is_ok());
+        assert!(validate_username("").is_err());
+        assert!(validate_username("-invalid").is_err());
+        assert!(validate_username("_invalid").is_err());
+        assert!(validate_username("user with spaces").is_err());
+    }
+
+    #[test]
+    fn test_validate_email() {
+        assert!(validate_email("user@example.com").is_ok());
+        assert!(validate_email("test.email+tag@domain.co.uk").is_ok());
+        assert!(validate_email("invalid-email").is_err());
+        assert!(validate_email("@domain.com").is_err());
+        assert!(validate_email("user@").is_err());
+    }
+
+    #[test]
+    fn test_validate_port() {
+        assert!(validate_port(8080).is_ok());
+        assert!(validate_port(65535).is_ok());
+        assert!(validate_port(0).is_err());
+        assert!(validate_port(80).is_err()); // Reserved port
+        assert!(validate_port(443).is_err()); // Reserved port
+    }
+
+    #[test]
+    fn test_validate_domain_name() {
+        assert!(validate_domain_name("example.com").is_ok());
+        assert!(validate_domain_name("sub.domain.example.org").is_ok());
+        assert!(validate_domain_name("localhost").is_err()); // No dot
+        assert!(validate_domain_name(".example.com").is_err()); // Starts with dot
+        assert!(validate_domain_name("example..com").is_err()); // Double dot
+    }
+
+    #[test]
+    fn test_validate_ip_address() {
+        assert!(validate_ip_address("192.168.1.1").is_ok());
+        assert!(validate_ip_address("::1").is_ok());
+        assert!(validate_ip_address("2001:db8::1").is_ok());
+        assert!(validate_ip_address("invalid-ip").is_err());
+        assert!(validate_ip_address("256.256.256.256").is_err());
+    }
+
+    #[test]
+    fn test_validate_protocol_name() {
+        assert!(validate_protocol_name("vless").is_ok());
+        assert!(validate_protocol_name("VLESS").is_ok()); // Case insensitive
+        assert!(validate_protocol_name("shadowsocks").is_ok());
+        assert!(validate_protocol_name("invalid-protocol").is_err());
+    }
+
+    #[test]
+    fn test_validate_percentage() {
+        assert!(validate_percentage(50.0, "test").is_ok());
+        assert!(validate_percentage(0.0, "test").is_ok());
+        assert!(validate_percentage(100.0, "test").is_ok());
+        assert!(validate_percentage(-1.0, "test").is_err());
+        assert!(validate_percentage(101.0, "test").is_err());
+    }
+
+    #[test]
+    fn test_sanitize_filename() {
+        assert_eq!(sanitize_filename("valid_filename.txt"), "valid_filename.txt");
+        assert_eq!(sanitize_filename("file<>with|invalid*chars.txt"), "file__with_invalid_chars.txt");
+        assert_eq!(sanitize_filename("  .trimmed.  "), "trimmed");
+    }
+
+    #[test]
+    fn test_validate_config_key_path() {
+        assert!(validate_config_key_path("server.port").is_ok());
+        assert!(validate_config_key_path("monitoring.alerts.cpu_threshold").is_ok());
+        assert!(validate_config_key_path("").is_err());
+        assert!(validate_config_key_path(".invalid").is_err());
+        assert!(validate_config_key_path("invalid.").is_err());
+        assert!(validate_config_key_path("invalid..path").is_err());
+    }
+}
