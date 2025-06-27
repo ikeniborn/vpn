@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
-use tokio::sync::RwLock;
+use dashmap::DashMap;
 use crate::user::{User, UserStatus, VpnProtocol};
 use crate::config::{ConfigGenerator, ServerConfig};
 use crate::links::ConnectionLinkGenerator;
@@ -9,7 +9,7 @@ use crate::error::{UserError, Result};
 use vpn_crypto::QrCodeGenerator;
 
 pub struct UserManager {
-    users: RwLock<HashMap<String, User>>,
+    users: DashMap<String, User>,
     storage_path: PathBuf,
     max_users: Option<usize>,
     server_config: ServerConfig,
@@ -50,7 +50,7 @@ impl UserManager {
         }
         
         let manager = Self {
-            users: RwLock::new(HashMap::new()),
+            users: DashMap::new(),
             storage_path,
             max_users: None,
             server_config,
@@ -70,20 +70,23 @@ impl UserManager {
         self.read_only_mode
     }
     
+    pub fn get_users_directory(&self) -> &Path {
+        &self.storage_path
+    }
+    
     pub async fn create_user(&self, name: String, protocol: VpnProtocol) -> Result<User> {
         if self.read_only_mode {
             return Err(UserError::ReadOnlyMode);
         }
         
-        let mut users = self.users.write().await;
-        
         if let Some(max) = self.max_users {
-            if users.len() >= max {
+            if self.users.len() >= max {
                 return Err(UserError::UserLimitExceeded(max));
             }
         }
         
-        if users.values().any(|u| u.name == name) {
+        // Check if user with this name already exists
+        if self.users.iter().any(|entry| entry.value().name == name) {
             return Err(UserError::UserAlreadyExists(name));
         }
         
@@ -99,8 +102,7 @@ impl UserManager {
         user.config.server_port = self.server_config.port;
         user.config.sni = self.server_config.sni.clone();
         
-        users.insert(user.id.clone(), user.clone());
-        drop(users);
+        self.users.insert(user.id.clone(), user.clone());
         
         self.save_user_to_disk(&user).await?;
         self.regenerate_server_config().await?;
@@ -109,17 +111,15 @@ impl UserManager {
     }
     
     pub async fn get_user(&self, id: &str) -> Result<User> {
-        let users = self.users.read().await;
-        users.get(id)
-            .cloned()
+        self.users.get(id)
+            .map(|entry| entry.value().clone())
             .ok_or_else(|| UserError::UserNotFound(id.to_string()))
     }
     
     pub async fn get_user_by_name(&self, name: &str) -> Result<User> {
-        let users = self.users.read().await;
-        users.values()
-            .find(|u| u.name == name)
-            .cloned()
+        self.users.iter()
+            .find(|entry| entry.value().name == name)
+            .map(|entry| entry.value().clone())
             .ok_or_else(|| UserError::UserNotFound(name.to_string()))
     }
     
@@ -128,15 +128,12 @@ impl UserManager {
             return Err(UserError::ReadOnlyMode);
         }
         
-        let mut users = self.users.write().await;
-        
-        if !users.contains_key(&user.id) {
+        if !self.users.contains_key(&user.id) {
             return Err(UserError::UserNotFound(user.id));
         }
         
         user.update_last_active();
-        users.insert(user.id.clone(), user.clone());
-        drop(users);
+        self.users.insert(user.id.clone(), user.clone());
         
         self.save_user_to_disk(&user).await?;
         self.regenerate_server_config().await?;
@@ -149,12 +146,9 @@ impl UserManager {
             return Err(UserError::ReadOnlyMode);
         }
         
-        let mut users = self.users.write().await;
-        
-        let user = users.remove(id)
+        let user = self.users.remove(id)
+            .map(|(_, user)| user)
             .ok_or_else(|| UserError::UserNotFound(id.to_string()))?;
-        
-        drop(users);
         
         self.delete_user_from_disk(&user).await?;
         self.regenerate_server_config().await?;
@@ -163,8 +157,9 @@ impl UserManager {
     }
     
     pub async fn list_users(&self, options: Option<UserListOptions>) -> Result<Vec<User>> {
-        let users = self.users.read().await;
-        let mut user_list: Vec<User> = users.values().cloned().collect();
+        let mut user_list: Vec<User> = self.users.iter()
+            .map(|entry| entry.value().clone())
+            .collect();
         
         let options = options.unwrap_or_default();
         
@@ -203,13 +198,11 @@ impl UserManager {
     }
     
     pub async fn get_user_count(&self) -> usize {
-        let users = self.users.read().await;
-        users.len()
+        self.users.len()
     }
     
     pub async fn get_active_user_count(&self) -> usize {
-        let users = self.users.read().await;
-        users.values().filter(|u| u.is_active()).count()
+        self.users.iter().filter(|entry| entry.value().is_active()).count()
     }
     
     pub async fn generate_connection_link(&self, user_id: &str) -> Result<String> {
@@ -299,19 +292,18 @@ impl UserManager {
             }
         }
         
-        // Since we can't use async in this context, we'll use blocking write
-        // This is fine during initialization
-        if let Ok(mut user_map) = self.users.try_write() {
-            *user_map = users;
+        // Insert users into DashMap
+        for (id, user) in users {
+            self.users.insert(id, user);
         }
         
         Ok(())
     }
     
     async fn regenerate_server_config(&self) -> Result<()> {
-        let users = self.users.read().await;
-        let user_list: Vec<User> = users.values().cloned().collect();
-        drop(users);
+        let user_list: Vec<User> = self.users.iter()
+            .map(|entry| entry.value().clone())
+            .collect();
         
         let xray_config = ConfigGenerator::generate_xray_config(&user_list, &self.server_config)?;
         ConfigGenerator::validate_config(&xray_config)?;

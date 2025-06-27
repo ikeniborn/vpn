@@ -289,7 +289,7 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let server_config = ServerConfig::default();
         let user_manager = UserManager::new(temp_dir.path(), server_config).unwrap();
-        let batch_ops = BatchOperations::new(&user_manager);
+        let batch_ops = BatchOperations::new(Arc::new(user_manager));
         
         let request = BatchCreateRequest {
             names: vec!["user1".to_string(), "user2".to_string()],

@@ -3,6 +3,8 @@ use bollard::container::StatsOptions;
 use bollard::models::ContainerStateStatusEnum;
 use futures_util::stream::StreamExt;
 use std::time::Duration;
+use std::collections::HashMap;
+use tokio::task::JoinSet;
 use crate::error::{DockerError, Result};
 use crate::container::ContainerManager;
 
@@ -18,6 +20,21 @@ pub struct HealthStatus {
     pub network_tx_bytes: u64,
 }
 
+#[derive(Debug, Clone)]
+pub struct BatchHealthResult {
+    pub successful: HashMap<String, HealthStatus>,
+    pub failed: HashMap<String, String>,
+    pub total_duration: Duration,
+}
+
+#[derive(Debug, Clone)]
+pub struct BatchHealthOptions {
+    pub timeout: Duration,
+    pub max_concurrent: usize,
+    pub fail_fast: bool,
+}
+
+#[derive(Clone)]
 pub struct HealthChecker {
     docker: Docker,
     container_manager: ContainerManager,
@@ -109,6 +126,37 @@ impl HealthChecker {
         ))
     }
     
+    /// Wait for multiple containers to become healthy concurrently
+    pub async fn wait_for_multiple_healthy(
+        &self,
+        names: &[&str],
+        timeout: Duration
+    ) -> HashMap<String, Result<()>> {
+        let mut tasks = JoinSet::new();
+        
+        // Spawn concurrent wait tasks
+        for name in names {
+            let name = name.to_string();
+            let health_checker = self.clone();
+            
+            tasks.spawn(async move {
+                let result = health_checker.wait_for_healthy(&name, timeout).await;
+                (name, result)
+            });
+        }
+        
+        let mut results = HashMap::new();
+        
+        // Collect results
+        while let Some(task_result) = tasks.join_next().await {
+            if let Ok((name, result)) = task_result {
+                results.insert(name, result);
+            }
+        }
+        
+        results
+    }
+    
     pub async fn check_multiple_containers(&self, names: &[&str]) -> Vec<Result<HealthStatus>> {
         let mut results = Vec::new();
         
@@ -117,6 +165,162 @@ impl HealthChecker {
         }
         
         results
+    }
+    
+    /// Concurrent health check for multiple containers with batching
+    pub async fn batch_health_check(&self, names: &[&str], options: Option<BatchHealthOptions>) -> BatchHealthResult {
+        let start_time = std::time::Instant::now();
+        let options = options.unwrap_or_default();
+        
+        let mut successful = HashMap::new();
+        let mut failed = HashMap::new();
+        
+        // Create a semaphore to limit concurrent operations
+        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(options.max_concurrent));
+        let mut tasks = JoinSet::new();
+        
+        // Spawn concurrent health check tasks
+        for name in names {
+            let name = name.to_string();
+            let health_checker = self.clone();
+            let permit = semaphore.clone();
+            let timeout = options.timeout;
+            
+            tasks.spawn(async move {
+                let _permit = permit.acquire().await.expect("Semaphore closed");
+                
+                // Use timeout for individual health checks
+                let result = tokio::time::timeout(
+                    timeout,
+                    health_checker.check_container_health(&name)
+                ).await;
+                
+                match result {
+                    Ok(Ok(health_status)) => Ok((name, health_status)),
+                    Ok(Err(e)) => Err((name, e.to_string())),
+                    Err(_) => Err((name, format!("Health check timed out after {:?}", timeout))),
+                }
+            });
+        }
+        
+        // Collect results as they complete
+        while let Some(task_result) = tasks.join_next().await {
+            match task_result {
+                Ok(Ok((name, health_status))) => {
+                    successful.insert(name, health_status);
+                },
+                Ok(Err((name, error))) => {
+                    failed.insert(name.clone(), error);
+                    
+                    // Fail fast if requested and we have any failure
+                    if options.fail_fast {
+                        // Cancel remaining tasks
+                        tasks.abort_all();
+                        break;
+                    }
+                },
+                Err(join_error) => {
+                    failed.insert(
+                        "unknown".to_string(),
+                        format!("Task join error: {}", join_error)
+                    );
+                }
+            }
+        }
+        
+        BatchHealthResult {
+            successful,
+            failed,
+            total_duration: start_time.elapsed(),
+        }
+    }
+    
+    /// Concurrent health check with simplified API that returns Results
+    pub async fn check_multiple_containers_concurrent(&self, names: &[&str]) -> Vec<Result<HealthStatus>> {
+        let batch_result = self.batch_health_check(
+            names,
+            Some(BatchHealthOptions {
+                timeout: Duration::from_secs(30),
+                max_concurrent: 10,
+                fail_fast: false,
+            })
+        ).await;
+        
+        // Convert to the expected Vec<Result<HealthStatus>> format
+        let mut results = Vec::with_capacity(names.len());
+        
+        for name in names {
+            if let Some(health_status) = batch_result.successful.get(*name) {
+                results.push(Ok(health_status.clone()));
+            } else if let Some(error) = batch_result.failed.get(*name) {
+                results.push(Err(DockerError::HealthCheckFailed(error.clone())));
+            } else {
+                results.push(Err(DockerError::HealthCheckFailed(
+                    "Container not found in batch results".to_string()
+                )));
+            }
+        }
+        
+        results
+    }
+    
+    /// Batch health check for multiple containers with streaming results
+    pub async fn stream_batch_health_checks(
+        &self,
+        names: Vec<String>,
+        options: Option<BatchHealthOptions>
+    ) -> tokio::sync::mpsc::Receiver<(String, Result<HealthStatus>)> {
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        let options = options.unwrap_or_default();
+        
+        let health_checker = self.clone();
+        
+        tokio::spawn(async move {
+            let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(options.max_concurrent));
+            let mut tasks = JoinSet::new();
+            
+            // Spawn tasks for each container
+            for name in names {
+                let tx = tx.clone();
+                let health_checker = health_checker.clone();
+                let permit = semaphore.clone();
+                let timeout = options.timeout;
+                
+                tasks.spawn(async move {
+                    let _permit = permit.acquire().await.expect("Semaphore closed");
+                    
+                    let result = tokio::time::timeout(
+                        timeout,
+                        health_checker.check_container_health(&name)
+                    ).await;
+                    
+                    let health_result = match result {
+                        Ok(Ok(health_status)) => Ok(health_status),
+                        Ok(Err(e)) => Err(e),
+                        Err(_) => Err(DockerError::HealthCheckFailed(
+                            format!("Health check timed out after {:?}", timeout)
+                        )),
+                    };
+                    
+                    let _ = tx.send((name, health_result)).await;
+                });
+            }
+            
+            // Wait for all tasks to complete
+            while tasks.join_next().await.is_some() {}
+        });
+        
+        rx
+    }
+}
+
+impl Default for BatchHealthOptions {
+    fn default() -> Self {
+        Self {
+            timeout: Duration::from_secs(30),
+            max_concurrent: 10,
+            fail_fast: false,
+        }
     }
 }
 
