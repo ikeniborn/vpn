@@ -27,7 +27,10 @@ pub enum ServerError {
     DockerError(#[from] vpn_docker::DockerError),
     
     #[error("Network error: {0}")]
-    NetworkError(#[from] vpn_network::NetworkError),
+    NetworkError(String),
+    
+    #[error("VPN network error: {0}")]
+    VpnNetworkError(#[from] vpn_network::NetworkError),
     
     #[error("Crypto error: {0}")]
     CryptoError(#[from] vpn_crypto::CryptoError),

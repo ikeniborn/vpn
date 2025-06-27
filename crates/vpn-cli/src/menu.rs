@@ -295,7 +295,7 @@ impl InteractiveMenu {
         if confirm {
             self.check_admin_privileges("VPN server installation")?;
             display::info("Starting installation...");
-            self.handler.install_server(protocol, port, sni, firewall, auto_start).await?;
+            self.handler.install_server(protocol, port, sni, firewall, auto_start, None, false).await?;
             display::success("Server installed successfully!");
             
             // Show next steps

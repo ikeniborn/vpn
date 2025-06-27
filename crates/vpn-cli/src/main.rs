@@ -75,8 +75,8 @@ async fn execute_command(
     handler.set_force_mode(cli.force);
 
     match command {
-        Commands::Install { protocol, port, sni, firewall, auto_start } => {
-            handler.install_server(protocol, port, sni, firewall, auto_start).await
+        Commands::Install { protocol, port, sni, firewall, auto_start, subnet, interactive_subnet } => {
+            handler.install_server(protocol, port, sni, firewall, auto_start, subnet, interactive_subnet).await
         }
         Commands::Uninstall { purge } => {
             handler.uninstall_server(purge).await
@@ -130,8 +130,8 @@ async fn execute_command(
             PrivilegeManager::show_privilege_status();
             Ok(())
         }
-        Commands::FixNetworks => {
-            handler.fix_network_conflicts().await
+        Commands::NetworkCheck => {
+            handler.check_network_status().await
         }
     }
 }

@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 // removed unused imports
 use vpn_docker::ContainerManager;
-use vpn_network::{PortChecker, IpDetector, FirewallManager, FirewallRule};
+use vpn_network::{PortChecker, IpDetector, FirewallManager, FirewallRule, SubnetManager, VpnSubnet};
 use vpn_network::firewall::{Protocol, Direction};
 use vpn_crypto::{X25519KeyManager, UuidGenerator};
 use vpn_users::{UserManager, User};
@@ -21,6 +21,8 @@ pub struct InstallationOptions {
     pub auto_start: bool,
     pub log_level: LogLevel,
     pub reality_dest: Option<String>,
+    pub subnet: Option<String>,
+    pub interactive_subnet: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -83,14 +85,14 @@ impl ServerInstaller {
             self.setup_firewall_rules(server_config.port).await?;
         }
         
-        // Create Docker configuration (this will overwrite any existing files)
-        self.create_docker_configuration(&options, &server_config).await?;
+        // Select appropriate subnet for VPN
+        let selected_subnet = self.select_vpn_subnet(&options).await?;
+        
+        // Create Docker configuration with selected subnet
+        self.create_docker_configuration(&options, &server_config, Some(&selected_subnet.cidr)).await?;
         
         // Validate the new Docker Compose file
         self.validate_docker_compose_file(&options).await?;
-        
-        // Check and resolve network conflicts
-        self.resolve_network_conflicts(&options).await?;
         
         // Download and start containers
         self.deploy_containers(&options).await?;
@@ -221,6 +223,7 @@ impl ServerInstaller {
         &self,
         options: &InstallationOptions,
         server_config: &ServerConfig,
+        subnet: Option<&str>,
     ) -> Result<()> {
         let template = DockerComposeTemplate::new();
         
@@ -230,6 +233,7 @@ impl ServerInstaller {
                     &options.install_path,
                     server_config,
                     options,
+                    subnet,
                 ).await?;
             }
             VpnProtocol::Shadowsocks => {
@@ -237,6 +241,7 @@ impl ServerInstaller {
                     &options.install_path,
                     server_config,
                     options,
+                    subnet,
                 ).await?;
             }
             _ => {
@@ -312,94 +317,55 @@ impl ServerInstaller {
         Ok(())
     }
     
-    async fn resolve_network_conflicts(&self, options: &InstallationOptions) -> Result<()> {
-        println!("🔍 Checking for Docker network conflicts...");
-        
-        let compose_path = options.install_path.join("docker-compose.yml");
-        
-        // Always clean up existing installation first
-        if compose_path.exists() {
-            println!("🧹 Cleaning up existing VPN installation...");
+    async fn select_vpn_subnet(&self, options: &InstallationOptions) -> Result<VpnSubnet> {
+        // If subnet is already specified, validate it
+        if let Some(subnet) = &options.subnet {
+            println!("🔍 Validating specified subnet: {}", subnet);
             
-            // Stop existing containers
-            let stop_output = Command::new("docker-compose")
-                .arg("-f")
-                .arg(&compose_path)
-                .arg("down")
-                .arg("-v")
-                .arg("--remove-orphans")
-                .output();
-                
-            if let Ok(output) = stop_output {
-                if output.status.success() {
-                    println!("✓ Stopped existing containers");
-                } else {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    println!("⚠️ Warning: Issue stopping containers: {}", stderr.lines().next().unwrap_or(""));
-                }
-            }
-        }
-        
-        // Force remove any vpn-related networks
-        self.force_remove_vpn_networks().await?;
-        
-        // Clean up unused networks
-        let cleanup_output = Command::new("docker")
-            .arg("network")
-            .arg("prune")
-            .arg("-f")
-            .output();
-            
-        if cleanup_output.is_ok() {
-            println!("✓ Cleaned up unused Docker networks");
-        }
-        
-        println!("✓ Network conflict resolution completed");
-        Ok(())
-    }
-    
-    async fn force_remove_vpn_networks(&self) -> Result<()> {
-        // Get list of networks containing 'vpn'
-        let network_list_output = Command::new("docker")
-            .arg("network")
-            .arg("ls")
-            .arg("--filter")
-            .arg("name=vpn")
-            .arg("-q")
-            .output();
-            
-        if let Ok(output) = network_list_output {
-            let network_ids = String::from_utf8_lossy(&output.stdout);
-            
-            for network_id in network_ids.lines() {
-                if !network_id.trim().is_empty() {
-                    let remove_output = Command::new("docker")
-                        .arg("network")
-                        .arg("rm")
-                        .arg(network_id.trim())
-                        .output();
-                        
-                    if let Ok(result) = remove_output {
-                        if result.status.success() {
-                            println!("✓ Removed VPN network: {}", network_id.trim());
-                        }
+            match SubnetManager::is_subnet_available(subnet) {
+                Ok(true) => {
+                    println!("✓ Specified subnet is available");
+                    return Ok(VpnSubnet {
+                        cidr: subnet.clone(),
+                        description: "User specified".to_string(),
+                        range_start: "N/A".to_string(),
+                        range_end: "N/A".to_string(),
+                    });
+                },
+                Ok(false) => {
+                    println!("⚠️ Specified subnet {} conflicts with existing networks", subnet);
+                    if !options.interactive_subnet {
+                        return Err(ServerError::NetworkError(format!(
+                            "Subnet {} is not available. Use --interactive-subnet to choose an alternative.",
+                            subnet
+                        )));
+                    }
+                },
+                Err(e) => {
+                    println!("⚠️ Cannot validate subnet {}: {}", subnet, e);
+                    if !options.interactive_subnet {
+                        return Err(ServerError::InstallationError(format!(
+                            "Subnet validation failed: {}. Use --interactive-subnet to choose manually.",
+                            e
+                        )));
                     }
                 }
             }
         }
         
-        // Also try to remove networks by name patterns
-        let network_patterns = ["vpn_vpn-network", "vpn-network", "vpn_default"];
-        for pattern in &network_patterns {
-            let _remove_output = Command::new("docker")
-                .arg("network")
-                .arg("rm")
-                .arg(pattern)
-                .output();
+        // Interactive subnet selection if requested or if specified subnet is not available
+        if options.interactive_subnet {
+            println!("🔧 Interactive subnet selection requested");
+            return SubnetManager::select_subnet_interactive()
+                .map_err(|e| ServerError::NetworkError(format!("Subnet selection failed: {}", e)));
         }
         
-        Ok(())
+        // Automatic subnet selection
+        println!("🔍 Automatically selecting available VPN subnet...");
+        SubnetManager::select_subnet_auto()
+            .map_err(|e| ServerError::NetworkError(format!("No available subnets found: {}", e)))
     }
+    
     
     async fn validate_docker_compose_file(&self, options: &InstallationOptions) -> Result<()> {
         let compose_path = options.install_path.join("docker-compose.yml");
@@ -793,160 +759,61 @@ impl ServerInstaller {
         Ok(())
     }
     
-    pub async fn fix_network_conflicts(&self) -> Result<()> {
-        println!("🔧 Attempting to fix Docker network conflicts...");
+    pub async fn check_network_status(&self) -> Result<()> {
+        println!("🔍 Checking Docker network status...");
         
-        // 1. Stop all VPN containers
-        println!("🛑 Stopping VPN containers...");
-        let containers_output = Command::new("docker")
-            .arg("ps")
-            .arg("-q")
-            .arg("--filter")
-            .arg("name=xray")
-            .output();
-            
-        if let Ok(output) = containers_output {
-            let container_ids = String::from_utf8_lossy(&output.stdout);
-            for container_id in container_ids.lines() {
-                if !container_id.trim().is_empty() {
-                    let _stop_output = Command::new("docker")
-                        .arg("stop")
-                        .arg(container_id.trim())
-                        .output();
+        // Show available subnets instead of aggressive cleanup
+        match SubnetManager::get_available_subnets() {
+            Ok(available_subnets) => {
+                if available_subnets.is_empty() {
+                    println!("⚠️ No available subnet ranges found for VPN");
+                    println!("💡 This might indicate network conflicts. Consider:");
+                    println!("   • Using vpn install --interactive-subnet to choose manually");
+                    println!("   • Specifying a custom subnet with --subnet <CIDR>");
+                    println!("   • Checking existing Docker networks: docker network ls");
+                } else {
+                    println!("✅ Found {} available subnet ranges for VPN", available_subnets.len());
+                    println!();
+                    println!("Available options:");
+                    for subnet in &available_subnets[..3.min(available_subnets.len())] {
+                        println!("  • {} - {}", subnet.cidr, subnet.description);
+                    }
+                    if available_subnets.len() > 3 {
+                        println!("  ... and {} more options", available_subnets.len() - 3);
+                    }
                 }
+            },
+            Err(e) => {
+                println!("❌ Failed to check network status: {}", e);
+                return Err(ServerError::NetworkError(format!("Network check failed: {}", e)));
             }
         }
         
-        // Stop watchtower container too
-        let _stop_watchtower = Command::new("docker")
-            .arg("stop")
-            .arg("watchtower")
-            .output();
-        
-        println!("✓ Stopped VPN containers");
-        
-        // 2. Remove all VPN networks using our helper method
-        self.force_remove_vpn_networks().await?;
-        
-        // 3. Prune unused networks
-        let prune_output = Command::new("docker")
-            .arg("network")
-            .arg("prune")
-            .arg("-f")
-            .output();
-            
-        if let Ok(output) = prune_output {
-            if output.status.success() {
-                println!("✓ Pruned unused Docker networks");
-            }
-        }
-        
-        // 4. Clean up any remaining network with subnet conflicts
-        self.remove_conflicting_subnets().await?;
-        
-        // 5. Clean up existing Docker Compose files
-        self.clean_existing_compose_files().await?;
-        
-        println!("✅ Network conflict resolution completed");
-        println!("💡 You can now try installing again: vpn install");
-        
-        Ok(())
-    }
-    
-    async fn remove_conflicting_subnets(&self) -> Result<()> {
-        // List all networks and check for conflicting subnets
-        let networks_output = Command::new("docker")
+        // Show current Docker networks status
+        let network_output = Command::new("docker")
             .arg("network")
             .arg("ls")
             .arg("--format")
-            .arg("{{.ID}}")
+            .arg("table {{.Name}}\\t{{.Driver}}\\t{{.Scope}}")
             .output();
             
-        if let Ok(output) = networks_output {
-            let network_ids = String::from_utf8_lossy(&output.stdout);
-            
-            for network_id in network_ids.lines() {
-                if !network_id.trim().is_empty() {
-                    // Inspect each network for conflicting subnets
-                    let inspect_output = Command::new("docker")
-                        .arg("network")
-                        .arg("inspect")
-                        .arg(network_id.trim())
-                        .output();
-                        
-                    if let Ok(inspect_result) = inspect_output {
-                        let network_info = String::from_utf8_lossy(&inspect_result.stdout);
-                        
-                        // Check if this network uses conflicting subnet ranges
-                        if network_info.contains("172.20.0.0") || 
-                           network_info.contains("172.18.0.0") ||
-                           network_info.contains("172.19.0.0") {
-                            
-                            // Try to remove this network if it's not in use
-                            let _remove_output = Command::new("docker")
-                                .arg("network")
-                                .arg("rm")
-                                .arg(network_id.trim())
-                                .output();
-                        }
-                    }
-                }
+        if let Ok(output) = network_output {
+            if output.status.success() {
+                let networks = String::from_utf8_lossy(&output.stdout);
+                println!();
+                println!("Current Docker networks:");
+                println!("{}", networks);
             }
         }
+        
+        println!();
+        println!("💡 To install VPN with subnet selection:");
+        println!("   vpn install --interactive-subnet    # Interactive selection");
+        println!("   vpn install --subnet 172.30.0.0/16  # Specify subnet manually");
         
         Ok(())
     }
     
-    async fn clean_existing_compose_files(&self) -> Result<()> {
-        // Common VPN installation paths
-        let potential_paths = [
-            "/opt/vpn/docker-compose.yml",
-            "/etc/vpn/docker-compose.yml", 
-            "/var/lib/vpn/docker-compose.yml",
-        ];
-        
-        for path in &potential_paths {
-            if std::path::Path::new(path).exists() {
-                if let Ok(content) = std::fs::read_to_string(path) {
-                    let mut modified = false;
-                    let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
-                    
-                    // Remove version lines
-                    if let Some(pos) = lines.iter().position(|line| line.trim().starts_with("version:")) {
-                        lines.remove(pos);
-                        // Also remove empty line after version if it exists
-                        if pos < lines.len() && lines[pos].trim().is_empty() {
-                            lines.remove(pos);
-                        }
-                        modified = true;
-                        println!("✓ Removed version attribute from {}", path);
-                    }
-                    
-                    // Remove ipam subnet configuration
-                    if let Some(ipam_pos) = lines.iter().position(|line| line.trim().starts_with("ipam:")) {
-                        // Remove ipam line and the next 2 lines (config and subnet)
-                        for _ in 0..3 {
-                            if ipam_pos < lines.len() {
-                                lines.remove(ipam_pos);
-                            }
-                        }
-                        modified = true;
-                        println!("✓ Removed fixed subnet configuration from {}", path);
-                    }
-                    
-                    // Write back if modified
-                    if modified {
-                        let new_content = lines.join("\n");
-                        if let Err(e) = std::fs::write(path, new_content) {
-                            println!("⚠️ Warning: Could not update {}: {}", path, e);
-                        }
-                    }
-                }
-            }
-        }
-        
-        Ok(())
-    }
 }
 
 #[derive(Debug)]
@@ -979,6 +846,8 @@ impl Default for InstallationOptions {
             auto_start: true,
             log_level: LogLevel::Warning,
             reality_dest: None,
+            subnet: None,
+            interactive_subnet: false,
         }
     }
 }

@@ -289,6 +289,8 @@ The VPN CLI provides comprehensive commands for managing your VPN infrastructure
 ```bash
 # Server Management
 vpn install --protocol vless --port 8443        # Install VPN server
+vpn install --interactive-subnet               # Install with interactive subnet selection
+vpn install --subnet 172.30.0.0/16             # Install with specific subnet
 vpn status                                       # Check server status
 vpn restart                                      # Restart VPN services
 vpn stop                                         # Stop VPN services
@@ -321,7 +323,7 @@ vpn config backup --file backup.toml           # Backup configuration
 # System Diagnostics and Information
 vpn doctor                                      # Run comprehensive system diagnostics
 vpn doctor --fix                                # Run diagnostics with automatic fixes
-vpn fix-networks                                # Fix Docker network conflicts
+vpn network-check                               # Check Docker network status and available subnets
 vpn info                                        # Show detailed system information
 vpn privileges                                  # Display current privilege status
 vpn benchmark                                   # Run performance benchmarks
@@ -450,6 +452,8 @@ vpn install [OPTIONS]
   --domain <DOMAIN>        Server domain name
   --sni <SNI>              SNI for Reality protocol (default: google.com)
   --auto-port              Automatically select available port
+  --subnet <CIDR>          Docker subnet for VPN network (e.g., 172.30.0.0/16)
+  --interactive-subnet     Interactive subnet selection to avoid conflicts
   --dry-run                Show what would be installed without making changes
 
 vpn status [OPTIONS]
@@ -534,7 +538,7 @@ vpn doctor [OPTIONS]
 vpn diagnostics [OPTIONS]  # Alias for 'doctor'
   --fix                    Attempt automatic fixes for detected issues
 
-vpn fix-networks           # Fix Docker network conflicts
+vpn network-check          # Check Docker network status and available subnets
 vpn info                   # Show system information
 vpn privileges             # Show privilege status
 vpn benchmark              # Run performance benchmarks
@@ -1033,34 +1037,37 @@ sudo usermod -aG docker $USER
 vpn docker test
 ```
 
-#### Docker Network Conflicts
+#### Docker Network Conflicts and Subnet Selection
+
+The VPN system now intelligently handles Docker network conflicts by offering subnet selection instead of aggressive cleanup:
 
 ```bash
-# Automatic fix for network conflicts
-vpn fix-networks
+# Check available subnets and network status
+vpn network-check
 
-# Manual troubleshooting
-docker network ls                              # List all networks
-docker network prune -f                       # Remove unused networks
+# Install with automatic subnet selection (recommended)
+vpn install --protocol vless --port 8443
 
-# If "Pool overlaps with other one" error occurs:
-docker network rm $(docker network ls -q --filter name=vpn)  # Remove VPN networks
-docker system prune -f                        # Clean up Docker system
-sudo systemctl restart docker                 # Restart Docker daemon
+# Install with interactive subnet selection
+vpn install --protocol vless --port 8443 --interactive-subnet
 
-# Check for conflicting subnet ranges
-docker network inspect bridge                 # Check default bridge network
-ip route show                                 # Check system routing table
+# Install with specific subnet
+vpn install --protocol vless --port 8443 --subnet 172.30.0.0/16
 
-# Alternative: Use different subnet in compose file
-# Edit docker-compose.yml and add:
-# networks:
-#   vpn-network:
-#     driver: bridge
-#     ipam:
-#       config:
-#         - subnet: 172.30.0.0/16              # Use different subnet
+# Available subnet ranges:
+# - 172.30.0.0/16 - Recommended private range
+# - 172.31.0.0/16 - Alternative private range  
+# - 192.168.100.0/24 - Compact private range
+# - 192.168.101.0/24 - Compact alternative
+# - 10.100.0.0/16 - Large private range
+# - 10.101.0.0/16 - Large alternative
 ```
+
+**Safety Features:**
+- ✅ No automatic deletion of existing Docker networks
+- ✅ Conflict detection without affecting other processes
+- ✅ User choice for subnet selection
+- ✅ Validation of subnet availability before use
 
 #### Network Issues
 

@@ -28,6 +28,15 @@ pub enum NetworkError {
     
     #[error("HTTP request failed: {0}")]
     HttpError(#[from] reqwest::Error),
+    
+    #[error("No available subnets found for VPN")]
+    NoAvailableSubnets,
+    
+    #[error("Invalid subnet format: {0}")]
+    InvalidSubnet(String),
+    
+    #[error("Command execution failed: {0}")]
+    CommandError(String),
 }
 
 pub type Result<T> = std::result::Result<T, NetworkError>;

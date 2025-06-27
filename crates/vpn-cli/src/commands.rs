@@ -44,6 +44,8 @@ impl CommandHandler {
         sni: Option<String>,
         firewall: bool,
         auto_start: bool,
+        subnet: Option<String>,
+        interactive_subnet: bool,
     ) -> Result<()> {
         let installer = ServerInstaller::new()?;
         
@@ -56,6 +58,8 @@ impl CommandHandler {
             auto_start,
             log_level: ServerLogLevel::Warning,
             reality_dest: None,
+            subnet,
+            interactive_subnet,
         };
 
         let pb = ProgressBar::new_spinner();
@@ -884,16 +888,15 @@ impl CommandHandler {
         Ok(())
     }
     
-    pub async fn fix_network_conflicts(&mut self) -> Result<()> {
-        display::info("🔧 Fixing Docker network conflicts...");
+    pub async fn check_network_status(&mut self) -> Result<()> {
+        display::info("🔍 Checking Docker network status and available subnets...");
         
         let installer = vpn_server::ServerInstaller::new()
             .map_err(|e| CliError::ServerError(e))?;
         
-        installer.fix_network_conflicts().await
+        installer.check_network_status().await
             .map_err(|e| CliError::ServerError(e))?;
             
-        display::success("Network conflicts resolved. Try running the installation again.");
         Ok(())
     }
 }

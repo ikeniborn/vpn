@@ -61,6 +61,14 @@ pub enum Commands {
         /// Auto-start service
         #[arg(long, default_value = "true")]
         auto_start: bool,
+        
+        /// Docker subnet for VPN network (CIDR format, e.g., 172.30.0.0/16)
+        #[arg(long)]
+        subnet: Option<String>,
+        
+        /// Interactive subnet selection
+        #[arg(long)]
+        interactive_subnet: bool,
     },
 
     /// Uninstall VPN server
@@ -139,8 +147,8 @@ pub enum Commands {
     /// Show privilege status
     Privileges,
     
-    /// Fix Docker network conflicts
-    FixNetworks,
+    /// Check Docker network status and available subnets
+    NetworkCheck,
 }
 
 #[derive(Subcommand, Clone)]

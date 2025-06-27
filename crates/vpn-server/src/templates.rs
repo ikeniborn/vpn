@@ -15,8 +15,9 @@ impl DockerComposeTemplate {
         install_path: &Path,
         server_config: &ServerConfig,
         options: &InstallationOptions,
+        subnet: Option<&str>,
     ) -> Result<()> {
-        let compose_content = self.create_xray_compose_content(server_config, options)?;
+        let compose_content = self.create_xray_compose_content(server_config, options, subnet)?;
         
         let compose_file = install_path.join("docker-compose.yml");
         fs::write(&compose_file, compose_content)?;
@@ -35,8 +36,9 @@ impl DockerComposeTemplate {
         install_path: &Path,
         server_config: &ServerConfig,
         options: &InstallationOptions,
+        subnet: Option<&str>,
     ) -> Result<()> {
-        let compose_content = self.create_outline_compose_content(server_config, options)?;
+        let compose_content = self.create_outline_compose_content(server_config, options, subnet)?;
         
         let compose_file = install_path.join("docker-compose.yml");
         fs::write(&compose_file, compose_content)?;
@@ -51,6 +53,7 @@ impl DockerComposeTemplate {
         &self,
         server_config: &ServerConfig,
         options: &InstallationOptions,
+        subnet: Option<&str>,
     ) -> Result<String> {
         let restart_policy = if options.auto_start { "unless-stopped" } else { "no" };
         
@@ -92,8 +95,8 @@ impl DockerComposeTemplate {
 
 networks:
   vpn-network:
-    driver: bridge
-"#, restart_policy, server_config.port, restart_policy);
+    driver: bridge{subnet_config}
+"#, restart_policy, server_config.port, restart_policy, subnet_config = Self::format_subnet_config(subnet));
         
         Ok(compose)
     }
@@ -102,6 +105,7 @@ networks:
         &self,
         server_config: &ServerConfig,
         options: &InstallationOptions,
+        subnet: Option<&str>,
     ) -> Result<String> {
         let restart_policy = if options.auto_start { "unless-stopped" } else { "no" };
         
@@ -135,11 +139,21 @@ networks:
 
 networks:
   vpn-network:
-    driver: bridge
+    driver: bridge{subnet_config}
 "#, restart_policy, server_config.port + 1000, server_config.port, 
-    server_config.log_level.as_str(), restart_policy);
+    server_config.log_level.as_str(), restart_policy, subnet_config = Self::format_subnet_config(subnet));
         
         Ok(compose)
+    }
+    
+    /// Format subnet configuration for Docker Compose network
+    fn format_subnet_config(subnet: Option<&str>) -> String {
+        match subnet {
+            Some(subnet_cidr) => {
+                format!("\n    ipam:\n      config:\n        - subnet: {}", subnet_cidr)
+            },
+            None => String::new(),
+        }
     }
     
     fn create_xray_directories(&self, install_path: &Path) -> Result<()> {
