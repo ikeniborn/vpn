@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::process::Command;
+use tokio::process::Command;
 use std::time::Duration;
 use vpn_docker::{ContainerManager, HealthChecker};
 use crate::validator::ConfigValidator;
@@ -57,7 +57,7 @@ impl ServerLifecycle {
             .arg(&compose_file)
             .arg("up")
             .arg("-d")
-            .output()?;
+            .output().await?;
         
         if !output.status.success() {
             return Err(ServerError::LifecycleError(
@@ -86,7 +86,7 @@ impl ServerLifecycle {
             .arg("-f")
             .arg(&compose_file)
             .arg("stop")
-            .output()?;
+            .output().await?;
         
         if !output.status.success() {
             return Err(ServerError::LifecycleError(
@@ -240,10 +240,8 @@ impl ServerLifecycle {
     }
     
     pub async fn backup_configuration(&self, install_path: &Path, backup_path: &Path) -> Result<()> {
-        use std::fs;
-        
         // Create backup directory
-        fs::create_dir_all(backup_path)?;
+        tokio::fs::create_dir_all(backup_path).await?;
         
         // Copy configuration files
         let config_files = [
@@ -257,19 +255,19 @@ impl ServerLifecycle {
             let src = install_path.join(file);
             let dst = backup_path.join(file);
             
-            if src.exists() {
+            if tokio::fs::try_exists(&src).await.unwrap_or(false) {
                 if let Some(parent) = dst.parent() {
-                    fs::create_dir_all(parent)?;
+                    tokio::fs::create_dir_all(parent).await?;
                 }
-                fs::copy(&src, &dst)?;
+                tokio::fs::copy(&src, &dst).await?;
             }
         }
         
         // Backup user data
         let users_dir = install_path.join("users");
-        if users_dir.exists() {
+        if tokio::fs::try_exists(&users_dir).await.unwrap_or(false) {
             let backup_users_dir = backup_path.join("users");
-            self.copy_dir_all(&users_dir, &backup_users_dir)?;
+            self.copy_dir_all(&users_dir, &backup_users_dir).await?;
         }
         
         println!("Configuration backup completed");
@@ -277,7 +275,7 @@ impl ServerLifecycle {
     }
     
     pub async fn restore_configuration(&self, install_path: &Path, backup_path: &Path) -> Result<()> {
-        if !backup_path.exists() {
+        if !tokio::fs::try_exists(backup_path).await.unwrap_or(false) {
             return Err(ServerError::LifecycleError("Backup path does not exist".to_string()));
         }
         
@@ -287,7 +285,7 @@ impl ServerLifecycle {
         }
         
         // Restore files
-        self.copy_dir_all(backup_path, install_path)?;
+        self.copy_dir_all(backup_path, install_path).await?;
         
         // Validate restored configuration
         let validation_result = self.validator.validate_installation(install_path).await?;
@@ -302,19 +300,17 @@ impl ServerLifecycle {
         Ok(())
     }
     
-    fn copy_dir_all(&self, src: &Path, dst: &Path) -> Result<()> {
-        use std::fs;
+    async fn copy_dir_all(&self, src: &Path, dst: &Path) -> Result<()> {
+        tokio::fs::create_dir_all(dst).await?;
         
-        fs::create_dir_all(dst)?;
-        
-        for entry in fs::read_dir(src)? {
-            let entry = entry?;
-            let ty = entry.file_type()?;
+        let mut entries = tokio::fs::read_dir(src).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let file_type = entry.file_type().await?;
             
-            if ty.is_dir() {
-                self.copy_dir_all(&entry.path(), &dst.join(entry.file_name()))?;
+            if file_type.is_dir() {
+                Box::pin(self.copy_dir_all(&entry.path(), &dst.join(entry.file_name()))).await?;
             } else {
-                fs::copy(entry.path(), dst.join(entry.file_name()))?;
+                tokio::fs::copy(entry.path(), dst.join(entry.file_name())).await?;
             }
         }
         

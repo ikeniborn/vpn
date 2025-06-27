@@ -2,7 +2,7 @@ use std::path::Path;
 use std::process::Command;
 use vpn_docker::{ContainerManager, HealthChecker};
 use vpn_network::{PortChecker, SniValidator};
-use crate::error::{ServerError, Result};
+use crate::error::Result;
 
 pub struct ConfigValidator {
     container_manager: ContainerManager,
@@ -244,8 +244,8 @@ impl ConfigValidator {
     async fn check_firewall_configuration(&self, result: &mut ValidationResult) {
         let check_name = "Firewall Configuration";
         
-        if vpn_network::FirewallManager::is_ufw_installed() {
-            match vpn_network::FirewallManager::check_ufw_status() {
+        if vpn_network::FirewallManager::is_ufw_installed().await {
+            match vpn_network::FirewallManager::check_ufw_status().await {
                 Ok(true) => {
                     self.add_pass(result, check_name, "UFW firewall is active");
                 }
@@ -256,7 +256,7 @@ impl ConfigValidator {
                     self.add_error(result, check_name, &format!("Failed to check UFW status: {}", e));
                 }
             }
-        } else if vpn_network::FirewallManager::is_iptables_installed() {
+        } else if vpn_network::FirewallManager::is_iptables_installed().await {
             self.add_pass(result, check_name, "iptables is available");
         } else {
             self.add_warning(result, check_name, "No firewall management tools found");

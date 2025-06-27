@@ -22,6 +22,15 @@ pub enum CryptoError {
     
     #[error("Image error: {0}")]
     ImageError(#[from] image::ImageError),
+    
+    #[error("Encryption error: {0}")]
+    EncryptionError(String),
+    
+    #[error("Decryption error: {0}")]
+    DecryptionError(String),
+    
+    #[error("JSON error: {0}")]
+    JsonError(#[from] serde_json::Error),
 }
 
 pub type Result<T> = std::result::Result<T, CryptoError>;

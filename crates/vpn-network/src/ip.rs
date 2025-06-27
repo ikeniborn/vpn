@@ -137,8 +137,8 @@ mod tests {
     
     #[test]
     fn test_private_ip_detection() {
-        let private_ip = "192.168.1.1".parse::<IpAddr>().unwrap();
-        let public_ip = "8.8.8.8".parse::<IpAddr>().unwrap();
+        let private_ip = "192.168.1.1".parse::<IpAddr>().expect("Valid private IP");
+        let public_ip = "8.8.8.8".parse::<IpAddr>().expect("Valid public IP");
         
         assert!(IpDetector::is_private_ip(&private_ip));
         assert!(!IpDetector::is_private_ip(&public_ip));

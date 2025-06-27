@@ -130,7 +130,8 @@ impl ConfigGenerator {
                     .unwrap_or_else(|| "www.google.com:443".to_string()),
                 xver: 0,
                 server_names: server_config.reality_server_names.clone(),
-                private_key: server_config.private_key.clone().unwrap(),
+                private_key: server_config.private_key.clone()
+                    .ok_or_else(|| UserError::InvalidConfiguration("Private key is required for Reality".to_string()))?,
                 short_id: server_config.short_id.clone()
                     .map(|s| vec![s])
                     .unwrap_or_default(),

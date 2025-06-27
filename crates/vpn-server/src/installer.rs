@@ -1,8 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::collections::HashMap;
-use bollard::container::Config;
-use bollard::models::HostConfig;
+// removed unused imports
 use vpn_docker::ContainerManager;
 use vpn_network::{PortChecker, IpDetector, FirewallManager, FirewallRule};
 use vpn_network::firewall::{Protocol, Direction};
@@ -101,7 +99,7 @@ impl ServerInstaller {
         }
         
         // Check UFW (optional)
-        if !FirewallManager::is_ufw_installed() && !FirewallManager::is_iptables_installed() {
+        if !FirewallManager::is_ufw_installed().await && !FirewallManager::is_iptables_installed().await {
             println!("Warning: No firewall management tools found (UFW/iptables)");
         }
         
@@ -177,7 +175,7 @@ impl ServerInstaller {
     }
     
     async fn setup_firewall_rules(&self, port: u16) -> Result<()> {
-        if FirewallManager::is_ufw_installed() {
+        if FirewallManager::is_ufw_installed().await {
             let rule = FirewallRule {
                 port,
                 protocol: Protocol::Both,
@@ -186,10 +184,10 @@ impl ServerInstaller {
                 comment: Some("VPN Server".to_string()),
             };
             
-            FirewallManager::add_ufw_rule(&rule)?;
+            FirewallManager::add_ufw_rule(&rule).await?;
             
-            if !FirewallManager::check_ufw_status()? {
-                FirewallManager::enable_ufw()?;
+            if !FirewallManager::check_ufw_status().await? {
+                FirewallManager::enable_ufw().await?;
             }
         }
         

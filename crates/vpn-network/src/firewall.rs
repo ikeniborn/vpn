@@ -1,4 +1,4 @@
-use std::process::Command;
+use tokio::process::Command;
 use std::net::IpAddr;
 use crate::error::{NetworkError, Result};
 
@@ -28,23 +28,25 @@ pub enum Direction {
 pub struct FirewallManager;
 
 impl FirewallManager {
-    pub fn is_ufw_installed() -> bool {
+    pub async fn is_ufw_installed() -> bool {
         Command::new("which")
             .arg("ufw")
             .output()
+            .await
             .map(|output| output.status.success())
             .unwrap_or(false)
     }
     
-    pub fn is_iptables_installed() -> bool {
+    pub async fn is_iptables_installed() -> bool {
         Command::new("which")
             .arg("iptables")
             .output()
+            .await
             .map(|output| output.status.success())
             .unwrap_or(false)
     }
     
-    pub fn add_ufw_rule(rule: &FirewallRule) -> Result<()> {
+    pub async fn add_ufw_rule(rule: &FirewallRule) -> Result<()> {
         let mut cmd = Command::new("ufw");
         cmd.arg("allow");
         
@@ -65,7 +67,7 @@ impl FirewallManager {
             cmd.arg("comment").arg(comment);
         }
         
-        let output = cmd.output()?;
+        let output = cmd.output().await?;
         
         if !output.status.success() {
             return Err(NetworkError::FirewallError(
@@ -76,7 +78,7 @@ impl FirewallManager {
         Ok(())
     }
     
-    pub fn remove_ufw_rule(rule: &FirewallRule) -> Result<()> {
+    pub async fn remove_ufw_rule(rule: &FirewallRule) -> Result<()> {
         let mut cmd = Command::new("ufw");
         cmd.arg("delete").arg("allow");
         
@@ -89,7 +91,7 @@ impl FirewallManager {
             Protocol::Both => &mut cmd,
         };
         
-        let output = cmd.output()?;
+        let output = cmd.output().await?;
         
         if !output.status.success() {
             return Err(NetworkError::FirewallError(
@@ -100,7 +102,7 @@ impl FirewallManager {
         Ok(())
     }
     
-    pub fn add_iptables_rule(rule: &FirewallRule) -> Result<()> {
+    pub async fn add_iptables_rule(rule: &FirewallRule) -> Result<()> {
         let chain = match rule.direction {
             Direction::In => "INPUT",
             Direction::Out => "OUTPUT",
@@ -120,14 +122,19 @@ impl FirewallManager {
             Protocol::Tcp => cmd.arg("-p").arg("tcp"),
             Protocol::Udp => cmd.arg("-p").arg("udp"),
             Protocol::Both => {
-                Self::add_iptables_rule(&FirewallRule {
+                // Handle TCP first
+                let tcp_rule = FirewallRule {
                     protocol: Protocol::Tcp,
                     ..rule.clone()
-                })?;
+                };
+                Box::pin(Self::add_iptables_rule(&tcp_rule)).await?;
                 
-                let mut udp_rule = rule.clone();
-                udp_rule.protocol = Protocol::Udp;
-                return Self::add_iptables_rule(&udp_rule);
+                // Handle UDP second
+                let udp_rule = FirewallRule {
+                    protocol: Protocol::Udp,
+                    ..rule.clone()
+                };
+                return Box::pin(Self::add_iptables_rule(&udp_rule)).await;
             }
         };
         
@@ -139,7 +146,7 @@ impl FirewallManager {
             cmd.arg("--comment").arg(comment);
         }
         
-        let output = cmd.output()?;
+        let output = cmd.output().await?;
         
         if !output.status.success() {
             return Err(NetworkError::FirewallError(
@@ -150,11 +157,11 @@ impl FirewallManager {
         Ok(())
     }
     
-    pub fn enable_ufw() -> Result<()> {
+    pub async fn enable_ufw() -> Result<()> {
         let output = Command::new("ufw")
             .arg("--force")
             .arg("enable")
-            .output()?;
+            .output().await?;
         
         if !output.status.success() {
             return Err(NetworkError::FirewallError(
@@ -165,10 +172,10 @@ impl FirewallManager {
         Ok(())
     }
     
-    pub fn check_ufw_status() -> Result<bool> {
+    pub async fn check_ufw_status() -> Result<bool> {
         let output = Command::new("ufw")
             .arg("status")
-            .output()?;
+            .output().await?;
         
         if !output.status.success() {
             return Err(NetworkError::FirewallError(
@@ -180,11 +187,11 @@ impl FirewallManager {
         Ok(status.contains("Status: active"))
     }
     
-    pub fn list_ufw_rules() -> Result<Vec<String>> {
+    pub async fn list_ufw_rules() -> Result<Vec<String>> {
         let output = Command::new("ufw")
             .arg("status")
             .arg("numbered")
-            .output()?;
+            .output().await?;
         
         if !output.status.success() {
             return Err(NetworkError::FirewallError(
@@ -202,9 +209,9 @@ impl FirewallManager {
         Ok(rules)
     }
     
-    pub fn save_iptables_rules(path: &str) -> Result<()> {
+    pub async fn save_iptables_rules(path: &str) -> Result<()> {
         let output = Command::new("iptables-save")
-            .output()?;
+            .output().await?;
         
         if !output.status.success() {
             return Err(NetworkError::FirewallError(
@@ -212,7 +219,7 @@ impl FirewallManager {
             ));
         }
         
-        std::fs::write(path, output.stdout)?;
+        tokio::fs::write(path, output.stdout).await?;
         Ok(())
     }
 }

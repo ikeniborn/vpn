@@ -87,7 +87,8 @@ mod tests {
     
     #[test]
     fn test_port_availability() {
-        let available = PortChecker::find_random_available_port(30000, 40000).unwrap();
+        let available = PortChecker::find_random_available_port(30000, 40000)
+            .expect("Failed to find available port");
         assert!(PortChecker::is_port_available(available));
     }
     

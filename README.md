@@ -2,9 +2,9 @@
 
 🦀 **Advanced VPN Management System** - высокопроизводительная, типобезопасная система управления VPN, написанная на Rust. Предоставляет комплексные инструменты для управления серверами Xray (VLESS+Reality) и Outline VPN. Эта реализация заменяет оригинальные Bash-скрипты современной, безопасной и эффективной альтернативой.
 
-[![CI Status](https://github.com/your-org/vpn-rust/workflows/CI/badge.svg)](https://github.com/your-org/vpn-rust/actions)
-[![Security Audit](https://github.com/your-org/vpn-rust/workflows/Security%20Audit/badge.svg)](https://github.com/your-org/vpn-rust/actions)
-[![Code Coverage](https://codecov.io/gh/your-org/vpn-rust/branch/main/graph/badge.svg)](https://codecov.io/gh/your-org/vpn-rust)
+[![CI Status](https://github.com/your-org/vpn/workflows/CI/badge.svg)](https://github.com/your-org/vpn/actions)
+[![Security Audit](https://github.com/your-org/vpn/workflows/Security%20Audit/badge.svg)](https://github.com/your-org/vpn/actions)
+[![Code Coverage](https://codecov.io/gh/your-org/vpn/branch/main/graph/badge.svg)](https://codecov.io/gh/your-org/vpn)
 [![Rust Version](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -61,8 +61,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/vpn-rust.git
-cd vpn-rust
+git clone https://github.com/your-org/vpn.git
+cd vpn
 
 # Build the entire workspace
 cargo build --release --workspace
@@ -100,11 +100,11 @@ vpn status --detailed
 
 ### From Binary Releases
 
-Download pre-compiled binaries from the [releases page](https://github.com/your-org/vpn-rust/releases):
+Download pre-compiled binaries from the [releases page](https://github.com/your-org/vpn/releases):
 
 ```bash
 # Download for Linux x86_64
-wget https://github.com/your-org/vpn-rust/releases/latest/download/vpn-x86_64-unknown-linux-gnu.tar.gz
+wget https://github.com/your-org/vpn/releases/latest/download/vpn-x86_64-unknown-linux-gnu.tar.gz
 
 # Extract and install
 tar xzf vpn-x86_64-unknown-linux-gnu.tar.gz
@@ -118,8 +118,8 @@ sudo mv vpn /usr/local/bin/
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # Clone and build
-git clone https://github.com/your-org/vpn-rust.git
-cd vpn-rust
+git clone https://github.com/your-org/vpn.git
+cd vpn
 cargo install --path crates/vpn-cli
 ```
 
@@ -262,7 +262,7 @@ The project is organized as a Rust workspace with specialized crates:
 ### Directory Structure
 
 ```
-vpn-rust/
+vpn/
 ├── crates/
 │   ├── vpn-cli/          # CLI application
 │   ├── vpn-crypto/       # Cryptographic operations
@@ -528,8 +528,8 @@ vpn monitor benchmark --compare-with-backup ./backup
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # Clone repository
-git clone https://github.com/your-org/vpn-rust.git
-cd vpn-rust
+git clone https://github.com/your-org/vpn.git
+cd vpn
 
 # Build all crates
 cargo build --workspace
@@ -733,10 +733,10 @@ vpn monitor analyze-logs --period 24h
 
 ### Getting Help
 
-- **Documentation**: [https://vpn-rust.docs.io](https://vpn-rust.docs.io)
-- **Issues**: [GitHub Issues](https://github.com/your-org/vpn-rust/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/vpn-rust/discussions)
-- **Chat**: [Discord Server](https://discord.gg/vpn-rust)
+- **Documentation**: [https://vpn.docs.io](https://vpn.docs.io)
+- **Issues**: [GitHub Issues](https://github.com/your-org/vpn/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/your-org/vpn/discussions)
+- **Chat**: [Discord Server](https://discord.gg/vpn)
 
 ## 📄 License
 

@@ -13,7 +13,8 @@ pub fn validate_username(username: &str) -> Result<()> {
     }
     
     // Check for valid characters (alphanumeric, dash, underscore)
-    let valid_regex = Regex::new(r"^[a-zA-Z0-9_-]+$").unwrap();
+    let valid_regex = Regex::new(r"^[a-zA-Z0-9_-]+$")
+        .map_err(|e| CliError::ValidationError(format!("Regex compilation failed: {}", e)))?;
     if !valid_regex.is_match(username) {
         return Err(CliError::ValidationError(
             "Username can only contain letters, numbers, dash, and underscore".to_string()
@@ -36,7 +37,8 @@ pub fn validate_email(email: &str) -> Result<()> {
     }
     
     // Basic email validation
-    let email_regex = Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap();
+    let email_regex = Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+        .map_err(|e| CliError::ValidationError(format!("Regex compilation failed: {}", e)))?;
     if !email_regex.is_match(email) {
         return Err(CliError::ValidationError("Invalid email format".to_string()));
     }
@@ -86,7 +88,8 @@ pub fn validate_domain_name(domain: &str) -> Result<()> {
     }
     
     // Check for valid domain format
-    let domain_regex = Regex::new(r"^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$").unwrap();
+    let domain_regex = Regex::new(r"^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+        .map_err(|e| CliError::ValidationError(format!("Regex compilation failed: {}", e)))?;
     if !domain_regex.is_match(domain) {
         return Err(CliError::ValidationError("Invalid domain name format".to_string()));
     }
@@ -238,7 +241,8 @@ pub fn validate_config_key_path(path: &str) -> Result<()> {
         return Err(CliError::ValidationError("Config key path cannot be empty".to_string()));
     }
     
-    let key_regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)*$").unwrap();
+    let key_regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)*$")
+        .map_err(|e| CliError::ValidationError(format!("Regex compilation failed: {}", e)))?;
     if !key_regex.is_match(path) {
         return Err(CliError::ValidationError(
             "Invalid config key path format. Use dot notation like 'section.key'".to_string()
@@ -250,7 +254,8 @@ pub fn validate_config_key_path(path: &str) -> Result<()> {
 
 pub fn sanitize_filename(filename: &str) -> String {
     // Remove or replace invalid filename characters
-    let invalid_chars_regex = Regex::new(r#"[<>:"/\\|?*]"#).unwrap();
+    let invalid_chars_regex = Regex::new(r#"[<>:"/\\|?*]"#)
+        .expect("Static regex should always compile");
     let sanitized = invalid_chars_regex.replace_all(filename, "_");
     
     // Trim whitespace and dots from ends
@@ -271,6 +276,65 @@ pub fn validate_backup_retention_days(days: u32) -> Result<()> {
     }
     
     Ok(())
+}
+
+/// Validate password strength for security
+pub fn validate_password_strength(password: &str) -> Result<()> {
+    if password.len() < 12 {
+        return Err(CliError::ValidationError(
+            "Password must be at least 12 characters long".to_string()
+        ));
+    }
+
+    if password.len() > 128 {
+        return Err(CliError::ValidationError(
+            "Password too long (max 128 characters)".to_string()
+        ));
+    }
+
+    let has_upper = password.chars().any(|c| c.is_ascii_uppercase());
+    let has_lower = password.chars().any(|c| c.is_ascii_lowercase());
+    let has_digit = password.chars().any(|c| c.is_ascii_digit());
+    let has_special = password.chars().any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c));
+
+    if !(has_upper && has_lower && has_digit && has_special) {
+        return Err(CliError::ValidationError(
+            "Password must contain uppercase, lowercase, digit, and special character".to_string()
+        ));
+    }
+
+    // Check for common weak patterns
+    let lower_password = password.to_lowercase();
+    let weak_patterns = [
+        "password", "123456", "qwerty", "admin", "root", "user",
+        "test", "guest", "vpn", "server", "default"
+    ];
+    
+    for pattern in &weak_patterns {
+        if lower_password.contains(pattern) {
+            return Err(CliError::ValidationError(
+                format!("Password contains weak pattern: {}", pattern)
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+/// Sanitize and validate log message to prevent log injection
+pub fn sanitize_log_message(message: &str) -> String {
+    // Remove control characters and potential ANSI escape sequences
+    let control_char_regex = Regex::new(r"[\x00-\x1F\x7F]|\x1B\[[0-9;]*[a-zA-Z]")
+        .expect("Static regex should always compile");
+    
+    let sanitized = control_char_regex.replace_all(message, "");
+    
+    // Limit length to prevent log flooding
+    if sanitized.len() > 1000 {
+        format!("{}...[truncated]", &sanitized[..997])
+    } else {
+        sanitized.to_string()
+    }
 }
 
 #[cfg(test)]

@@ -1,10 +1,10 @@
 use std::path::Path;
 use std::fs;
 use std::collections::HashMap;
-use vpn_crypto::{X25519KeyManager, KeyPair};
+use vpn_crypto::X25519KeyManager;
 use vpn_users::UserManager;
 use crate::lifecycle::ServerLifecycle;
-use crate::error::{ServerError, Result};
+use crate::error::Result;
 
 pub struct KeyRotationManager {
     server_lifecycle: ServerLifecycle,

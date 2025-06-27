@@ -85,24 +85,24 @@ mod tests {
     #[test]
     fn test_qr_generation() {
         let data = "vless://test@example.com:443";
-        let qr = QrCodeGenerator::generate(data).unwrap();
+        let qr = QrCodeGenerator::generate(data).expect("Failed to generate QR code");
         assert!(qr.width() > 0);
     }
     
     #[test]
     fn test_qr_save_as_image() {
-        let dir = tempdir().unwrap();
+        let dir = tempdir().expect("Failed to create temp dir");
         let path = dir.path().join("test.png");
         let data = "vless://test@example.com:443";
         
-        QrCodeGenerator::save_as_png(data, &path).unwrap();
+        QrCodeGenerator::save_as_png(data, &path).expect("Failed to save QR code");
         assert!(path.exists());
     }
     
     #[test]
     fn test_terminal_string() {
         let data = "https://example.com";
-        let terminal_str = QrCodeGenerator::to_terminal_string(data).unwrap();
+        let terminal_str = QrCodeGenerator::to_terminal_string(data).expect("Failed to generate terminal string");
         
         assert!(terminal_str.contains('█'));
         assert!(terminal_str.contains(' '));
