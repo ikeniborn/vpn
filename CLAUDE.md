@@ -248,3 +248,6 @@ Compared to Bash implementation:
 2. Add migration for existing users
 3. Update serialization/deserialization
 4. Update CLI display formatting
+```
+
+</invoke>

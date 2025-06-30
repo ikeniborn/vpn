@@ -7,7 +7,7 @@ members = [
     "crates/vpn-users",
     "crates/vpn-server",
     "crates/vpn-monitor",
-    "crates/vpn-cli",
+    "crates/vpn-cli", "crates/vpn-runtime", "crates/vpn-containerd",
 ]
 
 [workspace.package]
