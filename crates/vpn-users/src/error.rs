@@ -37,6 +37,24 @@ pub enum UserError {
     
     #[error("JSON error: {0}")]
     JsonError(#[from] serde_json::Error),
+    
+    #[error("Resource not found: {resource} with id {id}")]
+    NotFound {
+        resource: String,
+        id: String,
+    },
+    
+    #[error("Operation failed: {operation} - {details}")]
+    OperationError {
+        operation: String,
+        details: String,
+    },
+    
+    #[error("Validation failed for {field}: {message}")]
+    ValidationError {
+        field: String,
+        message: String,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, UserError>;
