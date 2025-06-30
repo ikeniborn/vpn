@@ -33,4 +33,23 @@ pub enum CryptoError {
     JsonError(#[from] serde_json::Error),
 }
 
+impl PartialEq for CryptoError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (CryptoError::KeyGenerationError(a), CryptoError::KeyGenerationError(b)) => a == b,
+            (CryptoError::EncodingError(a), CryptoError::EncodingError(b)) => a == b,
+            (CryptoError::QrCodeError(a), CryptoError::QrCodeError(b)) => a == b,
+            (CryptoError::InvalidKeyFormat(a), CryptoError::InvalidKeyFormat(b)) => a == b,
+            (CryptoError::EncryptionError(a), CryptoError::EncryptionError(b)) => a == b,
+            (CryptoError::DecryptionError(a), CryptoError::DecryptionError(b)) => a == b,
+            // For complex error types, just compare discriminants
+            (CryptoError::IoError(_), CryptoError::IoError(_)) => true,
+            (CryptoError::Base64Error(_), CryptoError::Base64Error(_)) => true,
+            (CryptoError::ImageError(_), CryptoError::ImageError(_)) => true,
+            (CryptoError::JsonError(_), CryptoError::JsonError(_)) => true,
+            _ => false,
+        }
+    }
+}
+
 pub type Result<T> = std::result::Result<T, CryptoError>;

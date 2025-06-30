@@ -15,7 +15,7 @@ qrcode = { workspace = true }
 image = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
-hex = "0.4"
+hex = { workspace = true }
 sha2 = "0.10"
 aes-gcm = "0.10"
 pbkdf2 = "0.12"

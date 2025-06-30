@@ -1,6 +1,43 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use crate::error::{CryptoError, Result};
 
+pub struct EncodingUtils;
+
+impl EncodingUtils {
+    pub fn new() -> Self {
+        Self
+    }
+    
+    pub fn base64_encode(&self, data: &[u8]) -> Result<String> {
+        Ok(BASE64.encode(data))
+    }
+    
+    pub fn base64_decode(&self, encoded: &str) -> Result<Vec<u8>> {
+        BASE64.decode(encoded.trim())
+            .map_err(|e| CryptoError::EncodingError(e.to_string()))
+    }
+    
+    pub fn base64_url_encode(&self, data: &[u8]) -> Result<String> {
+        use base64::{engine::general_purpose::URL_SAFE as BASE64_URL, Engine};
+        Ok(BASE64_URL.encode(data))
+    }
+    
+    pub fn base64_url_decode(&self, encoded: &str) -> Result<Vec<u8>> {
+        use base64::{engine::general_purpose::URL_SAFE as BASE64_URL, Engine};
+        BASE64_URL.decode(encoded.trim())
+            .map_err(|e| CryptoError::EncodingError(e.to_string()))
+    }
+    
+    pub fn hex_encode(&self, data: &[u8]) -> String {
+        hex::encode(data)
+    }
+    
+    pub fn hex_decode(&self, encoded: &str) -> Result<Vec<u8>> {
+        hex::decode(encoded.trim())
+            .map_err(|e| CryptoError::EncodingError(e.to_string()))
+    }
+}
+
 pub struct Base64Encoder;
 
 impl Base64Encoder {

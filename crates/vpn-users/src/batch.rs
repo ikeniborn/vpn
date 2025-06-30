@@ -181,7 +181,8 @@ impl BatchOperations {
             
             // Generate new keys if requested
             if options.generate_new_keys {
-                match vpn_crypto::X25519KeyManager::generate_keypair() {
+                let key_manager = vpn_crypto::X25519KeyManager::new();
+                match key_manager.generate_keypair() {
                     Ok(keypair) => {
                         user.config.private_key = Some(keypair.private_key_base64());
                         user.config.public_key = Some(keypair.public_key_base64());

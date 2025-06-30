@@ -58,7 +58,8 @@ pub enum VpnProtocol {
 impl User {
     pub fn new(name: String, protocol: VpnProtocol) -> Self {
         let id = Uuid::new_v4().to_string();
-        let short_id = vpn_crypto::UuidGenerator::generate_short_id();
+        let uuid_gen = vpn_crypto::UuidGenerator::new();
+        let short_id = uuid_gen.generate_short_id(&id).unwrap_or_else(|_| "default".to_string());
         
         Self {
             id,

@@ -428,10 +428,11 @@ impl CommandHandler {
                     println!("\nConnection Link:");
                     println!("{}", link);
                     
-                    // Generate ASCII QR code
-                    if let Ok(qr_text) = vpn_crypto::QrCodeGenerator::to_terminal_string(&link) {
-                        println!("\nQR Code:");
-                        println!("{}", qr_text);
+                    // Generate QR code
+                    let qr_gen = vpn_crypto::QrCodeGenerator::new();
+                    if let Ok(qr_data) = qr_gen.generate_qr_code(&link) {
+                        println!("\nQR Code generated successfully ({} bytes)", qr_data.len());
+                        println!("Use '--save-qr <path>' to save QR code to file");
                     }
                 }
             }

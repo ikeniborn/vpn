@@ -10,8 +10,8 @@ fn test_x25519_key_generation() -> Result<(), Box<dyn std::error::Error>> {
     
     // Test key pair generation
     let keypair = key_manager.generate_keypair()?;
-    assert_eq!(keypair.private_key.len(), 44); // Base64 encoded 32 bytes
-    assert_eq!(keypair.public_key.len(), 44);
+    assert_eq!(keypair.private_key.len(), 32); // Raw 32 bytes
+    assert_eq!(keypair.public_key.len(), 32);
     
     // Test that keys are different each time
     let keypair2 = key_manager.generate_keypair()?;
@@ -27,8 +27,8 @@ fn test_x25519_key_validation() -> Result<(), Box<dyn std::error::Error>> {
     
     // Test valid key validation
     let keypair = key_manager.generate_keypair()?;
-    assert!(key_manager.validate_private_key(&keypair.private_key).is_ok());
-    assert!(key_manager.validate_public_key(&keypair.public_key).is_ok());
+    assert!(key_manager.validate_private_key(&keypair.private_key_base64()).is_ok());
+    assert!(key_manager.validate_public_key(&keypair.public_key_base64()).is_ok());
     
     // Test invalid key validation
     assert!(key_manager.validate_private_key("invalid-key").is_err());
@@ -44,8 +44,8 @@ fn test_x25519_public_key_derivation() -> Result<(), Box<dyn std::error::Error>>
     let keypair = key_manager.generate_keypair()?;
     
     // Test deriving public key from private key
-    let derived_public = key_manager.derive_public_key(&keypair.private_key)?;
-    assert_eq!(derived_public, keypair.public_key);
+    let derived_public = key_manager.derive_public_key_base64(&keypair.private_key_base64())?;
+    assert_eq!(derived_public, keypair.public_key_base64());
     
     Ok(())
 }
@@ -67,8 +67,8 @@ fn test_uuid_generation() -> Result<(), Box<dyn std::error::Error>> {
     let short_id2 = uuid_gen.generate_short_id(&uuid2)?;
     
     assert_ne!(short_id1, short_id2);
-    assert_eq!(short_id1.len(), 16); // 8 bytes in hex
-    assert_eq!(short_id2.len(), 16);
+    assert_eq!(short_id1.len(), 8); // 4 bytes in hex (8 chars)
+    assert_eq!(short_id2.len(), 8);
     
     // Test consistency
     let short_id1_again = uuid_gen.generate_short_id(&uuid1)?;
@@ -185,12 +185,12 @@ fn test_encoding_edge_cases() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_key_pair_structure() {
     let keypair = KeyPair {
-        private_key: "private_key_data".to_string(),
-        public_key: "public_key_data".to_string(),
+        private_key: "private_key_data".to_string().into_bytes(),
+        public_key: "public_key_data".to_string().into_bytes(),
     };
     
-    assert_eq!(keypair.private_key, "private_key_data");
-    assert_eq!(keypair.public_key, "public_key_data");
+    assert_eq!(keypair.private_key, "private_key_data".to_string().into_bytes());
+    assert_eq!(keypair.public_key, "public_key_data".to_string().into_bytes());
 }
 
 #[test]

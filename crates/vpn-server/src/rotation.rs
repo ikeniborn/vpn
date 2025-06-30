@@ -95,7 +95,8 @@ impl KeyRotationManager {
         let public_key_file = config_dir.join("public_key.txt");
         
         // Generate new keypair
-        let new_keypair = X25519KeyManager::generate_keypair()?;
+        let key_manager = X25519KeyManager::new();
+        let new_keypair = key_manager.generate_keypair()?;
         
         // Save new keys
         fs::write(&private_key_file, new_keypair.private_key_base64())?;
@@ -122,7 +123,8 @@ impl KeyRotationManager {
         
         for mut user in users {
             // Generate new keypair for user
-            match X25519KeyManager::generate_keypair() {
+            let key_manager = X25519KeyManager::new();
+            match key_manager.generate_keypair() {
                 Ok(new_keypair) => {
                     user.config.private_key = Some(new_keypair.private_key_base64());
                     user.config.public_key = Some(new_keypair.public_key_base64());
@@ -261,7 +263,8 @@ impl KeyRotationManager {
             let private_key = fs::read_to_string(&private_key_file)?;
             let public_key = fs::read_to_string(&public_key_file)?;
             
-            match X25519KeyManager::from_base64(&private_key) {
+            let key_manager = X25519KeyManager::new();
+            match key_manager.from_base64(&private_key) {
                 Ok(keypair) => {
                     if keypair.public_key_base64() == public_key.trim() {
                         status.server_keys_valid = true;
@@ -286,7 +289,8 @@ impl KeyRotationManager {
         
         for user in users {
             if let (Some(private_key), Some(public_key)) = (&user.config.private_key, &user.config.public_key) {
-                match X25519KeyManager::from_base64(private_key) {
+                let key_manager = X25519KeyManager::new();
+                match key_manager.from_base64(private_key) {
                     Ok(keypair) => {
                         if keypair.public_key_base64() == *public_key {
                             status.user_keys_valid += 1;

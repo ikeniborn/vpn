@@ -70,7 +70,7 @@ impl DockerComposeTemplate {
       - ./users:/etc/xray/users
     environment:
       - XRAY_LOCATION_ASSET=/usr/share/xray
-    command: ["xray", "-config", "/etc/xray/config.json"]
+    command: ["run", "-config", "/etc/xray/config.json"]
     logging:
       driver: "json-file"
       options:

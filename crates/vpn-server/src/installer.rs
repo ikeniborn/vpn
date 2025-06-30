@@ -7,6 +7,7 @@ use vpn_network::firewall::{Protocol, Direction};
 use vpn_crypto::{X25519KeyManager, UuidGenerator};
 use vpn_users::{UserManager, User};
 use vpn_users::user::VpnProtocol;
+use uuid::Uuid;
 use crate::templates::DockerComposeTemplate;
 use crate::validator::ConfigValidator;
 use crate::error::{ServerError, Result};
@@ -161,8 +162,11 @@ impl ServerInstaller {
         };
         
         let public_ip = IpDetector::get_public_ip().await?;
-        let keypair = X25519KeyManager::generate_keypair()?;
-        let short_id = UuidGenerator::generate_short_id();
+        let key_manager = X25519KeyManager::new();
+        let keypair = key_manager.generate_keypair()?;
+        let uuid_gen = UuidGenerator::new();
+        let server_uuid = Uuid::new_v4().to_string();
+        let short_id = uuid_gen.generate_short_id(&server_uuid)?;
         
         let sni_domain = match &options.sni_domain {
             Some(domain) => domain.clone(),

@@ -93,7 +93,8 @@ impl UserManager {
         let mut user = User::new(name, protocol);
         
         // Generate crypto keys for the user
-        let keypair = vpn_crypto::X25519KeyManager::generate_keypair()
+        let key_manager = vpn_crypto::X25519KeyManager::new();
+        let keypair = key_manager.generate_keypair()
             .map_err(|e| UserError::CryptoError(e))?;
         
         user.config.private_key = Some(keypair.private_key_base64());
@@ -212,7 +213,8 @@ impl UserManager {
     
     pub async fn generate_qr_code(&self, user_id: &str, output_path: &Path) -> Result<()> {
         let link = self.generate_connection_link(user_id).await?;
-        QrCodeGenerator::save_as_png(&link, output_path)
+        let qr_gen = QrCodeGenerator::new();
+        qr_gen.save_qr_code_to_file(&link, &output_path.to_string_lossy())
             .map_err(|e| UserError::CryptoError(e))?;
         Ok(())
     }
