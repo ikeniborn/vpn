@@ -71,6 +71,12 @@ impl ServiceManager {
                 let mut labels = HashMap::new();
                 labels.insert("service.type".to_string(), "vpn-server".to_string());
                 labels.insert("service.role".to_string(), "core".to_string());
+                // Traefik labels for VPN server
+                labels.insert("traefik.enable".to_string(), "true".to_string());
+                labels.insert("traefik.tcp.routers.vpn-xray.rule".to_string(), "HostSNI(`*`)".to_string());
+                labels.insert("traefik.tcp.routers.vpn-xray.entrypoints".to_string(), "vpn-xray".to_string());
+                labels.insert("traefik.tcp.routers.vpn-xray.service".to_string(), "vpn-xray".to_string());
+                labels.insert("traefik.tcp.services.vpn-xray.loadbalancer.server.port".to_string(), "8443".to_string());
                 labels
             },
             deploy: Some(DeployConfig {
@@ -124,60 +130,80 @@ impl ServiceManager {
         }
     }
 
-    /// Create Nginx proxy service definition
-    pub fn create_nginx_proxy_service() -> ServiceDefinition {
+    /// Create Traefik proxy service definition
+    pub fn create_traefik_proxy_service() -> ServiceDefinition {
         ServiceDefinition {
-            image: "nginx:alpine".to_string(),
-            container_name: Some("nginx-proxy".to_string()),
+            image: "traefik:v3.0".to_string(),
+            container_name: Some("traefik".to_string()),
             restart: RestartPolicy::UnlessStopped,
             ports: vec![
                 PortMapping::tcp(80, 80),
                 PortMapping::tcp(443, 443),
+                PortMapping::tcp(8080, 8080), // Dashboard/API
+                PortMapping::tcp(8443, 8443), // VPN/Xray port
             ],
             volumes: vec![
-                VolumeMount::read_only("./configs/nginx", "/etc/nginx/conf.d"),
-                VolumeMount::read_only("nginx-certs", "/etc/nginx/certs"),
-                VolumeMount::new("vpn-logs", "/var/log/nginx"),
+                VolumeMount::read_only("/var/run/docker.sock", "/var/run/docker.sock"),
+                VolumeMount::read_only("./configs/traefik/traefik.yml", "/etc/traefik/traefik.yml"),
+                VolumeMount::read_only("./configs/traefik/dynamic.yml", "/etc/traefik/dynamic.yml"),
+                VolumeMount::new("traefik-acme", "/etc/traefik/acme.json"),
+                VolumeMount::new("traefik-logs", "/var/log/traefik"),
             ],
             environment: {
                 let mut env = HashMap::new();
-                env.insert("NGINX_HOST".to_string(), "${DOMAIN_NAME:-vpn.example.com}".to_string());
-                env.insert("NGINX_PORT".to_string(), "80".to_string());
+                env.insert("TRAEFIK_API_DASHBOARD".to_string(), "true".to_string());
+                env.insert("TRAEFIK_API_INSECURE".to_string(), "false".to_string());
+                env.insert("TRAEFIK_PROVIDERS_DOCKER".to_string(), "true".to_string());
+                env.insert("TRAEFIK_PROVIDERS_DOCKER_EXPOSEDBYDEFAULT".to_string(), "false".to_string());
+                env.insert("TRAEFIK_ENTRYPOINTS_WEB_ADDRESS".to_string(), ":80".to_string());
+                env.insert("TRAEFIK_ENTRYPOINTS_WEBSECURE_ADDRESS".to_string(), ":443".to_string());
+                env.insert("TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL".to_string(), "${ACME_EMAIL:-admin@vpn.local}".to_string());
+                env.insert("TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_STORAGE".to_string(), "/etc/traefik/acme.json".to_string());
+                env.insert("TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_HTTPCHALLENGE_ENTRYPOINT".to_string(), "web".to_string());
                 env
             },
-            depends_on: vec!["vpn-server".to_string()],
-            healthcheck: Some(HealthCheck::cmd_shell(
-                "wget --quiet --tries=1 --spider http://localhost/health || exit 1"
-            )),
+            depends_on: vec![],
+            healthcheck: Some(HealthCheck::http("/ping", 8080, 30, 5, 3, 10)),
             networks: vec!["vpn-network".to_string()],
             security_opt: vec!["no-new-privileges:true".to_string()],
             cap_drop: vec!["ALL".to_string()],
-            cap_add: vec!["CHOWN".to_string(), "SETGID".to_string(), "SETUID".to_string()],
+            cap_add: vec![],
             labels: {
                 let mut labels = HashMap::new();
                 labels.insert("service.type".to_string(), "proxy".to_string());
                 labels.insert("service.role".to_string(), "edge".to_string());
+                labels.insert("traefik.enable".to_string(), "true".to_string());
+                labels.insert("traefik.http.routers.traefik.rule".to_string(), "Host(`traefik.${DOMAIN_NAME:-vpn.local}`)".to_string());
+                labels.insert("traefik.http.routers.traefik.entrypoints".to_string(), "websecure".to_string());
+                labels.insert("traefik.http.routers.traefik.tls.certresolver".to_string(), "letsencrypt".to_string());
+                labels.insert("traefik.http.routers.traefik.service".to_string(), "api@internal".to_string());
+                labels.insert("traefik.http.routers.traefik.middlewares".to_string(), "admin-auth".to_string());
                 labels
             },
             deploy: Some(DeployConfig {
                 replicas: Some(1),
                 resources: Some(ResourcesConfig {
                     limits: Some(ResourceLimits {
-                        memory: Some("256M".to_string()),
-                        cpus: Some("0.25".to_string()),
+                        memory: Some("512M".to_string()),
+                        cpus: Some("0.5".to_string()),
                     }),
                     reservations: Some(ResourceLimits {
-                        memory: Some("128M".to_string()),
-                        cpus: Some("0.1".to_string()),
+                        memory: Some("256M".to_string()),
+                        cpus: Some("0.25".to_string()),
                     }),
                 }),
                 restart_policy: Some(RestartPolicyConfig {
                     condition: "on-failure".to_string(),
-                    delay: Some("5s".to_string()),
+                    delay: Some("10s".to_string()),
                     max_attempts: Some(3),
                     window: None,
                 }),
-                update_config: None,
+                update_config: Some(UpdateConfig {
+                    parallelism: Some(1),
+                    delay: Some("30s".to_string()),
+                    failure_action: Some("rollback".to_string()),
+                    order: Some("stop-first".to_string()),
+                }),
             }),
             logging: Some(LoggingConfig {
                 driver: "json-file".to_string(),
@@ -189,8 +215,7 @@ impl ServiceManager {
                 },
             }),
             tmpfs: vec![
-                "/var/cache/nginx:noexec,nosuid,size=64m".to_string(),
-                "/var/run:noexec,nosuid,size=32m".to_string(),
+                "/tmp:noexec,nosuid,size=64m".to_string(),
             ],
             read_only: false,
             user: None,
@@ -477,6 +502,13 @@ impl ServiceManager {
                 let mut labels = HashMap::new();
                 labels.insert("service.type".to_string(), "monitoring".to_string());
                 labels.insert("service.role".to_string(), "visualization".to_string());
+                // Traefik labels for Grafana
+                labels.insert("traefik.enable".to_string(), "true".to_string());
+                labels.insert("traefik.http.routers.grafana.rule".to_string(), "Host(`grafana.${DOMAIN_NAME:-vpn.local}`)".to_string());
+                labels.insert("traefik.http.routers.grafana.entrypoints".to_string(), "websecure".to_string());
+                labels.insert("traefik.http.routers.grafana.tls.certresolver".to_string(), "letsencrypt".to_string());
+                labels.insert("traefik.http.services.grafana.loadbalancer.server.port".to_string(), "3000".to_string());
+                labels.insert("traefik.http.routers.grafana.middlewares".to_string(), "default-middlewares".to_string());
                 labels
             },
             deploy: Some(DeployConfig {
@@ -632,6 +664,13 @@ impl ServiceManager {
                 let mut labels = HashMap::new();
                 labels.insert("service.type".to_string(), "identity".to_string());
                 labels.insert("service.role".to_string(), "auth".to_string());
+                // Traefik labels for identity service
+                labels.insert("traefik.enable".to_string(), "true".to_string());
+                labels.insert("traefik.http.routers.vpn-identity.rule".to_string(), "Host(`auth.${DOMAIN_NAME:-vpn.local}`)".to_string());
+                labels.insert("traefik.http.routers.vpn-identity.entrypoints".to_string(), "websecure".to_string());
+                labels.insert("traefik.http.routers.vpn-identity.tls.certresolver".to_string(), "letsencrypt".to_string());
+                labels.insert("traefik.http.services.vpn-identity.loadbalancer.server.port".to_string(), "8080".to_string());
+                labels.insert("traefik.http.routers.vpn-identity.middlewares".to_string(), "default-middlewares".to_string());
                 labels
             },
             deploy: Some(DeployConfig {
@@ -689,7 +728,7 @@ impl ServiceManager {
     /// Load predefined service definitions
     pub fn load_predefined_services(&mut self) {
         self.add_service("vpn-server".to_string(), Self::create_vpn_server_service());
-        self.add_service("nginx-proxy".to_string(), Self::create_nginx_proxy_service());
+        self.add_service("traefik".to_string(), Self::create_traefik_proxy_service());
         self.add_service("postgres".to_string(), Self::create_postgres_service());
         self.add_service("redis".to_string(), Self::create_redis_service());
         self.add_service("prometheus".to_string(), Self::create_prometheus_service());

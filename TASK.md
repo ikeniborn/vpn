@@ -249,8 +249,9 @@
 ```yaml
 # docker-compose.yml structure
 services:
+  traefik:        # Reverse proxy, load balancing, SSL termination
   vpn-server:     # Xray/VLESS with Reality
-  nginx-proxy:    # SSL termination and load balancing  
+  vpn-identity:   # Authentication and authorization service
   prometheus:     # Metrics collection
   grafana:        # Monitoring dashboards
   jaeger:         # Distributed tracing

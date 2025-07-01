@@ -24,7 +24,8 @@
 
 ### 🐳 **Deployment & Management**
 - **Docker Compose Orchestration**: Simplified multi-service deployment with `docker-compose up`
-- **Docker Integration**: Full containerized deployment with health monitoring  
+- **Traefik Load Balancing**: Automatic SSL/TLS termination with Let's Encrypt integration
+- **Service Discovery**: Dynamic service routing and load balancing with health checks
 - **Interactive CLI**: Modern command-line interface with colored output and progress bars
 - **Automated Migration**: Seamless migration from Bash-based installations
 - **Privilege Management**: Automatic privilege escalation with user confirmation
@@ -42,6 +43,40 @@
 - **Auto-fix Capabilities**: Automatic resolution of common configuration issues
 - **Privilege Management**: Smart privilege escalation with user confirmation
 - **Environment Validation**: Docker, network, and dependency verification
+
+## 🏗️ System Architecture
+
+### **Traefik-Based Infrastructure**
+
+The VPN system uses **Traefik v3.x** as the core reverse proxy and load balancer, providing:
+
+- **🔄 Automatic Service Discovery**: Dynamic routing configuration via Docker labels
+- **🔒 SSL/TLS Termination**: Automatic Let's Encrypt certificate management
+- **⚖️ Load Balancing**: Distribution across multiple VPN server instances
+- **📊 Health Monitoring**: Built-in health checks and automatic failover
+- **🚦 Traffic Management**: Rate limiting, circuit breakers, and retry policies
+
+### **Service Stack**
+
+```yaml
+Services:
+  ├── traefik              # Reverse proxy, SSL, load balancing
+  ├── vpn-server           # Xray-core (VLESS+Reality) 
+  ├── vpn-identity         # Authentication & authorization
+  ├── postgres             # User data & configuration
+  ├── redis                # Sessions & caching
+  ├── prometheus           # Metrics collection
+  ├── grafana              # Monitoring dashboards
+  └── jaeger               # Distributed tracing
+```
+
+### **High Availability Mode**
+
+- **Multi-Instance Deployment**: Automatic scaling of VPN servers and identity services
+- **Consul Service Discovery**: Centralized configuration and service registration
+- **PostgreSQL Primary-Replica**: Database replication for data redundancy  
+- **Redis Sentinel**: Session storage with automatic failover
+- **Sticky Sessions**: Client affinity for consistent authentication state
 
 ## 📋 Table of Contents
 

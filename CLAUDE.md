@@ -6,6 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a Rust-based VPN management system that provides comprehensive tools for managing Xray (VLESS+Reality) and Outline VPN servers. It replaces an original Bash implementation with a type-safe, high-performance alternative written in Rust.
 
+### Key Infrastructure Components
+
+- **Proxy/Load Balancer**: Traefik v3.x for reverse proxy, load balancing, and automatic SSL/TLS termination
+- **VPN Server**: Xray-core with VLESS+Reality protocol for secure tunneling
+- **Identity Management**: Custom Rust-based identity service with LDAP/OAuth2 support
+- **Monitoring**: Prometheus + Grafana + Jaeger for comprehensive observability
+- **Storage**: PostgreSQL for persistent data, Redis for sessions and caching
+- **Orchestration**: Docker Compose with Traefik service discovery
+
 ## Build and Development Commands
 
 ### Core Development Commands
