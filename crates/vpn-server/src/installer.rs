@@ -7,6 +7,7 @@ use vpn_network::firewall::{Protocol, Direction};
 use vpn_crypto::{X25519KeyManager, UuidGenerator};
 use vpn_users::{UserManager, User};
 use vpn_users::user::VpnProtocol;
+use vpn_types::validation::{PortValidator, PathValidator};
 use uuid::Uuid;
 use crate::templates::DockerComposeTemplate;
 use crate::validator::ConfigValidator;
@@ -59,6 +60,30 @@ impl ServerInstaller {
         // Pre-installation checks
         self.check_dependencies().await?;
         self.check_system_requirements().await?;
+        
+        // Validate installation path
+        let mut allowed_paths = vec![
+            PathBuf::from("/opt"),
+            PathBuf::from("/etc/vpn"),
+            PathBuf::from("/var/lib/vpn"),
+            PathBuf::from("/usr/local/vpn"),
+            PathBuf::from("/home"),
+        ];
+        
+        // Add user's home directory if available
+        if let Ok(home) = std::env::var("HOME") {
+            allowed_paths.push(PathBuf::from(home));
+        }
+        
+        let path_validator = PathValidator::new(allowed_paths);
+        
+        // For new installations, we just need to check the parent directory exists
+        if let Some(parent) = options.install_path.parent() {
+            if parent.exists() {
+                path_validator.validate(parent)
+                    .map_err(|e| ServerError::ValidationError(format!("Installation path validation failed: {}", e)))?;
+            }
+        }
         
         // Create installation directory with proper error handling
         if let Err(e) = std::fs::create_dir_all(&options.install_path) {
@@ -150,6 +175,9 @@ impl ServerInstaller {
     async fn generate_server_config(&self, options: &InstallationOptions) -> Result<ServerConfig> {
         let port = match options.port {
             Some(p) => {
+                // Use comprehensive port validation
+                PortValidator::validate(p)
+                    .map_err(|e| ServerError::ValidationError(e.to_string()))?;
                 PortChecker::validate_port(p)?;
                 if !PortChecker::is_port_available(p) {
                     return Err(ServerError::InstallationError(

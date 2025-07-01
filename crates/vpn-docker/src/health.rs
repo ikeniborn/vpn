@@ -86,6 +86,9 @@ impl HealthChecker {
         let mut stream = self.docker.stats(name, Some(options));
         
         if let Some(Ok(stats)) = stream.next().await {
+            // Explicitly drop the stream to ensure resources are freed
+            drop(stream);
+            
             let cpu_usage = calculate_cpu_percentage(&stats);
             
             let memory_stats = &stats.memory_stats;

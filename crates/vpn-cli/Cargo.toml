@@ -10,6 +10,7 @@ name = "vpn"
 path = "src/main.rs"
 
 [dependencies]
+vpn-types = { path = "../vpn-types" }
 vpn-docker = { path = "../vpn-docker" }
 vpn-crypto = { path = "../vpn-crypto" }
 vpn-network = { path = "../vpn-network" }
@@ -40,6 +41,7 @@ regex = "1.10"
 uuid = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 libc = "0.2"
+rand = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.8"

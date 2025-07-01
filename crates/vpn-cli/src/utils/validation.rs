@@ -1,81 +1,40 @@
 use std::net::{IpAddr, SocketAddr};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use regex::Regex;
+use vpn_types::validation::*;
 use crate::error::{CliError, Result};
 
 pub fn validate_username(username: &str) -> Result<()> {
-    if username.is_empty() {
-        return Err(CliError::ValidationError("Username cannot be empty".to_string()));
-    }
-    
-    if username.len() > 50 {
-        return Err(CliError::ValidationError("Username too long (max 50 characters)".to_string()));
-    }
-    
-    // Check for valid characters (alphanumeric, dash, underscore)
-    let valid_regex = Regex::new(r"^[a-zA-Z0-9_-]+$")
-        .map_err(|e| CliError::ValidationError(format!("Regex compilation failed: {}", e)))?;
-    if !valid_regex.is_match(username) {
-        return Err(CliError::ValidationError(
-            "Username can only contain letters, numbers, dash, and underscore".to_string()
-        ));
-    }
-    
-    // Cannot start with dash or underscore
-    if username.starts_with('-') || username.starts_with('_') {
-        return Err(CliError::ValidationError(
-            "Username cannot start with dash or underscore".to_string()
-        ));
-    }
-    
-    Ok(())
+    let validator = UsernameValidator::default();
+    validator.validate(username)
+        .map_err(|e| CliError::ValidationError(e.to_string()))
 }
 
 pub fn validate_email(email: &str) -> Result<()> {
-    if email.is_empty() {
-        return Err(CliError::ValidationError("Email cannot be empty".to_string()));
-    }
-    
-    // Basic email validation
-    let email_regex = Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
-        .map_err(|e| CliError::ValidationError(format!("Regex compilation failed: {}", e)))?;
-    if !email_regex.is_match(email) {
-        return Err(CliError::ValidationError("Invalid email format".to_string()));
-    }
-    
-    Ok(())
+    let validator = EmailValidator::default();
+    validator.validate(email)
+        .map_err(|e| CliError::ValidationError(e.to_string()))
 }
 
 pub fn validate_port(port: u16) -> Result<()> {
-    if port == 0 {
-        return Err(CliError::ValidationError("Port cannot be 0".to_string()));
-    }
-    
     if port < 1024 {
         return Err(CliError::ValidationError(
             "Port numbers below 1024 are privileged ports".to_string()
         ));
     }
     
-    // Check for commonly used ports that might conflict
-    let reserved_ports = [22, 80, 443, 53, 25, 110, 993, 995];
-    if reserved_ports.contains(&port) {
-        return Err(CliError::ValidationError(
-            format!("Port {} is commonly used by other services", port)
-        ));
-    }
-    
-    Ok(())
+    PortValidator::validate(port)
+        .map_err(|e| CliError::ValidationError(e.to_string()))
 }
 
 pub fn validate_ip_address(ip: &str) -> Result<IpAddr> {
-    ip.parse::<IpAddr>()
-        .map_err(|_| CliError::ValidationError(format!("Invalid IP address: {}", ip)))
+    IpValidator::validate(ip)
+        .map_err(|e| CliError::ValidationError(e.to_string()))
 }
 
 pub fn validate_socket_address(addr: &str) -> Result<SocketAddr> {
-    addr.parse::<SocketAddr>()
-        .map_err(|_| CliError::ValidationError(format!("Invalid socket address: {}", addr)))
+    IpValidator::validate_socket_addr(addr)
+        .map_err(|e| CliError::ValidationError(e.to_string()))
 }
 
 pub fn validate_domain_name(domain: &str) -> Result<()> {
@@ -118,18 +77,24 @@ pub fn validate_domain_name(domain: &str) -> Result<()> {
 }
 
 pub fn validate_file_path(path: &str, must_exist: bool) -> Result<()> {
-    let path = Path::new(path);
+    let path_obj = Path::new(path);
     
-    if must_exist && !path.exists() {
-        return Err(CliError::ValidationError(format!("File does not exist: {}", path.display())));
+    // Validate filename
+    if let Some(filename) = path_obj.file_name() {
+        PathValidator::validate_filename(&filename.to_string_lossy())
+            .map_err(|e| CliError::ValidationError(e.to_string()))?;
     }
     
-    if path.exists() && path.is_dir() {
-        return Err(CliError::ValidationError(format!("Path is a directory, not a file: {}", path.display())));
+    if must_exist && !path_obj.exists() {
+        return Err(CliError::ValidationError(format!("File does not exist: {}", path_obj.display())));
+    }
+    
+    if path_obj.exists() && path_obj.is_dir() {
+        return Err(CliError::ValidationError(format!("Path is a directory, not a file: {}", path_obj.display())));
     }
     
     // Check if parent directory exists
-    if let Some(parent) = path.parent() {
+    if let Some(parent) = path_obj.parent() {
         if !parent.exists() {
             return Err(CliError::ValidationError(
                 format!("Parent directory does not exist: {}", parent.display())
@@ -141,14 +106,29 @@ pub fn validate_file_path(path: &str, must_exist: bool) -> Result<()> {
 }
 
 pub fn validate_directory_path(path: &str, must_exist: bool) -> Result<()> {
-    let path = Path::new(path);
+    let path_obj = Path::new(path);
     
-    if must_exist && !path.exists() {
-        return Err(CliError::ValidationError(format!("Directory does not exist: {}", path.display())));
+    if must_exist && !path_obj.exists() {
+        return Err(CliError::ValidationError(format!("Directory does not exist: {}", path_obj.display())));
     }
     
-    if path.exists() && !path.is_dir() {
-        return Err(CliError::ValidationError(format!("Path is not a directory: {}", path.display())));
+    if path_obj.exists() && !path_obj.is_dir() {
+        return Err(CliError::ValidationError(format!("Path is not a directory: {}", path_obj.display())));
+    }
+    
+    // Use PathValidator for security checks
+    let allowed_paths = vec![
+        PathBuf::from("/etc/vpn"),
+        PathBuf::from("/opt/vpn"),
+        PathBuf::from("/var/lib/vpn"),
+        PathBuf::from("/tmp"),
+        dirs::home_dir().unwrap_or_else(|| PathBuf::from("/home"))
+    ];
+    
+    let validator = PathValidator::new(allowed_paths);
+    if path_obj.exists() {
+        validator.validate(path_obj)
+            .map_err(|e| CliError::ValidationError(e.to_string()))?;
     }
     
     Ok(())
@@ -335,6 +315,30 @@ pub fn sanitize_log_message(message: &str) -> String {
     } else {
         sanitized.to_string()
     }
+}
+
+/// Validate command arguments for shell execution safety
+pub fn validate_command_arg(arg: &str) -> Result<()> {
+    CommandValidator::validate(arg)
+        .map_err(|e| CliError::ValidationError(e.to_string()))
+}
+
+/// Validate SQL input to prevent injection
+pub fn validate_sql_input(input: &str) -> Result<()> {
+    SqlValidator::validate(input)
+        .map_err(|e| CliError::ValidationError(e.to_string()))
+}
+
+/// Validate configuration key
+pub fn validate_config_key(key: &str) -> Result<()> {
+    ConfigValidator::validate_key(key)
+        .map_err(|e| CliError::ValidationError(e.to_string()))
+}
+
+/// Validate configuration value
+pub fn validate_config_value(value: &str) -> Result<()> {
+    ConfigValidator::validate_value(value)
+        .map_err(|e| CliError::ValidationError(e.to_string()))
 }
 
 #[cfg(test)]

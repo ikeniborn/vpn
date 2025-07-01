@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/vpn-types",
     "crates/vpn-docker",
     "crates/vpn-crypto",
     "crates/vpn-network",

@@ -116,7 +116,8 @@ impl VolumeManager {
         
         let mut wait_stream = self.docker.wait_container(&container.id, None::<bollard::container::WaitContainerOptions<String>>);
         while let Some(_) = wait_stream.next().await {}
-        // Container finished
+        // Explicitly drop the stream to free resources
+        drop(wait_stream);
         
         self.docker.remove_container(&container.id, None).await?;
         
@@ -162,7 +163,8 @@ impl VolumeManager {
         
         let mut wait_stream = self.docker.wait_container(&container.id, None::<bollard::container::WaitContainerOptions<String>>);
         while let Some(_) = wait_stream.next().await {}
-        // Container finished
+        // Explicitly drop the stream to free resources
+        drop(wait_stream);
         
         self.docker.remove_container(&container.id, None).await?;
         

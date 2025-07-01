@@ -9,11 +9,20 @@ use vpn_cli::{Cli, Commands, InteractiveMenu, CommandHandler, ConfigManager, Cli
 async fn main() {
     let cli = Cli::parse();
     
+    // Initialize privilege manager
+    let mut privilege_manager = match PrivilegeManager::new() {
+        Ok(pm) => pm,
+        Err(e) => {
+            eprintln!("{} Failed to initialize privilege manager: {}", "Error:".red(), e);
+            process::exit(1);
+        }
+    };
+    
     // Check and request privileges if needed for specific commands
     if let Some(ref _command) = cli.command {
         let args: Vec<String> = std::env::args().collect();
         if PrivilegeManager::command_needs_root(&args) {
-            if let Err(e) = PrivilegeManager::ensure_root_privileges() {
+            if let Err(e) = privilege_manager.ensure_root_privileges() {
                 eprintln!("{} {}", "Error:".red(), e);
                 process::exit(1);
             }
@@ -41,7 +50,7 @@ async fn main() {
 
     // Show privilege status if verbose
     if cli.verbose {
-        PrivilegeManager::show_privilege_status();
+        privilege_manager.show_privilege_status();
         println!();
     }
 
@@ -56,7 +65,7 @@ async fn main() {
 
     // Execute command or start interactive menu
     let result = match cli.command {
-        Some(ref command) => execute_command(command_handler, command.clone(), &cli).await,
+        Some(ref command) => execute_command(command_handler, command.clone(), &cli, privilege_manager).await,
         None => start_interactive_menu(command_handler).await,
     };
 
@@ -70,6 +79,7 @@ async fn execute_command(
     mut handler: CommandHandler,
     command: Commands,
     cli: &Cli,
+    privilege_manager: PrivilegeManager,
 ) -> Result<(), CliError> {
     handler.set_output_format(cli.format.clone());
     handler.set_force_mode(cli.force);
@@ -138,7 +148,7 @@ async fn execute_command(
             handler.run_benchmark().await
         }
         Commands::Privileges => {
-            PrivilegeManager::show_privilege_status();
+            privilege_manager.show_privilege_status();
             Ok(())
         }
         Commands::NetworkCheck => {

@@ -1,12 +1,34 @@
+//! Enhanced privilege management with bracketing and audit logging
+
+mod audit;
+mod bracket;
+
+pub use audit::{PrivilegeAuditor, PrivilegeEvent};
+pub use bracket::{PrivilegeBracket, BracketManager};
+
 use std::process::{Command, Stdio};
 use std::env;
 use std::io::{self, Write};
+use std::time::Duration;
 use colored::*;
 use crate::error::{CliError, Result};
 
-pub struct PrivilegeManager;
+pub struct PrivilegeManager {
+    /// Bracket manager for rate limiting
+    bracket_manager: BracketManager,
+    /// Auditor for logging events
+    auditor: PrivilegeAuditor,
+}
 
 impl PrivilegeManager {
+    /// Create a new privilege manager
+    pub fn new() -> Result<Self> {
+        Ok(Self {
+            bracket_manager: BracketManager::new(20), // Max 20 escalations per hour
+            auditor: PrivilegeAuditor::new()?,
+        })
+    }
+
     /// Check if running as root
     pub fn is_root() -> bool {
         #[cfg(unix)]
@@ -80,7 +102,7 @@ impl PrivilegeManager {
     }
 
     /// Request elevated privileges and restart if needed
-    pub fn ensure_root_privileges() -> Result<()> {
+    pub fn ensure_root_privileges(&mut self) -> Result<()> {
         if Self::is_root() {
             return Ok(());
         }
@@ -105,17 +127,26 @@ impl PrivilegeManager {
         
         // Interactive confirmation
         if !Self::prompt_for_privilege_elevation(&operation)? {
+            // Log denial
+            let user = env::var("USER").unwrap_or_else(|_| "unknown".to_string());
+            self.auditor.log_denial(
+                user,
+                operation,
+                args,
+                "User cancelled operation".to_string(),
+            )?;
+            
             return Err(CliError::PermissionError(
                 "Operation cancelled by user".to_string()
             ));
         }
         
         // Try to get privilege elevation
-        Self::request_sudo_privileges(&args)
+        self.request_sudo_privileges(&args, &operation)
     }
 
     /// Request sudo privileges and re-execute with elevated rights
-    fn request_sudo_privileges(args: &[String]) -> Result<()> {
+    fn request_sudo_privileges(&mut self, args: &[String], operation: &str) -> Result<()> {
         let current_exe = env::current_exe()
             .map_err(|e| CliError::PermissionError(format!("Cannot get current executable path: {}", e)))?;
         
@@ -127,6 +158,15 @@ impl PrivilegeManager {
                 "sudo is not available. Please run as administrator manually.".to_string()
             ));
         }
+
+        // Log the attempt
+        let user = env::var("USER").unwrap_or_else(|_| "unknown".to_string());
+        self.auditor.log_grant(
+            user.clone(),
+            None,
+            operation.to_string(),
+            args.to_vec(),
+        )?;
 
         // Prepare command for sudo execution
         let mut cmd_args = vec![current_exe.to_string_lossy().to_string()];
@@ -194,6 +234,24 @@ impl PrivilegeManager {
         }
     }
 
+    /// Create a privilege bracket for temporary elevation
+    pub fn create_bracket(&self, operation: String, duration: Duration) -> Result<PrivilegeBracket> {
+        self.bracket_manager.create_bracket(operation, duration)
+    }
+
+    /// Execute a function with minimal required privileges
+    pub fn with_privileges<F, T>(&self, operation: &str, f: F) -> Result<T>
+    where
+        F: FnOnce() -> Result<T>,
+    {
+        let mut bracket = self.create_bracket(
+            operation.to_string(),
+            Duration::from_secs(300), // 5 minute timeout
+        )?;
+        
+        bracket.with_privileges(f)
+    }
+
     /// Get effective user information
     pub fn get_user_info() -> UserInfo {
         let current_user = env::var("USER").unwrap_or_else(|_| "unknown".to_string());
@@ -208,7 +266,7 @@ impl PrivilegeManager {
     }
 
     /// Show privilege status
-    pub fn show_privilege_status() {
+    pub fn show_privilege_status(&self) {
         let user_info = Self::get_user_info();
         
         println!("{}", "Privilege Status:".cyan().bold());
@@ -224,12 +282,51 @@ impl PrivilegeManager {
         } else {
             println!("  Status: {} (Limited access)", "Standard".yellow());
             println!("  Capabilities: {}", "Read-only operations only".yellow());
-            println!();
-            println!("{}", "To perform administrative operations:".cyan());
-            println!("  • VPN CLI will automatically request privileges when needed");
-            println!("  • You can manually run with: {}", "sudo vpn <command>".green());
-            println!("  • Or check specific operations: {}", "vpn privileges".green());
         }
+
+        // Show recent privilege usage
+        println!();
+        println!("{}", "Recent Privilege Usage:".cyan());
+        let usage = self.bracket_manager.get_recent_usage();
+        if usage.is_empty() {
+            println!("  No recent privilege escalations");
+        } else {
+            for (op, duration) in usage.iter().take(5) {
+                println!("  • {} ({} ago)", op.green(), format_duration(*duration));
+            }
+        }
+    }
+
+    /// Show audit log
+    pub fn show_audit_log(&self, count: usize) -> Result<()> {
+        println!("{}", "Privilege Audit Log:".cyan().bold());
+        
+        let events = self.auditor.get_recent_events(count)?;
+        if events.is_empty() {
+            println!("  No audit events found");
+        } else {
+            for event in events {
+                let status = if event.granted {
+                    "GRANTED".green()
+                } else {
+                    "DENIED".red()
+                };
+                
+                println!("  {} {} - {} by {} for '{}'",
+                    event.timestamp.format("%Y-%m-%d %H:%M:%S"),
+                    status,
+                    event.operation,
+                    event.user,
+                    event.command.join(" ")
+                );
+                
+                if let Some(reason) = event.denial_reason {
+                    println!("    Reason: {}", reason.yellow());
+                }
+            }
+        }
+        
+        Ok(())
     }
 }
 
@@ -238,6 +335,18 @@ pub struct UserInfo {
     pub current_user: String,
     pub sudo_user: Option<String>,
     pub is_root: bool,
+}
+
+/// Format duration in human-readable format
+fn format_duration(duration: Duration) -> String {
+    let secs = duration.as_secs();
+    if secs < 60 {
+        format!("{}s", secs)
+    } else if secs < 3600 {
+        format!("{}m", secs / 60)
+    } else {
+        format!("{}h {}m", secs / 3600, (secs % 3600) / 60)
+    }
 }
 
 #[cfg(test)]
@@ -257,9 +366,9 @@ mod tests {
     }
 
     #[test]
-    fn test_is_sudo_available() {
-        // This test may fail on systems without sudo, which is expected
-        let available = PrivilegeManager::is_sudo_available();
-        println!("Sudo available: {}", available);
+    fn test_format_duration() {
+        assert_eq!(format_duration(Duration::from_secs(30)), "30s");
+        assert_eq!(format_duration(Duration::from_secs(90)), "1m");
+        assert_eq!(format_duration(Duration::from_secs(3661)), "1h 1m");
     }
 }

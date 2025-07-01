@@ -80,13 +80,20 @@ impl LogStreamer {
                 Ok(output) => {
                     let entry = self.parse_log_output(container, output)?;
                     if tx.send(entry).await.is_err() {
+                        // Channel closed, stop streaming
                         break;
                     }
                 }
-                Err(e) => return Err(e.into()),
+                Err(e) => {
+                    // Explicitly drop stream before returning error
+                    drop(stream);
+                    return Err(e.into());
+                }
             }
         }
         
+        // Ensure stream is dropped to free resources
+        drop(stream);
         Ok(())
     }
     

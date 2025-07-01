@@ -7,6 +7,7 @@ use crate::config::{ConfigGenerator, ServerConfig};
 use crate::links::ConnectionLinkGenerator;
 use crate::error::{UserError, Result};
 use vpn_crypto::QrCodeGenerator;
+use vpn_types::validation::UsernameValidator;
 
 pub struct UserManager {
     users: DashMap<String, User>,
@@ -78,6 +79,14 @@ impl UserManager {
         if self.read_only_mode {
             return Err(UserError::ReadOnlyMode);
         }
+        
+        // Validate username
+        let username_validator = UsernameValidator::default();
+        username_validator.validate(&name)
+            .map_err(|e| UserError::ValidationError {
+                field: "username".to_string(),
+                message: e.to_string(),
+            })?;
         
         if let Some(max) = self.max_users {
             if self.users.len() >= max {

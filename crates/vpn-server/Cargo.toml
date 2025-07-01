@@ -6,6 +6,7 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+vpn-types = { path = "../vpn-types" }
 vpn-docker = { path = "../vpn-docker" }
 vpn-crypto = { path = "../vpn-crypto" }
 vpn-network = { path = "../vpn-network" }
