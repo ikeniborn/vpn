@@ -1,0 +1,71 @@
+apiVersion: vpn.io/v1alpha1
+kind: VpnServer
+metadata:
+  name: vpn-sample
+  namespace: default
+spec:
+  # VPN protocol to use
+  protocol: vless
+  
+  # Port to expose
+  port: 8443
+  
+  # Number of replicas
+  replicas: 2
+  
+  # Enable high availability
+  highAvailability: true
+  
+  # Resource requirements
+  resources:
+    cpuRequest: "200m"
+    cpuLimit: "1000m"
+    memoryRequest: "256Mi"
+    memoryLimit: "1Gi"
+    storageSize: "5Gi"
+  
+  # User management
+  users:
+    maxUsers: 50
+    autoCreate: true
+    quotaGb: 100
+    # Uncomment to enable external authentication
+    # externalAuth:
+    #   authType: ldap
+    #   endpoint: ldap://ldap.example.com
+    #   secretName: ldap-credentials
+  
+  # Network configuration
+  network:
+    serviceType: LoadBalancer
+    # Restrict access to specific IP ranges
+    loadBalancerSourceRanges:
+    - "10.0.0.0/8"
+    - "192.168.0.0/16"
+    enableIpv6: false
+  
+  # Security settings
+  security:
+    enableTls: true
+    # Uncomment to use custom TLS certificate
+    # tlsSecret: vpn-tls-cert
+    enableFirewall: true
+    allowedIps:
+    - "0.0.0.0/0"
+    enableIds: false
+  
+  # Monitoring configuration
+  monitoring:
+    enableMetrics: true
+    metricsPort: 9090
+    enableTracing: false
+    # tracingEndpoint: http://jaeger-collector:14268/api/traces
+  
+  # Custom labels
+  labels:
+    environment: production
+    team: infrastructure
+  
+  # Custom annotations
+  annotations:
+    vpn.io/description: "Production VPN server for internal use"

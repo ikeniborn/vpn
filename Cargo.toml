@@ -13,6 +13,7 @@ members = [
     "crates/vpn-telemetry",
     "crates/vpn-compose",
     "crates/vpn-cluster",
+    "crates/vpn-operator",
     # "crates/vpn-identity",  # TODO: Fix SQLX issues before enabling
 ]
 

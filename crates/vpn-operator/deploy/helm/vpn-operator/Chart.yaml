@@ -1,0 +1,53 @@
+apiVersion: v2
+name: vpn-operator
+description: A Kubernetes operator for managing VPN deployments
+type: application
+
+# Chart version
+version: 0.1.0
+
+# Application version (operator version)
+appVersion: "0.1.0"
+
+keywords:
+  - vpn
+  - operator
+  - vless
+  - outline
+  - wireguard
+  - openvpn
+
+home: https://github.com/your-org/vpn-operator
+sources:
+  - https://github.com/your-org/vpn-operator
+
+maintainers:
+  - name: VPN Team
+    email: vpn-team@example.com
+
+annotations:
+  # Artifact Hub annotations
+  artifacthub.io/category: security
+  artifacthub.io/license: MIT
+  artifacthub.io/operator: "true"
+  artifacthub.io/operatorCapabilities: Full Lifecycle
+  artifacthub.io/prerelease: "false"
+  
+  # CRDs included
+  artifacthub.io/crds: |
+    - kind: VpnServer
+      version: v1alpha1
+      description: VPN server deployment
+  
+  # Container images
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/images: |
+    - name: vpn-operator
+      image: vpn-operator:0.1.0
+  
+  # Documentation links
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://github.com/your-org/vpn-operator/blob/main/README.md
+    - name: Support
+      url: https://github.com/your-org/vpn-operator/issues
