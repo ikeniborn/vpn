@@ -114,6 +114,14 @@ async fn execute_command(
         Commands::Runtime(runtime_cmd) => {
             handler.handle_runtime_command(runtime_cmd).await
         }
+        Commands::Compose(compose_cmd) => {
+            vpn_cli::compose::handle_compose_command(
+                compose_cmd, 
+                cli.config.clone(),
+                cli.install_path.clone(),
+                cli.verbose
+            ).await.map_err(CliError::from)
+        }
         Commands::Menu => {
             start_interactive_menu(handler).await
         }

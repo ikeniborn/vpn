@@ -55,6 +55,9 @@ pub enum CliError {
     
     #[error("Dialog error: {0}")]
     DialogError(#[from] dialoguer::Error),
+    
+    #[error("Anyhow error: {0}")]
+    AnyhowError(#[from] anyhow::Error),
 }
 
 pub type Result<T> = std::result::Result<T, CliError>;

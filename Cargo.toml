@@ -11,6 +11,7 @@ members = [
     "crates/vpn-runtime",
     "crates/vpn-containerd",
     "crates/vpn-telemetry",
+    "crates/vpn-compose",
 ]
 
 [workspace.package]

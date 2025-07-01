@@ -6,6 +6,10 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 
+# DEPRECATED: This crate is deprecated in favor of Docker Compose orchestration
+# See Phase 5 in TASK.md for migration to docker-compose based architecture
+# This crate is kept for reference but is no longer actively developed
+
 [dependencies]
 vpn-runtime = { path = "../vpn-runtime" }
 containerd-client = "0.8.0"

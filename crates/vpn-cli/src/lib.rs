@@ -7,6 +7,7 @@ pub mod runtime;
 pub mod utils;
 pub mod error;
 pub mod privileges;
+pub mod compose;
 
 pub use cli::{Cli, Commands};
 pub use menu::{InteractiveMenu, MenuOption};

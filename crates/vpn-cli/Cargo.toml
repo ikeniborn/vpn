@@ -18,11 +18,13 @@ vpn-server = { path = "../vpn-server" }
 vpn-monitor = { path = "../vpn-monitor" }
 vpn-runtime = { path = "../vpn-runtime" }
 vpn-containerd = { path = "../vpn-containerd" }
+vpn-compose = { path = "../vpn-compose" }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = "0.9"
 clap = { version = "4.4", features = ["derive", "color", "suggestions"] }
 dialoguer = { version = "0.11", features = ["fuzzy-select"] }
 console = "0.15"

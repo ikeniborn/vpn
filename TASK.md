@@ -2,15 +2,67 @@
 
 **Project**: VPN Rust Implementation  
 **Last Updated**: 2025-07-01  
-**Status**: Active Development - Phase 6 (Testing and Performance)
+**Status**: Active Development - Phase 5 (Docker Compose Migration)  
+**Strategic Shift**: Deprecating containerd in favor of Docker Compose orchestration
 
 ## 🎯 Current Active Tasks
 
-### Phase 5: Advanced Features (Priority: HIGH)
-**Timeline**: 2-3 weeks  
+### Phase 5: Docker Compose Orchestration (Priority: HIGH)
+**Timeline**: 1-2 weeks  
 **Status**: 🚀 Ready to Execute
+**Reason**: Simplify deployment and improve reliability by focusing on Docker Compose instead of complex containerd abstraction
 
-#### 5.1 Advanced Monitoring System
+#### 5.0 Containerd Deprecation Strategy
+- [ ] **Deprecate containerd implementation** - `vpn-containerd` crate
+  - Mark vpn-containerd as deprecated but keep for reference
+  - Remove containerd runtime option from CLI commands
+  - Focus development resources on Docker + Docker Compose solution
+  - **Rationale**: Reduce complexity, improve maintainability, focus on proven solutions
+  - **Impact**: Simplified codebase, better resource allocation
+  - **Date Added**: 2025-07-01
+
+#### 5.1 Docker Compose Orchestration System
+- [ ] **Implement Docker Compose templates and management** - New `vpn-compose` module
+  - Create dynamic Docker Compose file generation for VPN infrastructure
+  - Implement service orchestration with Xray, Nginx, monitoring stack
+  - Add environment-specific configurations (dev, staging, production)
+  - Support for multi-service deployments with dependency management
+  - **Business Value**: Simplified deployment, better scalability, proven technology
+  - **Date Added**: 2025-07-01
+
+#### 5.2 Service Architecture Design
+- [ ] **Design microservices architecture with Docker Compose** - Architecture redesign
+  - VPN server service (Xray/VLESS with Reality)
+  - Nginx reverse proxy service with SSL termination
+  - Monitoring stack (Prometheus, Grafana, Jaeger)
+  - Database service for user management (PostgreSQL/Redis)
+  - Management API service for configuration
+  - **Scalability**: Foundation for horizontal scaling and service isolation
+  - **Date Added**: 2025-07-01
+
+#### 5.3 Dynamic Configuration Management
+- [ ] **Implement dynamic service configuration** - Configuration system enhancement
+  - Template-based Docker Compose generation
+  - Environment variable injection and secrets management
+  - Service discovery and load balancing configuration
+  - Health checks and restart policies for all services
+  - **Reliability**: Improved service resilience and configuration management
+  - **Date Added**: 2025-07-01
+
+#### 5.4 Monitoring Stack Integration
+- [ ] **Integrate monitoring services via Docker Compose** - Observability enhancement
+  - Prometheus for metrics collection from all services
+  - Grafana for visualization and alerting
+  - Jaeger for distributed tracing
+  - Log aggregation with ELK stack or Loki
+  - **Business Value**: Complete observability stack with minimal setup complexity
+  - **Date Added**: 2025-07-01
+
+### Phase 5.5: Advanced Features (Priority: MEDIUM)
+**Timeline**: 2-3 weeks  
+**Status**: ⏳ Pending
+
+#### 5.5 Advanced Monitoring System ✅ COMPLETED
 - [x] **Implement OpenTelemetry integration** - New `vpn-telemetry` crate ✅ COMPLETED 2025-07-01
   - ✅ Add distributed tracing with Jaeger support
   - ✅ Implement custom Prometheus metrics
@@ -19,19 +71,21 @@
   - **Date Added**: 2025-06-27
   - **Date Completed**: 2025-07-01
 
-#### 5.2 High Availability Features
-- [ ] **Design multi-node architecture** - Architecture redesign
-  - Implement load balancing between VPN servers
-  - Add automatic failover mechanisms
-  - Design health-based routing
+#### 5.6 High Availability Features
+- [ ] **Design multi-node architecture with Docker Compose** - Architecture redesign
+  - Implement load balancing between VPN servers using Docker Compose
+  - Add automatic failover mechanisms with service discovery
+  - Design health-based routing with Nginx upstream configurations
+  - Multi-region deployment support via Docker Compose overlays
   - **Scalability**: Required for enterprise deployment
   - **Date Added**: 2025-06-27
 
-#### 5.3 External Identity Integration
-- [ ] **Add LDAP/OAuth2 support** - New `vpn-identity` crate
-  - Integrate with external identity providers
+#### 5.7 External Identity Integration
+- [ ] **Add LDAP/OAuth2 support** - New `vpn-identity` service
+  - Integrate with external identity providers as Docker service
   - Implement SSO (Single Sign-On) capabilities
-  - Add role-based access control (RBAC)
+  - Add role-based access control (RBAC) with database backing
+  - Deploy identity service via Docker Compose
   - **Enterprise Feature**: Required for corporate deployments
   - **Date Added**: 2025-06-27
 
@@ -49,11 +103,12 @@
   - **Date Added**: 2025-06-27
   - **Progress**: vpn-crypto property tests completed 2025-06-30
 
-#### 6.2 Migration Testing and Verification
-- [ ] **Test Docker→containerd migration** - Migration test suite
-  - Validate user data preservation during migration
-  - Test configuration migration and compatibility
-  - Verify zero-downtime migration capability
+#### 6.2 Docker Compose Testing and Verification
+- [ ] **Test Docker Compose orchestration** - Orchestration test suite
+  - Validate service startup order and dependency management
+  - Test service discovery and inter-service communication
+  - Verify zero-downtime updates and rolling deployments
+  - Test backup and restore procedures for stateful services
   - **Reliability**: Critical for production deployments
   - **Date Added**: 2025-07-01
 
@@ -80,6 +135,14 @@
 ## 🐛 Bug Fixes and Technical Debt
 
 ### Critical Issues
+- [ ] **Deprecate containerd runtime implementation** - Codebase cleanup
+  - Mark vpn-containerd crate as deprecated with clear documentation
+  - Remove containerd runtime selection from CLI and configuration
+  - Keep containerd code for reference but exclude from active development
+  - **Priority**: HIGH
+  - **Rationale**: Focus resources on Docker Compose solution
+  - **Date Added**: 2025-07-01
+
 - [ ] **Remove legacy bash script implementations** - Project cleanup
   - Identify and remove old bash scripts that have been replaced by Rust implementation
   - Clean up any remaining bash dependencies in deployment scripts
@@ -152,10 +215,137 @@
 - [ ] **Improve error messages** with suggested fixes
 - [ ] **Add interactive tutorials** and examples
 
+## 📋 Docker Compose Migration Plan
+
+### New Architecture Overview
+**Focus**: Docker + Docker Compose instead of containerd abstraction  
+**Rationale**: Proven technology, simpler deployment, better tooling ecosystem  
+**Timeline**: 1-2 weeks for core implementation  
+
+### Service Architecture
+```yaml
+# docker-compose.yml structure
+services:
+  vpn-server:     # Xray/VLESS with Reality
+  nginx-proxy:    # SSL termination and load balancing  
+  prometheus:     # Metrics collection
+  grafana:        # Monitoring dashboards
+  jaeger:         # Distributed tracing
+  postgres:       # User database
+  redis:          # Session storage
+  vpn-api:        # Management API
+```
+
+### Benefits of Docker Compose Approach
+- **Simplified Deployment**: One command deployment (`docker-compose up`)
+- **Service Isolation**: Each component in separate container
+- **Easy Scaling**: Built-in scaling (`docker-compose up --scale vpn-server=3`)
+- **Health Monitoring**: Native health checks and restart policies
+- **Network Management**: Automatic service discovery and networking
+- **Volume Management**: Persistent data and configuration management
+- **Environment Flexibility**: Easy dev/staging/production configurations
+
+### Migration Strategy
+1. **Phase 1**: Create Docker Compose templates for existing services
+2. **Phase 2**: Implement service orchestration and dependencies
+3. **Phase 3**: Add monitoring and observability stack
+4. **Phase 4**: Implement multi-environment support
+5. **Phase 5**: Add high availability and scaling features
+
+## 🔧 Detailed Implementation Tasks
+
+### Phase 5A: Core Docker Compose Infrastructure (Week 1)
+
+#### 5A.1 Base Template Creation
+- [ ] **Create base docker-compose.yml template** - `templates/docker-compose/`
+  - VPN server service with Xray/VLESS configuration
+  - Nginx reverse proxy with SSL termination
+  - Network configuration with custom bridge networks
+  - Volume management for persistent data and configurations
+  - **Files**: `templates/docker-compose/base.yml`, environment files
+  - **Date Added**: 2025-07-01
+
+#### 5A.2 Service Configuration Templates  
+- [ ] **Implement service configuration templates** - Template system
+  - Xray server configuration with dynamic user injection
+  - Nginx configuration with upstream load balancing
+  - Environment variable templating system
+  - Configuration validation and generation tools
+  - **Impact**: Dynamic service configuration based on user requirements
+  - **Date Added**: 2025-07-01
+
+#### 5A.3 CLI Integration for Docker Compose
+- [ ] **Add Docker Compose commands to CLI** - `vpn-cli/src/compose.rs`
+  - `vpn compose up` - Start all services
+  - `vpn compose down` - Stop all services  
+  - `vpn compose restart [service]` - Restart specific services
+  - `vpn compose logs [service]` - View service logs
+  - `vpn compose scale [service=replicas]` - Scale services
+  - **UX Enhancement**: Simplified Docker Compose management
+  - **Date Added**: 2025-07-01
+
+### Phase 5B: Advanced Orchestration (Week 2)
+
+#### 5B.1 Multi-Environment Support
+- [ ] **Implement environment-specific configurations** - Configuration system
+  - Development environment (single node, debug enabled)
+  - Staging environment (multi-node, monitoring enabled)  
+  - Production environment (HA, security hardened, full monitoring)
+  - Environment variable management and secrets handling
+  - **Flexibility**: Support for different deployment scenarios
+  - **Date Added**: 2025-07-01
+
+#### 5B.2 Database Integration
+- [ ] **Add database services to Docker Compose** - Data persistence
+  - PostgreSQL service for user management and configuration
+  - Redis service for session storage and caching
+  - Database migration and initialization scripts
+  - Backup and restore procedures via Docker volumes
+  - **Data Management**: Persistent and scalable data storage
+  - **Date Added**: 2025-07-01
+
+#### 5B.3 Monitoring Stack Integration
+- [ ] **Integrate observability stack** - Monitoring services
+  - Prometheus service with VPN-specific metrics collection
+  - Grafana service with pre-configured dashboards
+  - Jaeger service for distributed tracing
+  - Log aggregation with Loki or ELK stack
+  - **Observability**: Complete monitoring solution via Docker Compose
+  - **Date Added**: 2025-07-01
+
+### Phase 5C: Production Features (Week 3)
+
+#### 5C.1 High Availability Configuration
+- [ ] **Implement HA Docker Compose setup** - Scalability enhancement
+  - Multi-replica VPN server configuration
+  - Load balancing with Nginx upstream configuration
+  - Health checks and automatic failover
+  - Service discovery between replicas
+  - **Reliability**: Production-ready high availability
+  - **Date Added**: 2025-07-01
+
+#### 5C.2 Security Hardening
+- [ ] **Implement security best practices** - Security enhancement
+  - Container security with non-root users
+  - Network security with custom bridge networks
+  - Secrets management with Docker secrets or external vaults
+  - SSL/TLS configuration for all inter-service communication
+  - **Security**: Production-grade security configuration
+  - **Date Added**: 2025-07-01
+
+#### 5C.3 Backup and Recovery
+- [ ] **Implement backup and recovery procedures** - Data protection
+  - Automated database backups via cron containers
+  - Configuration backup and versioning
+  - Volume snapshot and restore procedures
+  - Disaster recovery documentation and procedures
+  - **Data Protection**: Comprehensive backup and recovery solution
+  - **Date Added**: 2025-07-01
+
 ## 🎯 Recently Completed (2025-07-01)
 
-**✅ Docker to containerd Migration**: Complete runtime abstraction layer with switching capability  
-**✅ Containerd Testing Suite**: 41 comprehensive tests, 90%+ coverage, 40-60% performance improvement  
+**✅ Advanced Telemetry System**: Complete OpenTelemetry integration with Prometheus, tracing, and dashboards  
+**✅ Containerd Runtime Abstraction**: Full containerd implementation (now marked for deprecation)  
 **✅ Performance Benchmarking**: Automated benchmarking framework with continuous monitoring
 
 ---

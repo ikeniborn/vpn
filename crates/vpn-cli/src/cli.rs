@@ -125,6 +125,10 @@ pub enum Commands {
     #[command(subcommand)]
     Runtime(RuntimeCommands),
 
+    /// Docker Compose orchestration commands
+    #[command(subcommand)]
+    Compose(ComposeCommands),
+
     /// Interactive menu mode
     Menu,
 
@@ -468,6 +472,269 @@ pub enum RuntimeCommands {
 
     /// Show runtime capabilities comparison
     Capabilities,
+}
+
+#[derive(Subcommand, Clone)]
+pub enum ComposeCommands {
+    /// Start all VPN services using Docker Compose
+    Up {
+        /// Start in detached mode
+        #[arg(short, long, default_value = "true")]
+        detach: bool,
+        
+        /// Remove orphaned containers
+        #[arg(long, default_value = "true")]
+        remove_orphans: bool,
+        
+        /// Specific services to start
+        #[arg(long)]
+        services: Vec<String>,
+    },
+
+    /// Stop all VPN services
+    Down {
+        /// Remove volumes
+        #[arg(short, long)]
+        volumes: bool,
+        
+        /// Remove orphaned containers
+        #[arg(long, default_value = "true")]
+        remove_orphans: bool,
+        
+        /// Timeout for stopping containers (seconds)
+        #[arg(short, long, default_value = "10")]
+        timeout: u32,
+    },
+
+    /// Restart VPN services
+    Restart {
+        /// Specific services to restart
+        services: Vec<String>,
+        
+        /// Timeout for stopping containers (seconds)
+        #[arg(short, long, default_value = "10")]
+        timeout: u32,
+    },
+
+    /// Scale services
+    Scale {
+        /// Service scaling specs (service=replicas)
+        #[arg(value_parser = parse_service_scale)]
+        services: Vec<ServiceScale>,
+    },
+
+    /// Show service status
+    Status {
+        /// Show only running services
+        #[arg(long)]
+        running_only: bool,
+        
+        /// Output format (table, json)
+        #[arg(short, long, default_value = "table")]
+        format: StatusFormat,
+    },
+
+    /// View service logs
+    Logs {
+        /// Specific service to show logs for
+        service: Option<String>,
+        
+        /// Follow log output
+        #[arg(short, long)]
+        follow: bool,
+        
+        /// Number of lines to show
+        #[arg(short, long, default_value = "100")]
+        tail: usize,
+        
+        /// Show timestamps
+        #[arg(short, long)]
+        timestamps: bool,
+    },
+
+    /// Execute command in a service container
+    Exec {
+        /// Service name
+        service: String,
+        
+        /// Command to execute
+        command: Vec<String>,
+        
+        /// Run in interactive mode
+        #[arg(short, long)]
+        interactive: bool,
+        
+        /// Allocate a TTY
+        #[arg(short, long)]
+        tty: bool,
+    },
+
+    /// Pull latest images for all services
+    Pull {
+        /// Specific services to pull
+        services: Vec<String>,
+        
+        /// Pull images in parallel
+        #[arg(long, default_value = "true")]
+        parallel: bool,
+    },
+
+    /// Build or rebuild services
+    Build {
+        /// Specific services to build
+        services: Vec<String>,
+        
+        /// Don't use cache when building
+        #[arg(long)]
+        no_cache: bool,
+        
+        /// Always remove intermediate containers
+        #[arg(long)]
+        force_rm: bool,
+    },
+
+    /// Generate Docker Compose files
+    Generate {
+        /// Environment (development, staging, production)
+        #[arg(short, long, default_value = "development")]
+        environment: String,
+        
+        /// Output directory
+        #[arg(short, long, default_value = "./docker-compose")]
+        output: PathBuf,
+        
+        /// Include monitoring stack
+        #[arg(long, default_value = "true")]
+        monitoring: bool,
+        
+        /// Include development tools
+        #[arg(long)]
+        dev_tools: bool,
+    },
+
+    /// Configure environment settings
+    Config {
+        /// Configuration subcommands
+        #[command(subcommand)]
+        command: ComposeConfigCommands,
+    },
+
+    /// Environment management
+    Environment {
+        /// Environment subcommands
+        #[command(subcommand)]
+        command: EnvironmentCommands,
+    },
+
+    /// Health check for all services
+    Health {
+        /// Service to check (default: all)
+        service: Option<String>,
+        
+        /// Timeout for health checks (seconds)
+        #[arg(short, long, default_value = "30")]
+        timeout: u32,
+    },
+
+    /// Update service configurations
+    Update {
+        /// Recreate containers with updated config
+        #[arg(long, default_value = "true")]
+        recreate: bool,
+        
+        /// Specific services to update
+        services: Vec<String>,
+    },
+}
+
+#[derive(Subcommand, Clone)]
+pub enum ComposeConfigCommands {
+    /// Show current compose configuration
+    Show,
+    
+    /// Edit compose configuration
+    Edit,
+    
+    /// Validate compose configuration
+    Validate,
+    
+    /// Set environment variable
+    Set {
+        /// Variable name
+        key: String,
+        /// Variable value
+        value: String,
+    },
+    
+    /// Get environment variable
+    Get {
+        /// Variable name
+        key: String,
+    },
+    
+    /// List all environment variables
+    List,
+}
+
+#[derive(Subcommand, Clone)]
+pub enum EnvironmentCommands {
+    /// List available environments
+    List,
+    
+    /// Switch to an environment
+    Switch {
+        /// Environment name (development, staging, production)
+        environment: String,
+    },
+    
+    /// Create a new environment
+    Create {
+        /// Environment name
+        name: String,
+        /// Base environment to copy from
+        #[arg(short, long)]
+        from: Option<String>,
+    },
+    
+    /// Delete an environment
+    Delete {
+        /// Environment name
+        name: String,
+    },
+    
+    /// Show environment details
+    Show {
+        /// Environment name (defaults to current)
+        environment: Option<String>,
+    },
+}
+
+/// Service scaling specification
+#[derive(Clone, Debug)]
+pub struct ServiceScale {
+    pub service: String,
+    pub replicas: u32,
+}
+
+/// Parse service scaling specification (service=replicas)
+fn parse_service_scale(s: &str) -> Result<ServiceScale, String> {
+    let parts: Vec<&str> = s.split('=').collect();
+    if parts.len() != 2 {
+        return Err("Invalid format. Use: service=replicas".to_string());
+    }
+    
+    let service = parts[0].to_string();
+    let replicas = parts[1].parse::<u32>()
+        .map_err(|_| "Invalid replica count")?;
+    
+    Ok(ServiceScale { service, replicas })
+}
+
+#[derive(clap::ValueEnum, Clone, Debug)]
+pub enum StatusFormat {
+    Table,
+    Json,
+    Yaml,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]
