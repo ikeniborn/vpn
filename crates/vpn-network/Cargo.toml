@@ -21,3 +21,5 @@ rand = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
+proptest = "1.0"
+proptest-derive = "0.4"

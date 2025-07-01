@@ -18,12 +18,11 @@ use openidconnect::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Clone)]
 pub struct OAuth2Provider {
     pub name: String,
     pub config: OAuth2ProviderConfig,
     client: BasicClient,
-    pkce_verifier: Option<PkceCodeVerifier>,
+    pkce_verifier: Option<String>, // Store as string instead of PkceCodeVerifier
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,7 +61,8 @@ impl OAuth2Provider {
 
     pub fn create_authorization_request(&mut self) -> AuthorizationRequest {
         let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
-        self.pkce_verifier = Some(pkce_verifier.clone());
+        let verifier_secret = pkce_verifier.secret().clone();
+        self.pkce_verifier = Some(verifier_secret.clone());
 
         let mut auth_request = self.client
             .authorize_url(CsrfToken::new_random)
@@ -78,7 +78,7 @@ impl OAuth2Provider {
         AuthorizationRequest {
             auth_url: auth_url.to_string(),
             state: csrf_token.secret().clone(),
-            code_verifier: Some(pkce_verifier.secret().clone()),
+            code_verifier: Some(verifier_secret),
         }
     }
 

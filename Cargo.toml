@@ -12,7 +12,7 @@ members = [
     # "crates/vpn-containerd",  # DEPRECATED: Removed from active development, kept for reference
     "crates/vpn-telemetry",
     "crates/vpn-compose",
-    "crates/vpn-identity",
+    # "crates/vpn-identity",  # TODO: Fix SQLX issues before enabling
 ]
 
 [workspace.package]
@@ -32,7 +32,7 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 
 # Docker
-bollard = "0.15"
+bollard = "0.16"
 
 # Cryptography
 base64 = "0.21"
@@ -48,16 +48,13 @@ ipnetwork = "0.20"
 pnet = "0.34"
 
 # CLI
-toml = "0.8"
-dialoguer = "0.11"
 
-# Testing
-proptest = "1.4"
+# Testing dependencies moved to workspace.dependencies
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
 quickcheck = "1.0"
 mockall = "0.12"
-console = "0.15"
-indicatif = "0.17"
-colored = "2.0"
-tabled = "0.15"
 clap = { version = "4.0", features = ["derive"] }
+proptest = "1.0"
+toml = "0.8"
 

@@ -29,7 +29,7 @@ impl Storage {
 
     // User operations
     pub async fn create_user(&self, user: &User) -> Result<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO users (
                 id, email, username, display_name, provider, provider_id,
@@ -37,21 +37,21 @@ impl Storage {
                 created_at, updated_at, last_login
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             "#,
-            user.id,
-            user.email,
-            user.username,
-            user.display_name,
-            serde_json::to_value(&user.provider)?,
-            user.provider_id,
-            user.password_hash,
-            &user.roles,
-            user.attributes,
-            user.is_active,
-            user.email_verified,
-            user.created_at,
-            user.updated_at,
-            user.last_login,
         )
+        .bind(user.id)
+        .bind(&user.email)
+        .bind(&user.username)
+        .bind(&user.display_name)
+        .bind(serde_json::to_value(&user.provider)?)
+        .bind(&user.provider_id)
+        .bind(&user.password_hash)
+        .bind(&user.roles)
+        .bind(&user.attributes)
+        .bind(user.is_active)
+        .bind(user.email_verified)
+        .bind(user.created_at)
+        .bind(user.updated_at)
+        .bind(user.last_login)
         .execute(&self.pool)
         .await?;
         

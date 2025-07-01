@@ -1,0 +1,11 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc f8e6cf1966722d1a69b150c07f6080b9f72a53440318ef05f693dd1b652cd703 # shrinks to stats = ContainerStats { cpu_usage_percent: 0.0, memory_usage_bytes: 1981144090, memory_limit_bytes: 1073741824, network_rx_bytes: 0, network_tx_bytes: 0, block_read_bytes: 0, block_write_bytes: 0, pids: 1 }
+cc f7e9c65b784db8eb13c91213699d8aad1a22ec47d6363193fdb1426f87f8c34c # shrinks to image = "-0/a/a"
+cc ce75eb86169184673658248bed2a929615a08c57c8359d1a6b06967308f2f352 # shrinks to mounts = {"/_": "/_AA_A0aaaAaa_0_a_00A_AAa0A0-aA0-AAa_00-aaaaa0A_aAa0_Aa0_aaaA0aAA0A_-a000AaA-__0a-Aaa__A0_-0a0a-0Aa_a"}
+cc c8db47d83367ec0fbb28b37f2fbc774cf60ea853763906e3f816f753f4630898 # shrinks to stats = ContainerStats { cpu_usage_percent: 98.21393730297831, memory_usage_bytes: 536870912, memory_limit_bytes: 1073741824, network_rx_bytes: 0, network_tx_bytes: 0, block_read_bytes: 0, block_write_bytes: 0, pids: 1 }
+cc 67d75d72415120ffb7b24b63fa8349467912794e40c3f531e5c6834e01445856 # shrinks to mounts = {"/a": "/_a_AAaaAaaaa_0a_A_0AaAa_aa_aA0A00A_-aAA0a_00_Aa-a0"}

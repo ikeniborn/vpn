@@ -302,6 +302,16 @@ impl HealthCheck {
             start_period: Some("30s".to_string()),
         }
     }
+
+    pub fn http(path: &str, port: u16, interval_secs: u64, timeout_secs: u64, retries: u32, start_period_secs: u64) -> Self {
+        Self {
+            test: vec!["CMD".to_string(), "curl".to_string(), "-f".to_string(), format!("http://localhost:{}{}", port, path)],
+            interval: format!("{}s", interval_secs),
+            timeout: format!("{}s", timeout_secs),
+            retries,
+            start_period: Some(format!("{}s", start_period_secs)),
+        }
+    }
 }
 
 /// Restart policy

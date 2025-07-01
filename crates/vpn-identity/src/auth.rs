@@ -4,6 +4,7 @@ use crate::{
     error::{IdentityError, Result},
     models::{AuthProvider as AuthProviderType, AuthToken, User, UserInfo},
     storage::Storage,
+    ldap::LdapProvider,
 };
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
@@ -24,6 +25,51 @@ pub trait AuthProvider: Send + Sync {
     async fn verify_configuration(&self) -> Result<()>;
 }
 
+// Local auth provider implementation
+#[derive(Clone)]
+pub struct LocalAuthProvider {
+    storage: Arc<Storage>,
+}
+
+impl LocalAuthProvider {
+    pub fn new(storage: Arc<Storage>) -> Self {
+        Self { storage }
+    }
+}
+
+#[async_trait]
+impl AuthProvider for LocalAuthProvider {
+    async fn authenticate(&self, username: &str, password: &str) -> Result<User> {
+        let user = self.storage.find_user_by_username(username).await?
+            .ok_or(IdentityError::InvalidCredentials)?;
+        
+        if let Some(password_hash) = &user.password_hash {
+            // Verify password with argon2
+            use argon2::{Argon2, PasswordHash, PasswordVerifier};
+            let parsed_hash = PasswordHash::new(password_hash)
+                .map_err(|_| IdentityError::InvalidCredentials)?;
+            
+            Argon2::default()
+                .verify_password(password.as_bytes(), &parsed_hash)
+                .map_err(|_| IdentityError::InvalidCredentials)?;
+            
+            Ok(user)
+        } else {
+            Err(IdentityError::InvalidCredentials)
+        }
+    }
+    
+    fn provider_type(&self) -> AuthProviderType {
+        AuthProviderType::Local
+    }
+    
+    async fn verify_configuration(&self) -> Result<()> {
+        // Check database connection
+        let _ = self.storage.list_users(1, 0).await?;
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: String, // User ID
@@ -36,6 +82,36 @@ pub struct Claims {
     pub aud: Vec<String>,
 }
 
+// Enum for different auth providers to avoid trait object issues
+#[derive(Clone)]
+pub enum AuthProviderEnum {
+    Local(LocalAuthProvider),
+    Ldap(LdapProvider),
+}
+
+impl AuthProviderEnum {
+    pub async fn authenticate(&self, username: &str, password: &str) -> Result<User> {
+        match self {
+            AuthProviderEnum::Local(provider) => provider.authenticate(username, password).await,
+            AuthProviderEnum::Ldap(provider) => provider.authenticate(username, password).await,
+        }
+    }
+    
+    pub fn provider_type(&self) -> AuthProviderType {
+        match self {
+            AuthProviderEnum::Local(provider) => provider.provider_type(),
+            AuthProviderEnum::Ldap(provider) => provider.provider_type(),
+        }
+    }
+    
+    pub async fn verify_configuration(&self) -> Result<()> {
+        match self {
+            AuthProviderEnum::Local(provider) => provider.verify_configuration().await,
+            AuthProviderEnum::Ldap(provider) => provider.verify_configuration().await,
+        }
+    }
+}
+
 pub struct AuthService {
     storage: Arc<Storage>,
     jwt_secret: String,
@@ -43,7 +119,7 @@ pub struct AuthService {
     jwt_refresh_expiration: Duration,
     jwt_issuer: String,
     jwt_audience: Vec<String>,
-    providers: Vec<Box<dyn AuthProvider>>,
+    providers: Vec<AuthProviderEnum>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,7 +149,7 @@ impl AuthService {
         }
     }
 
-    pub fn add_provider(&mut self, provider: Box<dyn AuthProvider>) {
+    pub fn add_provider(&mut self, provider: AuthProviderEnum) {
         self.providers.push(provider);
     }
 

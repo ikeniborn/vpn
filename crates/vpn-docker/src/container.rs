@@ -42,7 +42,7 @@ pub struct ContainerConfig {
     pub networks: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ContainerStatus {
     Running,
     Stopped,

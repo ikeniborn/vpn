@@ -101,6 +101,7 @@ impl ServiceManager {
                     parallelism: Some(1),
                     delay: Some("10s".to_string()),
                     failure_action: Some("rollback".to_string()),
+                    order: None,
                 }),
             }),
             logging: Some(LoggingConfig {
@@ -894,6 +895,8 @@ pub struct UpdateConfig {
     pub delay: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub failure_action: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order: Option<String>,
 }
 
 /// Logging configuration

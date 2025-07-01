@@ -6,6 +6,9 @@ pub mod subnet;
 pub mod manager;
 pub mod error;
 
+#[cfg(test)]
+pub mod proptest;
+
 pub use port::{PortChecker, PortStatus};
 pub use ip::IpDetector;
 pub use firewall::{FirewallManager, FirewallRule};

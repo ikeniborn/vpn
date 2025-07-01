@@ -12,6 +12,7 @@ use ldap3::{Ldap, LdapConnAsync, LdapConnSettings, Scope, SearchEntry};
 use std::collections::HashMap;
 use uuid::Uuid;
 
+#[derive(Clone)]
 pub struct LdapProvider {
     config: LdapConfig,
 }

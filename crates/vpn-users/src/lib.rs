@@ -5,6 +5,9 @@ pub mod links;
 pub mod batch;
 pub mod error;
 
+#[cfg(test)]
+pub mod proptest;
+
 pub use user::{User, UserStatus, UserConfig};
 pub use manager::UserManager;
 pub use links::ConnectionLinkGenerator;
