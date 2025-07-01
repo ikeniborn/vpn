@@ -1,0 +1,53 @@
+[package]
+name = "vpn-cluster"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Core dependencies
+tokio = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+num_cpus = { workspace = true }
+rand = { workspace = true }
+
+# Distributed system dependencies
+# raft = "0.6"  # TODO: Fix compatibility issues
+# etcd-rs = "1.0"  # TODO: Implement later
+# consul = "0.4"  # TODO: Implement later  
+sled = "0.34"
+# tikv-client = "0.3"  # TODO: Implement later
+
+# Network and communication
+tonic = "0.11"
+prost = "0.12"
+tokio-stream = "0.1"
+hyper = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+
+# Serialization and configuration
+toml = { workspace = true }
+config = "0.14"
+
+# Cryptography for cluster authentication
+ring = "0.17"
+base64 = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+mockall = { workspace = true }
+tokio-test = "0.4"
+tempfile = "3.0"
+tracing-subscriber = "0.3"
+
+[build-dependencies]
+tonic-build = "0.11"

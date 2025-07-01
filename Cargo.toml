@@ -12,6 +12,7 @@ members = [
     # "crates/vpn-containerd",  # DEPRECATED: Removed from active development, kept for reference
     "crates/vpn-telemetry",
     "crates/vpn-compose",
+    "crates/vpn-cluster",
     # "crates/vpn-identity",  # TODO: Fix SQLX issues before enabling
 ]
 
@@ -57,4 +58,19 @@ mockall = "0.12"
 clap = { version = "4.0", features = ["derive"] }
 proptest = "1.0"
 toml = "0.8"
+
+# Distributed systems dependencies
+raft = "0.6"
+etcd-rs = "1.0"
+consul = "0.4"
+sled = "0.34"
+tikv-client = "0.3"
+tonic = "0.11"
+prost = "0.12"
+tokio-stream = "0.1"
+hyper = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+config = "0.14"
+ring = "0.17"
+num_cpus = "1.0"
 
