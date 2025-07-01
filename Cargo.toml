@@ -12,6 +12,7 @@ members = [
     # "crates/vpn-containerd",  # DEPRECATED: Removed from active development, kept for reference
     "crates/vpn-telemetry",
     "crates/vpn-compose",
+    "crates/vpn-identity",
 ]
 
 [workspace.package]

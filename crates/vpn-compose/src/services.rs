@@ -604,6 +604,88 @@ impl ServiceManager {
         }
     }
 
+    /// Create VPN Identity service definition
+    pub fn create_vpn_identity_service() -> ServiceDefinition {
+        ServiceDefinition {
+            image: "vpn-identity:latest".to_string(),
+            container_name: Some("vpn-identity".to_string()),
+            restart: RestartPolicy::UnlessStopped,
+            ports: vec![PortMapping::tcp(8080, 8080)],
+            volumes: vec![
+                VolumeMount::new("identity-config", "/etc/vpn-identity"),
+            ],
+            environment: {
+                let mut env = HashMap::new();
+                env.insert("DATABASE_URL".to_string(), "postgres://vpn:vpn@postgres-identity:5432/vpn_identity".to_string());
+                env.insert("REDIS_URL".to_string(), "redis://redis-identity:6379".to_string());
+                env.insert("JWT_SECRET".to_string(), "${JWT_SECRET:-change-me-in-production}".to_string());
+                env.insert("RUST_LOG".to_string(), "info,vpn_identity=debug".to_string());
+                env
+            },
+            depends_on: vec!["postgres-identity".to_string(), "redis-identity".to_string()],
+            healthcheck: Some(HealthCheck::http("/health", 8080, 30, 10, 3, 40)),
+            networks: vec!["vpn-network".to_string()],
+            security_opt: vec!["no-new-privileges:true".to_string()],
+            cap_drop: vec!["ALL".to_string()],
+            cap_add: vec![],
+            labels: {
+                let mut labels = HashMap::new();
+                labels.insert("service.type".to_string(), "identity".to_string());
+                labels.insert("service.role".to_string(), "auth".to_string());
+                labels
+            },
+            deploy: Some(DeployConfig {
+                replicas: Some(2),
+                resources: Some(ResourcesConfig {
+                    limits: Some(ResourceLimits {
+                        memory: Some("256M".to_string()),
+                        cpus: Some("0.5".to_string()),
+                    }),
+                    reservations: Some(ResourceLimits {
+                        memory: Some("128M".to_string()),
+                        cpus: Some("0.25".to_string()),
+                    }),
+                }),
+                restart_policy: Some(RestartPolicyConfig {
+                    condition: "on-failure".to_string(),
+                    delay: Some("5s".to_string()),
+                    max_attempts: Some(3),
+                    window: None,
+                }),
+                update_config: Some(UpdateConfig {
+                    parallelism: Some(1),
+                    delay: Some("10s".to_string()),
+                    failure_action: Some("rollback".to_string()),
+                    order: Some("stop-first".to_string()),
+                }),
+            }),
+            logging: Some(LoggingConfig {
+                driver: "json-file".to_string(),
+                options: {
+                    let mut opts = HashMap::new();
+                    opts.insert("max-size".to_string(), "10m".to_string());
+                    opts.insert("max-file".to_string(), "3".to_string());
+                    opts
+                },
+            }),
+            tmpfs: vec![],
+            read_only: false,
+            user: Some("1000:1000".to_string()),
+            working_dir: Some("/app".to_string()),
+            command: None,
+            entrypoint: None,
+            expose: vec![],
+            external_links: vec![],
+            extra_hosts: vec![],
+            hostname: None,
+            domainname: None,
+            mac_address: None,
+            privileged: false,
+            stdin_open: false,
+            tty: false,
+        }
+    }
+
     /// Load predefined service definitions
     pub fn load_predefined_services(&mut self) {
         self.add_service("vpn-server".to_string(), Self::create_vpn_server_service());
@@ -613,6 +695,7 @@ impl ServiceManager {
         self.add_service("prometheus".to_string(), Self::create_prometheus_service());
         self.add_service("grafana".to_string(), Self::create_grafana_service());
         self.add_service("jaeger".to_string(), Self::create_jaeger_service());
+        self.add_service("vpn-identity".to_string(), Self::create_vpn_identity_service());
     }
 
     /// Validate service dependencies
