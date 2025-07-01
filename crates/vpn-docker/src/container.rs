@@ -1,4 +1,4 @@
-use bollard::Docker;
+// use bollard::Docker; // No longer needed, using connection pool
 use bollard::container::{Config, CreateContainerOptions, StartContainerOptions, StopContainerOptions, RemoveContainerOptions};
 use bollard::models::{ContainerSummary, ContainerInspectResponse};
 use bollard::exec::{CreateExecOptions, StartExecResults};
@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tokio::task::JoinSet;
 use crate::error::{DockerError, Result};
+use crate::pool::get_docker_connection;
+use crate::cache::get_container_cache;
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone)]
@@ -75,13 +77,13 @@ pub type DockerManager = ContainerManager;
 impl ContainerConfig {
     pub fn new(name: &str, image: &str) -> Self {
         Self {
-            name: name.to_string(),
-            image: image.to_string(),
+            name: name.to_owned(),
+            image: image.to_owned(),
             port_mappings: HashMap::new(),
             environment_variables: HashMap::new(),
             volume_mounts: HashMap::new(),
-            restart_policy: "unless-stopped".to_string(),
-            networks: vec!["default".to_string()],
+            restart_policy: "unless-stopped".to_owned(),
+            networks: vec!["default".to_owned()],
         }
     }
     
@@ -90,20 +92,20 @@ impl ContainerConfig {
     }
     
     pub fn add_environment_variable(&mut self, key: &str, value: &str) {
-        self.environment_variables.insert(key.to_string(), value.to_string());
+        self.environment_variables.insert(key.to_owned(), value.to_owned());
     }
     
     pub fn add_volume_mount(&mut self, host_path: &str, container_path: &str) {
-        self.volume_mounts.insert(host_path.to_string(), container_path.to_string());
+        self.volume_mounts.insert(host_path.to_owned(), container_path.to_owned());
     }
     
     pub fn set_restart_policy(&mut self, policy: &str) {
-        self.restart_policy = policy.to_string();
+        self.restart_policy = policy.to_owned();
     }
     
     pub fn add_network(&mut self, network: &str) {
-        if !self.networks.contains(&network.to_string()) {
-            self.networks.push(network.to_string());
+        if !self.networks.iter().any(|n| n == network) {
+            self.networks.push(network.to_owned());
         }
     }
     
@@ -202,14 +204,14 @@ impl std::fmt::Display for ContainerStatus {
 
 #[derive(Clone)]
 pub struct ContainerManager {
-    docker: Docker,
+    // Remove direct Docker connection, use pool instead
 }
 
 impl ContainerManager {
     pub fn new() -> Result<Self> {
-        let docker = Docker::connect_with_local_defaults()
-            .map_err(|e| DockerError::ConnectionError(e.to_string()))?;
-        Ok(Self { docker })
+        // Initialize cache cleanup task
+        crate::cache::start_cache_cleanup_task();
+        Ok(Self {})
     }
     
     pub async fn list_containers(&self, all: bool) -> Result<Vec<ContainerSummary>> {
@@ -224,12 +226,14 @@ impl ContainerManager {
             ..Default::default()
         };
         
-        Ok(self.docker.list_containers(Some(options)).await?)
+        let connection = get_docker_connection().await?;
+        Ok(connection.docker().list_containers(Some(options)).await?)
     }
     
     pub async fn inspect_container(&self, name: &str) -> Result<ContainerInspectResponse> {
-        self.docker.inspect_container(name, None).await
-            .map_err(|_| DockerError::ContainerNotFound(name.to_string()).into())
+        let connection = get_docker_connection().await?;
+        connection.docker().inspect_container(name, None).await
+            .map_err(|_| DockerError::ContainerNotFound(name.to_owned()).into())
     }
     
     pub async fn create_container(
@@ -242,12 +246,22 @@ impl ContainerManager {
             ..Default::default()
         };
         
-        let response = self.docker.create_container(Some(options), config).await?;
+        let connection = get_docker_connection().await?;
+        let response = connection.docker().create_container(Some(options), config).await?;
+        
+        // Invalidate cache since container list has changed
+        get_container_cache().invalidate_container(name).await;
+        
         Ok(response.id)
     }
     
     pub async fn start_container(&self, name: &str) -> Result<()> {
-        self.docker.start_container(name, None::<StartContainerOptions<String>>).await?;
+        let connection = get_docker_connection().await?;
+        connection.docker().start_container(name, None::<StartContainerOptions<String>>).await?;
+        
+        // Invalidate cached status since container state changed
+        get_container_cache().invalidate_container(name).await;
+        
         Ok(())
     }
     
@@ -256,7 +270,12 @@ impl ContainerManager {
             t: timeout.unwrap_or(10),
         };
         
-        self.docker.stop_container(name, Some(options)).await?;
+        let connection = get_docker_connection().await?;
+        connection.docker().stop_container(name, Some(options)).await?;
+        
+        // Invalidate cached status since container state changed
+        get_container_cache().invalidate_container(name).await;
+        
         Ok(())
     }
     
@@ -273,8 +292,50 @@ impl ContainerManager {
             ..Default::default()
         };
         
-        self.docker.remove_container(name, Some(options)).await?;
+        let connection = get_docker_connection().await?;
+        connection.docker().remove_container(name, Some(options)).await?;
+        
+        // Invalidate cache since container has been removed
+        get_container_cache().invalidate_container(name).await;
+        
         Ok(())
+    }
+    
+    /// Get container status with caching for better performance
+    pub async fn get_container_status(&self, name: &str) -> Result<ContainerStatus> {
+        // Check cache first
+        if let Some(cached_status) = get_container_cache().get_status(name).await {
+            return Ok(cached_status);
+        }
+        
+        // Fetch from Docker API if not cached
+        let status = match self.inspect_container(name).await {
+            Ok(info) => {
+                if let Some(state) = info.state {
+                    if state.running.unwrap_or(false) {
+                        ContainerStatus::Running
+                    } else if state.paused.unwrap_or(false) {
+                        ContainerStatus::Paused
+                    } else if state.restarting.unwrap_or(false) {
+                        ContainerStatus::Restarting
+                    } else if state.dead.unwrap_or(false) {
+                        ContainerStatus::Dead
+                    } else if let Some(exit_code) = state.exit_code {
+                        ContainerStatus::Exited(exit_code)
+                    } else {
+                        ContainerStatus::Stopped
+                    }
+                } else {
+                    ContainerStatus::Unknown("No state information".to_owned())
+                }
+            }
+            Err(_) => ContainerStatus::NotFound,
+        };
+        
+        // Cache the result
+        get_container_cache().cache_status(name, status.clone()).await;
+        
+        Ok(status)
     }
     
     pub async fn exec_command(
@@ -289,10 +350,11 @@ impl ContainerManager {
             ..Default::default()
         };
         
-        let exec = self.docker.create_exec(container, exec_options).await?;
+        let connection = get_docker_connection().await?;
+        let exec = connection.docker().create_exec(container, exec_options).await?;
         
         if let StartExecResults::Attached { mut output, .. } = 
-            self.docker.start_exec(&exec.id, None).await? {
+            connection.docker().start_exec(&exec.id, None).await? {
             
             let mut result = String::new();
             while let Some(Ok(msg)) = output.next().await {
@@ -302,7 +364,7 @@ impl ContainerManager {
         } else {
             Err(DockerError::ApiError(bollard::errors::Error::DockerResponseServerError {
                 status_code: 500,
-                message: "Failed to attach to exec".to_string(),
+                message: "Failed to attach to exec".to_owned(),
             }))
         }
     }
