@@ -8,7 +8,7 @@ use vpn_users::user::UserStatus;
 use vpn_users::manager::UserListOptions;
 // use vpn_monitor::{TrafficMonitor, HealthMonitor, LogAnalyzer, MetricsCollector, AlertManager};
 // use vpn_monitor::traffic::MonitoringConfig;
-use crate::{cli::*, config::ConfigManager, utils::display, CliError, Result};
+use crate::{cli::*, config::ConfigManager, runtime::RuntimeManager, utils::display, CliError, Result};
 
 pub struct CommandHandler {
     #[allow(dead_code)]
@@ -594,6 +594,33 @@ impl CommandHandler {
 
     pub async fn handle_migration_command(&mut self, _command: MigrationCommands) -> Result<()> {
         display::info("Migration command not yet implemented");
+        Ok(())
+    }
+
+    pub async fn handle_runtime_command(&mut self, command: RuntimeCommands) -> Result<()> {
+        let mut runtime_manager = RuntimeManager::new(None)?;
+        
+        match command {
+            RuntimeCommands::Status => {
+                runtime_manager.show_status().await?;
+            }
+            RuntimeCommands::Switch { runtime } => {
+                runtime_manager.switch_runtime(&runtime).await?;
+            }
+            RuntimeCommands::Enable { runtime, enabled } => {
+                runtime_manager.enable_runtime(&runtime, enabled)?;
+            }
+            RuntimeCommands::Socket { runtime, path } => {
+                runtime_manager.update_socket(&runtime, &path)?;
+            }
+            RuntimeCommands::Migrate => {
+                runtime_manager.migrate_to_containerd().await?;
+            }
+            RuntimeCommands::Capabilities => {
+                runtime_manager.show_capabilities()?;
+            }
+        }
+        
         Ok(())
     }
 

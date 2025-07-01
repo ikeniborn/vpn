@@ -111,6 +111,9 @@ async fn execute_command(
         Commands::Migration(migration_cmd) => {
             handler.handle_migration_command(migration_cmd).await
         }
+        Commands::Runtime(runtime_cmd) => {
+            handler.handle_runtime_command(runtime_cmd).await
+        }
         Commands::Menu => {
             start_interactive_menu(handler).await
         }

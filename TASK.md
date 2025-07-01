@@ -306,12 +306,16 @@
   - **Date Completed**: 2025-07-01
 
 #### 4.3 CLI Runtime Management
-- [ ] **Implement runtime selection CLI commands** - `crates/vpn-cli/src/runtime.rs`
-  - Add `vpn runtime switch` command for changing runtimes
-  - Implement `vpn runtime status` for runtime diagnostics
-  - Add `vpn runtime migrate` for Docker→containerd migration
-  - **UX**: Seamless runtime switching experience
+- [x] **Implement runtime selection CLI commands** - `crates/vpn-cli/src/runtime.rs`
+  - Added `vpn runtime status` command showing configuration and connectivity
+  - Implemented `vpn runtime switch` for changing runtimes  
+  - Added `vpn runtime enable/disable` for runtime configuration
+  - Created `vpn runtime migrate` for Docker→containerd migration
+  - Added `vpn runtime capabilities` for feature comparison
+  - Added `vpn runtime socket` for socket path updates
+  - **Status**: ✅ Complete with comprehensive CLI interface
   - **Date Added**: 2025-06-30
+  - **Date Completed**: 2025-07-01
 
 ### Phase 5: Testing and Performance (Weeks 7-8)
 

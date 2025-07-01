@@ -121,6 +121,10 @@ pub enum Commands {
     #[command(subcommand)]
     Migration(MigrationCommands),
 
+    /// Runtime management commands
+    #[command(subcommand)]
+    Runtime(RuntimeCommands),
+
     /// Interactive menu mode
     Menu,
 
@@ -429,6 +433,41 @@ pub enum MigrationCommands {
         #[arg(short, long)]
         input: PathBuf,
     },
+}
+
+#[derive(Subcommand, Clone)]
+pub enum RuntimeCommands {
+    /// Show runtime status and information
+    Status,
+
+    /// Switch container runtime
+    Switch {
+        /// Runtime to switch to (auto, docker, containerd)
+        runtime: String,
+    },
+
+    /// Enable or disable a runtime
+    Enable {
+        /// Runtime to configure (docker, containerd)
+        runtime: String,
+        /// Enable (true) or disable (false) the runtime
+        #[arg(long)]
+        enabled: bool,
+    },
+
+    /// Update runtime socket path
+    Socket {
+        /// Runtime to configure (docker, containerd)
+        runtime: String,
+        /// New socket path
+        path: String,
+    },
+
+    /// Migrate from Docker to containerd
+    Migrate,
+
+    /// Show runtime capabilities comparison
+    Capabilities,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]

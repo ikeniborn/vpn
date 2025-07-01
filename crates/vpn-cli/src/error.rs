@@ -20,6 +20,12 @@ pub enum CliError {
     #[error("User input error: {0}")]
     InputError(String),
     
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+    
+    #[error("Runtime error: {0}")]
+    RuntimeError(String),
+    
     #[error("Permission denied: {0}")]
     PermissionError(String),
     
