@@ -12,15 +12,20 @@ containerd-client = "0.8.0"
 tokio = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 async-trait = "0.1"
-chrono = "0.4"
 futures-util = "0.3"
 pin-project = "1.0"
 tonic = "0.12"
 prost = "0.13"
+prost-types = "0.13"
+base64 = "0.22"
+async-stream = "0.3"
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+rand = "0.8"
 
 [dev-dependencies]
 tokio-test = "0.4"

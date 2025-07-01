@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tokio::task::JoinSet;
 use crate::error::{DockerError, Result};
+use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone)]
 pub enum ContainerOperation {
@@ -28,6 +29,175 @@ pub struct BatchOperationOptions {
     pub max_concurrent: usize,
     pub timeout: Duration,
     pub fail_fast: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContainerConfig {
+    pub name: String,
+    pub image: String,
+    pub port_mappings: HashMap<u16, u16>, // host_port -> container_port
+    pub environment_variables: HashMap<String, String>,
+    pub volume_mounts: HashMap<String, String>, // host_path -> container_path
+    pub restart_policy: String,
+    pub networks: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ContainerStatus {
+    Running,
+    Stopped,
+    Paused,
+    Restarting,
+    Removing,
+    Dead,
+    Created,
+    Exited(i64), // exit code
+    NotFound,
+    Error(String),
+    Unknown(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContainerStats {
+    pub cpu_usage_percent: f64,
+    pub memory_usage_bytes: u64,
+    pub memory_limit_bytes: u64,
+    pub network_rx_bytes: u64,
+    pub network_tx_bytes: u64,
+    pub block_read_bytes: u64,
+    pub block_write_bytes: u64,
+    pub pids: u64,
+}
+
+// Alias for backward compatibility
+pub type DockerManager = ContainerManager;
+
+impl ContainerConfig {
+    pub fn new(name: &str, image: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            image: image.to_string(),
+            port_mappings: HashMap::new(),
+            environment_variables: HashMap::new(),
+            volume_mounts: HashMap::new(),
+            restart_policy: "unless-stopped".to_string(),
+            networks: vec!["default".to_string()],
+        }
+    }
+    
+    pub fn add_port_mapping(&mut self, host_port: u16, container_port: u16) {
+        self.port_mappings.insert(host_port, container_port);
+    }
+    
+    pub fn add_environment_variable(&mut self, key: &str, value: &str) {
+        self.environment_variables.insert(key.to_string(), value.to_string());
+    }
+    
+    pub fn add_volume_mount(&mut self, host_path: &str, container_path: &str) {
+        self.volume_mounts.insert(host_path.to_string(), container_path.to_string());
+    }
+    
+    pub fn set_restart_policy(&mut self, policy: &str) {
+        self.restart_policy = policy.to_string();
+    }
+    
+    pub fn add_network(&mut self, network: &str) {
+        if !self.networks.contains(&network.to_string()) {
+            self.networks.push(network.to_string());
+        }
+    }
+    
+    // Builder-style methods for fluent API
+    pub fn with_port_mapping(mut self, host_port: u16, container_port: u16) -> Self {
+        self.add_port_mapping(host_port, container_port);
+        self
+    }
+    
+    pub fn with_environment_variable(mut self, key: &str, value: &str) -> Self {
+        self.add_environment_variable(key, value);
+        self
+    }
+    
+    pub fn with_volume_mount(mut self, host_path: &str, container_path: &str) -> Self {
+        self.add_volume_mount(host_path, container_path);
+        self
+    }
+    
+    pub fn with_restart_policy(mut self, policy: &str) -> Self {
+        self.set_restart_policy(policy);
+        self
+    }
+    
+    pub fn with_network(mut self, network: &str) -> Self {
+        self.add_network(network);
+        self
+    }
+}
+
+impl From<&str> for ContainerStatus {
+    fn from(status: &str) -> Self {
+        match status.to_lowercase().as_str() {
+            "running" => ContainerStatus::Running,
+            "stopped" => ContainerStatus::Stopped,
+            "paused" => ContainerStatus::Paused,
+            "restarting" => ContainerStatus::Restarting,
+            "removing" => ContainerStatus::Removing,
+            "dead" => ContainerStatus::Dead,
+            "created" => ContainerStatus::Created,
+            s if s.starts_with("exited") => {
+                // Parse exit code from "exited (code)"
+                let code = s.strip_prefix("exited (")
+                    .and_then(|s| s.strip_suffix(")"))
+                    .and_then(|s| s.parse::<i64>().ok())
+                    .unwrap_or(0);
+                ContainerStatus::Exited(code)
+            }
+            _ => ContainerStatus::Unknown(status.to_string()),
+        }
+    }
+}
+
+impl Default for ContainerStats {
+    fn default() -> Self {
+        Self {
+            cpu_usage_percent: 0.0,
+            memory_usage_bytes: 0,
+            memory_limit_bytes: 0,
+            network_rx_bytes: 0,
+            network_tx_bytes: 0,
+            block_read_bytes: 0,
+            block_write_bytes: 0,
+            pids: 0,
+        }
+    }
+}
+
+impl ContainerStats {
+    pub fn get_memory_usage_percent(&self) -> f64 {
+        if self.memory_limit_bytes == 0 {
+            0.0
+        } else {
+            (self.memory_usage_bytes as f64 / self.memory_limit_bytes as f64) * 100.0
+        }
+    }
+}
+
+impl std::fmt::Display for ContainerStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ContainerStatus::Running => write!(f, "running"),
+            ContainerStatus::Stopped => write!(f, "stopped"),
+            ContainerStatus::Paused => write!(f, "paused"),
+            ContainerStatus::Restarting => write!(f, "restarting"),
+            ContainerStatus::Removing => write!(f, "removing"),
+            ContainerStatus::Dead => write!(f, "dead"),
+            ContainerStatus::Created => write!(f, "created"),
+            ContainerStatus::Exited(code) => write!(f, "exited({})", code),
+            ContainerStatus::NotFound => write!(f, "not_found"),
+            ContainerStatus::Error(msg) => write!(f, "error: {}", msg),
+            ContainerStatus::Unknown(status) => write!(f, "unknown({})", status),
+        }
+    }
 }
 
 #[derive(Clone)]

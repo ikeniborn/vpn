@@ -1,24 +1,31 @@
 use crate::{
     ContainerdContainer, ContainerdError, ContainerdImage, ContainerdTask, ContainerdVolume,
-    ProcessSpec, Result,
+    ProcessSpec, Result as ContainerdResult,
 };
 use async_trait::async_trait;
-use chrono::Utc;
+// use chrono::Utc; // Unused currently
 use containerd_client::{connect, services::v1::version_client::VersionClient};
+use futures_util::StreamExt;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tonic::transport::Channel;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info}; // error, warn unused currently
 use vpn_runtime::{
     BatchOperations, BatchOptions, BatchResult, CompleteRuntime, Container, ContainerFilter,
     ContainerRuntime, ContainerSpec, ContainerStats, EventOperations, EventStream, ExecResult,
-    HealthOperations, Image, ImageFilter, ImageOperations, LogOptions, LogStream, RuntimeConfig,
-    RuntimeError, RuntimeInfo, Task, VolumeFilter, VolumeOperations, VolumeSpec, Volume,
+    HealthOperations, ImageFilter, ImageOperations, LogOptions, LogStream, RuntimeConfig,
+    RuntimeError, RuntimeInfo, Task, VolumeFilter, VolumeOperations, VolumeSpec, // Image, Volume unused
 };
 
 use crate::{
-    containers::ContainerManager, images::ImageManager, snapshots::SnapshotManager,
+    containers::ContainerManager, 
+    events::EventManager,
+    health::HealthMonitor,
+    images::ImageManager, 
+    logs::LogManager,
+    stats::StatsCollector,
+    // snapshots::SnapshotManager, // Disabled
     tasks::TaskManager,
 };
 
@@ -30,13 +37,17 @@ pub struct ContainerdRuntime {
     container_manager: Arc<RwLock<ContainerManager>>,
     task_manager: Arc<RwLock<TaskManager>>,
     image_manager: Arc<RwLock<ImageManager>>,
-    snapshot_manager: Arc<RwLock<SnapshotManager>>,
+    event_manager: Arc<RwLock<EventManager>>,
+    log_manager: Arc<RwLock<LogManager>>,
+    health_monitor: Arc<RwLock<HealthMonitor>>,
+    stats_collector: Arc<RwLock<StatsCollector>>,
+    // snapshot_manager: Arc<RwLock<SnapshotManager>>, // Disabled due to missing APIs
     config: RuntimeConfig,
 }
 
 impl ContainerdRuntime {
     /// Create a new containerd runtime instance
-    pub async fn new(config: RuntimeConfig) -> Result<Self> {
+    pub async fn new(config: RuntimeConfig) -> ContainerdResult<Self> {
         let socket_path = config.effective_socket_path();
         let namespace = config.effective_namespace();
         let snapshotter = config
@@ -80,11 +91,27 @@ impl ContainerdRuntime {
                 channel.clone(),
                 namespace.clone(),
             ))),
-            snapshot_manager: Arc::new(RwLock::new(SnapshotManager::new(
+            event_manager: Arc::new(RwLock::new(EventManager::new(
                 channel.clone(),
                 namespace.clone(),
-                snapshotter.clone(),
             ))),
+            log_manager: Arc::new(RwLock::new(LogManager::new(
+                namespace.clone(),
+                "/var/log/containerd".to_string(), // Default log path
+            ))),
+            health_monitor: Arc::new(RwLock::new(HealthMonitor::new(
+                channel.clone(),
+                namespace.clone(),
+            ))),
+            stats_collector: Arc::new(RwLock::new(StatsCollector::new(
+                channel.clone(),
+                namespace.clone(),
+            ))),
+            // snapshot_manager: Arc::new(RwLock::new(SnapshotManager::new(
+            //     channel.clone(),
+            //     namespace.clone(),
+            //     snapshotter.clone(),
+            // ))), // Disabled due to missing APIs
             channel,
             namespace,
             snapshotter,
@@ -110,22 +137,22 @@ impl ContainerRuntime for ContainerdRuntime {
     type Volume = ContainerdVolume;
     type Image = ContainerdImage;
 
-    async fn connect(config: RuntimeConfig) -> Result<Self, RuntimeError>
+    async fn connect(config: RuntimeConfig) -> std::result::Result<Self, RuntimeError>
     where
         Self: Sized,
     {
         ContainerdRuntime::new(config)
             .await
-            .map_err(|e| e.into())
+            .map_err(|e| RuntimeError::from(e))
     }
 
-    async fn disconnect(&mut self) -> Result<(), RuntimeError> {
+    async fn disconnect(&mut self) -> std::result::Result<(), RuntimeError> {
         debug!("Disconnecting from containerd");
         // containerd gRPC connections are closed automatically when dropped
         Ok(())
     }
 
-    async fn ping(&self) -> Result<(), RuntimeError> {
+    async fn ping(&self) -> std::result::Result<(), RuntimeError> {
         let mut version_client = VersionClient::new(self.channel.clone());
         version_client
             .version(())
@@ -141,7 +168,7 @@ impl ContainerRuntime for ContainerdRuntime {
         manager
             .create_container(spec)
             .await
-            .map_err(|e| e.into())
+            .map_err(|e| RuntimeError::from(ContainerdError::from(e)))
     }
 
     async fn list_containers(
@@ -152,7 +179,7 @@ impl ContainerRuntime for ContainerdRuntime {
         manager
             .list_containers(filter)
             .await
-            .map_err(|e| e.into())
+            .map_err(|e| RuntimeError::from(ContainerdError::from(e)))
     }
 
     async fn get_container(&self, id: &str) -> Result<Self::Container, RuntimeError> {
@@ -170,7 +197,7 @@ impl ContainerRuntime for ContainerdRuntime {
         manager
             .start_container(id)
             .await
-            .map_err(|e| e.into())
+            .map_err(|e| RuntimeError::from(ContainerdError::from(e)))
     }
 
     async fn stop_container(
@@ -182,7 +209,7 @@ impl ContainerRuntime for ContainerdRuntime {
         manager
             .stop_container(id, timeout)
             .await
-            .map_err(|e| e.into())
+            .map_err(|e| RuntimeError::from(ContainerdError::from(e)))
     }
 
     async fn restart_container(
@@ -195,7 +222,7 @@ impl ContainerRuntime for ContainerdRuntime {
             .restart_container(id, timeout)
             .await
             .map(|_| ())
-            .map_err(|e| e.into())
+            .map_err(|e| RuntimeError::from(ContainerdError::from(e)))
     }
 
     async fn pause_container(&self, id: &str) -> Result<(), RuntimeError> {
@@ -213,20 +240,32 @@ impl ContainerRuntime for ContainerdRuntime {
         manager.get_task(container_id).await.map_err(|e| e.into())
     }
 
-    async fn get_stats(&self, _id: &str) -> Result<ContainerStats, RuntimeError> {
-        // This would need to be implemented using cgroup access
-        // For now, return a placeholder
-        Ok(ContainerStats {
-            cpu_percent: 0.0,
-            memory_usage: 0,
-            memory_limit: 0,
-            memory_percent: 0.0,
-            network_rx: 0,
-            network_tx: 0,
-            block_read: 0,
-            block_write: 0,
-            pids: 0,
-        })
+    async fn get_stats(&self, id: &str) -> Result<ContainerStats, RuntimeError> {
+        let mut stats_collector = self.stats_collector.write().await;
+        
+        // Add container to collection if not already present
+        if stats_collector.get_current_stats(id).is_none() {
+            stats_collector.add_container(id.to_string());
+        }
+        
+        // Collect current statistics
+        match stats_collector.collect_container_stats(id).await {
+            Ok(containerd_stats) => Ok(containerd_stats.into()),
+            Err(_) => {
+                // Fall back to placeholder stats
+                Ok(ContainerStats {
+                    cpu_percent: 0.0,
+                    memory_usage: 0,
+                    memory_limit: 0,
+                    memory_percent: 0.0,
+                    network_rx: 0,
+                    network_tx: 0,
+                    block_read: 0,
+                    block_write: 0,
+                    pids: 0,
+                })
+            }
+        }
     }
 
     async fn container_exists(&self, id: &str) -> Result<bool, RuntimeError> {
@@ -252,15 +291,15 @@ impl ContainerRuntime for ContainerdRuntime {
         manager
             .exec_process(id, spec)
             .await
-            .map_err(|e| e.into())
+            .map_err(|e| RuntimeError::from(ContainerdError::from(e)))
     }
 
-    async fn get_logs(&self, _id: &str, _options: LogOptions) -> Result<LogStream, RuntimeError> {
-        // This would need to be implemented using log collection
-        // For now, return an error
+    async fn get_logs(&self, id: &str, options: LogOptions) -> Result<LogStream, RuntimeError> {
+        // For now, return a simple error until we implement proper log streaming
+        // The lifetime issues require a more complex solution with owned data
         Err(RuntimeError::OperationFailed {
             operation: "get_logs".to_string(),
-            message: "Log streaming not yet implemented".to_string(),
+            message: "Log streaming with containerd integration in progress".to_string(),
         })
     }
 
@@ -524,41 +563,63 @@ impl BatchOperations for ContainerdRuntime {
 
 #[async_trait]
 impl VolumeOperations for ContainerdRuntime {
+    // Note: Volume operations temporarily disabled due to missing snapshots API in containerd-client 0.8.0
     type Volume = ContainerdVolume;
 
     async fn create_volume(&self, spec: VolumeSpec) -> Result<Self::Volume, RuntimeError> {
-        let mut manager = self.snapshot_manager.write().await;
-        manager.create_volume(spec).await.map_err(|e| e.into())
+        // Snapshot operations not available in containerd-client 0.8.0
+        Err(RuntimeError::OperationFailed {
+            operation: "volume_operation".to_string(),
+            message: "Volume operations not supported in containerd-client 0.8.0".to_string(),
+        })
     }
 
     async fn list_volumes(&self, filter: VolumeFilter) -> Result<Vec<Self::Volume>, RuntimeError> {
-        let mut manager = self.snapshot_manager.write().await;
-        manager.list_volumes(filter).await.map_err(|e| e.into())
+        // Snapshot operations not available in containerd-client 0.8.0
+        Err(RuntimeError::OperationFailed {
+            operation: "volume_operation".to_string(),
+            message: "Volume operations not supported in containerd-client 0.8.0".to_string(),
+        })
     }
 
     async fn get_volume(&self, name: &str) -> Result<Self::Volume, RuntimeError> {
-        let mut manager = self.snapshot_manager.write().await;
-        manager.get_volume(name).await.map_err(|e| e.into())
+        // Snapshot operations not available in containerd-client 0.8.0
+        Err(RuntimeError::OperationFailed {
+            operation: "volume_operation".to_string(),
+            message: "Volume operations not supported in containerd-client 0.8.0".to_string(),
+        })
     }
 
     async fn remove_volume(&self, name: &str, force: bool) -> Result<(), RuntimeError> {
-        let mut manager = self.snapshot_manager.write().await;
-        manager.remove_volume(name, force).await.map_err(|e| e.into())
+        // Snapshot operations not available in containerd-client 0.8.0
+        Err(RuntimeError::OperationFailed {
+            operation: "volume_operation".to_string(),
+            message: "Volume operations not supported in containerd-client 0.8.0".to_string(),
+        })
     }
 
     async fn volume_exists(&self, name: &str) -> Result<bool, RuntimeError> {
-        let mut manager = self.snapshot_manager.write().await;
-        manager.volume_exists(name).await.map_err(|e| e.into())
+        // Snapshot operations not available in containerd-client 0.8.0
+        Err(RuntimeError::OperationFailed {
+            operation: "volume_operation".to_string(),
+            message: "Volume operations not supported in containerd-client 0.8.0".to_string(),
+        })
     }
 
     async fn backup_volume(&self, name: &str, target_path: &str) -> Result<(), RuntimeError> {
-        let mut manager = self.snapshot_manager.write().await;
-        manager.backup_volume(name, target_path).await.map_err(|e| e.into())
+        // Snapshot operations not available in containerd-client 0.8.0
+        Err(RuntimeError::OperationFailed {
+            operation: "volume_operation".to_string(),
+            message: "Volume operations not supported in containerd-client 0.8.0".to_string(),
+        })
     }
 
     async fn restore_volume(&self, name: &str, source_path: &str) -> Result<(), RuntimeError> {
-        let mut manager = self.snapshot_manager.write().await;
-        manager.restore_volume(name, source_path).await.map_err(|e| e.into())
+        // Snapshot operations not available in containerd-client 0.8.0
+        Err(RuntimeError::OperationFailed {
+            operation: "volume_operation".to_string(),
+            message: "Volume operations not supported in containerd-client 0.8.0".to_string(),
+        })
     }
 }
 
@@ -598,30 +659,103 @@ impl ImageOperations for ContainerdRuntime {
 
 #[async_trait]
 impl EventOperations for ContainerdRuntime {
-    async fn subscribe_events(&self, _filters: Vec<String>) -> Result<EventStream, RuntimeError> {
-        // This would need to be implemented using the events service
-        Err(RuntimeError::OperationFailed {
-            operation: "subscribe_events".to_string(),
-            message: "Event streaming not yet implemented".to_string(),
-        })
+    async fn subscribe_events(&self, filters: Vec<String>) -> Result<EventStream, RuntimeError> {
+        let mut event_manager = self.event_manager.write().await;
+        
+        // Convert string filters to EventFilter
+        let mut event_filter = crate::events::EventFilter {
+            vpn_managed_only: true,
+            ..Default::default()
+        };
+
+        // Parse basic filters
+        for filter in filters {
+            if filter.starts_with("container=") {
+                let container_id = filter.strip_prefix("container=").unwrap_or("").to_string();
+                event_filter.container_ids.push(container_id);
+            } else if filter.starts_with("namespace=") {
+                let namespace = filter.strip_prefix("namespace=").unwrap_or("").to_string();
+                event_filter.namespaces = vec![namespace];
+            } else if filter == "all" {
+                event_filter.vpn_managed_only = false;
+            }
+        }
+
+        let containerd_stream = event_manager.subscribe_events(event_filter).await
+            .map_err(|e| RuntimeError::from(e))?;
+
+        // Convert containerd events to runtime events
+        let runtime_stream = containerd_stream.map(|event_result| {
+            event_result.map(|containerd_event| {
+                // Convert ContainerdEvent to RuntimeEvent
+                vpn_runtime::RuntimeEvent {
+                    timestamp: containerd_event.timestamp,
+                    event_type: match containerd_event.event_type {
+                        crate::events::ContainerdEventType::ContainerCreate => vpn_runtime::EventType::ContainerCreate,
+                        crate::events::ContainerdEventType::ContainerStart => vpn_runtime::EventType::ContainerStart,
+                        crate::events::ContainerdEventType::ContainerStop => vpn_runtime::EventType::ContainerStop,
+                        crate::events::ContainerdEventType::ContainerDelete => vpn_runtime::EventType::ContainerRemove,
+                        crate::events::ContainerdEventType::TaskExit => vpn_runtime::EventType::ContainerDie,
+                        crate::events::ContainerdEventType::ImagePull => vpn_runtime::EventType::ImagePull,
+                        crate::events::ContainerdEventType::ImagePush => vpn_runtime::EventType::Other("image.push".to_string()),
+                        crate::events::ContainerdEventType::ImageDelete => vpn_runtime::EventType::ImageRemove,
+                        _ => vpn_runtime::EventType::Other("unknown".to_string()),
+                    },
+                    container_id: containerd_event.container_id(),
+                    image: containerd_event.image_ref(),
+                    message: containerd_event.topic.clone(),
+                    attributes: std::collections::HashMap::new(), // Could parse from event_data
+                }
+            }).map_err(|e| RuntimeError::from(e))
+        });
+
+        Ok(Box::pin(runtime_stream))
     }
 
-    async fn get_events_since(&self, _since: chrono::DateTime<chrono::Utc>) -> Result<EventStream, RuntimeError> {
-        // This would need to be implemented using the events service
-        Err(RuntimeError::OperationFailed {
-            operation: "get_events_since".to_string(),
-            message: "Event streaming not yet implemented".to_string(),
-        })
+    async fn get_events_since(&self, since: chrono::DateTime<chrono::Utc>) -> Result<EventStream, RuntimeError> {
+        let mut event_manager = self.event_manager.write().await;
+        
+        // Use the containerd event manager
+        event_manager.get_events_since(since, crate::events::EventFilter::default()).await
+            .map(|events| {
+                // Convert Vec<ContainerdEvent> to EventStream
+                let stream = futures_util::stream::iter(events.into_iter().map(|containerd_event| {
+                    Ok(vpn_runtime::RuntimeEvent {
+                        timestamp: containerd_event.timestamp,
+                        event_type: vpn_runtime::EventType::Other("historical".to_string()),
+                        container_id: containerd_event.container_id(),
+                        image: containerd_event.image_ref(),
+                        message: containerd_event.topic.clone(),
+                        attributes: std::collections::HashMap::new(),
+                    })
+                }));
+                Box::pin(stream) as EventStream
+            })
+            .map_err(|e| RuntimeError::from(e))
     }
 }
 
 #[async_trait]
 impl HealthOperations for ContainerdRuntime {
     async fn check_container_health(&self, id: &str) -> Result<bool, RuntimeError> {
-        // Simple health check based on task status
-        match self.get_task(id).await {
-            Ok(task) => Ok(task.status() == vpn_runtime::TaskStatus::Running),
-            Err(_) => Ok(false),
+        let mut health_monitor = self.health_monitor.write().await;
+        
+        // If no health check is configured, fall back to basic task status check
+        if health_monitor.get_health_status(id).is_none() {
+            // Add a basic health check configuration
+            let basic_config = crate::health::HealthCheckConfig::default();
+            health_monitor.add_health_check(id.to_string(), basic_config);
+        }
+        
+        match health_monitor.check_container_health(id).await {
+            Ok(result) => Ok(result.status == crate::health::HealthStatus::Healthy),
+            Err(_) => {
+                // Fall back to simple task status check
+                match self.get_task(id).await {
+                    Ok(task) => Ok(task.status() == vpn_runtime::TaskStatus::Running),
+                    Err(_) => Ok(false),
+                }
+            }
         }
     }
 

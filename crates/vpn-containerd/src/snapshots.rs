@@ -1,9 +1,9 @@
 use crate::{ContainerdError, ContainerdVolume, MountSpec, Result, SnapshotInfo, SnapshotKind};
 use chrono::{DateTime, Utc};
 use containerd_client::services::v1::{
-    snapshots_client::SnapshotsClient,
-    CommitSnapshotRequest, ListSnapshotsRequest, PrepareSnapshotRequest, RemoveSnapshotRequest,
-    StatSnapshotRequest, ViewSnapshotRequest, MountsRequest,
+    // snapshots_client::SnapshotsClient, // Missing in 0.8.0
+    // CommitSnapshotRequest, ListSnapshotsRequest, PrepareSnapshotRequest, RemoveSnapshotRequest,
+    // StatSnapshotRequest, ViewSnapshotRequest, MountsRequest, // Missing in 0.8.0
 };
 use std::collections::HashMap;
 use tonic::transport::Channel;

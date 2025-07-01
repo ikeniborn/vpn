@@ -6,6 +6,10 @@ use crate::error::Result;
 pub struct SniValidator;
 
 impl SniValidator {
+    pub fn validate_domain(domain: &str) -> Result<bool> {
+        Ok(Self::is_valid_domain_format(domain))
+    }
+    
     pub async fn validate_sni(domain: &str) -> Result<bool> {
         if !Self::is_valid_domain_format(domain) {
             return Ok(false);

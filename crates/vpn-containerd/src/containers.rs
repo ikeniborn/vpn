@@ -3,11 +3,11 @@ use chrono::{DateTime, Utc};
 use containerd_client::services::v1::{
     containers_client::ContainersClient,
     CreateContainerRequest, DeleteContainerRequest, GetContainerRequest, ListContainersRequest,
-    UpdateContainerRequest,
+    UpdateContainerRequest, Container,
 };
 use std::collections::HashMap;
 use tonic::transport::Channel;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info}; // error, warn unused currently
 use vpn_runtime::{ContainerFilter, ContainerSpec, ContainerState, ContainerStatus};
 
 /// Container management operations for containerd
@@ -179,7 +179,7 @@ impl ContainerManager {
         container.labels.extend(labels);
 
         // Build update request
-        let container_spec = containerd_client::types::Container {
+        let container_spec = Container {
             id: container.id.clone(),
             image: container.image.clone(),
             labels: container.labels.clone(),
@@ -200,14 +200,14 @@ impl ContainerManager {
     }
 
     /// Build containerd container specification from VPN container spec
-    fn build_container_spec(&self, spec: &ContainerSpec) -> Result<containerd_client::types::Container> {
+    fn build_container_spec(&self, spec: &ContainerSpec) -> Result<Container> {
         let mut labels = spec.labels.clone();
         
         // Add VPN-specific labels
         labels.insert("vpn.managed".to_string(), "true".to_string());
         labels.insert("vpn.created_at".to_string(), Utc::now().to_rfc3339());
 
-        Ok(containerd_client::types::Container {
+        Ok(Container {
             id: spec.name.clone(),
             image: spec.image.clone(),
             runtime: None, // Use default runtime
@@ -223,7 +223,7 @@ impl ContainerManager {
     /// Convert containerd container to our container type
     fn convert_to_containerd_container(
         &self,
-        container: containerd_client::types::Container,
+        container: Container,
     ) -> Result<ContainerdContainer> {
         // Parse creation time from labels if available
         let created_at = container

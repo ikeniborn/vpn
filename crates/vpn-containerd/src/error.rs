@@ -42,6 +42,9 @@ pub enum ContainerdError {
     #[error("Event streaming error: {message}")]
     EventError { message: String },
 
+    #[error("Event operation failed: {operation} - {message}")]
+    EventOperationFailed { operation: String, message: String },
+
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
 
@@ -56,6 +59,12 @@ pub enum ContainerdError {
 
     #[error("Configuration error: {message}")]
     ConfigError { message: String },
+
+    #[error("Operation not supported: {operation} - {reason}")]
+    OperationNotSupported { operation: String, reason: String },
+
+    #[error("Operation failed: {operation} - {message}")]
+    OperationFailed { operation: String, message: String },
 
     #[error("Runtime error: {0}")]
     RuntimeError(#[from] RuntimeError),
@@ -81,6 +90,10 @@ impl From<ContainerdError> for RuntimeError {
             ContainerdError::InvalidSpec { message } => RuntimeError::InvalidSpec { message },
             ContainerdError::Timeout { operation } => RuntimeError::Timeout { operation },
             ContainerdError::ConfigError { message } => RuntimeError::ConfigError { message },
+            ContainerdError::OperationNotSupported { operation, reason } => RuntimeError::OperationFailed { 
+                operation, 
+                message: format!("Operation not supported: {}", reason) 
+            },
             ContainerdError::IoError(e) => RuntimeError::IoError(e),
             ContainerdError::JsonError(e) => RuntimeError::SerializationError(e),
             ContainerdError::RuntimeError(e) => e,

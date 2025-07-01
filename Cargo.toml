@@ -9,7 +9,7 @@ members = [
     "crates/vpn-monitor",
     "crates/vpn-cli", 
     "crates/vpn-runtime",
-    # "crates/vpn-containerd",  # Temporarily disabled due to API compatibility issues
+    "crates/vpn-containerd",
 ]
 
 [workspace.package]
@@ -47,6 +47,11 @@ pnet = "0.34"
 # CLI
 toml = "0.8"
 dialoguer = "0.11"
+
+# Testing
+proptest = "1.4"
+quickcheck = "1.0"
+mockall = "0.12"
 console = "0.15"
 indicatif = "0.17"
 colored = "2.0"

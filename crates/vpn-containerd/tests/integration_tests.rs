@@ -1,6 +1,7 @@
 use vpn_runtime::{
-    ContainerFilter, ContainerRuntime, ContainerSpec, RuntimeConfig, RuntimeType,
-    ContainerdConfig, MountType, VolumeMount,
+    BatchOperations, CompleteRuntime, Container, ContainerFilter, ContainerRuntime, 
+    ContainerSpec, HealthOperations, Image, ImageOperations, RuntimeConfig, RuntimeType,
+    Task, Volume, VolumeOperations, ContainerdConfig,
 };
 use vpn_containerd::ContainerdRuntime;
 use std::collections::HashMap;
@@ -185,8 +186,9 @@ async fn test_batch_operations() {
         fail_fast: false,
     };
 
+    let name_refs: Vec<&str> = container_names.iter().map(|s| s.as_ref()).collect();
     let start_result = runtime.batch_start_containers(
-        &container_names.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        &name_refs,
         batch_options.clone()
     ).await.unwrap();
 
@@ -194,8 +196,9 @@ async fn test_batch_operations() {
     assert_eq!(start_result.failure_count(), 0);
 
     // Test batch health check
+    let name_refs: Vec<&str> = container_names.iter().map(|s| s.as_ref()).collect();
     let health_results = runtime.batch_health_check(
-        &container_names.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        &name_refs,
         batch_options.clone()
     ).await.unwrap();
 
@@ -205,8 +208,9 @@ async fn test_batch_operations() {
     }
 
     // Test batch stop
+    let name_refs: Vec<&str> = container_names.iter().map(|s| s.as_ref()).collect();
     let stop_result = runtime.batch_stop_containers(
-        &container_names.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        &name_refs,
         None,
         batch_options.clone()
     ).await.unwrap();
@@ -214,8 +218,9 @@ async fn test_batch_operations() {
     assert_eq!(stop_result.success_count(), container_names.len());
 
     // Clean up - batch remove
+    let name_refs: Vec<&str> = container_names.iter().map(|s| s.as_ref()).collect();
     let remove_result = runtime.batch_remove_containers(
-        &container_names.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        &name_refs,
         false,
         batch_options
     ).await.unwrap();
@@ -384,8 +389,9 @@ async fn benchmark_container_operations() {
         fail_fast: false,
     };
     
+    let name_refs: Vec<&str> = container_names.iter().map(|s| s.as_ref()).collect();
     let _result = runtime.batch_start_containers(
-        &container_names.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        &name_refs,
         batch_options.clone()
     ).await.unwrap();
     let start_time = start.elapsed();
@@ -393,8 +399,9 @@ async fn benchmark_container_operations() {
 
     // Benchmark batch stop
     let start = std::time::Instant::now();
+    let name_refs: Vec<&str> = container_names.iter().map(|s| s.as_ref()).collect();
     let _result = runtime.batch_stop_containers(
-        &container_names.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        &name_refs,
         None,
         batch_options.clone()
     ).await.unwrap();
@@ -402,8 +409,9 @@ async fn benchmark_container_operations() {
     println!("Stopped {} containers in {:?}", num_containers, stop_time);
 
     // Clean up
+    let name_refs: Vec<&str> = container_names.iter().map(|s| s.as_ref()).collect();
     let _result = runtime.batch_remove_containers(
-        &container_names.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        &name_refs,
         false,
         batch_options
     ).await.unwrap();

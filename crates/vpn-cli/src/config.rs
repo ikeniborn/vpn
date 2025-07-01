@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use crate::error::{CliError, Result};
 
@@ -9,6 +10,7 @@ pub struct CliConfig {
     pub ui: UiConfig,
     pub monitoring: MonitoringConfig,
     pub security: SecurityConfig,
+    pub runtime: RuntimeSelectionConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +60,44 @@ pub struct SecurityConfig {
     pub key_rotation_interval_days: u32,
     pub backup_keys: bool,
     pub strict_validation: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeSelectionConfig {
+    pub preferred_runtime: String,
+    pub auto_detect: bool,
+    pub fallback_enabled: bool,
+    pub docker: DockerRuntimeConfig,
+    pub containerd: ContainerdRuntimeConfig,
+    pub migration: MigrationConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockerRuntimeConfig {
+    pub socket_path: String,
+    pub api_version: Option<String>,
+    pub timeout_seconds: u64,
+    pub max_connections: usize,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContainerdRuntimeConfig {
+    pub socket_path: String,
+    pub namespace: String,
+    pub timeout_seconds: u64,
+    pub max_connections: usize,
+    pub snapshotter: String,
+    pub runtime: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MigrationConfig {
+    pub backup_before_migration: bool,
+    pub preserve_containers: bool,
+    pub validate_after_migration: bool,
+    pub migration_timeout_minutes: u32,
 }
 
 pub struct ConfigManager {
@@ -116,6 +156,119 @@ impl ConfigManager {
         Self::save_config(&self.config, &self.config_path)
     }
 
+    // Runtime configuration utility methods
+    pub fn get_runtime_config(&self) -> &RuntimeSelectionConfig {
+        &self.config.runtime
+    }
+
+    pub fn set_preferred_runtime(&mut self, runtime: &str) -> Result<()> {
+        if !["auto", "docker", "containerd"].contains(&runtime) {
+            return Err(CliError::ConfigError(
+                "Runtime must be 'auto', 'docker', or 'containerd'".to_string()
+            ));
+        }
+        self.config.runtime.preferred_runtime = runtime.to_string();
+        Self::save_config(&self.config, &self.config_path)
+    }
+
+    pub fn enable_runtime(&mut self, runtime: &str, enabled: bool) -> Result<()> {
+        // Check if disabling this runtime would leave no runtimes enabled
+        if !enabled {
+            let would_have_docker = match runtime {
+                "docker" => false,
+                _ => self.config.runtime.docker.enabled,
+            };
+            let would_have_containerd = match runtime {
+                "containerd" => false,
+                _ => self.config.runtime.containerd.enabled,
+            };
+            
+            if !would_have_docker && !would_have_containerd {
+                return Err(CliError::ConfigError(
+                    "At least one runtime must be enabled".to_string()
+                ));
+            }
+        }
+        
+        // Apply the change
+        match runtime {
+            "docker" => self.config.runtime.docker.enabled = enabled,
+            "containerd" => self.config.runtime.containerd.enabled = enabled,
+            _ => return Err(CliError::ConfigError(
+                "Runtime must be 'docker' or 'containerd'".to_string()
+            )),
+        }
+        
+        Self::save_config(&self.config, &self.config_path)
+    }
+
+    pub fn update_runtime_socket(&mut self, runtime: &str, socket_path: &str) -> Result<()> {
+        match runtime {
+            "docker" => self.config.runtime.docker.socket_path = socket_path.to_string(),
+            "containerd" => self.config.runtime.containerd.socket_path = socket_path.to_string(),
+            _ => return Err(CliError::ConfigError(
+                "Runtime must be 'docker' or 'containerd'".to_string()
+            )),
+        }
+        Self::save_config(&self.config, &self.config_path)
+    }
+
+    pub fn enable_auto_detection(&mut self, enabled: bool) -> Result<()> {
+        self.config.runtime.auto_detect = enabled;
+        Self::save_config(&self.config, &self.config_path)
+    }
+
+    pub fn enable_runtime_fallback(&mut self, enabled: bool) -> Result<()> {
+        self.config.runtime.fallback_enabled = enabled;
+        Self::save_config(&self.config, &self.config_path)
+    }
+
+    /// Convert CLI runtime config to vpn-runtime config
+    pub fn to_runtime_config(&self) -> vpn_runtime::RuntimeConfig {
+        let runtime = &self.config.runtime;
+        
+        let runtime_type = match runtime.preferred_runtime.as_str() {
+            "docker" => vpn_runtime::RuntimeType::Docker,
+            "containerd" => vpn_runtime::RuntimeType::Containerd,
+            _ => vpn_runtime::RuntimeType::Auto,
+        };
+
+        let docker_config = if runtime.docker.enabled {
+            Some(vpn_runtime::DockerConfig {
+                socket_path: runtime.docker.socket_path.clone(),
+                api_version: runtime.docker.api_version.clone(),
+                timeout_seconds: runtime.docker.timeout_seconds,
+                max_connections: runtime.docker.max_connections,
+            })
+        } else {
+            None
+        };
+
+        let containerd_config = if runtime.containerd.enabled {
+            Some(vpn_runtime::ContainerdConfig {
+                socket_path: runtime.containerd.socket_path.clone(),
+                namespace: runtime.containerd.namespace.clone(),
+                timeout_seconds: runtime.containerd.timeout_seconds,
+                max_connections: runtime.containerd.max_connections,
+                snapshotter: runtime.containerd.snapshotter.clone(),
+                runtime: runtime.containerd.runtime.clone(),
+            })
+        } else {
+            None
+        };
+
+        vpn_runtime::RuntimeConfig {
+            runtime_type,
+            socket_path: None, // Use runtime-specific socket paths
+            namespace: None,   // Use runtime-specific namespaces
+            timeout: Duration::from_secs(30), // Default timeout
+            max_connections: 10, // Default max connections
+            docker: docker_config,
+            containerd: containerd_config,
+            fallback_enabled: runtime.fallback_enabled,
+        }
+    }
+
     pub fn validate_config(&self) -> Result<Vec<String>> {
         let mut warnings = Vec::new();
 
@@ -154,6 +307,36 @@ impl ConfigManager {
 
         if self.config.monitoring.metrics_retention_days == 0 {
             warnings.push("Metrics retention should be at least 1 day".to_string());
+        }
+
+        // Validate runtime configuration
+        let runtime = &self.config.runtime;
+        if !["auto", "docker", "containerd"].contains(&runtime.preferred_runtime.as_str()) {
+            warnings.push("Preferred runtime must be 'auto', 'docker', or 'containerd'".to_string());
+        }
+
+        if !runtime.docker.enabled && !runtime.containerd.enabled {
+            warnings.push("At least one runtime must be enabled".to_string());
+        }
+
+        if runtime.docker.timeout_seconds == 0 {
+            warnings.push("Docker timeout must be greater than 0".to_string());
+        }
+
+        if runtime.containerd.timeout_seconds == 0 {
+            warnings.push("Containerd timeout must be greater than 0".to_string());
+        }
+
+        if runtime.docker.max_connections == 0 {
+            warnings.push("Docker max connections must be greater than 0".to_string());
+        }
+
+        if runtime.containerd.max_connections == 0 {
+            warnings.push("Containerd max connections must be greater than 0".to_string());
+        }
+
+        if runtime.migration.migration_timeout_minutes == 0 {
+            warnings.push("Migration timeout must be greater than 0".to_string());
         }
 
         Ok(warnings)
@@ -199,6 +382,7 @@ impl Default for CliConfig {
             ui: UiConfig::default(),
             monitoring: MonitoringConfig::default(),
             security: SecurityConfig::default(),
+            runtime: RuntimeSelectionConfig::default(),
         }
     }
 }
@@ -270,6 +454,56 @@ impl Default for SecurityConfig {
     }
 }
 
+impl Default for RuntimeSelectionConfig {
+    fn default() -> Self {
+        Self {
+            preferred_runtime: "auto".to_string(),
+            auto_detect: true,
+            fallback_enabled: true,
+            docker: DockerRuntimeConfig::default(),
+            containerd: ContainerdRuntimeConfig::default(),
+            migration: MigrationConfig::default(),
+        }
+    }
+}
+
+impl Default for DockerRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            socket_path: "/var/run/docker.sock".to_string(),
+            api_version: None,
+            timeout_seconds: 30,
+            max_connections: 10,
+            enabled: true,
+        }
+    }
+}
+
+impl Default for ContainerdRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            socket_path: "/run/containerd/containerd.sock".to_string(),
+            namespace: "default".to_string(),
+            timeout_seconds: 30,
+            max_connections: 10,
+            snapshotter: "overlayfs".to_string(),
+            runtime: "io.containerd.runc.v2".to_string(),
+            enabled: true,
+        }
+    }
+}
+
+impl Default for MigrationConfig {
+    fn default() -> Self {
+        Self {
+            backup_before_migration: true,
+            preserve_containers: true,
+            validate_after_migration: true,
+            migration_timeout_minutes: 30,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -309,5 +543,71 @@ mod tests {
         let warnings = manager.validate_config().unwrap();
         
         assert!(!warnings.is_empty(), "Invalid config should produce warnings");
+    }
+
+    #[test]
+    fn test_runtime_configuration() {
+        let temp_dir = tempdir().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+        let mut manager = ConfigManager::new(Some(config_path)).unwrap();
+        
+        // Test default runtime config
+        let runtime_config = manager.get_runtime_config();
+        assert_eq!(runtime_config.preferred_runtime, "auto");
+        assert!(runtime_config.auto_detect);
+        assert!(runtime_config.fallback_enabled);
+        assert!(runtime_config.docker.enabled);
+        assert!(runtime_config.containerd.enabled);
+        
+        // Test setting preferred runtime
+        manager.set_preferred_runtime("containerd").unwrap();
+        assert_eq!(manager.get_runtime_config().preferred_runtime, "containerd");
+        
+        // Test invalid runtime
+        assert!(manager.set_preferred_runtime("invalid").is_err());
+        
+        // Test enabling/disabling runtimes
+        manager.enable_runtime("docker", false).unwrap();
+        assert!(!manager.get_runtime_config().docker.enabled);
+        assert!(manager.get_runtime_config().containerd.enabled);
+        
+        // Test disabling all runtimes should fail
+        assert!(manager.enable_runtime("containerd", false).is_err());
+        
+        // Test socket path update
+        manager.update_runtime_socket("containerd", "/custom/path.sock").unwrap();
+        assert_eq!(manager.get_runtime_config().containerd.socket_path, "/custom/path.sock");
+        
+        // Test conversion to vpn-runtime config
+        let vpn_runtime_config = manager.to_runtime_config();
+        assert_eq!(vpn_runtime_config.runtime_type, vpn_runtime::RuntimeType::Containerd);
+        assert!(vpn_runtime_config.containerd.is_some());
+        assert!(vpn_runtime_config.docker.is_none()); // Docker is disabled
+        assert!(vpn_runtime_config.fallback_enabled);
+    }
+
+    #[test]
+    fn test_runtime_config_validation() {
+        let mut config = CliConfig::default();
+        
+        // Test invalid preferred runtime
+        config.runtime.preferred_runtime = "invalid".to_string();
+        config.runtime.docker.enabled = false;
+        config.runtime.containerd.enabled = false;
+        config.runtime.docker.timeout_seconds = 0;
+        config.runtime.migration.migration_timeout_minutes = 0;
+        
+        let temp_dir = tempdir().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+        ConfigManager::save_config(&config, &config_path).unwrap();
+        
+        let manager = ConfigManager::new(Some(config_path)).unwrap();
+        let warnings = manager.validate_config().unwrap();
+        
+        // Should have multiple runtime-related warnings
+        assert!(warnings.iter().any(|w| w.contains("Preferred runtime")));
+        assert!(warnings.iter().any(|w| w.contains("At least one runtime")));
+        assert!(warnings.iter().any(|w| w.contains("Docker timeout")));
+        assert!(warnings.iter().any(|w| w.contains("Migration timeout")));
     }
 }

@@ -160,6 +160,28 @@ pub struct ContainerFilter {
     pub all: bool,
 }
 
+/// Log level enumeration
+#[derive(Debug, Clone, PartialEq)]
+pub enum LogLevel {
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+impl std::fmt::Display for LogLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LogLevel::Error => write!(f, "ERROR"),
+            LogLevel::Warn => write!(f, "WARN"),
+            LogLevel::Info => write!(f, "INFO"),
+            LogLevel::Debug => write!(f, "DEBUG"),
+            LogLevel::Trace => write!(f, "TRACE"),
+        }
+    }
+}
+
 /// Log entry from container
 #[derive(Debug, Clone)]
 pub struct LogEntry {

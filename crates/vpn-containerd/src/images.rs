@@ -2,7 +2,8 @@ use crate::{ContainerdError, ContainerdImage, Result};
 use chrono::{DateTime, Utc};
 use containerd_client::services::v1::{
     images_client::ImagesClient,
-    DeleteImageRequest, GetImageRequest, ListImagesRequest, PutImageRequest,
+    DeleteImageRequest, GetImageRequest, ListImagesRequest, Image,
+    // PutImageRequest, // This appears to be missing in 0.8.0
 };
 use std::collections::HashMap;
 use tonic::transport::Channel;
@@ -96,7 +97,7 @@ impl ImageManager {
         // 3. Register the image with the images service
 
         // For now, we'll create a placeholder image entry
-        let image_spec = containerd_client::types::Image {
+        let image_spec = Image {
             name: reference.to_string(),
             labels: HashMap::new(),
             target: None, // Would contain the actual image manifest
@@ -104,24 +105,12 @@ impl ImageManager {
             updated_at: Some(prost_types::Timestamp::from(std::time::SystemTime::now())),
         };
 
-        let request = PutImageRequest {
-            image: Some(image_spec),
-        };
-
-        let response = self
-            .client
-            .put(request)
-            .await
-            .map_err(|e| ContainerdError::GrpcError(e))?;
-
-        let image = response.into_inner().image.ok_or_else(|| {
-            ContainerdError::ImageNotFound {
-                reference: reference.to_string(),
-            }
-        })?;
-
-        info!("Image pulled successfully: {}", reference);
-        Ok(self.convert_to_containerd_image(image)?)
+        // PutImageRequest is not available in containerd-client 0.8.0
+        // We need to implement a workaround or use the content service directly
+        Err(ContainerdError::OperationNotSupported {
+            operation: "pull_image".to_string(),
+            reason: "PutImageRequest not available in containerd-client 0.8.0".to_string(),
+        })
     }
 
     /// Remove an image
@@ -130,6 +119,7 @@ impl ImageManager {
 
         let request = DeleteImageRequest {
             name: reference.to_string(),
+            target: None, // Optional target descriptor
             sync: true, // Wait for deletion to complete
         };
 
@@ -171,7 +161,7 @@ impl ImageManager {
         image.labels.extend(labels);
 
         // Build update request
-        let image_spec = containerd_client::types::Image {
+        let image_spec = Image {
             name: image.id.clone(),
             labels: image.labels.clone(),
             target: None, // Keep existing target
@@ -179,16 +169,11 @@ impl ImageManager {
             updated_at: Some(prost_types::Timestamp::from(std::time::SystemTime::now())),
         };
 
-        let request = PutImageRequest {
-            image: Some(image_spec),
-        };
-
-        self.client
-            .put(request)
-            .await
-            .map_err(|e| ContainerdError::GrpcError(e))?;
-
-        Ok(image)
+        // PutImageRequest is not available in containerd-client 0.8.0
+        Err(ContainerdError::OperationNotSupported {
+            operation: "update_image_labels".to_string(),
+            reason: "PutImageRequest not available in containerd-client 0.8.0".to_string(),
+        })
     }
 
     /// Get image size (from target manifest)
@@ -205,7 +190,7 @@ impl ImageManager {
         let source_image = self.get_image(source).await?;
 
         // Create a new image entry with the target name
-        let image_spec = containerd_client::types::Image {
+        let image_spec = Image {
             name: target.to_string(),
             labels: source_image.labels.clone(),
             target: None, // Copy from source
@@ -213,23 +198,17 @@ impl ImageManager {
             updated_at: Some(prost_types::Timestamp::from(std::time::SystemTime::now())),
         };
 
-        let request = PutImageRequest {
-            image: Some(image_spec),
-        };
-
-        self.client
-            .put(request)
-            .await
-            .map_err(|e| ContainerdError::GrpcError(e))?;
-
-        info!("Image tagged successfully: {} -> {}", source, target);
-        Ok(())
+        // PutImageRequest is not available in containerd-client 0.8.0
+        Err(ContainerdError::OperationNotSupported {
+            operation: "tag_image".to_string(),
+            reason: "PutImageRequest not available in containerd-client 0.8.0".to_string(),
+        })
     }
 
     /// Convert containerd image to our image type
     fn convert_to_containerd_image(
         &self,
-        image: containerd_client::types::Image,
+        image: Image,
     ) -> Result<ContainerdImage> {
         // Parse creation time
         let created_at = image
@@ -301,6 +280,7 @@ impl ImageManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vpn_runtime::Image;
 
     #[test]
     fn test_image_filter_creation() {

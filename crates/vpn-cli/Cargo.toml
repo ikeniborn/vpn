@@ -16,6 +16,7 @@ vpn-network = { path = "../vpn-network" }
 vpn-users = { path = "../vpn-users" }
 vpn-server = { path = "../vpn-server" }
 vpn-monitor = { path = "../vpn-monitor" }
+vpn-runtime = { path = "../vpn-runtime" }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }

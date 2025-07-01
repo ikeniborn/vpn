@@ -57,9 +57,10 @@ impl RuntimeFactory {
     async fn create_containerd_runtime(
         _config: RuntimeConfig,
     ) -> Result<Arc<dyn ContainerRuntime<Container = Box<dyn crate::Container>, Task = Box<dyn crate::Task>, Volume = Box<dyn crate::Volume>, Image = Box<dyn crate::Image>>>, RuntimeError> {
-        // This will be implemented in vpn-containerd crate
+        // For now, return an error. The actual implementation should be
+        // provided by the application that links both vpn-runtime and vpn-containerd
         Err(RuntimeError::ConfigError {
-            message: "containerd runtime not yet implemented".to_string(),
+            message: "containerd runtime factory not registered. Application must provide runtime factory implementation.".to_string(),
         })
     }
 

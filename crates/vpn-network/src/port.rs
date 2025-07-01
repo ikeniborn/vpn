@@ -2,6 +2,17 @@ use std::net::{TcpListener, SocketAddr, IpAddr, Ipv4Addr};
 use tokio::net::TcpStream;
 use tokio::time::{timeout, Duration};
 use crate::error::{NetworkError, Result};
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum PortStatus {
+    Open,
+    Closed,
+    Filtered,
+    Unavailable,
+    InUse,
+    Available,
+}
 
 pub struct PortChecker;
 
