@@ -333,12 +333,20 @@ impl ComposeManager {
             } else {
                 // Fallback to parsing text format
                 let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 4 {
+                if parts.len() >= 2 {
                     services.push(ServiceStatus {
                         name: parts[0].to_string(),
-                        state: parts[2].to_string(),
-                        health: None,
-                        ports: vec![],
+                        state: parts[1].to_string(),
+                        health: if parts.len() > 2 && parts[2] != "-" {
+                            Some(parts[2].to_string())
+                        } else {
+                            None
+                        },
+                        ports: if parts.len() > 3 {
+                            vec![parts[3..].join(" ")]
+                        } else {
+                            vec![]
+                        },
                     });
                 }
             }

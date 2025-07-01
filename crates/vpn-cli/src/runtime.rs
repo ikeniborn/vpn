@@ -1,7 +1,7 @@
 use crate::config::ConfigManager;
 use crate::error::{CliError, Result};
 use vpn_runtime::{RuntimeFactory, RuntimeType};
-use vpn_containerd::ContainerdFactory;
+// use vpn_containerd::ContainerdFactory;  // DEPRECATED: Removed in favor of Docker Compose
 use colored::*;
 use std::path::PathBuf;
 
@@ -40,9 +40,10 @@ impl RuntimeManager {
             if docker_available { "Available".green() } else { "Not Available".red() }
         );
         
-        println!("  Containerd: {} ({})", 
+        println!("  Containerd: {} ({}) {}", 
             format_bool(runtime_config.containerd.enabled),
-            if containerd_available { "Available".green() } else { "Not Available".red() }
+            if containerd_available { "Available".green() } else { "Not Available".red() },
+            "[DEPRECATED]".red().bold()
         );
 
         // Show detailed configuration
@@ -54,7 +55,8 @@ impl RuntimeManager {
         }
 
         if runtime_config.containerd.enabled {
-            println!("\n{}", "Containerd Configuration:".bold());
+            println!("\n{} {}", "Containerd Configuration:".bold(), "[DEPRECATED]".red().bold());
+            println!("  {} Use Docker Compose orchestration instead", "⚠️ ".yellow());
             println!("  Socket Path: {}", runtime_config.containerd.socket_path);
             println!("  Namespace: {}", runtime_config.containerd.namespace);
             println!("  Timeout: {}s", runtime_config.containerd.timeout_seconds);
@@ -72,10 +74,17 @@ impl RuntimeManager {
 
     /// Switch to a different runtime
     pub async fn switch_runtime(&mut self, runtime: &str) -> Result<()> {
+        // Check for deprecated containerd usage
+        if runtime == "containerd" {
+            return Err(CliError::FeatureDeprecated(
+                "Containerd runtime is deprecated. Use Docker Compose orchestration instead.".to_string()
+            ));
+        }
+        
         // Validate runtime choice
-        if !["auto", "docker", "containerd"].contains(&runtime) {
+        if !["auto", "docker"].contains(&runtime) {
             return Err(CliError::InvalidInput(
-                "Runtime must be 'auto', 'docker', or 'containerd'".to_string()
+                "Runtime must be 'auto' or 'docker' (containerd deprecated)".to_string()
             ));
         }
 
@@ -121,9 +130,16 @@ impl RuntimeManager {
 
     /// Enable or disable a runtime
     pub fn enable_runtime(&mut self, runtime: &str, enabled: bool) -> Result<()> {
-        if !["docker", "containerd"].contains(&runtime) {
+        // Check for deprecated containerd usage
+        if runtime == "containerd" {
+            return Err(CliError::FeatureDeprecated(
+                "Containerd runtime is deprecated. Use Docker Compose orchestration instead.".to_string()
+            ));
+        }
+        
+        if runtime != "docker" {
             return Err(CliError::InvalidInput(
-                "Runtime must be 'docker' or 'containerd'".to_string()
+                "Only 'docker' runtime is supported (containerd deprecated)".to_string()
             ));
         }
 
@@ -140,9 +156,16 @@ impl RuntimeManager {
 
     /// Update runtime socket path
     pub fn update_socket(&mut self, runtime: &str, socket_path: &str) -> Result<()> {
-        if !["docker", "containerd"].contains(&runtime) {
+        // Check for deprecated containerd usage
+        if runtime == "containerd" {
+            return Err(CliError::FeatureDeprecated(
+                "Containerd runtime is deprecated. Use Docker Compose orchestration instead.".to_string()
+            ));
+        }
+        
+        if runtime != "docker" {
             return Err(CliError::InvalidInput(
-                "Runtime must be 'docker' or 'containerd'".to_string()
+                "Only 'docker' runtime is supported (containerd deprecated)".to_string()
             ));
         }
 
@@ -153,70 +176,12 @@ impl RuntimeManager {
         Ok(())
     }
 
-    /// Migrate from Docker to containerd
+    /// Migrate from Docker to containerd (DEPRECATED)
+    #[deprecated = "Containerd support has been deprecated in favor of Docker Compose orchestration"]
     pub async fn migrate_to_containerd(&mut self) -> Result<()> {
-        println!("{}", "Docker to Containerd Migration".bold().cyan());
-        println!("{}", "=".repeat(40).cyan());
-
-        // Check prerequisites
-        println!("Checking prerequisites...");
-        
-        let runtime_config = self.config_manager.get_runtime_config();
-        if !runtime_config.containerd.enabled {
-            return Err(CliError::ConfigError(
-                "Containerd runtime is not enabled in configuration".to_string()
-            ));
-        }
-
-        let containerd_available = ContainerdFactory::is_available().await;
-        if !containerd_available {
-            return Err(CliError::RuntimeError(
-                "Containerd is not available on this system".to_string()
-            ));
-        }
-
-        // Test containerd connectivity
-        println!("Testing containerd connectivity...");
-        let vpn_runtime_config = self.config_manager.to_runtime_config();
-        match ContainerdFactory::verify_connection(vpn_runtime_config.clone()).await {
-            Ok(version) => println!("✓ Containerd connection verified (version: {})", version.green()),
-            Err(e) => return Err(CliError::RuntimeError(
-                format!("Failed to connect to containerd: {}", e)
-            )),
-        }
-
-        // Backup current configuration if enabled
-        if runtime_config.migration.backup_before_migration {
-            println!("Creating configuration backup...");
-            let backup_path = std::env::temp_dir().join(format!("vpn-config-backup-{}.toml", 
-                chrono::Utc::now().timestamp()));
-            self.config_manager.export_config(&backup_path)?;
-            println!("✓ Configuration backed up to: {}", backup_path.display().to_string().green());
-        }
-
-        // Switch to containerd
-        println!("Switching runtime to containerd...");
-        let preserve_containers = runtime_config.migration.preserve_containers;
-        let validate_after_migration = runtime_config.migration.validate_after_migration;
-        self.config_manager.set_preferred_runtime("containerd")?;
-
-        // Optionally disable Docker runtime
-        if !preserve_containers {
-            println!("Disabling Docker runtime...");
-            // Don't actually disable to maintain fallback capability
-            println!("Note: Docker runtime kept enabled for fallback capability");
-        }
-
-        // Validate migration
-        if validate_after_migration {
-            println!("Validating migration...");
-            self.test_connectivity().await?;
-        }
-
-        println!("{}", "Migration completed successfully!".bold().green());
-        println!("Your VPN system is now using containerd as the container runtime.");
-        
-        Ok(())
+        Err(CliError::FeatureDeprecated(
+            "Docker to Containerd migration is deprecated. Use Docker Compose orchestration instead. See Phase 5 in TASK.md for migration guidance.".to_string()
+        ))
     }
 
     /// Test connectivity to configured runtimes
@@ -235,10 +200,8 @@ impl RuntimeManager {
         }
 
         if runtime_config.containerd.enabled {
-            match ContainerdFactory::verify_connection(vpn_runtime_config.clone()).await {
-                Ok(version) => println!("  Containerd: {} (version: {})", "Connected".green(), version),
-                Err(e) => println!("  Containerd: {} ({})", "Connection Failed".red(), e),
-            }
+            println!("  Containerd: {} {}", "Deprecated".yellow(), "[DEPRECATED]".red().bold());
+            println!("    {} Use Docker Compose orchestration instead", "⚠️ ".yellow());
         }
 
         Ok(())

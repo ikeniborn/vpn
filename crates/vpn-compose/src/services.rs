@@ -367,12 +367,252 @@ impl ServiceManager {
         }
     }
 
+    /// Create Prometheus monitoring service
+    pub fn create_prometheus_service() -> ServiceDefinition {
+        ServiceDefinition {
+            image: "prom/prometheus:latest".to_string(),
+            container_name: Some("vpn-prometheus".to_string()),
+            restart: RestartPolicy::UnlessStopped,
+            ports: vec![PortMapping::tcp(9090, 9090)],
+            volumes: vec![
+                VolumeMount::read_only("./configs/prometheus", "/etc/prometheus"),
+                VolumeMount::new("prometheus-data", "/prometheus"),
+            ],
+            environment: HashMap::new(),
+            depends_on: vec![],
+            healthcheck: Some(HealthCheck::cmd_shell(
+                "wget --quiet --tries=1 --spider http://localhost:9090/-/healthy || exit 1"
+            )),
+            networks: vec!["vpn-internal".to_string()],
+            security_opt: vec!["no-new-privileges:true".to_string()],
+            cap_drop: vec!["ALL".to_string()],
+            cap_add: vec![],
+            labels: {
+                let mut labels = HashMap::new();
+                labels.insert("service.type".to_string(), "monitoring".to_string());
+                labels.insert("service.role".to_string(), "metrics".to_string());
+                labels
+            },
+            deploy: Some(DeployConfig {
+                replicas: Some(1),
+                resources: Some(ResourcesConfig {
+                    limits: Some(ResourceLimits {
+                        memory: Some("512M".to_string()),
+                        cpus: Some("0.5".to_string()),
+                    }),
+                    reservations: Some(ResourceLimits {
+                        memory: Some("256M".to_string()),
+                        cpus: Some("0.25".to_string()),
+                    }),
+                }),
+                restart_policy: Some(RestartPolicyConfig {
+                    condition: "on-failure".to_string(),
+                    delay: Some("5s".to_string()),
+                    max_attempts: Some(3),
+                    window: None,
+                }),
+                update_config: None,
+            }),
+            logging: Some(LoggingConfig {
+                driver: "json-file".to_string(),
+                options: {
+                    let mut opts = HashMap::new();
+                    opts.insert("max-size".to_string(), "10m".to_string());
+                    opts.insert("max-file".to_string(), "3".to_string());
+                    opts
+                },
+            }),
+            tmpfs: vec![],
+            read_only: false,
+            user: None,
+            working_dir: None,
+            command: Some(vec![
+                "--config.file=/etc/prometheus/prometheus.yml".to_string(),
+                "--storage.tsdb.path=/prometheus".to_string(),
+                "--web.console.libraries=/etc/prometheus/console_libraries".to_string(),
+                "--web.console.templates=/etc/prometheus/consoles".to_string(),
+                "--storage.tsdb.retention.time=30d".to_string(),
+                "--web.enable-lifecycle".to_string(),
+            ]),
+            entrypoint: None,
+            expose: vec![],
+            external_links: vec![],
+            extra_hosts: vec![],
+            hostname: None,
+            domainname: None,
+            mac_address: None,
+            privileged: false,
+            stdin_open: false,
+            tty: false,
+        }
+    }
+
+    /// Create Grafana visualization service
+    pub fn create_grafana_service() -> ServiceDefinition {
+        ServiceDefinition {
+            image: "grafana/grafana:latest".to_string(),
+            container_name: Some("vpn-grafana".to_string()),
+            restart: RestartPolicy::UnlessStopped,
+            ports: vec![PortMapping::tcp(3001, 3000)],
+            volumes: vec![
+                VolumeMount::read_only("./configs/grafana", "/etc/grafana/provisioning"),
+                VolumeMount::new("grafana-data", "/var/lib/grafana"),
+            ],
+            environment: {
+                let mut env = HashMap::new();
+                env.insert("GF_SECURITY_ADMIN_PASSWORD".to_string(), "${GRAFANA_PASSWORD:-admin}".to_string());
+                env.insert("GF_USERS_ALLOW_SIGN_UP".to_string(), "false".to_string());
+                env.insert("GF_SECURITY_DISABLE_GRAVATAR".to_string(), "true".to_string());
+                env
+            },
+            depends_on: vec!["prometheus".to_string()],
+            healthcheck: Some(HealthCheck::cmd_shell(
+                "wget --quiet --tries=1 --spider http://localhost:3000/api/health || exit 1"
+            )),
+            networks: vec!["vpn-internal".to_string()],
+            security_opt: vec!["no-new-privileges:true".to_string()],
+            cap_drop: vec!["ALL".to_string()],
+            cap_add: vec![],
+            labels: {
+                let mut labels = HashMap::new();
+                labels.insert("service.type".to_string(), "monitoring".to_string());
+                labels.insert("service.role".to_string(), "visualization".to_string());
+                labels
+            },
+            deploy: Some(DeployConfig {
+                replicas: Some(1),
+                resources: Some(ResourcesConfig {
+                    limits: Some(ResourceLimits {
+                        memory: Some("256M".to_string()),
+                        cpus: Some("0.25".to_string()),
+                    }),
+                    reservations: Some(ResourceLimits {
+                        memory: Some("128M".to_string()),
+                        cpus: Some("0.1".to_string()),
+                    }),
+                }),
+                restart_policy: Some(RestartPolicyConfig {
+                    condition: "on-failure".to_string(),
+                    delay: Some("5s".to_string()),
+                    max_attempts: Some(3),
+                    window: None,
+                }),
+                update_config: None,
+            }),
+            logging: Some(LoggingConfig {
+                driver: "json-file".to_string(),
+                options: {
+                    let mut opts = HashMap::new();
+                    opts.insert("max-size".to_string(), "10m".to_string());
+                    opts.insert("max-file".to_string(), "3".to_string());
+                    opts
+                },
+            }),
+            tmpfs: vec![],
+            read_only: false,
+            user: None,
+            working_dir: None,
+            command: None,
+            entrypoint: None,
+            expose: vec![],
+            external_links: vec![],
+            extra_hosts: vec![],
+            hostname: None,
+            domainname: None,
+            mac_address: None,
+            privileged: false,
+            stdin_open: false,
+            tty: false,
+        }
+    }
+
+    /// Create Jaeger tracing service
+    pub fn create_jaeger_service() -> ServiceDefinition {
+        ServiceDefinition {
+            image: "jaegertracing/all-in-one:latest".to_string(),
+            container_name: Some("vpn-jaeger".to_string()),
+            restart: RestartPolicy::UnlessStopped,
+            ports: vec![
+                PortMapping::tcp(16686, 16686),  // UI
+                PortMapping::tcp(14268, 14268),  // Collector
+            ],
+            volumes: vec![],
+            environment: {
+                let mut env = HashMap::new();
+                env.insert("COLLECTOR_OTLP_ENABLED".to_string(), "true".to_string());
+                env.insert("COLLECTOR_ZIPKIN_HOST_PORT".to_string(), ":9411".to_string());
+                env
+            },
+            depends_on: vec![],
+            healthcheck: Some(HealthCheck::cmd_shell(
+                "wget --quiet --tries=1 --spider http://localhost:16686/ || exit 1"
+            )),
+            networks: vec!["vpn-internal".to_string()],
+            security_opt: vec!["no-new-privileges:true".to_string()],
+            cap_drop: vec!["ALL".to_string()],
+            cap_add: vec![],
+            labels: {
+                let mut labels = HashMap::new();
+                labels.insert("service.type".to_string(), "monitoring".to_string());
+                labels.insert("service.role".to_string(), "tracing".to_string());
+                labels
+            },
+            deploy: Some(DeployConfig {
+                replicas: Some(1),
+                resources: Some(ResourcesConfig {
+                    limits: Some(ResourceLimits {
+                        memory: Some("512M".to_string()),
+                        cpus: Some("0.5".to_string()),
+                    }),
+                    reservations: Some(ResourceLimits {
+                        memory: Some("256M".to_string()),
+                        cpus: Some("0.25".to_string()),
+                    }),
+                }),
+                restart_policy: Some(RestartPolicyConfig {
+                    condition: "on-failure".to_string(),
+                    delay: Some("5s".to_string()),
+                    max_attempts: Some(3),
+                    window: None,
+                }),
+                update_config: None,
+            }),
+            logging: Some(LoggingConfig {
+                driver: "json-file".to_string(),
+                options: {
+                    let mut opts = HashMap::new();
+                    opts.insert("max-size".to_string(), "10m".to_string());
+                    opts.insert("max-file".to_string(), "3".to_string());
+                    opts
+                },
+            }),
+            tmpfs: vec![],
+            read_only: false,
+            user: None,
+            working_dir: None,
+            command: None,
+            entrypoint: None,
+            expose: vec![],
+            external_links: vec![],
+            extra_hosts: vec![],
+            hostname: None,
+            domainname: None,
+            mac_address: None,
+            privileged: false,
+            stdin_open: false,
+            tty: false,
+        }
+    }
+
     /// Load predefined service definitions
     pub fn load_predefined_services(&mut self) {
         self.add_service("vpn-server".to_string(), Self::create_vpn_server_service());
         self.add_service("nginx-proxy".to_string(), Self::create_nginx_proxy_service());
         self.add_service("postgres".to_string(), Self::create_postgres_service());
         self.add_service("redis".to_string(), Self::create_redis_service());
+        self.add_service("prometheus".to_string(), Self::create_prometheus_service());
+        self.add_service("grafana".to_string(), Self::create_grafana_service());
+        self.add_service("jaeger".to_string(), Self::create_jaeger_service());
     }
 
     /// Validate service dependencies
@@ -435,7 +675,7 @@ impl ServiceManager {
 }
 
 /// Complete service definition for Docker Compose
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ServiceDefinition {
     pub image: String,
     #[serde(skip_serializing_if = "Option::is_none")]

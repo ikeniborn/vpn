@@ -110,7 +110,8 @@ The project uses a Rust workspace with specialized crates organized in layers:
 Core Libraries (Foundation Layer):
 ├── vpn-crypto     # Cryptographic operations (X25519, UUID, QR codes)
 ├── vpn-docker     # Docker container management and health monitoring
-└── vpn-network    # Network utilities (port checking, firewall, IP detection)
+├── vpn-network    # Network utilities (port checking, firewall, IP detection)
+└── vpn-compose    # Docker Compose orchestration and service management
 
 Service Layer (Business Logic):
 ├── vpn-users      # User lifecycle, connection links, batch operations
@@ -119,6 +120,9 @@ Service Layer (Business Logic):
 
 Application Layer:
 └── vpn-cli        # CLI interface, interactive menu, privilege management
+
+Deprecated Crates:
+└── vpn-containerd # DEPRECATED: Containerd runtime (kept for reference)
 ```
 
 ### Key Design Patterns

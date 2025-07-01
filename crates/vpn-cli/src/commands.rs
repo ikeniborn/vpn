@@ -605,18 +605,48 @@ impl CommandHandler {
                 runtime_manager.show_status().await?;
             }
             RuntimeCommands::Switch { runtime } => {
+                if runtime == "containerd" {
+                    eprintln!("⚠️  WARNING: Containerd support has been deprecated!");
+                    eprintln!("   Use Docker Compose orchestration instead: `vpn compose up`");
+                    eprintln!("   For more information, see Phase 5 in TASK.md");
+                    return Err(CliError::FeatureDeprecated(
+                        "Containerd runtime has been deprecated in favor of Docker Compose orchestration".to_string()
+                    ));
+                }
                 runtime_manager.switch_runtime(&runtime).await?;
             }
             RuntimeCommands::Enable { runtime, enabled } => {
+                if runtime == "containerd" {
+                    eprintln!("⚠️  WARNING: Containerd support has been deprecated!");
+                    eprintln!("   Use Docker Compose orchestration instead: `vpn compose up`");
+                    eprintln!("   For more information, see Phase 5 in TASK.md");
+                    return Err(CliError::FeatureDeprecated(
+                        "Containerd runtime has been deprecated in favor of Docker Compose orchestration".to_string()
+                    ));
+                }
                 runtime_manager.enable_runtime(&runtime, enabled)?;
             }
             RuntimeCommands::Socket { runtime, path } => {
+                if runtime == "containerd" {
+                    eprintln!("⚠️  WARNING: Containerd support has been deprecated!");
+                    eprintln!("   Use Docker Compose orchestration instead: `vpn compose up`");
+                    eprintln!("   For more information, see Phase 5 in TASK.md");
+                    return Err(CliError::FeatureDeprecated(
+                        "Containerd runtime has been deprecated in favor of Docker Compose orchestration".to_string()
+                    ));
+                }
                 runtime_manager.update_socket(&runtime, &path)?;
             }
             RuntimeCommands::Migrate => {
-                runtime_manager.migrate_to_containerd().await?;
+                eprintln!("⚠️  WARNING: Docker to Containerd migration has been deprecated!");
+                eprintln!("   Use Docker Compose orchestration instead: `vpn compose up`");
+                eprintln!("   For migration guidance, see Phase 5 in TASK.md");
+                return Err(CliError::FeatureDeprecated(
+                    "Containerd migration has been deprecated in favor of Docker Compose orchestration".to_string()
+                ));
             }
             RuntimeCommands::Capabilities => {
+                eprintln!("⚠️  NOTE: Containerd capabilities shown for reference only - containerd support deprecated");
                 runtime_manager.show_capabilities()?;
             }
         }

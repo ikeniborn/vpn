@@ -9,7 +9,7 @@ members = [
     "crates/vpn-monitor",
     "crates/vpn-cli", 
     "crates/vpn-runtime",
-    "crates/vpn-containerd",
+    # "crates/vpn-containerd",  # DEPRECATED: Removed from active development, kept for reference
     "crates/vpn-telemetry",
     "crates/vpn-compose",
 ]

@@ -6,6 +6,7 @@
 pub mod config;
 pub mod template;
 pub mod generator;
+pub mod ha;
 pub mod manager;
 pub mod environment;
 pub mod services;
@@ -15,6 +16,7 @@ pub mod error;
 pub use config::{ComposeConfig, ServiceConfig, NetworkConfig, VolumeConfig};
 pub use template::{TemplateManager, TemplateContext, TemplateError};
 pub use generator::{ComposeGenerator, GeneratorOptions};
+pub use ha::{HAConfig, HAManager, HAHealthStatus, MultiRegionConfig, RoutingPolicy};
 pub use manager::{ComposeManager, ComposeStatus, ServiceStatus as ComposeServiceStatus};
 pub use environment::Environment;
 pub use config::EnvironmentConfig;

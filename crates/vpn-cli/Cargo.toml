@@ -17,7 +17,7 @@ vpn-users = { path = "../vpn-users" }
 vpn-server = { path = "../vpn-server" }
 vpn-monitor = { path = "../vpn-monitor" }
 vpn-runtime = { path = "../vpn-runtime" }
-vpn-containerd = { path = "../vpn-containerd" }
+# vpn-containerd = { path = "../vpn-containerd" }  # DEPRECATED: Removed in favor of Docker Compose
 vpn-compose = { path = "../vpn-compose" }
 tokio = { workspace = true }
 anyhow = { workspace = true }

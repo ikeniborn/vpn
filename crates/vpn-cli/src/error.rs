@@ -26,6 +26,9 @@ pub enum CliError {
     #[error("Runtime error: {0}")]
     RuntimeError(String),
     
+    #[error("Feature deprecated: {0}")]
+    FeatureDeprecated(String),
+    
     #[error("Permission denied: {0}")]
     PermissionError(String),
     

@@ -444,30 +444,31 @@ pub enum RuntimeCommands {
     /// Show runtime status and information
     Status,
 
-    /// Switch container runtime
+    /// Switch container runtime (DEPRECATED: containerd support removed)
     Switch {
-        /// Runtime to switch to (auto, docker, containerd)
+        /// Runtime to switch to (auto, docker) - containerd deprecated
         runtime: String,
     },
 
-    /// Enable or disable a runtime
+    /// Enable or disable a runtime (DEPRECATED: containerd support removed)
     Enable {
-        /// Runtime to configure (docker, containerd)
+        /// Runtime to configure (docker only) - containerd deprecated
         runtime: String,
         /// Enable (true) or disable (false) the runtime
         #[arg(long)]
         enabled: bool,
     },
 
-    /// Update runtime socket path
+    /// Update runtime socket path (DEPRECATED: containerd support removed)
     Socket {
-        /// Runtime to configure (docker, containerd)
+        /// Runtime to configure (docker only) - containerd deprecated
         runtime: String,
         /// New socket path
         path: String,
     },
 
-    /// Migrate from Docker to containerd
+    /// Migrate from Docker to containerd (DEPRECATED: Feature removed)
+    #[deprecated = "Containerd support has been deprecated in favor of Docker Compose orchestration"]
     Migrate,
 
     /// Show runtime capabilities comparison

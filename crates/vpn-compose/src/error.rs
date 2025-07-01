@@ -96,6 +96,11 @@ pub enum ComposeError {
 
     #[error("VPN network error: {0}")]
     VpnNetwork(#[from] vpn_network::error::NetworkError),
+
+    #[error("High availability error: {message}")]
+    HAError {
+        message: String,
+    },
 }
 
 impl ComposeError {
@@ -182,6 +187,13 @@ impl ComposeError {
     /// Create a manager initialization error
     pub fn manager_init_failed(message: impl Into<String>) -> Self {
         Self::ManagerInitFailed {
+            message: message.into(),
+        }
+    }
+
+    /// Create a high availability error
+    pub fn ha_error(message: impl Into<String>) -> Self {
+        Self::HAError {
             message: message.into(),
         }
     }

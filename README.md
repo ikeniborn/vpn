@@ -23,10 +23,13 @@
 - **Cross-Platform**: Native support for x86_64, ARM64, and ARMv7 architectures
 
 ### 🐳 **Deployment & Management**
-- **Docker Integration**: Full containerized deployment with health monitoring
+- **Docker Compose Orchestration**: Simplified multi-service deployment with `docker-compose up`
+- **Docker Integration**: Full containerized deployment with health monitoring  
 - **Interactive CLI**: Modern command-line interface with colored output and progress bars
 - **Automated Migration**: Seamless migration from Bash-based installations
 - **Privilege Management**: Automatic privilege escalation with user confirmation
+
+> **Note**: Containerd runtime support has been deprecated in favor of Docker Compose orchestration for improved maintainability and simpler deployments. See Phase 5 in [TASK.md](TASK.md) for migration details.
 
 ### 📊 **Monitoring & Analytics**
 - **Real-time Metrics**: Live traffic analysis and connection monitoring

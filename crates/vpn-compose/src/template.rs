@@ -46,6 +46,7 @@ impl TemplateManager {
         
         // Load environment-specific templates
         self.load_template("development", "development.yml").await?;
+        self.load_template("staging", "staging.yml").await?;
         self.load_template("production", "production.yml").await?;
         
         // Load configuration templates
