@@ -287,7 +287,7 @@ impl TaskManager {
             exec_id,
         };
 
-        let response = self
+        let _response = self
             .client
             .exec(request)
             .await

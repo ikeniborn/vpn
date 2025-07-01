@@ -12,7 +12,7 @@ use tokio::sync::RwLock;
 use tonic::transport::Channel;
 use tracing::{debug, info}; // error, warn unused currently
 use vpn_runtime::{
-    BatchOperations, BatchOptions, BatchResult, CompleteRuntime, Container, ContainerFilter,
+    BatchOperations, BatchOptions, BatchResult, CompleteRuntime, ContainerFilter,
     ContainerRuntime, ContainerSpec, ContainerStats, EventOperations, EventStream, ExecResult,
     HealthOperations, ImageFilter, ImageOperations, LogOptions, LogStream, RuntimeConfig,
     RuntimeError, RuntimeInfo, Task, VolumeFilter, VolumeOperations, VolumeSpec, // Image, Volume unused
@@ -294,7 +294,7 @@ impl ContainerRuntime for ContainerdRuntime {
             .map_err(|e| RuntimeError::from(ContainerdError::from(e)))
     }
 
-    async fn get_logs(&self, id: &str, options: LogOptions) -> Result<LogStream, RuntimeError> {
+    async fn get_logs(&self, _id: &str, _options: LogOptions) -> Result<LogStream, RuntimeError> {
         // For now, return a simple error until we implement proper log streaming
         // The lifetime issues require a more complex solution with owned data
         Err(RuntimeError::OperationFailed {
@@ -490,7 +490,7 @@ impl BatchOperations for ContainerdRuntime {
     async fn batch_remove_containers(
         &self,
         ids: &[&str],
-        force: bool,
+        _force: bool,
         options: BatchOptions,
     ) -> Result<BatchResult, RuntimeError> {
         let start_time = std::time::Instant::now();
@@ -566,7 +566,7 @@ impl VolumeOperations for ContainerdRuntime {
     // Note: Volume operations temporarily disabled due to missing snapshots API in containerd-client 0.8.0
     type Volume = ContainerdVolume;
 
-    async fn create_volume(&self, spec: VolumeSpec) -> Result<Self::Volume, RuntimeError> {
+    async fn create_volume(&self, _spec: VolumeSpec) -> Result<Self::Volume, RuntimeError> {
         // Snapshot operations not available in containerd-client 0.8.0
         Err(RuntimeError::OperationFailed {
             operation: "volume_operation".to_string(),
@@ -574,7 +574,7 @@ impl VolumeOperations for ContainerdRuntime {
         })
     }
 
-    async fn list_volumes(&self, filter: VolumeFilter) -> Result<Vec<Self::Volume>, RuntimeError> {
+    async fn list_volumes(&self, _filter: VolumeFilter) -> Result<Vec<Self::Volume>, RuntimeError> {
         // Snapshot operations not available in containerd-client 0.8.0
         Err(RuntimeError::OperationFailed {
             operation: "volume_operation".to_string(),
@@ -582,7 +582,7 @@ impl VolumeOperations for ContainerdRuntime {
         })
     }
 
-    async fn get_volume(&self, name: &str) -> Result<Self::Volume, RuntimeError> {
+    async fn get_volume(&self, _name: &str) -> Result<Self::Volume, RuntimeError> {
         // Snapshot operations not available in containerd-client 0.8.0
         Err(RuntimeError::OperationFailed {
             operation: "volume_operation".to_string(),
@@ -590,7 +590,7 @@ impl VolumeOperations for ContainerdRuntime {
         })
     }
 
-    async fn remove_volume(&self, name: &str, force: bool) -> Result<(), RuntimeError> {
+    async fn remove_volume(&self, _name: &str, _force: bool) -> Result<(), RuntimeError> {
         // Snapshot operations not available in containerd-client 0.8.0
         Err(RuntimeError::OperationFailed {
             operation: "volume_operation".to_string(),
@@ -598,7 +598,7 @@ impl VolumeOperations for ContainerdRuntime {
         })
     }
 
-    async fn volume_exists(&self, name: &str) -> Result<bool, RuntimeError> {
+    async fn volume_exists(&self, _name: &str) -> Result<bool, RuntimeError> {
         // Snapshot operations not available in containerd-client 0.8.0
         Err(RuntimeError::OperationFailed {
             operation: "volume_operation".to_string(),
@@ -606,7 +606,7 @@ impl VolumeOperations for ContainerdRuntime {
         })
     }
 
-    async fn backup_volume(&self, name: &str, target_path: &str) -> Result<(), RuntimeError> {
+    async fn backup_volume(&self, _name: &str, _target_path: &str) -> Result<(), RuntimeError> {
         // Snapshot operations not available in containerd-client 0.8.0
         Err(RuntimeError::OperationFailed {
             operation: "volume_operation".to_string(),
@@ -614,7 +614,7 @@ impl VolumeOperations for ContainerdRuntime {
         })
     }
 
-    async fn restore_volume(&self, name: &str, source_path: &str) -> Result<(), RuntimeError> {
+    async fn restore_volume(&self, _name: &str, _source_path: &str) -> Result<(), RuntimeError> {
         // Snapshot operations not available in containerd-client 0.8.0
         Err(RuntimeError::OperationFailed {
             operation: "volume_operation".to_string(),

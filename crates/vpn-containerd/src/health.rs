@@ -242,7 +242,7 @@ impl HealthMonitor {
 
                 match tasks_client.get(task_request).await {
                     Ok(response) => {
-                        let task = response.get_ref();
+                        let _task = response.get_ref();
                         // For now, if we can get the task, assume it's healthy
                         // In a real implementation, you'd check the actual status field
                         Ok(HealthStatus::Healthy)
@@ -259,7 +259,7 @@ impl HealthMonitor {
         &self,
         container_id: &str,
         command: &[String],
-        timeout: Duration,
+        _timeout: Duration,
     ) -> Result<HealthCheckResult> {
         use containerd_client::services::v1::{
             tasks_client::TasksClient,
@@ -273,9 +273,9 @@ impl HealthMonitor {
 
         // This is a simplified implementation
         // In a real implementation, you would execute the command in the container
-        let mut tasks_client = TasksClient::new(self.channel.clone());
+        let _tasks_client = TasksClient::new(self.channel.clone());
         
-        let exec_request = ExecProcessRequest {
+        let _exec_request = ExecProcessRequest {
             container_id: container_id.to_string(),
             stdin: String::new(),
             stdout: String::new(),

@@ -157,7 +157,7 @@ impl LogFilter {
     pub fn errors_only() -> Self {
         Self {
             levels: vec![LogLevel::Error],
-            streams: vec![LogStream::Stderr],
+            // Don't filter by stream - errors can appear on both stdout and stderr
             ..Default::default()
         }
     }

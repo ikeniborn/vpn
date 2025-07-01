@@ -97,7 +97,7 @@ impl ImageManager {
         // 3. Register the image with the images service
 
         // For now, we'll create a placeholder image entry
-        let image_spec = Image {
+        let _image_spec = Image {
             name: reference.to_string(),
             labels: HashMap::new(),
             target: None, // Would contain the actual image manifest
@@ -161,7 +161,7 @@ impl ImageManager {
         image.labels.extend(labels);
 
         // Build update request
-        let image_spec = Image {
+        let _image_spec = Image {
             name: image.id.clone(),
             labels: image.labels.clone(),
             target: None, // Keep existing target
@@ -190,7 +190,7 @@ impl ImageManager {
         let source_image = self.get_image(source).await?;
 
         // Create a new image entry with the target name
-        let image_spec = Image {
+        let _image_spec = Image {
             name: target.to_string(),
             labels: source_image.labels.clone(),
             target: None, // Copy from source
