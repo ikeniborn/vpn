@@ -51,8 +51,8 @@
 
 ## 🚀 Quick Start
 
-> **📌 Note:** This project is currently in active development on the `refactoring` branch. 
-> The installation scripts use the latest refactoring branch for the most up-to-date features.
+> **📌 Note:** This project provides production-ready VPN management tools. 
+> Use the stable `main` branch for reliable deployment and latest features.
 
 ### ⚡ One-Line Installation (Fastest)
 
@@ -60,10 +60,10 @@ Install the VPN CLI tool with a single command **(run as regular user, not root)
 
 ```bash
 # Install VPN CLI and launch interactive menu
-curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/refactoring/scripts/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/main/scripts/install.sh | bash
 
 # Install without launching menu
-curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/refactoring/scripts/install.sh | bash -s -- --no-menu
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/main/scripts/install.sh | bash -s -- --no-menu
 ```
 
 **⚠️ Important:** Do not run with `sudo` - the script will prompt for sudo only when needed for system packages.
@@ -73,7 +73,7 @@ curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/refactoring/scripts/in
 **Fresh Installation:**
 ```bash
 # Download and run installation script
-wget https://raw.githubusercontent.com/ikeniborn/vpn/refactoring/scripts/install.sh
+wget https://raw.githubusercontent.com/ikeniborn/vpn/main/scripts/install.sh
 chmod +x install.sh
 
 # Standard installation - complete setup
@@ -89,7 +89,7 @@ chmod +x install.sh
 **Update Existing Installation:**
 ```bash
 # Download and run update script
-wget https://raw.githubusercontent.com/ikeniborn/vpn/refactoring/scripts/update.sh
+wget https://raw.githubusercontent.com/ikeniborn/vpn/main/scripts/update.sh
 chmod +x update.sh
 
 # Standard update - pull latest code and rebuild
@@ -136,7 +136,7 @@ If you prefer using Docker without building:
 
 ```bash
 # Quick start with Docker Compose
-curl -L https://raw.githubusercontent.com/ikeniborn/vpn/refactoring/docker-compose.hub.yml -o docker-compose.yml
+curl -L https://raw.githubusercontent.com/ikeniborn/vpn/main/docker-compose.hub.yml -o docker-compose.yml
 
 # Set environment variables
 export VPN_PROTOCOL=vless
@@ -537,14 +537,14 @@ The installation script supports the following platforms:
 **DigitalOcean**
 ```bash
 # SSH into your droplet and run
-curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/refactoring/scripts/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/main/scripts/install.sh | bash
 ```
 
 **AWS EC2**
 ```bash
 # Add to user data or run after instance creation
 #!/bin/bash
-curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/refactoring/scripts/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/main/scripts/install.sh | bash
 ```
 
 **Other VPS Providers**
