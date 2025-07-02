@@ -5,21 +5,58 @@ use tokio::sync::mpsc;
 use std::time::SystemTime;
 use crate::error::{DockerError, Result};
 
+/// Docker container log streaming service
+/// 
+/// Provides functionality to retrieve and stream logs from Docker containers
+/// with support for filtering, following, and real-time log streaming.
+/// 
+/// # Examples
+/// 
+/// ```rust,no_run
+/// use vpn_docker::LogStreamer;
+/// 
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let log_streamer = LogStreamer::new()?;
+///     
+///     // Get recent logs
+///     let logs = log_streamer.get_logs("vpn-server", Some(100), false).await?;
+///     for entry in logs {
+///         println!("[{}] {}: {}", entry.timestamp.elapsed().unwrap().as_secs(), 
+///                  entry.container, entry.message);
+///     }
+///     
+///     Ok(())
+/// }
+/// ```
 pub struct LogStreamer {
     docker: Docker,
 }
 
+/// A single log entry from a Docker container
+/// 
+/// Contains the log message along with metadata about when it was created,
+/// which container it came from, and which stream (stdout/stderr) it originated from.
 #[derive(Debug, Clone)]
 pub struct LogEntry {
+    /// When the log entry was created
     pub timestamp: SystemTime,
+    /// Name of the container that generated this log
     pub container: String,
+    /// Which output stream this log came from
     pub stream: LogStream,
+    /// The actual log message content
     pub message: String,
 }
 
+/// The output stream that a log entry originated from
+/// 
+/// Docker containers have two standard output streams that can be monitored separately.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LogStream {
+    /// Standard output stream (stdout)
     Stdout,
+    /// Standard error stream (stderr)
     Stderr,
 }
 

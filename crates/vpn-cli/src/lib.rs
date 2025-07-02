@@ -9,7 +9,7 @@ pub mod error;
 pub mod privileges;
 pub mod compose;
 
-pub use cli::{Cli, Commands};
+pub use cli::{Cli, Commands, Shell};
 pub use menu::{InteractiveMenu, MenuOption};
 pub use config::{CliConfig, ConfigManager};
 pub use commands::CommandHandler;

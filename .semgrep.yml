@@ -1,0 +1,112 @@
+# .semgrep.yml - Semgrep configuration for custom security rules
+
+rules:
+  - id: vpn-no-hardcoded-secrets
+    patterns:
+      - pattern-either:
+          - pattern: |
+              let $KEY = "$SECRET"
+          - pattern: |
+              const $KEY: &str = "$SECRET"
+          - pattern: |
+              static $KEY: &str = "$SECRET"
+    pattern-regex:
+      patterns:
+        - "(?i)(password|secret|token|api_key|apikey|auth|credential)"
+    message: "Potential hardcoded secret found. Use environment variables or secure configuration instead."
+    languages: [rust]
+    severity: ERROR
+
+  - id: vpn-sql-injection
+    patterns:
+      - pattern-either:
+          - pattern: |
+              format!("... {} ...", $INPUT)
+          - pattern: |
+              format!("... {:?} ...", $INPUT)
+      - metavariable-regex:
+          metavariable: $INPUT
+          regex: "(?i)(user_input|request|params|query)"
+    message: "Potential SQL injection. Use parameterized queries instead of string formatting."
+    languages: [rust]
+    severity: ERROR
+
+  - id: vpn-command-injection
+    patterns:
+      - pattern-either:
+          - pattern: std::process::Command::new($CMD)
+          - pattern: Command::new($CMD)
+      - pattern-not:
+          - pattern: Command::new("...")
+    message: "Potential command injection. Validate and sanitize command inputs."
+    languages: [rust]
+    severity: WARNING
+
+  - id: vpn-unsafe-deserialization
+    patterns:
+      - pattern-either:
+          - pattern: serde_json::from_str($INPUT)
+          - pattern: serde_yaml::from_str($INPUT)
+          - pattern: toml::from_str($INPUT)
+      - pattern-not-inside: |
+          if let Err(_) = ... { ... }
+      - pattern-not-inside: |
+          match ... { Ok(...) => ..., Err(...) => ... }
+    message: "Unsafe deserialization without error handling. Always handle deserialization errors."
+    languages: [rust]
+    severity: WARNING
+
+  - id: vpn-path-traversal
+    patterns:
+      - pattern-either:
+          - pattern: Path::new($INPUT).join(...)
+          - pattern: PathBuf::from($INPUT)
+          - pattern: $PATH.join($INPUT)
+      - metavariable-regex:
+          metavariable: $INPUT
+          regex: "(?i)(user_input|request|params)"
+      - pattern-not-inside: |
+          if $INPUT.contains("..") { ... }
+    message: "Potential path traversal vulnerability. Validate paths to prevent directory traversal."
+    languages: [rust]
+    severity: ERROR
+
+  - id: vpn-privilege-escalation
+    patterns:
+      - pattern-either:
+          - pattern: std::env::set_var("LD_PRELOAD", ...)
+          - pattern: std::env::set_var("PATH", ...)
+          - pattern: std::os::unix::process::CommandExt::uid(...)
+          - pattern: std::os::unix::process::CommandExt::gid(...)
+    message: "Potential privilege escalation. Be careful when modifying process environment or permissions."
+    languages: [rust]
+    severity: WARNING
+
+  - id: vpn-docker-socket-exposure
+    patterns:
+      - pattern: |
+          "/var/run/docker.sock"
+      - pattern-inside:
+          - pattern-either:
+              - pattern: mount(...)
+              - pattern: volumes(...)
+    message: "Docker socket exposure detected. This grants root-equivalent access to the host."
+    languages: [rust]
+    severity: WARNING
+
+  - id: vpn-insecure-random
+    patterns:
+      - pattern-either:
+          - pattern: rand::random()
+          - pattern: rand::thread_rng()
+      - pattern-inside:
+          - pattern-either:
+              - pattern: |
+                  ... key ...
+              - pattern: |
+                  ... token ...
+              - pattern: |
+                  ... secret ...
+    message: "Using non-cryptographic randomness for security-sensitive operations. Use rand::rngs::OsRng instead."
+    languages: [rust]
+    severity: ERROR

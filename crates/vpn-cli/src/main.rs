@@ -1,13 +1,25 @@
-use clap::Parser;
+use clap::{Parser, CommandFactory};
+use clap_complete::generate;
 use colored::*;
 use std::process;
+use std::io;
+use std::path::PathBuf;
 use tokio;
 
-use vpn_cli::{Cli, Commands, InteractiveMenu, CommandHandler, ConfigManager, CliError, PrivilegeManager};
+use vpn_cli::{Cli, Commands, InteractiveMenu, CommandHandler, ConfigManager, CliError, PrivilegeManager, Shell};
 
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
+    
+    // Handle completions command early (no need for privilege/config initialization)
+    if let Some(Commands::Completions { shell, output }) = &cli.command {
+        if let Err(e) = generate_completions(shell.clone(), output.clone()) {
+            eprintln!("{} {}", "Error:".red(), e);
+            process::exit(1);
+        }
+        return;
+    }
     
     // Initialize privilege manager
     let mut privilege_manager = match PrivilegeManager::new() {
@@ -19,12 +31,15 @@ async fn main() {
     };
     
     // Check and request privileges if needed for specific commands
-    if let Some(ref _command) = cli.command {
-        let args: Vec<String> = std::env::args().collect();
-        if PrivilegeManager::command_needs_root(&args) {
-            if let Err(e) = privilege_manager.ensure_root_privileges() {
-                eprintln!("{} {}", "Error:".red(), e);
-                process::exit(1);
+    // Skip privilege checking for completions command
+    if let Some(ref command) = cli.command {
+        if !matches!(command, Commands::Completions { .. }) {
+            let args: Vec<String> = std::env::args().collect();
+            if PrivilegeManager::command_needs_root(&args) {
+                if let Err(e) = privilege_manager.ensure_root_privileges() {
+                    eprintln!("{} {}", "Error:".red(), e);
+                    process::exit(1);
+                }
             }
         }
     }
@@ -154,6 +169,9 @@ async fn execute_command(
         Commands::NetworkCheck => {
             handler.check_network_status().await
         }
+        Commands::Completions { shell, output } => {
+            generate_completions(shell, output)
+        }
     }
 }
 
@@ -203,4 +221,35 @@ fn setup_logging(verbose: bool, quiet: bool) {
         .with_file(false)
         .with_line_number(false)
         .init();
+}
+
+fn generate_completions(shell: Shell, output: Option<PathBuf>) -> Result<(), CliError> {
+    let mut cmd = Cli::command();
+    let shell: clap_complete::Shell = shell.into();
+    
+    match output {
+        Some(path) => {
+            let mut file = std::fs::File::create(&path)
+                .map_err(|e| CliError::FileOperation(format!("Failed to create output file {}: {}", path.display(), e)))?;
+            generate(shell, &mut cmd, "vpn", &mut file);
+            println!("Generated {} completion script: {}", 
+                shell_name(&shell), path.display());
+        }
+        None => {
+            generate(shell, &mut cmd, "vpn", &mut io::stdout());
+        }
+    }
+    
+    Ok(())
+}
+
+fn shell_name(shell: &clap_complete::Shell) -> &'static str {
+    match shell {
+        clap_complete::Shell::Bash => "Bash",
+        clap_complete::Shell::Zsh => "Zsh", 
+        clap_complete::Shell::Fish => "Fish",
+        clap_complete::Shell::PowerShell => "PowerShell",
+        clap_complete::Shell::Elvish => "Elvish",
+        _ => "Unknown",
+    }
 }

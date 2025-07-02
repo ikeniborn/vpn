@@ -157,6 +157,17 @@ pub enum Commands {
     
     /// Check Docker network status and available subnets
     NetworkCheck,
+
+    /// Generate shell completion scripts
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+        
+        /// Output file (defaults to stdout)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand, Clone)]
@@ -314,7 +325,7 @@ pub enum MonitorCommands {
     /// Show traffic statistics
     Traffic {
         /// Time period in hours
-        #[arg(short, long, default_value = "24")]
+        #[arg(short = 't', long, default_value = "24")]
         hours: u32,
         
         /// User filter
@@ -347,7 +358,7 @@ pub enum MonitorCommands {
     /// Show performance metrics
     Metrics {
         /// Time period in hours
-        #[arg(short, long, default_value = "1")]
+        #[arg(short = 't', long, default_value = "1")]
         hours: u32,
     },
 
@@ -545,11 +556,11 @@ pub enum ComposeCommands {
         follow: bool,
         
         /// Number of lines to show
-        #[arg(short, long, default_value = "100")]
+        #[arg(short = 'n', long, default_value = "100")]
         tail: usize,
         
         /// Show timestamps
-        #[arg(short, long)]
+        #[arg(short = 'T', long)]
         timestamps: bool,
     },
 
@@ -732,6 +743,15 @@ fn parse_service_scale(s: &str) -> Result<ServiceScale, String> {
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]
+pub enum Shell {
+    Bash,
+    Zsh,
+    Fish,
+    PowerShell,
+    Elvish,
+}
+
+#[derive(clap::ValueEnum, Clone, Debug)]
 pub enum StatusFormat {
     Table,
     Json,
@@ -803,6 +823,18 @@ impl OutputFormat {
             OutputFormat::Json => "json",
             OutputFormat::Table => "table",
             OutputFormat::Plain => "plain",
+        }
+    }
+}
+
+impl From<Shell> for clap_complete::Shell {
+    fn from(shell: Shell) -> Self {
+        match shell {
+            Shell::Bash => clap_complete::Shell::Bash,
+            Shell::Zsh => clap_complete::Shell::Zsh,
+            Shell::Fish => clap_complete::Shell::Fish,
+            Shell::PowerShell => clap_complete::Shell::PowerShell,
+            Shell::Elvish => clap_complete::Shell::Elvish,
         }
     }
 }

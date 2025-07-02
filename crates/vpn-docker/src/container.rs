@@ -11,51 +11,101 @@ use crate::pool::get_docker_connection;
 use crate::cache::get_container_cache;
 use serde::{Serialize, Deserialize};
 
+/// Operations that can be performed on containers in batch mode
 #[derive(Debug, Clone)]
 pub enum ContainerOperation {
+    /// Start a container
     Start(String),
+    /// Stop a container with optional timeout in seconds
     Stop(String, Option<i64>),
+    /// Restart a container with optional timeout in seconds
     Restart(String, Option<i64>),
+    /// Remove a container with force flag
     Remove(String, bool),
 }
 
+/// Result of a batch container operation
 #[derive(Debug, Clone)]
 pub struct BatchOperationResult {
+    /// List of containers that were successfully processed
     pub successful: Vec<String>,
+    /// Map of container names to error messages for failed operations
     pub failed: HashMap<String, String>,
+    /// Total time taken for the batch operation
     pub total_duration: Duration,
 }
 
+/// Configuration options for batch operations
 #[derive(Debug, Clone)]
 pub struct BatchOperationOptions {
+    /// Maximum number of concurrent operations (default: 5)
     pub max_concurrent: usize,
+    /// Timeout for each individual operation
     pub timeout: Duration,
+    /// Whether to stop on first failure (default: false)
     pub fail_fast: bool,
 }
 
+/// Configuration for creating and managing Docker containers
+/// 
+/// This struct provides a high-level interface for configuring Docker containers
+/// with all necessary settings including networking, volumes, and environment.
+/// 
+/// # Examples
+/// 
+/// ```rust
+/// use vpn_docker::ContainerConfig;
+/// 
+/// let mut config = ContainerConfig::new("my-vpn", "xray:latest");
+/// config.add_port_mapping(8443, 8443);
+/// config.add_environment_variable("LOG_LEVEL", "info");
+/// config.add_volume_mount("/host/data", "/container/data");
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContainerConfig {
+    /// Container name (must be unique)
     pub name: String,
+    /// Docker image name and tag
     pub image: String,
-    pub port_mappings: HashMap<u16, u16>, // host_port -> container_port
+    /// Port mappings: host_port -> container_port
+    pub port_mappings: HashMap<u16, u16>,
+    /// Environment variables to set in the container
     pub environment_variables: HashMap<String, String>,
-    pub volume_mounts: HashMap<String, String>, // host_path -> container_path
+    /// Volume mounts: host_path -> container_path
+    pub volume_mounts: HashMap<String, String>,
+    /// Docker restart policy (default: "unless-stopped")
     pub restart_policy: String,
+    /// Networks to connect the container to
     pub networks: Vec<String>,
 }
 
+/// Current status of a Docker container
+/// 
+/// This enum represents all possible states a container can be in,
+/// including error conditions and unknown states.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ContainerStatus {
+    /// Container is running normally
     Running,
+    /// Container is stopped
     Stopped,
+    /// Container is paused
     Paused,
+    /// Container is in the process of restarting
     Restarting,
+    /// Container is being removed
     Removing,
+    /// Container process is dead
     Dead,
+    /// Container is created but not started
     Created,
-    Exited(i64), // exit code
+    /// Container has exited with the given exit code
+    Exited(i64),
+    /// Container was not found
     NotFound,
+    /// Container is in an error state
     Error(String),
+    /// Container status is unknown
     Unknown(String),
 }
 
@@ -202,18 +252,129 @@ impl std::fmt::Display for ContainerStatus {
     }
 }
 
+/// High-performance Docker container manager with connection pooling and caching
+/// 
+/// `ContainerManager` provides a comprehensive interface for managing Docker containers
+/// with built-in performance optimizations including connection pooling and intelligent
+/// caching to reduce Docker API overhead.
+/// 
+/// # Features
+/// 
+/// - **Connection Pooling**: Automatic connection reuse and management
+/// - **Intelligent Caching**: Reduces redundant API calls for status and statistics
+/// - **Batch Operations**: Efficient concurrent container operations
+/// - **Health Monitoring**: Built-in health check and status monitoring
+/// - **Error Handling**: Comprehensive error handling and recovery
+/// 
+/// # Examples
+/// 
+/// ## Basic Usage
+/// 
+/// ```rust,no_run
+/// use vpn_docker::{ContainerManager, ContainerConfig};
+/// 
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let manager = ContainerManager::new()?;
+///     
+///     // List all containers
+///     let containers = manager.list_containers(true).await?;
+///     println!("Found {} containers", containers.len());
+///     
+///     // Check container status (cached for performance)
+///     let status = manager.get_container_status("my-container").await?;
+///     println!("Container status: {}", status);
+///     
+///     Ok(())
+/// }
+/// ```
+/// 
+/// ## Batch Operations
+/// 
+/// ```rust,no_run
+/// use vpn_docker::{ContainerManager, BatchOperationOptions};
+/// use std::time::Duration;
+/// 
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let manager = ContainerManager::new()?;
+/// 
+/// let containers = ["container1", "container2", "container3"];
+/// let options = Some(BatchOperationOptions {
+///     max_concurrent: 3,
+///     timeout: Duration::from_secs(30),
+///     fail_fast: false,
+/// });
+/// 
+/// let result = manager.batch_start_containers(&containers, options).await;
+/// println!("Started {} containers, {} failed", 
+///          result.successful.len(), result.failed.len());
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone)]
 pub struct ContainerManager {
-    // Remove direct Docker connection, use pool instead
+    // Uses connection pool instead of direct Docker connection for better performance
 }
 
 impl ContainerManager {
+    /// Create a new container manager instance
+    /// 
+    /// This initializes the connection pool and starts background cache cleanup tasks.
+    /// The manager is lightweight and can be cloned efficiently.
+    /// 
+    /// # Returns
+    /// 
+    /// Returns a `Result<ContainerManager, DockerError>` where the error indicates
+    /// issues with Docker daemon connectivity or initialization.
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust,no_run
+    /// use vpn_docker::ContainerManager;
+    /// 
+    /// let manager = ContainerManager::new()?;
+    /// # Ok::<(), vpn_docker::DockerError>(())
+    /// ```
     pub fn new() -> Result<Self> {
         // Initialize cache cleanup task
         crate::cache::start_cache_cleanup_task();
         Ok(Self {})
     }
     
+    /// List all Docker containers with optional filtering
+    /// 
+    /// Returns a list of containers based on the `all` parameter. When `all` is false,
+    /// only running containers are returned. When true, all containers regardless of
+    /// their state are included.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `all` - If true, return all containers; if false, only running containers
+    /// 
+    /// # Returns
+    /// 
+    /// Returns `Result<Vec<ContainerSummary>, DockerError>` containing the list of containers
+    /// or an error if the Docker API call fails.
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust,no_run
+    /// use vpn_docker::ContainerManager;
+    /// 
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let manager = ContainerManager::new()?;
+    /// 
+    /// // List only running containers
+    /// let running = manager.list_containers(false).await?;
+    /// println!("Running containers: {}", running.len());
+    /// 
+    /// // List all containers
+    /// let all = manager.list_containers(true).await?;
+    /// println!("Total containers: {}", all.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn list_containers(&self, all: bool) -> Result<Vec<ContainerSummary>> {
         let mut filters = HashMap::new();
         if !all {
@@ -230,12 +391,76 @@ impl ContainerManager {
         Ok(connection.docker().list_containers(Some(options)).await?)
     }
     
+    /// Inspect a specific container and return detailed information
+    /// 
+    /// Retrieves comprehensive information about a container including its configuration,
+    /// state, network settings, and mount points. This is useful for debugging and
+    /// monitoring container health.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `name` - The container name or ID to inspect
+    /// 
+    /// # Returns
+    /// 
+    /// Returns `Result<ContainerInspectResponse, DockerError>` containing detailed
+    /// container information or `ContainerNotFound` error if the container doesn't exist.
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust,no_run
+    /// use vpn_docker::ContainerManager;
+    /// 
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let manager = ContainerManager::new()?;
+    /// 
+    /// let info = manager.inspect_container("vpn-server").await?;
+    /// if let Some(state) = &info.state {
+    ///     println!("Container running: {}", state.running.unwrap_or(false));
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn inspect_container(&self, name: &str) -> Result<ContainerInspectResponse> {
         let connection = get_docker_connection().await?;
         connection.docker().inspect_container(name, None).await
             .map_err(|_| DockerError::ContainerNotFound(name.to_owned()).into())
     }
     
+    /// Create a new Docker container with the specified configuration
+    /// 
+    /// Creates a new container using the provided Docker configuration. The container
+    /// is only created, not started. Use `start_container()` to start it afterwards.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `name` - Unique name for the container
+    /// * `config` - Docker container configuration including image, ports, volumes, etc.
+    /// 
+    /// # Returns
+    /// 
+    /// Returns `Result<String, DockerError>` containing the created container ID
+    /// or an error if the creation fails.
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust,no_run
+    /// use vpn_docker::ContainerManager;
+    /// use bollard::container::Config;
+    /// 
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let manager = ContainerManager::new()?;
+    /// 
+    /// let config = Config {
+    ///     image: Some("xray:latest".to_string()),
+    ///     ..Default::default()
+    /// };
+    /// 
+    /// let container_id = manager.create_container("vpn-server", config).await?;
+    /// println!("Created container: {}", container_id);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn create_container(
         &self,
         name: &str,
@@ -255,6 +480,33 @@ impl ContainerManager {
         Ok(response.id)
     }
     
+    /// Start a previously created container
+    /// 
+    /// Starts a container that was previously created with `create_container()`.
+    /// The cache is automatically invalidated to ensure status queries return
+    /// fresh information.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `name` - The container name or ID to start
+    /// 
+    /// # Returns
+    /// 
+    /// Returns `Result<(), DockerError>` indicating success or failure.
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust,no_run
+    /// use vpn_docker::ContainerManager;
+    /// 
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let manager = ContainerManager::new()?;
+    /// 
+    /// manager.start_container("vpn-server").await?;
+    /// println!("Container started successfully");
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn start_container(&self, name: &str) -> Result<()> {
         let connection = get_docker_connection().await?;
         connection.docker().start_container(name, None::<StartContainerOptions<String>>).await?;
@@ -265,6 +517,36 @@ impl ContainerManager {
         Ok(())
     }
     
+    /// Stop a running container with optional timeout
+    /// 
+    /// Gracefully stops a running container by sending a SIGTERM signal followed by
+    /// SIGKILL after the timeout period. The cache is automatically invalidated.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `name` - The container name or ID to stop
+    /// * `timeout` - Optional timeout in seconds before force killing (default: 10)
+    /// 
+    /// # Returns
+    /// 
+    /// Returns `Result<(), DockerError>` indicating success or failure.
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust,no_run
+    /// use vpn_docker::ContainerManager;
+    /// 
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let manager = ContainerManager::new()?;
+    /// 
+    /// // Stop with default timeout (10 seconds)
+    /// manager.stop_container("vpn-server", None).await?;
+    /// 
+    /// // Stop with custom timeout
+    /// manager.stop_container("vpn-server", Some(30)).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn stop_container(&self, name: &str, timeout: Option<i64>) -> Result<()> {
         let options = StopContainerOptions {
             t: timeout.unwrap_or(10),
@@ -279,12 +561,69 @@ impl ContainerManager {
         Ok(())
     }
     
+    /// Restart a container by stopping and starting it
+    /// 
+    /// Combines stop and start operations with the specified timeout. This is useful
+    /// for applying configuration changes or recovering from container issues.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `name` - The container name or ID to restart
+    /// * `timeout` - Optional timeout in seconds for the stop operation
+    /// 
+    /// # Returns
+    /// 
+    /// Returns `Result<(), DockerError>` indicating success or failure.
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust,no_run
+    /// use vpn_docker::ContainerManager;
+    /// 
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let manager = ContainerManager::new()?;
+    /// 
+    /// manager.restart_container("vpn-server", Some(10)).await?;
+    /// println!("Container restarted successfully");
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn restart_container(&self, name: &str, timeout: Option<i64>) -> Result<()> {
         self.stop_container(name, timeout).await?;
         self.start_container(name).await?;
         Ok(())
     }
     
+    /// Remove a container and optionally its volumes
+    /// 
+    /// Permanently removes a container and optionally associated volumes. Use force=true
+    /// to remove running containers. The cache is automatically invalidated.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `name` - The container name or ID to remove
+    /// * `force` - If true, forcefully remove even if running
+    /// 
+    /// # Returns
+    /// 
+    /// Returns `Result<(), DockerError>` indicating success or failure.
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust,no_run
+    /// use vpn_docker::ContainerManager;
+    /// 
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let manager = ContainerManager::new()?;
+    /// 
+    /// // Remove stopped container
+    /// manager.remove_container("old-container", false).await?;
+    /// 
+    /// // Force remove running container
+    /// manager.remove_container("vpn-server", true).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn remove_container(&self, name: &str, force: bool) -> Result<()> {
         let options = RemoveContainerOptions {
             force,
@@ -338,6 +677,39 @@ impl ContainerManager {
         Ok(status)
     }
     
+    /// Execute a command inside a running container
+    /// 
+    /// Runs a command inside the specified container and returns the output.
+    /// This is useful for debugging, configuration changes, or health checks.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `container` - The container name or ID to execute the command in
+    /// * `cmd` - Vector of command and arguments to execute
+    /// 
+    /// # Returns
+    /// 
+    /// Returns `Result<String, DockerError>` containing the command output
+    /// or an error if execution fails.
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust,no_run
+    /// use vpn_docker::ContainerManager;
+    /// 
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let manager = ContainerManager::new()?;
+    /// 
+    /// // Execute a simple command
+    /// let output = manager.exec_command("vpn-server", vec!["ps", "aux"]).await?;
+    /// println!("Process list: {}", output);
+    /// 
+    /// // Check configuration
+    /// let config = manager.exec_command("vpn-server", vec!["cat", "/etc/xray/config.json"]).await?;
+    /// println!("Config: {}", config);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn exec_command(
         &self,
         container: &str,
@@ -369,6 +741,35 @@ impl ContainerManager {
         }
     }
     
+    /// Check if a container exists
+    /// 
+    /// Quickly checks whether a container with the given name exists.
+    /// This is a lightweight operation that doesn't return detailed information.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `name` - The container name or ID to check
+    /// 
+    /// # Returns
+    /// 
+    /// Returns `true` if the container exists, `false` otherwise.
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust,no_run
+    /// use vpn_docker::ContainerManager;
+    /// 
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let manager = ContainerManager::new()?;
+    /// 
+    /// if manager.container_exists("vpn-server").await {
+    ///     println!("Container exists");
+    /// } else {
+    ///     println!("Container not found");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn container_exists(&self, name: &str) -> bool {
         self.inspect_container(name).await.is_ok()
     }

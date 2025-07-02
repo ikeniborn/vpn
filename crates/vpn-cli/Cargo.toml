@@ -27,6 +27,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
 clap = { version = "4.4", features = ["derive", "color", "suggestions"] }
+clap_complete = "4.4"
 dialoguer = { version = "0.11", features = ["fuzzy-select"] }
 console = "0.15"
 indicatif = "0.17"

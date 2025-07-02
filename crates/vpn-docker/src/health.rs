@@ -8,32 +8,91 @@ use tokio::task::JoinSet;
 use crate::error::{DockerError, Result};
 use crate::container::ContainerManager;
 
+/// Health status information for a Docker container
+/// 
+/// Contains comprehensive health and performance metrics for a container
+/// including resource usage, network statistics, and operational status.
 #[derive(Debug, Clone)]
 pub struct HealthStatus {
+    /// Name or ID of the container
     pub container_name: String,
+    /// Whether the container is currently running
     pub is_running: bool,
+    /// Current container status (running, stopped, paused, etc.)
     pub status: String,
+    /// CPU usage as a percentage (0.0 - 100.0)
     pub cpu_usage: f64,
+    /// Current memory usage in bytes
     pub memory_usage: u64,
+    /// Memory limit in bytes (0 indicates no limit)
     pub memory_limit: u64,
+    /// Network bytes received since container start
     pub network_rx_bytes: u64,
+    /// Network bytes transmitted since container start
     pub network_tx_bytes: u64,
 }
 
+/// Result of a batch health check operation
+/// 
+/// Contains the results of checking multiple containers simultaneously,
+/// with separate collections for successful and failed operations.
 #[derive(Debug, Clone)]
 pub struct BatchHealthResult {
+    /// Successfully checked containers with their health status
     pub successful: HashMap<String, HealthStatus>,
+    /// Failed container checks with error messages
     pub failed: HashMap<String, String>,
+    /// Total time taken to complete all health checks
     pub total_duration: Duration,
 }
 
+/// Configuration options for batch health checking operations
+/// 
+/// Controls the behavior of concurrent health checks including timeouts,
+/// concurrency limits, and failure handling strategies.
 #[derive(Debug, Clone)]
 pub struct BatchHealthOptions {
+    /// Maximum time to wait for individual health checks
     pub timeout: Duration,
+    /// Maximum number of concurrent health check operations
     pub max_concurrent: usize,
+    /// Whether to stop all operations on first failure
     pub fail_fast: bool,
 }
 
+/// Docker container health monitoring service
+/// 
+/// Provides comprehensive health checking capabilities for Docker containers
+/// including resource monitoring, performance metrics, and batch operations.
+/// 
+/// # Features
+/// 
+/// - Real-time container health status monitoring
+/// - CPU, memory, and network usage statistics
+/// - Concurrent batch health checking
+/// - Memory leak prevention with proper resource cleanup
+/// 
+/// # Examples
+/// 
+/// ```rust,no_run
+/// use vpn_docker::HealthChecker;
+/// 
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let health_checker = HealthChecker::new()?;
+///     
+///     // Check single container health
+///     let status = health_checker.check_container_health("vpn-server").await?;
+///     println!("CPU usage: {}%", status.cpu_usage);
+///     
+///     // Batch check multiple containers
+///     let containers = ["vpn-server", "traefik", "prometheus"];
+///     let results = health_checker.batch_check_health(&containers, None).await;
+///     println!("Checked {} containers", results.successful.len());
+///     
+///     Ok(())
+/// }
+/// ```
 #[derive(Clone)]
 pub struct HealthChecker {
     docker: Docker,
@@ -41,6 +100,23 @@ pub struct HealthChecker {
 }
 
 impl HealthChecker {
+    /// Create a new health checker instance
+    /// 
+    /// Initializes connections to the Docker daemon and container manager.
+    /// 
+    /// # Returns
+    /// 
+    /// Returns `Result<HealthChecker, DockerError>` where the error indicates
+    /// issues with Docker daemon connectivity.
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust,no_run
+    /// use vpn_docker::HealthChecker;
+    /// 
+    /// let checker = HealthChecker::new()?;
+    /// # Ok::<(), vpn_docker::DockerError>(())
+    /// ```
     pub fn new() -> Result<Self> {
         let docker = Docker::connect_with_local_defaults()
             .map_err(|e| DockerError::ConnectionError(e.to_string()))?;
@@ -48,6 +124,35 @@ impl HealthChecker {
         Ok(Self { docker, container_manager })
     }
     
+    /// Check the health status of a single container
+    /// 
+    /// Retrieves comprehensive health information including running status,
+    /// CPU usage, memory consumption, and network statistics.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `name` - The container name or ID to check
+    /// 
+    /// # Returns
+    /// 
+    /// Returns `Result<HealthStatus, DockerError>` containing the health status
+    /// or an error if the container cannot be found or checked.
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust,no_run
+    /// use vpn_docker::HealthChecker;
+    /// 
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let checker = HealthChecker::new()?;
+    /// 
+    /// let status = checker.check_container_health("vpn-server").await?;
+    /// println!("Container running: {}", status.is_running);
+    /// println!("CPU usage: {:.1}%", status.cpu_usage);
+    /// println!("Memory usage: {} MB", status.memory_usage / 1024 / 1024);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn check_container_health(&self, name: &str) -> Result<HealthStatus> {
         let inspect = self.container_manager.inspect_container(name).await?;
         
@@ -114,6 +219,35 @@ impl HealthChecker {
         }
     }
     
+    /// Wait for a container to become healthy within a timeout period
+    /// 
+    /// Continuously checks container health until it becomes running or the timeout
+    /// expires. This is useful for waiting for containers to start up properly.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `name` - The container name or ID to wait for
+    /// * `timeout` - Maximum time to wait for the container to become healthy
+    /// 
+    /// # Returns
+    /// 
+    /// Returns `Result<(), DockerError>` indicating success or timeout/error.
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust,no_run
+    /// use vpn_docker::HealthChecker;
+    /// use std::time::Duration;
+    /// 
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let checker = HealthChecker::new()?;
+    /// 
+    /// // Wait up to 60 seconds for container to become healthy
+    /// checker.wait_for_healthy("vpn-server", Duration::from_secs(60)).await?;
+    /// println!("Container is now healthy!");
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn wait_for_healthy(&self, name: &str, timeout: Duration) -> Result<()> {
         let start = std::time::Instant::now();
         

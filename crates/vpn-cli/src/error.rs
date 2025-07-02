@@ -32,6 +32,9 @@ pub enum CliError {
     #[error("Permission denied: {0}")]
     PermissionError(String),
     
+    #[error("File operation failed: {0}")]
+    FileOperation(String),
+    
     #[error("Server error: {0}")]
     ServerError(#[from] vpn_server::ServerError),
     
