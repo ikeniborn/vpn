@@ -23,7 +23,7 @@ NC='\033[0m' # No Color
 LAUNCH_MENU=true
 SKIP_DOCKER=false
 VERBOSE=false
-REPO_URL="https://github.com/your-org/vpn.git"
+REPO_URL="https://github.com/ikeniborn/vpn.git"
 REPO_DIR="$HOME/vpn-rust"
 
 # Function to print colored output

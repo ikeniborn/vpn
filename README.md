@@ -2,13 +2,13 @@
 
 🦀 **Advanced VPN Management System** - высокопроизводительная, типобезопасная система управления VPN, написанная на Rust. Предоставляет комплексные инструменты для управления серверами Xray (VLESS+Reality), Outline VPN и прокси-серверами. Эта реализация заменяет оригинальные Bash-скрипты современной, безопасной и эффективной альтернативой.
 
-[![CI Status](https://github.com/your-org/vpn/workflows/CI/badge.svg)](https://github.com/your-org/vpn/actions)
-[![Docker Build](https://github.com/your-org/vpn/workflows/Docker%20Build%20and%20Publish/badge.svg)](https://github.com/your-org/vpn/actions)
-[![Security Audit](https://github.com/your-org/vpn/workflows/Security%20Audit/badge.svg)](https://github.com/your-org/vpn/actions)
-[![Code Coverage](https://codecov.io/gh/your-org/vpn/branch/main/graph/badge.svg)](https://codecov.io/gh/your-org/vpn)
+[![CI Status](https://github.com/ikeniborn/vpn/workflows/CI/badge.svg)](https://github.com/ikeniborn/vpn/actions)
+[![Docker Build](https://github.com/ikeniborn/vpn/workflows/Docker%20Build%20and%20Publish/badge.svg)](https://github.com/ikeniborn/vpn/actions)
+[![Security Audit](https://github.com/ikeniborn/vpn/workflows/Security%20Audit/badge.svg)](https://github.com/ikeniborn/vpn/actions)
+[![Code Coverage](https://codecov.io/gh/ikeniborn/vpn/branch/main/graph/badge.svg)](https://codecov.io/gh/ikeniborn/vpn)
 [![Rust Version](https://img.shields.io/badge/rust-1.75+-blue.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Docker Pulls](https://img.shields.io/docker/pulls/yourusername/vpn-rust.svg)](https://hub.docker.com/r/yourusername/vpn-rust)
+[![Docker Pulls](https://img.shields.io/docker/pulls/ikeniborn/vpn-rust.svg)](https://hub.docker.com/r/ikeniborn/vpn-rust)
 
 ## ✨ Features
 
@@ -51,16 +51,19 @@
 
 ## 🚀 Quick Start
 
+> **📌 Note:** This project is currently in active development on the `refactoring` branch. 
+> The installation scripts use the latest refactoring branch for the most up-to-date features.
+
 ### ⚡ One-Line Installation (Fastest)
 
 Install the VPN CLI tool with a single command **(run as regular user, not root)**:
 
 ```bash
 # Install VPN CLI and launch interactive menu
-curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/refactoring/scripts/install.sh | bash
 
 # Install without launching menu
-curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/install.sh | bash -s -- --no-menu
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/refactoring/scripts/install.sh | bash -s -- --no-menu
 ```
 
 **⚠️ Important:** Do not run with `sudo` - the script will prompt for sudo only when needed for system packages.
@@ -70,7 +73,7 @@ curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/install.sh
 **Fresh Installation:**
 ```bash
 # Download and run installation script
-wget https://raw.githubusercontent.com/your-org/vpn/main/scripts/install.sh
+wget https://raw.githubusercontent.com/ikeniborn/vpn/refactoring/scripts/install.sh
 chmod +x install.sh
 
 # Standard installation - complete setup
@@ -86,7 +89,7 @@ chmod +x install.sh
 **Update Existing Installation:**
 ```bash
 # Download and run update script
-wget https://raw.githubusercontent.com/your-org/vpn/main/scripts/update.sh
+wget https://raw.githubusercontent.com/ikeniborn/vpn/refactoring/scripts/update.sh
 chmod +x update.sh
 
 # Standard update - pull latest code and rebuild
@@ -133,7 +136,7 @@ If you prefer using Docker without building:
 
 ```bash
 # Quick start with Docker Compose
-curl -L https://raw.githubusercontent.com/yourusername/vpn-rust/main/docker-compose.hub.yml -o docker-compose.yml
+curl -L https://raw.githubusercontent.com/ikeniborn/vpn/refactoring/docker-compose.hub.yml -o docker-compose.yml
 
 # Set environment variables
 export VPN_PROTOCOL=vless
@@ -154,10 +157,10 @@ docker exec vpn-server vpn users link alice --qr
 
 | Image | Description | Size | Architectures |
 |-------|-------------|------|---------------|
-| `yourusername/vpn-rust:latest` | Main VPN server with CLI | ~50MB | amd64, arm64 |
-| `yourusername/vpn-rust-proxy-auth:latest` | Proxy authentication service | ~20MB | amd64, arm64 |
-| `yourusername/vpn-rust-identity:latest` | Identity management service | ~25MB | amd64, arm64 |
-| `yourusername/vpn-rust-cluster:latest` | Distributed clustering service | ~30MB | amd64, arm64 |
+| `ikeniborn/vpn-rust:latest` | Main VPN server with CLI | ~50MB | amd64, arm64 |
+| `ikeniborn/vpn-rust-proxy-auth:latest` | Proxy authentication service | ~20MB | amd64, arm64 |
+| `ikeniborn/vpn-rust-identity:latest` | Identity management service | ~25MB | amd64, arm64 |
+| `ikeniborn/vpn-rust-cluster:latest` | Distributed clustering service | ~30MB | amd64, arm64 |
 
 ### 🛠️ Build from Source
 
@@ -234,7 +237,7 @@ sudo usermod -aG docker $USER
 
 ```bash
 # Clone the repository (as regular user)
-git clone https://github.com/your-org/vpn.git
+git clone https://github.com/ikeniborn/vpn.git
 cd vpn
 
 # Build the entire workspace (as regular user)
@@ -534,14 +537,14 @@ The installation script supports the following platforms:
 **DigitalOcean**
 ```bash
 # SSH into your droplet and run
-curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-install.sh | bash
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/refactoring/scripts/install.sh | bash
 ```
 
 **AWS EC2**
 ```bash
 # Add to user data or run after instance creation
 #!/bin/bash
-curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-install.sh | bash
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/refactoring/scripts/install.sh | bash
 ```
 
 **Other VPS Providers**
@@ -556,7 +559,7 @@ The installation works with any VPS provider:
 
 ```bash
 # Clone repository and install
-git clone https://github.com/your-org/vpn.git
+git clone https://github.com/ikeniborn/vpn.git
 cd vpn
 ./scripts/install.sh
 ```
@@ -565,10 +568,10 @@ cd vpn
 
 ```bash
 # Pull pre-built image
-docker pull yourusername/vpn-rust:latest
+docker pull ikeniborn/vpn-rust:latest
 
 # Run CLI through Docker
-docker run -it --rm yourusername/vpn-rust:latest vpn menu
+docker run -it --rm ikeniborn/vpn-rust:latest vpn menu
 ```
 
 ### Using the VPN CLI
@@ -841,4 +844,4 @@ Complete documentation is available in the [`docs/`](docs/) directory:
 
 **Made with ❤️ and 🦀 Rust**
 
-[📚 Documentation](docs/) | [🐛 Issues](https://github.com/your-org/vpn/issues) | [💬 Discussions](https://github.com/your-org/vpn/discussions) | [🐳 Docker Hub](https://hub.docker.com/r/yourusername/vpn-rust)
+[📚 Documentation](docs/) | [🐛 Issues](https://github.com/ikeniborn/vpn/issues) | [💬 Discussions](https://github.com/ikeniborn/vpn/discussions) | [🐳 Docker Hub](https://hub.docker.com/r/ikeniborn/vpn-rust)
