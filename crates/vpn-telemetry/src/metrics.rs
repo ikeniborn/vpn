@@ -1,9 +1,8 @@
 //! Metrics collection and Prometheus integration
 
 use crate::{config::TelemetryConfig, error::Result, TelemetryError};
-use async_trait::async_trait;
 use prometheus::{
-    Counter, CounterVec, Encoder, Gauge, GaugeVec, Histogram, HistogramVec, Registry, TextEncoder,
+    Counter, CounterVec, Gauge, GaugeVec, Histogram, HistogramVec, Registry, TextEncoder,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

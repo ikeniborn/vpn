@@ -1,17 +1,15 @@
 //! Reconciler for VPN resources
 
 use crate::{
-    crd::{VpnServer, VpnPhase, VpnProtocol},
-    error::{OperatorError, Result},
+    crd::VpnServer,
+    error::Result,
     resources::{deployment, service, configmap, secret},
     OperatorConfig,
 };
-use k8s_openapi::{
-    api::{
-        apps::v1::{Deployment, DeploymentSpec},
-        core::v1::{ConfigMap, Secret, Service, ServiceSpec},
-    },
-};
+use k8s_openapi::api::{
+        apps::v1::Deployment,
+        core::v1::{ConfigMap, Secret, Service},
+    };
 use kube::{
     api::{Api, DeleteParams, Patch, PatchParams, PostParams},
     client::Client,

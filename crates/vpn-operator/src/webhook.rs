@@ -4,7 +4,7 @@ use crate::{
     crd::{VpnServer, VpnServerSpec},
     error::{OperatorError, Result},
 };
-use kube::core::admission::{AdmissionRequest, AdmissionResponse, AdmissionReview};
+use kube::core::admission::{AdmissionRequest, AdmissionResponse};
 use serde_json::json;
 
 /// Validate VPN server specifications
@@ -19,7 +19,7 @@ pub fn validate_vpn_server(req: AdmissionRequest<VpnServer>) -> AdmissionRespons
 }
 
 /// Mutate VPN server specifications with defaults
-pub fn mutate_vpn_server(mut req: AdmissionRequest<VpnServer>) -> AdmissionResponse {
+pub fn mutate_vpn_server(req: AdmissionRequest<VpnServer>) -> AdmissionResponse {
     match &req.object {
         Some(vpn) => {
             let patches = generate_patches(&vpn.spec);

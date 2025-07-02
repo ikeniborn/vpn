@@ -9,8 +9,7 @@ use serde_json::json;
 use std::path::PathBuf;
 use tabled::{Table, Tabled};
 use vpn_compose::{
-    ComposeOrchestrator, ComposeConfig, Environment, EnvironmentConfig,
-    ComposeManager, ComposeStatus, ComposeServiceStatus
+    ComposeOrchestrator, ComposeConfig, EnvironmentConfig, ComposeStatus, ComposeServiceStatus
 };
 
 /// Handle Docker Compose commands

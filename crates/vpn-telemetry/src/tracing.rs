@@ -4,7 +4,7 @@ use crate::{config::TelemetryConfig, error::Result, TelemetryError};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{info, warn, Span};
+use tracing::{info, Span};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry};
 
 /// Trace context for managing distributed traces

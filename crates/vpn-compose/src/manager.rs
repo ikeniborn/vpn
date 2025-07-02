@@ -3,11 +3,10 @@
 use crate::config::ComposeConfig;
 use crate::error::{ComposeError, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
 use tokio::process::Command;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Docker Compose manager for executing compose operations
 pub struct ComposeManager {

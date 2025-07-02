@@ -1,6 +1,6 @@
 //! Service management for Docker Compose
 
-use crate::config::{ServiceConfig, VolumeMount, PortMapping, HealthCheck, RestartPolicy};
+use crate::config::{VolumeMount, PortMapping, HealthCheck, RestartPolicy};
 use crate::error::{ComposeError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

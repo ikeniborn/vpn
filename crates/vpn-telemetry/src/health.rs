@@ -1,7 +1,6 @@
 //! Health monitoring and collection
 
 use crate::{config::TelemetryConfig, error::Result, TelemetryError, TelemetryProvider};
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;

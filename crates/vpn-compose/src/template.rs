@@ -4,7 +4,6 @@ use crate::config::ComposeConfig;
 use crate::error::{ComposeError, Result};
 use handlebars::Handlebars;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tera::Tera;

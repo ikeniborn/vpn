@@ -15,7 +15,6 @@ use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 use tracing::{error, info};
 use vpn_proxy::{
-    auth::AuthManager,
     config::{AuthConfig, ProxyConfig, RateLimitConfig},
     error::ProxyError,
     manager::ProxyManager,

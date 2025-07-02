@@ -26,7 +26,6 @@ pub use error::{ComposeError, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 /// Docker Compose orchestration system
 pub struct ComposeOrchestrator {

@@ -1,24 +1,22 @@
 //! Main controller for managing VPN resources
 
 use crate::{
-    crd::{VpnServer, VpnServerStatus, VpnPhase},
+    crd::{VpnServer, VpnPhase},
     error::{OperatorError, Result},
     reconciler::VpnReconciler,
     OperatorConfig,
 };
 use futures::StreamExt;
 use kube::{
-    api::{Api, ListParams, Patch, PatchParams},
+    api::{Api, Patch, PatchParams},
     client::Client,
     runtime::{
         controller::{Action, Controller},
-        events::{Event, EventType, Recorder, Reporter},
+        events::{Recorder, Reporter},
         finalizer::{finalizer, Event as FinalizerEvent},
-    },
-    Resource, ResourceExt,
+    }, ResourceExt,
 };
 use std::{sync::Arc, time::Duration};
-use tokio::sync::RwLock;
 
 /// Controller for managing VPN resources
 pub struct VpnOperatorController {

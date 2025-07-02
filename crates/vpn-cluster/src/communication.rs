@@ -6,7 +6,7 @@ use crate::state::ClusterState;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 use tonic::{transport::Server, Request, Response, Status};
 

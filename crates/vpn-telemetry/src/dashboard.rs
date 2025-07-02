@@ -2,7 +2,6 @@
 
 use crate::{config::TelemetryConfig, error::Result, TelemetryError};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;

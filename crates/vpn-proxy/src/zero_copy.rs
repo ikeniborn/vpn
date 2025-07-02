@@ -14,7 +14,7 @@ pub async fn zero_copy_transfer(
     direction: &str,
     max_bytes: Option<usize>,
 ) -> Result<u64> {
-    use nix::fcntl::{splice, SpliceFFlags};
+    
     use nix::unistd::pipe;
     
     let source_fd = source.as_raw_fd();

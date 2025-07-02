@@ -17,7 +17,6 @@ pub use reconciler::VpnReconciler;
 
 use kube::Client;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 /// Main operator that orchestrates VPN deployments in Kubernetes
 pub struct VpnOperator {

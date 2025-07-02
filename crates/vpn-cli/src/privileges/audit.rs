@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 use std::fs::{OpenOptions, create_dir_all};
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use crate::error::Result;
 
 /// Privilege escalation event

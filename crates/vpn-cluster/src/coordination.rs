@@ -3,7 +3,7 @@
 use crate::config::ClusterConfig;
 use crate::consensus::{ConsensusEngine, SimpleConsensus};
 use crate::error::{ClusterError, Result};
-use crate::node::{Node, NodeId, NodeRole, NodeStatus};
+use crate::node::{Node, NodeId, NodeStatus};
 use crate::state::ClusterState;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
