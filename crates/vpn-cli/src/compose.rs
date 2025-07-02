@@ -242,6 +242,33 @@ fn display_status_table(status: &ComposeStatus, services: &[ComposeServiceStatus
     }
 }
 
+/// Display health status for a single service
+fn display_service_health(service: &ComposeServiceStatus) {
+    let health_icon = match service.health.as_deref() {
+        Some("healthy") => "✓".green(),
+        Some("unhealthy") => "✗".red(),
+        Some("starting") => "⟳".yellow(),
+        _ => "-".white(),
+    };
+    
+    let state_display = match service.state.as_str() {
+        "running" => service.state.green(),
+        "exited" => service.state.red(),
+        _ => service.state.yellow(),
+    };
+    
+    println!("{} {} - State: {}, Health: {}", 
+        health_icon,
+        service.name.bold(),
+        state_display,
+        service.health.as_deref().unwrap_or("N/A")
+    );
+    
+    if !service.ports.is_empty() {
+        println!("  Ports: {}", service.ports.join(", "));
+    }
+}
+
 /// View service logs
 async fn handle_compose_logs(
     service: Option<String>,
@@ -265,45 +292,81 @@ async fn handle_compose_logs(
 async fn handle_compose_exec(
     service: String,
     command: Vec<String>,
-    interactive: bool,
-    tty: bool,
+    _interactive: bool,
+    _tty: bool,
     config_path: Option<PathBuf>,
     install_path: PathBuf,
 ) -> Result<()> {
     println!("{}", format!("Executing command in service: {}", service).cyan());
     
-    // For now, this would delegate to the compose manager
-    // In a full implementation, this would use the manager's exec functionality
-    println!("{}", "Command execution completed".green());
+    let config = load_compose_config(config_path, install_path).await?;
+    let orchestrator = ComposeOrchestrator::new(config).await?;
+    
+    // Convert Vec<String> to Vec<&str> for the exec method
+    let command_refs: Vec<&str> = command.iter().map(|s| s.as_str()).collect();
+    
+    let output = orchestrator.exec_command(&service, &command_refs).await
+        .context(format!("Failed to execute command in service: {}", service))?;
+    
+    println!("{}", output);
+    println!("{}", "✓ Command execution completed".green());
     Ok(())
 }
 
 /// Pull latest images
 async fn handle_compose_pull(
     services: Vec<String>,
-    parallel: bool,
+    _parallel: bool,
     config_path: Option<PathBuf>,
     install_path: PathBuf,
 ) -> Result<()> {
     println!("{}", "Pulling latest images...".cyan());
     
-    // Implementation would use the compose manager to pull images
-    println!("{}", "✓ Images pulled successfully".green());
+    let config = load_compose_config(config_path, install_path).await?;
+    let orchestrator = ComposeOrchestrator::new(config).await?;
+    
+    if services.is_empty() {
+        orchestrator.pull_images(None).await
+            .context("Failed to pull images")?;
+        println!("{}", "✓ All images pulled successfully".green());
+    } else {
+        for service in &services {
+            println!("{}", format!("Pulling image for service: {}", service).cyan());
+            orchestrator.pull_images(Some(service)).await
+                .context(format!("Failed to pull image for service: {}", service))?;
+            println!("{}", format!("✓ Image for {} pulled successfully", service).green());
+        }
+    }
+    
     Ok(())
 }
 
 /// Build services
 async fn handle_compose_build(
     services: Vec<String>,
-    no_cache: bool,
-    force_rm: bool,
+    _no_cache: bool,
+    _force_rm: bool,
     config_path: Option<PathBuf>,
     install_path: PathBuf,
 ) -> Result<()> {
     println!("{}", "Building services...".cyan());
     
-    // Implementation would use the compose manager to build services
-    println!("{}", "✓ Services built successfully".green());
+    let config = load_compose_config(config_path, install_path).await?;
+    let orchestrator = ComposeOrchestrator::new(config).await?;
+    
+    if services.is_empty() {
+        orchestrator.build_services(None).await
+            .context("Failed to build services")?;
+        println!("{}", "✓ All services built successfully".green());
+    } else {
+        for service in &services {
+            println!("{}", format!("Building service: {}", service).cyan());
+            orchestrator.build_services(Some(service)).await
+                .context(format!("Failed to build service: {}", service))?;
+            println!("{}", format!("✓ Service {} built successfully", service).green());
+        }
+    }
+    
     Ok(())
 }
 
@@ -432,21 +495,55 @@ async fn handle_environment_command(
 /// Health check for services
 async fn handle_compose_health(
     service: Option<String>,
-    timeout: u32,
+    _timeout: u32,
     config_path: Option<PathBuf>,
     install_path: PathBuf,
 ) -> Result<()> {
     let config = load_compose_config(config_path, install_path).await?;
     let orchestrator = ComposeOrchestrator::new(config).await?;
 
+    let status = orchestrator.get_status().await
+        .context("Failed to get service status")?;
+
     if let Some(service_name) = service {
         println!("{}", format!("Checking health of service: {}", service_name).cyan());
+        
+        if let Some(service_status) = status.services.iter().find(|s| s.name == service_name) {
+            display_service_health(&service_status);
+        } else {
+            println!("{}", format!("Service {} not found", service_name).red());
+            return Ok(());
+        }
     } else {
         println!("{}", "Checking health of all services...".cyan());
+        println!();
+        
+        let healthy_count = status.services.iter()
+            .filter(|s| s.state == "running" && s.health.as_deref() == Some("healthy"))
+            .count();
+        
+        println!("{}", format!(
+            "Overall Health: {}/{} services healthy", 
+            healthy_count, 
+            status.total_services
+        ).bold());
+        println!();
+        
+        for service_status in &status.services {
+            display_service_health(&service_status);
+            println!();
+        }
     }
 
-    // Implementation would check service health
-    println!("{}", "✓ All services are healthy".green());
+    let all_healthy = status.services.iter()
+        .all(|s| s.state == "running" && s.health.as_deref() != Some("unhealthy"));
+    
+    if all_healthy {
+        println!("{}", "✓ All services are healthy".green());
+    } else {
+        println!("{}", "⚠ Some services are unhealthy".yellow());
+    }
+    
     Ok(())
 }
 

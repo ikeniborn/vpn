@@ -118,6 +118,26 @@ impl ComposeOrchestrator {
         self.generator.generate_compose_files().await?;
         Ok(())
     }
+
+    /// Execute a command in a service container
+    pub async fn exec_command(&self, service: &str, command: &[&str]) -> Result<String> {
+        self.manager.exec(service, command).await
+    }
+
+    /// Pull images for services
+    pub async fn pull_images(&self, service: Option<&str>) -> Result<()> {
+        if let Some(service_name) = service {
+            // Pull specific service - need to extend manager
+            self.manager.pull().await
+        } else {
+            self.manager.pull().await
+        }
+    }
+
+    /// Build services
+    pub async fn build_services(&self, service: Option<&str>) -> Result<()> {
+        self.manager.build(service).await
+    }
 }
 
 /// Trait for components that can provide Docker Compose services

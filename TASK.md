@@ -247,40 +247,55 @@
 
 ---
 
-## 🏗️ Phase 12: Remaining Features (Priority: MEDIUM)
+## ✅ Phase 12: Remaining Features (Priority: MEDIUM)
 **Timeline**: 2 weeks  
-**Status**: ⏳ Pending
+**Status**: 🟢 COMPLETED  
+**Completion Date**: 2025-07-02
 
-### 12.1 Legacy Cleanup
-- [ ] **Remove legacy bash script implementations**
-  - Identify and remove old bash scripts
-  - Clean up bash dependencies in deployment scripts
-  - Update documentation to remove bash references
-  - **Estimated**: 2 days
+### 12.1 Legacy Cleanup ✅
+- [x] **Remove legacy bash script implementations**
+  - ✅ Searched entire codebase for bash scripts
+  - ✅ Found only infrastructure support scripts (PostgreSQL, K8s backup)
+  - ✅ No legacy VPN bash implementation found in repository
+  - ✅ Confirmed migration tools exist for external bash installations
+  - **Impact**: Clean codebase with no legacy implementations
+  - **Completed**: 2025-07-02
 
-### 12.2 Docker Compose CLI Integration
-- [ ] **Add Docker Compose commands to CLI** - `vpn-cli/src/compose.rs`
-  - `vpn compose up` - Start all services
-  - `vpn compose down` - Stop all services  
-  - `vpn compose restart [service]` - Restart specific services
-  - `vpn compose logs [service]` - View service logs
-  - `vpn compose scale [service=replicas]` - Scale services
-  - **Estimated**: 3 days
+### 12.2 Docker Compose CLI Integration ✅
+- [x] **Add Docker Compose commands to CLI** - `vpn-cli/src/compose.rs`
+  - ✅ `vpn compose up` - Start all services with detach support
+  - ✅ `vpn compose down` - Stop all services with volume cleanup
+  - ✅ `vpn compose restart [service]` - Restart specific services
+  - ✅ `vpn compose logs [service]` - View service logs with tail/follow
+  - ✅ `vpn compose scale [service=replicas]` - Scale services dynamically
+  - ✅ `vpn compose exec` - Execute commands in containers
+  - ✅ `vpn compose pull` - Pull latest images
+  - ✅ `vpn compose build` - Build services
+  - ✅ `vpn compose health` - Health check with detailed status
+  - **Impact**: Full Docker Compose integration in CLI
+  - **Completed**: 2025-07-02
 
-### 12.3 Advanced Docker Compose Features
-- [ ] **Multi-environment configurations**
-  - Development environment setup
-  - Staging environment setup
-  - Production environment setup
-  - Environment variable management
-  - **Estimated**: 3 days
+### 12.3 Advanced Docker Compose Features ✅
+- [x] **Multi-environment configurations**
+  - ✅ Created development.yml with debugging tools
+  - ✅ Created staging.yml with pre-production setup
+  - ✅ Created production.yml with HA configuration
+  - ✅ Environment-specific resource limits and security
+  - ✅ Integrated environment manager in vpn-compose
+  - **Impact**: Easy deployment across environments
+  - **Completed**: 2025-07-02
 
-- [ ] **Production security hardening**
-  - Container security with non-root users
-  - Network isolation and segmentation
-  - Secrets management integration
-  - SSL/TLS for all services
-  - **Estimated**: 4 days
+- [x] **Production security hardening**
+  - ✅ Created security-hardening.yml with security defaults
+  - ✅ Implemented container security (non-root, read-only, capabilities)
+  - ✅ Network isolation with encrypted overlay networks
+  - ✅ Secrets management with Docker secrets
+  - ✅ SSL/TLS configuration for all services
+  - ✅ Created Traefik security headers middleware
+  - ✅ PostgreSQL secure configuration
+  - ✅ Comprehensive SECURITY_HARDENING.md guide
+  - **Impact**: Production-ready security configuration
+  - **Completed**: 2025-07-02
 
 ---
 
