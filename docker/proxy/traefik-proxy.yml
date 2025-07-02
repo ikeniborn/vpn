@@ -1,0 +1,132 @@
+# Traefik configuration for HTTP/HTTPS proxy server
+# This configuration enables Traefik to act as a forward proxy
+
+version: '3.8'
+
+services:
+  traefik-proxy:
+    image: traefik:v3.0
+    container_name: vpn-traefik-proxy
+    restart: unless-stopped
+    command:
+      # Enable debug mode for development
+      - "--log.level=INFO"
+      
+      # API & Dashboard
+      - "--api.dashboard=true"
+      - "--api.insecure=false"
+      
+      # Providers
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
+      
+      # Entrypoints for proxy
+      - "--entrypoints.http-proxy.address=:8080"
+      - "--entrypoints.https-proxy.address=:8443"
+      - "--entrypoints.socks5.address=:1080"
+      
+      # Enable ForwardAuth middleware for authentication
+      - "--experimental.plugins.vpn-proxy-auth.modulename=github.com/vpn-project/traefik-vpn-auth"
+      - "--experimental.plugins.vpn-proxy-auth.version=v1.0.0"
+      
+      # Metrics
+      - "--metrics.prometheus=true"
+      - "--metrics.prometheus.buckets=0.1,0.3,1.2,5.0"
+      
+      # Access logs
+      - "--accesslog=true"
+      - "--accesslog.filepath=/logs/access.log"
+      - "--accesslog.format=json"
+      
+    ports:
+      # HTTP Proxy
+      - "8080:8080"
+      # HTTPS Proxy
+      - "8443:8443"
+      # SOCKS5 Proxy
+      - "1080:1080"
+      # Traefik Dashboard (internal only)
+      - "127.0.0.1:8090:8090"
+      
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./dynamic:/etc/traefik/dynamic:ro
+      - ./logs:/logs
+      - ./certs:/certs:ro
+      
+    networks:
+      - proxy-network
+      
+    environment:
+      - TRAEFIK_LOG_LEVEL=INFO
+      
+    labels:
+      - "traefik.enable=true"
+      # Dashboard
+      - "traefik.http.routers.api.rule=Host(`proxy-dashboard.local`)"
+      - "traefik.http.routers.api.service=api@internal"
+      - "traefik.http.routers.api.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=admin:$$2y$$10$$..."
+      
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Authentication service for proxy
+  proxy-auth:
+    image: vpn-proxy-auth:latest
+    build:
+      context: ../../
+      dockerfile: docker/proxy/Dockerfile.auth
+    container_name: vpn-proxy-auth
+    restart: unless-stopped
+    environment:
+      - AUTH_BACKEND=vpn-users
+      - VPN_USERS_PATH=/var/lib/vpn/users
+      - RATE_LIMIT_ENABLED=true
+      - RATE_LIMIT_RPS=100
+      - METRICS_ENABLED=true
+      - LOG_LEVEL=info
+    volumes:
+      - vpn-users-data:/var/lib/vpn/users:ro
+      - ./auth-config.toml:/etc/proxy/config.toml:ro
+    networks:
+      - proxy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.auth.rule=PathPrefix(`/auth`)"
+      - "traefik.http.services.auth.loadbalancer.server.port=3000"
+      
+  # Metrics aggregator
+  proxy-metrics:
+    image: prom/prometheus:latest
+    container_name: vpn-proxy-metrics
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - proxy-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      
+networks:
+  proxy-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+          
+volumes:
+  vpn-users-data:
+    external: true
+  prometheus-data:
+    driver: local

@@ -1,0 +1,56 @@
+# Build stage
+FROM rust:1.75-slim AS builder
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /usr/src/app
+
+# Copy workspace files
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ ./crates/
+
+# Build only the identity service
+RUN cargo build --release --package vpn-identity
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1000 vpn
+
+# Copy binary from builder
+COPY --from=builder /usr/src/app/target/release/vpn-identity /usr/local/bin/vpn-identity
+
+# Copy migration files
+COPY --from=builder /usr/src/app/crates/vpn-identity/migrations /app/migrations
+
+# Create config directory
+RUN mkdir -p /etc/vpn-identity && chown vpn:vpn /etc/vpn-identity
+
+# Switch to non-root user
+USER vpn
+
+# Set working directory
+WORKDIR /app
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Run the service
+CMD ["vpn-identity"]

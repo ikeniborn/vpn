@@ -1,0 +1,104 @@
+# Traefik v3.x configuration for VPN system
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+# Enable API and dashboard
+api:
+  dashboard: true
+  debug: true
+  insecure: false  # Dashboard over HTTPS only
+
+# Entry points
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entrypoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        options: default
+  
+  vpn-xray:
+    address: ":8443"  # Xray VPN port
+  
+  metrics:
+    address: ":8080"  # Internal metrics port
+
+# Providers
+providers:
+  # Docker provider for service discovery
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: vpn-network
+    watch: true
+    
+  # File provider for static configurations
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: true
+
+# Certificate resolvers for Let's Encrypt
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: admin@vpn.local
+      storage: /etc/traefik/acme.json
+      httpChallenge:
+        entryPoint: web
+      # Alternative: DNS challenge for wildcard certificates
+      # dnsChallenge:
+      #   provider: cloudflare
+      #   resolvers:
+      #     - "1.1.1.1:53"
+      #     - "8.8.8.8:53"
+
+# Logging
+log:
+  level: INFO
+  format: json
+  filePath: /var/log/traefik/traefik.log
+
+# Access logs
+accessLog:
+  format: json
+  filePath: /var/log/traefik/access.log
+  filters:
+    statusCodes:
+      - "400-599"  # Log only errors
+  fields:
+    headers:
+      defaultMode: keep
+      names:
+        User-Agent: redact
+        Authorization: drop
+        X-Forwarded-For: keep
+
+# Metrics for Prometheus
+metrics:
+  prometheus:
+    addEntryPointsLabels: true
+    addServicesLabels: true
+    addRoutersLabels: true
+    entryPoint: metrics
+
+# Health check endpoint
+ping:
+  entryPoint: metrics
+
+# Tracing for Jaeger
+tracing:
+  jaeger:
+    samplingServerURL: "http://jaeger:14268/api/sampling"
+    samplingType: const
+    samplingParam: 1.0
+    localAgentHostPort: "jaeger:6832"
+    traceContextHeaderName: "uber-trace-id"

@@ -1,0 +1,172 @@
+# Default values for vpn-operator
+
+# Operator configuration
+operator:
+  # Number of operator replicas
+  replicas: 1
+  
+  # Operator image
+  image:
+    repository: vpn-operator
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  # Image pull secrets
+  imagePullSecrets: []
+  
+  # Namespace to watch (empty for all namespaces)
+  watchNamespace: ""
+  
+  # Default VPN image for deployments
+  vpnImage: "vpn-server:latest"
+  
+  # Default protocol for VPN servers
+  defaultProtocol: "vless"
+  
+  # Enable high availability by default
+  enableHA: false
+  
+  # Leader election configuration
+  leaderElection:
+    enabled: true
+    leaseDuration: 15s
+    renewDeadline: 10s
+    retryPeriod: 2s
+  
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+  
+  # Node selector
+  nodeSelector: {}
+  
+  # Tolerations
+  tolerations: []
+  
+  # Affinity
+  affinity: {}
+
+# Service account configuration
+serviceAccount:
+  # Create service account
+  create: true
+  # Service account name
+  name: ""
+  # Annotations for service account
+  annotations: {}
+
+# RBAC configuration
+rbac:
+  # Create RBAC resources
+  create: true
+
+# CRD configuration
+crds:
+  # Install CRDs
+  install: true
+  # Keep CRDs on chart uninstall
+  keep: true
+
+# Metrics configuration
+metrics:
+  # Enable metrics endpoint
+  enabled: true
+  # Metrics port
+  port: 8080
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 8080
+    annotations: {}
+
+# Webhook configuration
+webhook:
+  # Enable admission webhooks
+  enabled: true
+  # Webhook port
+  port: 9443
+  # Certificate configuration
+  certManager:
+    enabled: false
+    issuerRef:
+      name: selfsigned-issuer
+      kind: Issuer
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 443
+    annotations: {}
+
+# Monitoring configuration
+monitoring:
+  # Create ServiceMonitor for Prometheus
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+  
+  # Create Grafana dashboard ConfigMap
+  grafanaDashboard:
+    enabled: false
+    namespace: ""
+    labels:
+      grafana_dashboard: "1"
+
+# Log configuration
+logging:
+  # Log level (debug, info, warn, error)
+  level: info
+  # Log format (json, text)
+  format: json
+
+# Extra environment variables
+extraEnv: []
+# - name: EXAMPLE_VAR
+#   value: "example"
+
+# Extra volumes
+extraVolumes: []
+# - name: extra-config
+#   configMap:
+#     name: extra-config
+
+# Extra volume mounts
+extraVolumeMounts: []
+# - name: extra-config
+#   mountPath: /etc/extra-config
+#   readOnly: true
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod labels
+podLabels: {}
+
+# Priority class name
+priorityClassName: ""
+
+# Network policy
+networkPolicy:
+  enabled: false
+  ingress:
+    - from:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: prometheus

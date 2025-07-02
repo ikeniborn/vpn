@@ -1,0 +1,23 @@
+[package]
+name = "vpn-docker"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+bollard = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+futures-util = "0.3"
+chrono = "0.4"
+once_cell = "1.19"
+
+[dev-dependencies]
+tokio-test = "0.4"
+proptest = "1.0"
+proptest-derive = "0.4"

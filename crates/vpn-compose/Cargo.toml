@@ -1,0 +1,50 @@
+[package]
+name = "vpn-compose"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Core dependencies
+tokio.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml = "0.9"
+tracing.workspace = true
+
+# Configuration management
+toml.workspace = true
+
+# Template engine
+tera = "1.19"
+handlebars = "4.4"
+
+# Process management
+subprocess = "0.2"
+
+# Path utilities
+pathdiff = "0.2"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID generation
+uuid.workspace = true
+
+# Async trait
+async-trait = "0.1"
+
+# Internal dependencies
+vpn-users = { path = "../vpn-users" }
+vpn-docker = { path = "../vpn-docker" }
+vpn-server = { path = "../vpn-server" }
+vpn-network = { path = "../vpn-network" }
+
+[dev-dependencies]
+tempfile = "3.8"
+mockall.workspace = true
+proptest.workspace = true

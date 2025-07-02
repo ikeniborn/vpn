@@ -1,0 +1,19 @@
+# .trivyignore - Trivy vulnerability scanner ignore file
+# Use this file to ignore false positives or accepted risks
+
+# Example: Ignore specific CVEs
+# CVE-2022-12345
+
+# Ignore vulnerabilities in test dependencies
+# These don't affect production builds
+**/test/**
+**/tests/**
+**/benches/**
+**/examples/**
+
+# Ignore low severity vulnerabilities in development tools
+# These are only used during development
+**/target/debug/**
+
+# Example: Ignore specific library vulnerabilities that are mitigated
+# CVE-2021-12345 # Mitigated by our firewall configuration

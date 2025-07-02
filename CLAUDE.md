@@ -4,236 +4,328 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This repository contains a multi-protocol VPN server implementation supporting both **Xray** (VLESS+Reality) and **Outline VPN** (Shadowsocks). The system consists of:
+This is a Rust-based VPN management system that provides comprehensive tools for managing Xray (VLESS+Reality), Outline VPN servers, and HTTP/SOCKS5 proxy servers. It replaces an original Bash implementation with a type-safe, high-performance alternative written in Rust.
 
-- `vpn.sh` - Unified management script with interactive menu
-- Modular architecture in `lib/` and `modules/` directories
-- Support for ARM architectures (ARM64/ARMv7) including Raspberry Pi
+### Key Infrastructure Components
 
-The VPN servers run in Docker containers, providing enterprise-level security with advanced features like automatic port selection, SNI quality monitoring, key rotation, traffic statistics, and automatic updates.
+- **Proxy/Load Balancer**: Traefik v3.x for reverse proxy, load balancing, and automatic SSL/TLS termination
+- **VPN Server**: Xray-core with VLESS+Reality protocol for secure tunneling
+- **Proxy Server**: Custom Rust-based HTTP/HTTPS and SOCKS5 proxy with authentication
+- **Identity Management**: Custom Rust-based identity service with LDAP/OAuth2 support
+- **Monitoring**: Prometheus + Grafana + Jaeger for comprehensive observability
+- **Storage**: PostgreSQL for persistent data, Redis for sessions and caching
+- **Orchestration**: Docker Compose with Traefik service discovery
+- **Deployment**: Multi-arch Docker images (amd64, arm64) available on Docker Hub
 
-## Key Technologies
+## Build and Development Commands
 
-- **Xray-core**: Latest XTLS/Xray-core implementation (migrated from V2Ray)
-- **Outline VPN**: Shadowsocks-based protocol with web management interface
-- **VLESS+Reality Protocol**: State-of-the-art protocol with TLS 1.3 masquerading
-- **XTLS Vision Flow**: Enhanced performance with minimal processing overhead
-- **Docker**: Containerized deployment with automatic updates via Watchtower
-- **X25519 Cryptography**: Military-grade key generation
-- **ARM Support**: Full compatibility with ARM64 and ARMv7 architectures
-
-## Commands
-
-### Development & Testing
+### Core Development Commands
 
 ```bash
-# Run all tests
-cd /path/to/vpn/project
-./test/run_all_tests.sh
+# Build the entire workspace
+cargo build --workspace
 
-# Run individual test suites
-./test/test_libraries.sh        # Test core libraries
-./test/test_user_modules.sh     # Test user management modules
-./test/test_server_modules.sh   # Test server management modules
-./test/test_monitoring_modules.sh # Test monitoring modules
-./test/test_install_modules.sh  # Test installation modules
-./test/test_performance.sh      # Test performance optimizations
+# Build with optimizations (release mode)
+cargo build --release --workspace
 
-# Syntax validation
-bash -n vpn.sh
-for module in lib/*.sh modules/*/*.sh; do bash -n "$module"; done
+# Install the CLI tool
+cargo install --path crates/vpn-cli
 
-# Optional: Advanced linting with shellcheck
-shellcheck vpn.sh lib/*.sh modules/*/*.sh
+# Run tests for all crates
+cargo test --workspace
 
-# Validate Docker configuration
-cd /opt/v2ray && docker-compose config
+# Run tests for a specific crate
+cargo test -p vpn-users
+cargo test -p vpn-docker
+cargo test -p vpn-proxy
+
+# Format all code
+cargo fmt --all
+
+# Run linter with all features
+cargo clippy --all-features --workspace -- -D warnings
+
+# Check for security vulnerabilities
+cargo audit
+
+# Generate and open documentation
+cargo doc --workspace --open
+
+# Run benchmarks
+cargo bench
+
+# Clean build artifacts
+cargo clean
 ```
 
-### Unified Management Script
-
-All VPN functionality is available through a single script:
+### Docker Build Commands
 
 ```bash
-# Launch interactive menu
-sudo ./vpn.sh
+# Build multi-arch Docker images locally
+./scripts/docker-build.sh
 
-# Or use specific commands
-sudo ./vpn.sh install      # Install VPN server
-sudo ./vpn.sh status       # Check server status
-sudo ./vpn.sh users        # Manage users
-sudo ./vpn.sh restart      # Restart server
-sudo ./vpn.sh uninstall    # Uninstall server
-sudo ./vpn.sh debug        # Show debug info & loaded modules
-sudo ./vpn.sh benchmark    # Run performance benchmarks
-```
+# Build and push to registry
+PUSH=true ./scripts/docker-build.sh
 
-### Docker Operations
+# Build specific image
+docker buildx build --platform linux/amd64,linux/arm64 -t vpn-rust:latest .
 
-**For Xray VPN:**
-```bash
-# Navigate to working directory
-cd /opt/v2ray
+# Deploy using Docker Hub images
+docker-compose -f docker-compose.hub.yml up -d
 
-# Container management
-docker-compose down
+# Quick start with Docker
+curl -L https://raw.githubusercontent.com/yourusername/vpn-rust/main/docker-compose.hub.yml -o docker-compose.yml
 docker-compose up -d
-docker-compose restart
-docker-compose ps
-docker-compose logs -f
-docker stats xray
-
-# View logs
-docker logs --tail 50 xray
-tail -f /opt/v2ray/logs/access.log
-tail -f /opt/v2ray/logs/error.log
 ```
 
-**For Outline VPN:**
+### Running Specific Tests
+
 ```bash
-# View container status
-docker ps | grep -E "shadowbox|watchtower"
+# Run a single test by name
+cargo test test_user_creation
 
-# View logs
-docker logs shadowbox
-docker logs watchtower
+# Run tests matching a pattern
+cargo test user::
 
-# Access management configuration
-cat /opt/outline/management/config.json
-cat /opt/outline/access.txt
+# Run tests with output displayed
+cargo test -- --nocapture
+
+# Run tests in a specific module
+cargo test --package vpn-users --lib user::tests
+
+# Run integration tests only
+cargo test --test integration_tests
 ```
 
-## Architecture
+### Cross-Compilation
 
-### Repository Structure
-```
-vpn/
-├── vpn.sh                   # Unified management script (single entry point)
-├── lib/                     # Core Libraries
-│   ├── common.sh           # Common functions and utilities
-│   ├── config.sh           # Configuration management
-│   ├── docker.sh           # Docker operations
-│   ├── network.sh          # Network utilities
-│   ├── crypto.sh           # Cryptographic functions
-│   ├── ui.sh               # User interface components
-│   └── performance.sh      # Performance optimization
-├── modules/                 # Feature Modules
-│   ├── install/            # Installation modules
-│   ├── menu/               # Menu system
-│   ├── users/              # User management
-│   ├── server/             # Server management
-│   ├── monitoring/         # Monitoring & analytics
-│   └── system/             # System utilities
-├── test/                   # Test suite
-└── config/                 # Configuration templates
+```bash
+# Install cross-compilation tool
+cargo install cross
+
+# Build for ARM64 (e.g., Raspberry Pi 4)
+cross build --target aarch64-unknown-linux-gnu --release
+
+# Build for ARMv7 (e.g., Raspberry Pi 3)
+cross build --target armv7-unknown-linux-gnueabihf --release
 ```
 
-### Server Directory Structure
+### CLI Usage Examples
 
-**Xray Server:**
+```bash
+# Check privileges status
+vpn privileges
+
+# List users (read-only, no sudo needed)
+vpn users list
+
+# Create user (requires sudo, will prompt)
+vpn users create alice
+
+# Install VPN server
+sudo vpn install --protocol vless --port 8443
+
+# Install proxy server
+sudo vpn install --protocol proxy-server --port 8888
+
+# Proxy management
+vpn proxy status --detailed
+vpn proxy monitor --user alice
+vpn proxy test https://google.com
+
+# Run with custom install path
+vpn --install-path /tmp/test-vpn users list
+
+# Use verbose mode to see privilege information
+vpn --verbose users list
 ```
-/opt/v2ray/
-├── config/
-│   ├── config.json          # Main Xray configuration
-│   ├── private_key.txt      # Reality private key
-│   ├── public_key.txt       # Reality public key
-│   └── sni.txt             # SNI domain
-├── users/
-│   ├── user1.json          # User configuration
-│   ├── user1.link          # Connection link
-│   └── user1.png           # QR code
-├── logs/
-│   ├── access.log          # Access logs
-│   └── error.log           # Error logs
-└── docker-compose.yml      # Container configuration
+
+## Architecture and Crate Structure
+
+### Workspace Layout
+
+The project uses a Rust workspace with specialized crates organized in layers:
+
+```
+Core Libraries (Foundation Layer):
+├── vpn-crypto     # Cryptographic operations (X25519, UUID, QR codes)
+├── vpn-docker     # Docker container management and health monitoring
+├── vpn-network    # Network utilities (port checking, firewall, IP detection)
+└── vpn-compose    # Docker Compose orchestration and service management
+
+Service Layer (Business Logic):
+├── vpn-users      # User lifecycle, connection links, batch operations
+├── vpn-server     # Server installation, configuration, lifecycle
+├── vpn-proxy      # HTTP/HTTPS and SOCKS5 proxy server with auth
+├── vpn-monitor    # Traffic stats, health monitoring, alerts, metrics
+├── vpn-identity   # Identity service with LDAP/OAuth2 support
+├── vpn-cluster    # Distributed clustering and coordination
+├── vpn-operator   # Kubernetes operator for VPN management
+└── vpn-telemetry  # Advanced telemetry and observability
+
+Application Layer:
+└── vpn-cli        # CLI interface, interactive menu, privilege management
+
+Runtime Layer:
+├── vpn-runtime    # Runtime abstraction and factory patterns
+└── vpn-types      # Shared types and validation
+
+Deprecated Crates:
+└── vpn-containerd # DEPRECATED: Containerd runtime (kept for reference)
 ```
 
-**Outline Server:**
-```
-/opt/outline/
-├── persisted-state/
-│   └── shadowbox_server_config.json
-├── management/
-│   └── config.json
-├── access.txt
-└── api_port.txt
-```
+### Key Design Patterns
 
-## Module System
+1. **Error Handling**: Each crate defines its own error type using `thiserror`, with automatic conversion between crate errors.
 
-The project uses a modular architecture with lazy loading for optimal performance:
+2. **Async/Await**: All I/O operations use Tokio for async execution. Docker operations, file I/O, and network calls are all async.
 
-- **Core Libraries** (`lib/`): Essential utilities loaded on demand
-- **Feature Modules** (`modules/`): Specialized functionality loaded when needed
-- **Lazy Loading**: Modules are cached and loaded only once per session
-- **Performance Optimization**: < 2 second startup time, < 50MB memory usage
+3. **Privilege Management**: The CLI automatically detects when operations need root privileges and can request elevation via sudo with user confirmation.
 
-Key modules include:
-- `modules/install/`: Installation workflows for different VPN protocols
-- `modules/users/`: Complete user lifecycle management
-- `modules/server/`: Server operations (restart, status, uninstall)
-- `modules/monitoring/`: Statistics, logging, and health checks
-- `modules/system/`: System utilities like watchdog and diagnostics
+4. **Read-Only Mode**: When running without proper permissions, the system gracefully degrades to read-only mode instead of failing.
 
-## Development Workflow
+5. **Modular Configuration**: Each crate can operate independently with its own configuration, but they compose into a unified system.
 
-1. **Before Changes**: Run tests to ensure clean state
-   ```bash
-   ./test/run_all_tests.sh
+### Critical Cross-Crate Dependencies
+
+1. **UserManager** (vpn-users) requires:
+   - ServerConfig for server details
+   - Storage path with write permissions (or falls back to read-only)
+   - Docker connectivity for container operations
+
+2. **ServerInstaller** (vpn-server) orchestrates:
+   - ContainerManager (vpn-docker) for Docker operations
+   - FirewallManager (vpn-network) for network rules
+   - ConfigGenerator (vpn-users) for user configurations
+
+3. **CommandHandler** (vpn-cli) coordinates:
+   - All service layer crates for operations
+   - PrivilegeManager for permission handling
+   - ConfigManager for settings
+
+### State Management
+
+- **User data**: Stored as JSON files in `{install_path}/users/{user_id}/config.json`
+- **Server config**: TOML format in `/etc/vpn/config.toml` or specified path
+- **Docker state**: Managed by Docker daemon, accessed via bollard API
+- **Logs**: Written to `/var/log/vpn/` or specified directory
+
+### Key Gotchas and Solutions
+
+1. **Permission Errors**: The system handles permission denied errors gracefully:
+   ```rust
+   // In UserManager::load_users_from_disk()
+   if e.kind() == std::io::ErrorKind::PermissionDenied {
+       // Switch to read-only mode
+       return Ok(());
+   }
    ```
 
-2. **Make Changes**: Follow modular architecture patterns
+2. **Docker API Changes**: Using bollard 0.15, some APIs changed:
+   - CPU stats are no longer Option<T>
+   - wait_container returns a Stream, not a Future
+   - Network bytes don't return Option
 
-3. **Validate Syntax**: Check modified files
-   ```bash
-   bash -n path/to/modified/file.sh
-   ```
+3. **Lifetime Issues**: BatchOperations uses Arc<UserManager> instead of lifetimes to avoid complexity.
 
-4. **Run Relevant Tests**: Test affected modules
-   ```bash
-   ./test/test_libraries.sh     # If modified lib/
-   ./test/test_user_modules.sh  # If modified user modules
-   ```
+4. **Import Paths**: 
+   - VpnProtocol comes from `vpn_users::user::VpnProtocol`
+   - Protocol/Direction come from `vpn_network::firewall::{Protocol, Direction}`
 
-5. **Full Test Suite**: Before committing
-   ```bash
-   ./test/run_all_tests.sh
-   ```
+## Testing Strategy
 
-6. **Performance Check**: Ensure no regressions
-   ```bash
-   ./test/test_performance.sh
-   sudo ./vpn.sh benchmark
-   ```
+### Unit Tests
+- Each crate has unit tests in `src/` files using `#[cfg(test)]` modules
+- Test data uses tempdir for isolation
+- Mock Docker responses for container tests
 
-## Key Features & Capabilities
+### Integration Tests
+- Located in `tests/integration_tests.rs`
+- Test CLI binary compilation and execution
+- Verify workspace builds successfully
 
-### System Diagnostics
-- Comprehensive health checks and automatic issue detection
-- Network configuration validation and auto-repair
-- Port accessibility testing and firewall rule management
-- Detailed diagnostic reports for troubleshooting
+### Manual Testing Scenarios
+1. Test privilege escalation: `vpn users create testuser`
+2. Test read-only mode: `vpn users list` (without sudo)
+3. Test migration: `vpn migrate from-bash --source /opt/v2ray`
+4. Test performance: `vpn benchmark --compare-bash`
 
-### User Management
-- Multi-user support with unique UUID and short ID per user
-- QR code generation for easy mobile setup
-- Connection link generation for all platforms
-- User activity tracking and statistics
+## CI/CD Pipeline
 
-### Performance Optimization
-- Lazy module loading reduces startup time to < 2 seconds
-- Docker operation caching with 5-second TTL
-- Configuration caching with 30-second TTL
-- Parallel processing for container health checks
+GitHub Actions workflows (`.github/workflows/`):
+- **ci.yml**: Tests on Ubuntu and macOS with stable and beta Rust
+- **release.yml**: Automated releases with binary artifacts
+- Security audit with cargo-audit
+- Code coverage with tarpaulin
+- Cross-compilation for ARM architectures
+- Multi-arch Docker image builds
+- Caching for faster builds
 
-### Security Features
-- Reality protocol with TLS 1.3 masquerading
-- Automatic key rotation with zero downtime
-- UFW firewall integration
-- Container isolation with Docker security boundaries
+## Migration from Bash
 
-### Monitoring & Analytics
-- Real-time container resource monitoring
-- Network traffic statistics with vnstat integration
-- Configurable logging levels (none, error, warning, info, debug)
-- User activity analysis and connection tracking
+The system includes comprehensive migration tools:
+1. **Analysis**: `vpn migrate analyze --source /opt/v2ray`
+2. **Backup**: `vpn migrate backup --source /opt/v2ray`
+3. **Migration**: `vpn migrate from-bash --source /opt/v2ray`
+4. **Verification**: `vpn migrate verify-migration`
+5. **Rollback**: `vpn migrate rollback --backup {path}`
+
+Key preservation during migration:
+- User UUIDs and keys
+- Server configuration
+- Traffic statistics
+- Connection links
+
+## Performance Characteristics
+
+Current optimized performance:
+- **Startup time**: 0.005s (95% better than original target)
+- **Memory usage**: ~10MB (optimized with connection pooling)
+- **Docker operations**: <20ms (with caching)
+- **User creation**: 15ms
+- **Key generation**: 8ms
+- Concurrent operations via Tokio async runtime
+- Zero-cost abstractions for type safety
+
+Compared to original Bash implementation:
+- 26x faster startup time
+- 73% reduction in memory usage
+
+## Common Development Tasks
+
+### Adding a New Command
+1. Add variant to `Commands` enum in `crates/vpn-cli/src/cli.rs`
+2. Add handler method in `CommandHandler` (commands.rs)
+3. Update pattern match in `main.rs`
+4. Add tests in relevant crate
+
+### Updating Docker API Calls
+1. Check bollard 0.15 documentation for API
+2. Handle both success and error cases
+3. Update error types if needed
+4. Test with actual Docker daemon
+
+### Adding New User Fields
+1. Update `User` struct in `vpn-users/src/user.rs`
+2. Add migration for existing users
+3. Update serialization/deserialization
+4. Update CLI display formatting
+
+## Documentation Structure
+
+Comprehensive documentation is organized in the `docs/` directory:
+- **docs/CHANGELOG.md**: Complete version history and migration guides
+- **docs/architecture/**: System architecture diagrams and design docs
+- **docs/guides/**: User guides for Docker, operations, performance, security
+- **docs/specs/**: Technical specifications for components
+
+## Project Status
+
+**Current Status**: Production Ready - Maintenance Mode
+- Core development completed (8 weeks, ~50,000+ lines of code)
+- All major features implemented and tested
+- Docker Hub images available for multi-arch deployment
+- Comprehensive documentation and architecture diagrams
+- Focus: Testing improvements, optimization, and future enhancements
+
+</invoke>

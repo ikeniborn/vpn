@@ -1,0 +1,23 @@
+[package]
+name = "vpn-monitor"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+vpn-docker = { path = "../vpn-docker" }
+vpn-users = { path = "../vpn-users" }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1.10"
+reqwest = { version = "0.11", features = ["json"] }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3.8"
