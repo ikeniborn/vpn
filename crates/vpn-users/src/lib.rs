@@ -13,3 +13,6 @@ pub use manager::UserManager;
 pub use links::ConnectionLinkGenerator;
 pub use batch::BatchOperations;
 pub use error::{UserError, Result};
+
+// Re-export VpnProtocol for external use
+pub use vpn_types::protocol::VpnProtocol;

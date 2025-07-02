@@ -1,8 +1,9 @@
 use vpn_server::{
-    ServerManager, ServerConfig, ServerStatus, InstallationManager, 
-    KeyRotationManager, TemplateManager, ValidationManager,
-    ProtocolConfig, VpnProtocol
+    ServerInstaller, ConfigValidator, ServerLifecycle,
+    KeyRotationManager, DockerComposeTemplate, ProxyInstaller
 };
+use vpn_types::protocol::VpnProtocol;
+use vpn_users::config::ServerConfig;
 use tempfile::tempdir;
 use std::path::PathBuf;
 use tokio;

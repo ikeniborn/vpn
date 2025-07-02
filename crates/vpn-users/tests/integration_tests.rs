@@ -1,8 +1,7 @@
 use vpn_users::{
     UserManager, User, UserConfig, UserStatus,
-    ConnectionLinkGenerator, BatchOperations
+    ConnectionLinkGenerator, BatchOperations, VpnProtocol
 };
-use vpn_users::user::VpnProtocol;
 use vpn_users::config::ServerConfig;
 use tempfile::tempdir;
 use uuid::Uuid;

@@ -1,0 +1,83 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github
+.gitlab-ci.yml
+
+# Documentation
+README.md
+CHANGELOG.md
+SECURITY.md
+OPERATIONS.md
+*.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rust
+target/
+**/target/
+Cargo.lock
+*.pdb
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Temporary files
+tmp/
+temp/
+.tmp
+
+# Test files
+**/tests/
+test-*
+*_test.rs
+
+# Development
+.env
+.env.local
+.env.development
+.env.test
+
+# Docker
+Dockerfile.*
+docker-compose*.yml
+.docker
+
+# Build artifacts
+dist/
+build/
+out/
+
+# Coverage
+coverage/
+*.profraw
+
+# Backups
+*.bak
+*.backup
+
+# Node modules (if any)
+node_modules/
+
+# Examples and docs
+examples/
+docs/
+doc/
+
+# Benchmarks
+benches/
+**/benches/

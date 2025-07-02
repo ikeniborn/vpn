@@ -4,16 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Rust-based VPN management system that provides comprehensive tools for managing Xray (VLESS+Reality) and Outline VPN servers. It replaces an original Bash implementation with a type-safe, high-performance alternative written in Rust.
+This is a Rust-based VPN management system that provides comprehensive tools for managing Xray (VLESS+Reality), Outline VPN servers, and HTTP/SOCKS5 proxy servers. It replaces an original Bash implementation with a type-safe, high-performance alternative written in Rust.
 
 ### Key Infrastructure Components
 
 - **Proxy/Load Balancer**: Traefik v3.x for reverse proxy, load balancing, and automatic SSL/TLS termination
 - **VPN Server**: Xray-core with VLESS+Reality protocol for secure tunneling
+- **Proxy Server**: Custom Rust-based HTTP/HTTPS and SOCKS5 proxy with authentication
 - **Identity Management**: Custom Rust-based identity service with LDAP/OAuth2 support
 - **Monitoring**: Prometheus + Grafana + Jaeger for comprehensive observability
 - **Storage**: PostgreSQL for persistent data, Redis for sessions and caching
 - **Orchestration**: Docker Compose with Traefik service discovery
+- **Deployment**: Multi-arch Docker images (amd64, arm64) available on Docker Hub
 
 ## Build and Development Commands
 
@@ -35,6 +37,7 @@ cargo test --workspace
 # Run tests for a specific crate
 cargo test -p vpn-users
 cargo test -p vpn-docker
+cargo test -p vpn-proxy
 
 # Format all code
 cargo fmt --all
@@ -53,6 +56,26 @@ cargo bench
 
 # Clean build artifacts
 cargo clean
+```
+
+### Docker Build Commands
+
+```bash
+# Build multi-arch Docker images locally
+./scripts/docker-build.sh
+
+# Build and push to registry
+PUSH=true ./scripts/docker-build.sh
+
+# Build specific image
+docker buildx build --platform linux/amd64,linux/arm64 -t vpn-rust:latest .
+
+# Deploy using Docker Hub images
+docker-compose -f docker-compose.hub.yml up -d
+
+# Quick start with Docker
+curl -L https://raw.githubusercontent.com/yourusername/vpn-rust/main/docker-compose.hub.yml -o docker-compose.yml
+docker-compose up -d
 ```
 
 ### Running Specific Tests
@@ -99,8 +122,16 @@ vpn users list
 # Create user (requires sudo, will prompt)
 vpn users create alice
 
-# Install server with sudo already
+# Install VPN server
 sudo vpn install --protocol vless --port 8443
+
+# Install proxy server
+sudo vpn install --protocol proxy-server --port 8888
+
+# Proxy management
+vpn proxy status --detailed
+vpn proxy monitor --user alice
+vpn proxy test https://google.com
 
 # Run with custom install path
 vpn --install-path /tmp/test-vpn users list
@@ -125,6 +156,7 @@ Core Libraries (Foundation Layer):
 Service Layer (Business Logic):
 ├── vpn-users      # User lifecycle, connection links, batch operations
 ├── vpn-server     # Server installation, configuration, lifecycle
+├── vpn-proxy      # HTTP/HTTPS and SOCKS5 proxy server with auth
 └── vpn-monitor    # Traffic stats, health monitoring, alerts, metrics
 
 Application Layer:

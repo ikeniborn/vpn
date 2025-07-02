@@ -7,6 +7,7 @@ use crate::{user::*, error::*};
 use proptest::prelude::*;
 use proptest::option;
 use chrono::Utc;
+use vpn_types::protocol::VpnProtocol;
 
 /// Strategy for generating valid user names
 pub fn user_name_strategy() -> impl Strategy<Value = String> {
