@@ -70,14 +70,43 @@ curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install
 #### 2. Production развертывание
 
 **Docker (рекомендуется):**
+
+**Вариант 1: Через Docker Registry (рекомендуется для команд)**
+```bash
+# На сборочной машине
+docker build -t myregistry.com/vpn:latest .
+docker push myregistry.com/vpn:latest
+
+# На production сервере
+docker pull myregistry.com/vpn:latest
+docker-compose up -d
+```
+
+**Вариант 2: Через файл (для изолированных сред)**
 ```bash
 # На сборочной машине
 ./scripts/docker-build.sh
-docker save vpn:latest | gzip > vpn.tar.gz
+docker save vpn:latest | gzip > vpn-$(date +%Y%m%d).tar.gz
+# Размер архива: ~25-30MB
+
+# Передача на production (выберите один способ):
+scp vpn-*.tar.gz user@server:/tmp/
+# или через USB/внешний носитель
+# или через S3/облачное хранилище
 
 # На production сервере
-docker load < vpn.tar.gz
+docker load < vpn-*.tar.gz
 docker-compose up -d
+```
+
+**Вариант 3: Multi-arch сборка через Docker Hub**
+```bash
+# Сборка и публикация multi-arch образа
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -t yourusername/vpn:latest --push .
+
+# На любом сервере (автоматически выберет нужную архитектуру)
+docker pull yourusername/vpn:latest
 ```
 
 **Бинарные файлы:**
@@ -187,9 +216,11 @@ crates/
 ## 📖 Документация
 
 - [Docker руководство](docs/guides/DOCKER.md)
+- [Распространение Docker образов](docs/guides/DOCKER_DISTRIBUTION.md)
 - [Руководство по безопасности](docs/guides/SECURITY.md)
 - [Операционное руководство](docs/guides/OPERATIONS.md)
 - [Оптимизация производительности](docs/guides/PERFORMANCE.md)
+- [Оптимизация сборки](BUILD_OPTIMIZATION.md)
 - [Архитектура системы](docs/architecture/)
 - [Технические спецификации](docs/specs/)
 - [История изменений](docs/CHANGELOG.md)
