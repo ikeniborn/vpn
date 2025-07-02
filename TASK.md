@@ -29,13 +29,11 @@
 - [ ] **End-to-end testing**
   - User lifecycle scenarios
   - Server installation/uninstallation flows
-  - Migration testing
   - Proxy functionality validation
 
 ### User Experience
 - [ ] **Configuration wizards**
   - Interactive setup wizard
-  - Migration wizard from other VPN solutions
   - Configuration validation wizard
   
 - [ ] **Better error messages**

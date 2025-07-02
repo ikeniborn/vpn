@@ -25,7 +25,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Interactive menu system** for guided operations
 - **User management** with batch operations support
 - **Real-time monitoring** with Prometheus and Grafana
-- **Automated migration** from Bash implementations
 - **Performance benchmarks** and optimization tools
 - **Security hardening** with privilege management
 - **Cross-platform support** (x86_64, ARM64, ARMv7)
@@ -73,12 +72,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Performance regression detection**
 - **Multi-arch Docker builds** with GitHub Actions
 
-### Migration & Compatibility
-- **Automatic migration** from Bash implementations
+### Compatibility
 - **Configuration validation** and backup/restore
 - **Import/export** support for multiple formats
 - **Backward compatibility** with existing setups
-- **Migration verification** tools
 
 ### Monitoring & Observability
 - **Prometheus metrics** collection
@@ -195,32 +192,15 @@ crates/
 ## Breaking Changes
 
 ### From Bash Implementation
-- **Configuration format**: Migrated from shell scripts to TOML
-- **Installation paths**: Changed from `/opt/v2ray` to `/opt/vpn`
+- **Configuration format**: Uses TOML instead of shell scripts
+- **Installation paths**: Uses `/opt/vpn` instead of `/opt/v2ray`
 - **Command structure**: New CLI with different command names
 - **Docker networks**: Uses custom networks instead of host networking
-- **Migration required**: Automatic migration tools provided
 
 ### API Changes
 - All APIs are new in v0.1.0 (initial release)
 - Future versions will follow semantic versioning
 - Breaking changes will be documented here
-
-## Migration Guide
-
-### From Bash v3.0+
-```bash
-# Automatic migration
-vpn migrate from-bash --source /opt/v2ray --validate
-```
-
-### From Bash v2.x
-```bash
-# Manual migration with validation
-vpn migrate validate --source /opt/v2ray
-vpn migrate backup --source /opt/v2ray
-vpn migrate from-bash --source /opt/v2ray --manual
-```
 
 ## Security Fixes
 

@@ -247,8 +247,7 @@ Deprecated Crates:
 ### Manual Testing Scenarios
 1. Test privilege escalation: `vpn users create testuser`
 2. Test read-only mode: `vpn users list` (without sudo)
-3. Test migration: `vpn migrate from-bash --source /opt/v2ray`
-4. Test performance: `vpn benchmark --compare-bash`
+3. Test performance: `vpn benchmark --compare-bash`
 
 ## CI/CD Pipeline
 
@@ -260,21 +259,6 @@ GitHub Actions workflows (`.github/workflows/`):
 - Cross-compilation for ARM architectures
 - Multi-arch Docker image builds
 - Caching for faster builds
-
-## Migration from Bash
-
-The system includes comprehensive migration tools:
-1. **Analysis**: `vpn migrate analyze --source /opt/v2ray`
-2. **Backup**: `vpn migrate backup --source /opt/v2ray`
-3. **Migration**: `vpn migrate from-bash --source /opt/v2ray`
-4. **Verification**: `vpn migrate verify-migration`
-5. **Rollback**: `vpn migrate rollback --backup {path}`
-
-Key preservation during migration:
-- User UUIDs and keys
-- Server configuration
-- Traffic statistics
-- Connection links
 
 ## Performance Characteristics
 
@@ -307,14 +291,13 @@ Compared to original Bash implementation:
 
 ### Adding New User Fields
 1. Update `User` struct in `vpn-users/src/user.rs`
-2. Add migration for existing users
-3. Update serialization/deserialization
-4. Update CLI display formatting
+2. Update serialization/deserialization
+3. Update CLI display formatting
 
 ## Documentation Structure
 
 Comprehensive documentation is organized in the `docs/` directory:
-- **docs/CHANGELOG.md**: Complete version history and migration guides
+- **docs/CHANGELOG.md**: Complete version history
 - **docs/architecture/**: System architecture diagrams and design docs
 - **docs/guides/**: User guides for Docker, operations, performance, security
 - **docs/specs/**: Technical specifications for components
