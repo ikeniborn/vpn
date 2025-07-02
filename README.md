@@ -359,7 +359,10 @@ vpn migrate restore --source ./backup.tar.gz
 - **[Security Guide](SECURITY.md)** - Security best practices and hardening
 - **[Operations Guide](OPERATIONS.md)** - Day-to-day operations and maintenance
 - **[API Documentation](https://docs.rs/vpn-cli)** - Complete API reference
-- **[Architecture Guide](docs/ARCHITECTURE.md)** - System design and components
+- **[Architecture Guide](docs/architecture/)** - System design and components
+  - [System Architecture](docs/architecture/system-architecture.md)
+  - [Crate Dependencies](docs/architecture/crate-dependencies.md)
+  - [Network Topology](docs/architecture/network-topology.md)
 
 ## 🛠️ Development
 
