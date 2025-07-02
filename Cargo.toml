@@ -15,6 +15,7 @@ members = [
     "crates/vpn-compose",
     "crates/vpn-cluster",
     "crates/vpn-operator",
+    "crates/vpn-proxy",
     # "crates/vpn-identity",  # TODO: Fix SQLX issues before enabling
 ]
 
@@ -48,6 +49,16 @@ hex = "0.4"
 
 # Network
 ipnetwork = "0.20"
+
+# Proxy dependencies
+warp = "0.3"
+http = "1.0"
+tower = "0.4"
+dashmap = "5.5"
+argon2 = "0.5"
+prometheus = { version = "0.13", features = ["process"] }
+opentelemetry = "0.21"
+opentelemetry-prometheus = "0.14"
 pnet = "0.34"
 
 # CLI

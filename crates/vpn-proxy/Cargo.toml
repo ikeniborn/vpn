@@ -1,0 +1,72 @@
+[package]
+name = "vpn-proxy"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+vpn-types = { path = "../vpn-types" }
+vpn-crypto = { path = "../vpn-crypto" }
+vpn-network = { path = "../vpn-network" }
+vpn-users = { path = "../vpn-users" }
+
+# Async runtime
+tokio = { workspace = true, features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec", "net"] }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+
+# Networking
+hyper = { workspace = true }
+bytes = "1.5"
+futures = "0.3"
+pin-project = "1.1"
+
+# SOCKS5
+async-socks5 = "0.5"
+
+# HTTP proxy
+http = { workspace = true }
+httparse = "1.8"
+url = "2.5"
+
+# TLS
+rustls = "0.21"
+tokio-rustls = "0.24"
+rustls-pemfile = "1.0"
+
+# Authentication
+base64 = { workspace = true }
+argon2 = "0.5"
+reqwest = { workspace = true }
+
+# Metrics
+prometheus = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry-prometheus = { workspace = true }
+warp = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Rate limiting
+governor = "0.6"
+nonzero_ext = "0.3"
+
+# Connection pooling
+deadpool = "0.9"
+dashmap = "5.5"
+
+[dev-dependencies]
+tempfile = "3.8"
+tokio-test = "0.4"
+proptest = "1.0"
