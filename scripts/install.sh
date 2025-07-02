@@ -1,12 +1,11 @@
 #!/bin/bash
 #
 # VPN CLI Installation Script
-# This script installs dependencies, builds the project, and installs the VPN CLI tool
+# Installs dependencies, clones repository, builds project, and installs VPN CLI tool
 #
 # Usage: ./install.sh [options]
 # Options:
 #   --no-menu          Don't launch the menu after installation
-#   --skip-rust        Skip Rust installation (assume it's already installed)
 #   --skip-docker      Skip Docker installation
 #   --verbose          Enable verbose output
 #   --help             Show this help message
@@ -22,9 +21,10 @@ NC='\033[0m' # No Color
 
 # Default values
 LAUNCH_MENU=true
-SKIP_RUST=false
 SKIP_DOCKER=false
 VERBOSE=false
+REPO_URL="https://github.com/your-org/vpn.git"
+REPO_DIR="$HOME/vpn-rust"
 
 # Function to print colored output
 print_status() {
@@ -72,17 +72,16 @@ check_requirements() {
     
     # Check available memory for building
     MEM_TOTAL=$(free -m | awk '/^Mem:/{print $2}')
-    if [ "$MEM_TOTAL" -lt 2048 ]; then
-        print_warning "Low memory detected: ${MEM_TOTAL}MB. At least 2GB recommended for building."
-        print_warning "Build may be slow or fail. Consider using pre-built binaries."
+    if [ "$MEM_TOTAL" -lt 1024 ]; then
+        print_warning "Low memory detected: ${MEM_TOTAL}MB. At least 1GB recommended for building."
     else
         print_success "Memory: ${MEM_TOTAL}MB"
     fi
     
     # Check available disk space
     DISK_AVAILABLE=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//')
-    if [ "$DISK_AVAILABLE" -lt 1 ]; then
-        print_error "Insufficient disk space. At least 1GB required, found ${DISK_AVAILABLE}GB"
+    if [ "$DISK_AVAILABLE" -lt 2 ]; then
+        print_error "Insufficient disk space. At least 2GB required, found ${DISK_AVAILABLE}GB"
         exit 1
     else
         print_success "Disk space: ${DISK_AVAILABLE}GB available"
@@ -105,7 +104,8 @@ install_os_dependencies() {
                 libssl-dev \
                 protobuf-compiler \
                 ca-certificates \
-                gnupg
+                gnupg \
+                software-properties-common
             ;;
         fedora|rhel|centos)
             dnf install -y \
@@ -144,11 +144,6 @@ install_os_dependencies() {
 
 # Function to install Rust
 install_rust() {
-    if [ "$SKIP_RUST" = true ]; then
-        print_warning "Skipping Rust installation"
-        return
-    fi
-    
     print_status "Installing Rust toolchain..."
     
     # Check if Rust is already installed
@@ -176,56 +171,66 @@ install_rust() {
     print_success "Rust toolchain installed"
 }
 
-# Function to install Docker (optional)
+# Function to install Docker
 install_docker() {
     if [ "$SKIP_DOCKER" = true ]; then
         print_warning "Skipping Docker installation"
         return
     fi
     
-    print_status "Checking Docker..."
+    print_status "Installing Docker..."
     
     # Check if Docker is already installed
     if command -v docker &> /dev/null; then
         print_success "Docker is already installed"
+        
+        # Start Docker if not running
+        if ! docker info &> /dev/null; then
+            print_status "Starting Docker service..."
+            sudo systemctl start docker
+            sudo systemctl enable docker
+        fi
         return
     fi
     
-    print_warning "Docker is not installed. Some features may not be available."
-    read -p "Would you like to install Docker? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        print_status "Installing Docker..."
-        curl -fsSL https://get.docker.com | sh
-        
-        # Add current user to docker group
-        if [ "$EUID" -ne 0 ]; then
-            sudo usermod -aG docker $USER
-            print_warning "You've been added to the docker group. Please log out and back in for this to take effect."
-        fi
-        
-        print_success "Docker installed"
+    # Install Docker
+    print_status "Downloading and installing Docker..."
+    curl -fsSL https://get.docker.com | sh
+    
+    # Start and enable Docker
+    sudo systemctl start docker
+    sudo systemctl enable docker
+    
+    # Add current user to docker group
+    if [ "$EUID" -ne 0 ]; then
+        sudo usermod -aG docker $USER
+        print_warning "You've been added to the docker group. Please log out and back in for this to take effect."
     fi
+    
+    # Install Docker Compose
+    print_status "Installing Docker Compose..."
+    COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep -o '"tag_name": "[^"]*' | cut -d'"' -f4)
+    sudo curl -L "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    sudo chmod +x /usr/local/bin/docker-compose
+    
+    print_success "Docker and Docker Compose installed"
 }
 
-# Function to clone or update repository
-clone_or_update_repo() {
-    print_status "Getting VPN source code..."
-    
-    REPO_URL="https://github.com/your-org/vpn.git"
-    REPO_DIR="$HOME/vpn-rust"
+# Function to clone repository
+clone_repository() {
+    print_status "Cloning VPN repository..."
     
     if [ -d "$REPO_DIR" ]; then
         print_status "Repository exists, updating..."
         cd "$REPO_DIR"
-        git pull origin main
+        git pull origin main || git pull origin master
     else
         print_status "Cloning repository..."
         git clone "$REPO_URL" "$REPO_DIR"
         cd "$REPO_DIR"
     fi
     
-    print_success "Source code ready"
+    print_success "Repository ready at $REPO_DIR"
 }
 
 # Function to build the project
@@ -233,7 +238,7 @@ build_project() {
     print_status "Building VPN project (this may take a while)..."
     
     # Ensure we're in the repo directory
-    cd "$HOME/vpn-rust"
+    cd "$REPO_DIR"
     
     # Clean previous builds
     if [ "$VERBOSE" = true ]; then
@@ -244,12 +249,13 @@ build_project() {
     if [ "$VERBOSE" = true ]; then
         cargo build --release --workspace
     else
+        print_status "Building project... (this may take 5-10 minutes)"
         cargo build --release --workspace 2>&1 | while read -r line; do
             if [[ "$line" =~ "Compiling" ]]; then
                 echo -ne "\r${BLUE}[*]${NC} Building... $(echo "$line" | awk '{print $2}')"
             fi
         done
-        echo -e "\r${BLUE}[*]${NC} Building... Done!                    "
+        echo -e "\r${BLUE}[*]${NC} Building... Completed!                    "
     fi
     
     print_success "Project built successfully"
@@ -259,7 +265,7 @@ build_project() {
 install_cli() {
     print_status "Installing VPN CLI..."
     
-    cd "$HOME/vpn-rust"
+    cd "$REPO_DIR"
     
     # Install using cargo
     if [ "$VERBOSE" = true ]; then
@@ -270,7 +276,7 @@ install_cli() {
     
     # Verify installation
     if command -v vpn &> /dev/null; then
-        VPN_VERSION=$(vpn --version | cut -d' ' -f2)
+        VPN_VERSION=$(vpn --version 2>/dev/null | cut -d' ' -f2 || echo "unknown")
         print_success "VPN CLI installed successfully (version $VPN_VERSION)"
     else
         print_error "VPN CLI installation failed"
@@ -367,23 +373,23 @@ setup_completion() {
     
     case "$SHELL_NAME" in
         bash)
-            if [ -d "$HOME/.local/share/bash-completion/completions" ]; then
+            if [ -d "$HOME/.local/share" ]; then
                 mkdir -p "$HOME/.local/share/bash-completion/completions"
-                vpn completions bash > "$HOME/.local/share/bash-completion/completions/vpn"
+                vpn completions bash > "$HOME/.local/share/bash-completion/completions/vpn" 2>/dev/null || true
                 print_success "Bash completion installed"
             fi
             ;;
         zsh)
-            if [ -d "$HOME/.zsh/completions" ]; then
+            if [ -d "$HOME/.zsh" ]; then
                 mkdir -p "$HOME/.zsh/completions"
-                vpn completions zsh > "$HOME/.zsh/completions/_vpn"
+                vpn completions zsh > "$HOME/.zsh/completions/_vpn" 2>/dev/null || true
                 print_success "Zsh completion installed"
             fi
             ;;
         fish)
-            if [ -d "$HOME/.config/fish/completions" ]; then
+            if [ -d "$HOME/.config/fish" ]; then
                 mkdir -p "$HOME/.config/fish/completions"
-                vpn completions fish > "$HOME/.config/fish/completions/vpn.fish"
+                vpn completions fish > "$HOME/.config/fish/completions/vpn.fish" 2>/dev/null || true
                 print_success "Fish completion installed"
             fi
             ;;
@@ -393,29 +399,16 @@ setup_completion() {
     esac
 }
 
-# Function to run post-installation checks
-run_checks() {
-    print_status "Running post-installation checks..."
+# Function to run doctor checks
+run_doctor() {
+    print_status "Running VPN system diagnostics..."
     
-    # Check VPN CLI
-    echo -n "Checking VPN CLI... "
-    if vpn --version &> /dev/null; then
-        echo -e "${GREEN}OK${NC}"
-    else
-        echo -e "${RED}FAILED${NC}"
-    fi
-    
-    # Check configuration
-    echo -n "Checking configuration... "
-    if [ -f "$HOME/.config/vpn-cli/config.toml" ]; then
-        echo -e "${GREEN}OK${NC}"
-    else
-        echo -e "${RED}FAILED${NC}"
-    fi
-    
-    # Run doctor command
-    print_status "Running system diagnostics..."
-    vpn doctor || true
+    echo
+    vpn doctor || {
+        print_warning "Some diagnostic checks failed. This is normal for a fresh installation."
+        print_warning "You can install VPN server components using the interactive menu."
+    }
+    echo
 }
 
 # Function to show completion message
@@ -427,20 +420,21 @@ show_completion_message() {
     echo
     echo "The VPN CLI tool has been successfully installed."
     echo
-    echo "Available commands:"
-    echo "  vpn --help           Show all available commands"
-    echo "  vpn menu             Launch interactive menu"
-    echo "  vpn doctor           Run system diagnostics"
-    echo "  vpn install          Install VPN server"
+    echo "Next steps:"
+    echo "  1. Use 'vpn menu' to launch the interactive menu"
+    echo "  2. Install VPN server with 'sudo vpn install'"
+    echo "  3. Create users with 'sudo vpn users create <username>'"
     echo
-    echo "Configuration file: $HOME/.config/vpn-cli/config.toml"
+    echo "Configuration: $HOME/.config/vpn-cli/config.toml"
+    echo "Binary location: $HOME/.cargo/bin/vpn"
+    echo "Source code: $REPO_DIR"
     echo
     
     if [ "$LAUNCH_MENU" = true ]; then
-        echo "Launching interactive menu..."
+        echo "Launching interactive menu in 3 seconds..."
         echo "========================================"
         echo
-        sleep 2
+        sleep 3
     fi
 }
 
@@ -452,20 +446,19 @@ show_help() {
     echo
     echo "Options:"
     echo "  --no-menu          Don't launch the menu after installation"
-    echo "  --skip-rust        Skip Rust installation (assume it's already installed)"
     echo "  --skip-docker      Skip Docker installation"
     echo "  --verbose          Enable verbose output"
     echo "  --help             Show this help message"
     echo
-    echo "Examples:"
-    echo "  # Standard installation"
-    echo "  $0"
-    echo
-    echo "  # Installation without launching menu"
-    echo "  $0 --no-menu"
-    echo
-    echo "  # Installation with existing Rust"
-    echo "  $0 --skip-rust"
+    echo "This script will:"
+    echo "  1. Install system dependencies"
+    echo "  2. Install Rust toolchain"
+    echo "  3. Install Docker (optional)"
+    echo "  4. Clone VPN repository"
+    echo "  5. Build the project"
+    echo "  6. Install VPN CLI"
+    echo "  7. Run system diagnostics"
+    echo "  8. Launch interactive menu (optional)"
 }
 
 # Parse command line arguments
@@ -473,10 +466,6 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --no-menu)
             LAUNCH_MENU=false
-            shift
-            ;;
-        --skip-rust)
-            SKIP_RUST=true
             shift
             ;;
         --skip-docker)
@@ -507,9 +496,9 @@ main() {
     echo
     
     # Check if running as root
-    if [ "$EUID" -eq 0 ] && [ "$SKIP_RUST" = false ]; then
-        print_error "This script should not be run as root when installing Rust"
-        print_warning "Run as a regular user, or use --skip-rust if Rust is already installed"
+    if [ "$EUID" -eq 0 ]; then
+        print_error "This script should not be run as root"
+        print_warning "Run as a regular user. The script will prompt for sudo when needed."
         exit 1
     fi
     
@@ -518,15 +507,12 @@ main() {
     check_requirements
     
     print_status "Detected OS: $OS $OS_VERSION"
+    print_status "Architecture: $(uname -m)"
     echo
     
     # Installation steps
-    if [ "$EUID" -eq 0 ]; then
-        install_os_dependencies
-    else
-        print_status "Installing OS dependencies (requires sudo)..."
-        sudo -E bash -c "$(declare -f install_os_dependencies detect_os print_status print_success print_error); OS=$OS; OS_VERSION=$OS_VERSION; install_os_dependencies"
-    fi
+    print_status "Installing system dependencies (requires sudo)..."
+    sudo -E bash -c "$(declare -f install_os_dependencies detect_os print_status print_success print_error); OS=$OS; OS_VERSION=$OS_VERSION; install_os_dependencies"
     
     # Install Rust (as regular user)
     install_rust
@@ -536,11 +522,11 @@ main() {
         source "$HOME/.cargo/env"
     fi
     
-    # Install Docker (optional)
+    # Install Docker
     install_docker
     
-    # Clone or update repository
-    clone_or_update_repo
+    # Clone repository
+    clone_repository
     
     # Build and install
     build_project
@@ -549,7 +535,9 @@ main() {
     # Post-installation setup
     create_default_config
     setup_completion
-    run_checks
+    
+    # Run diagnostics
+    run_doctor
     
     # Show completion message
     show_completion_message

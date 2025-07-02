@@ -56,56 +56,76 @@
 Install the VPN CLI tool with a single command **(run as regular user, not root)**:
 
 ```bash
-# Install VPN CLI and launch interactive menu (as regular user)
-curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-install.sh | bash
+# Install VPN CLI and launch interactive menu
+curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/install.sh | bash
 
-# Install without launching menu (as regular user)
-curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-install.sh | bash -s -- --no-menu
+# Install without launching menu
+curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/install.sh | bash -s -- --no-menu
 ```
 
 **⚠️ Important:** Do not run with `sudo` - the script will prompt for sudo only when needed for system packages.
 
-### 🔧 Installation Script
+### 🔧 Installation & Update Scripts
 
-For more control over the installation process:
-
+**Fresh Installation:**
 ```bash
-# Download the installation script (as regular user)
+# Download and run installation script
 wget https://raw.githubusercontent.com/your-org/vpn/main/scripts/install.sh
 chmod +x install.sh
 
-# Standard installation - builds from source (as regular user)
+# Standard installation - complete setup
 ./install.sh
 
-# Installation without launching menu
-./install.sh --no-menu
+# Installation options
+./install.sh --no-menu       # Skip launching menu
+./install.sh --skip-docker   # Skip Docker installation
+./install.sh --verbose       # Show detailed output
+./install.sh --help          # Show all options
+```
 
-# Skip Docker installation
-./install.sh --skip-docker
+**Update Existing Installation:**
+```bash
+# Download and run update script
+wget https://raw.githubusercontent.com/your-org/vpn/main/scripts/update.sh
+chmod +x update.sh
 
-# Use existing Rust installation
-./install.sh --skip-rust
+# Standard update - pull latest code and rebuild
+./update.sh
 
-# View all options
-./install.sh --help
+# Update options
+./update.sh --no-menu        # Skip launching menu
+./update.sh --clean          # Clean build (cargo clean)
+./update.sh --verbose        # Show detailed output
+./update.sh --help           # Show all options
 ```
 
 **Permission Requirements:**
-- 🔓 **Regular user** for Rust installation and building
-- 🔒 **Sudo access** only for system package installation
+- 🔓 **Regular user** for all operations (Rust, building, CLI)
+- 🔒 **Sudo access** only for system packages and Docker installation
 - 📂 CLI installs to `~/.cargo/bin/` (user directory)
 
-**Installation Script Features:**
+**Script Features:**
+
+**install.sh** (Complete Setup):
 - 🔍 Automatic OS detection (Ubuntu, Debian, Fedora, RHEL, CentOS, Arch)
-- 📦 Installs all required dependencies (build tools, SSL, protobuf)
+- 📦 Installs system dependencies (build tools, SSL, protobuf)
 - 🦀 Installs Rust toolchain (if not present)
-- 🐳 Optional Docker installation
+- 🐳 Installs Docker + Docker Compose (optional)
+- 📥 Clones VPN repository from GitHub
 - 🔨 Builds the entire project from source
-- 📦 Installs the VPN CLI tool via cargo
+- 📦 Installs VPN CLI tool via cargo
 - ⚙️ Creates default configuration
 - 🎯 Sets up shell completions
-- ✅ Runs post-installation checks
-- 🎮 Optionally launches interactive menu
+- 🩺 Runs system diagnostics (`vpn doctor`)
+- 🎮 Launches interactive menu
+
+**update.sh** (Update Existing):
+- 📥 Updates repository with latest code
+- 🦀 Updates Rust toolchain if needed
+- 🔨 Rebuilds project with latest changes
+- 📦 Reinstalls VPN CLI with new version
+- 🩺 Runs system diagnostics
+- 🎮 Launches interactive menu
 
 ### 🐳 Using Pre-built Docker Images
 
