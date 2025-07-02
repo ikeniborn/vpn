@@ -83,6 +83,69 @@ docker exec vpn-server vpn users link alice --qr
 
 ### 🛠️ Build from Source
 
+#### Prerequisites
+
+Before building from source, ensure you have the following installed:
+
+**1. Rust Toolchain (Required)**
+```bash
+# Install Rust using rustup (recommended)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Follow the on-screen instructions, then reload your shell
+source $HOME/.cargo/env
+
+# Verify installation
+rustc --version
+cargo --version
+
+# Update to the latest stable version
+rustup update stable
+```
+
+**2. System Dependencies**
+```bash
+# Ubuntu/Debian
+sudo apt update
+sudo apt install -y \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    protobuf-compiler \
+    git
+
+# Fedora/RHEL/CentOS
+sudo dnf install -y \
+    gcc \
+    make \
+    pkgconfig \
+    openssl-devel \
+    protobuf-compiler \
+    git
+
+# macOS (using Homebrew)
+brew install \
+    protobuf \
+    openssl
+
+# Arch Linux
+sudo pacman -S \
+    base-devel \
+    pkg-config \
+    openssl \
+    protobuf \
+    git
+```
+
+**3. Docker (Optional, for container operations)**
+```bash
+# Install Docker if you plan to use container features
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+```
+
+#### Building the Project
+
 ```bash
 # Clone the repository
 git clone https://github.com/your-org/vpn.git
@@ -99,6 +162,39 @@ vpn --version
 
 # Run system compatibility check
 vpn doctor
+```
+
+#### Additional Build Options
+
+**Cross-Compilation (Optional)**
+```bash
+# Install cross-compilation tool
+cargo install cross
+
+# Build for ARM64 (e.g., Raspberry Pi 4)
+cross build --target aarch64-unknown-linux-gnu --release
+
+# Build for ARMv7 (e.g., Raspberry Pi 3)
+cross build --target armv7-unknown-linux-gnueabihf --release
+```
+
+**Minimum Requirements**
+- Rust 1.70.0 or later (for async/await and other features)
+- 2GB RAM for building (4GB recommended)
+- 1GB free disk space
+
+**Troubleshooting Build Issues**
+```bash
+# If you encounter linking errors on Linux
+export PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/local/lib/pkgconfig"
+
+# For macOS with OpenSSL issues
+export OPENSSL_DIR=$(brew --prefix openssl)
+export PKG_CONFIG_PATH="$OPENSSL_DIR/lib/pkgconfig"
+
+# Clean build if you have issues
+cargo clean
+cargo build --release --workspace
 ```
 
 ## 📈 Performance Metrics
