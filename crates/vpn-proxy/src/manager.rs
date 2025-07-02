@@ -29,7 +29,7 @@ impl ProxyManager {
     pub fn new(config: ProxyConfig, metrics: ProxyMetrics) -> Result<Self> {
         let auth_manager = Arc::new(AuthManager::new(&config.auth)?);
         let rate_limiter = Arc::new(RateLimiter::new(&config.rate_limit));
-        let connection_pool = Arc::new(ConnectionPool::new(&config.pool));
+        let connection_pool = Arc::new(ConnectionPool::new(&config.pool, metrics.clone()));
         
         Ok(Self {
             config: Arc::new(config),
@@ -44,7 +44,7 @@ impl ProxyManager {
     /// Authenticate a connection
     pub async fn authenticate(
         &self,
-        credentials: Option<(&str, &str)>,
+        credentials: Option<(String, String)>,
         peer_addr: SocketAddr,
     ) -> Result<String> {
         // Check IP whitelist first
@@ -60,7 +60,7 @@ impl ProxyManager {
         
         // Authenticate with credentials
         if let Some((username, password)) = credentials {
-            let user_id = self.auth_manager.authenticate(username, password).await?;
+            let user_id = self.auth_manager.authenticate(&username, &password).await?;
             self.metrics.record_auth_success();
             Ok(user_id)
         } else if self.config.auth.allow_anonymous {

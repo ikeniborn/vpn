@@ -72,7 +72,7 @@ impl HttpRequest {
     }
     
     /// Get Proxy-Authorization header
-    pub fn proxy_auth(&self) -> Option<(&str, &str)> {
+    pub fn proxy_auth(&self) -> Option<(String, String)> {
         self.headers
             .iter()
             .find(|(name, _)| name.to_lowercase() == "proxy-authorization")
@@ -84,7 +84,7 @@ impl HttpRequest {
                         if let Ok(creds) = String::from_utf8(decoded) {
                             let parts: Vec<&str> = creds.splitn(2, ':').collect();
                             if parts.len() == 2 {
-                                return Some((parts[0], parts[1]));
+                                return Some((parts[0].to_string(), parts[1].to_string()));
                             }
                         }
                     }

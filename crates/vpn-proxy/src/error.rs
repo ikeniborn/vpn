@@ -57,6 +57,9 @@ pub enum ProxyError {
     #[error("Network error: {0}")]
     Network(#[from] vpn_network::error::NetworkError),
     
+    #[error("Metrics error: {0}")]
+    Metrics(String),
+    
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
@@ -92,5 +95,11 @@ impl ProxyError {
     
     pub fn internal(msg: impl Into<String>) -> Self {
         Self::Internal(msg.into())
+    }
+}
+
+impl From<prometheus::Error> for ProxyError {
+    fn from(err: prometheus::Error) -> Self {
+        Self::Metrics(err.to_string())
     }
 }

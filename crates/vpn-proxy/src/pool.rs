@@ -3,6 +3,7 @@
 use crate::{
     config::PoolConfig,
     error::{ProxyError, Result},
+    metrics::ProxyMetrics,
 };
 use dashmap::DashMap;
 use std::net::SocketAddr;
@@ -10,7 +11,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::net::TcpStream;
 use tokio::sync::{Mutex, Semaphore};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// A pooled connection with metadata
 struct PooledConnection {
@@ -60,16 +61,18 @@ pub struct ConnectionPool {
     pools: Arc<DashMap<SocketAddr, Vec<Arc<Mutex<PooledConnection>>>>>,
     total_connections: Arc<Semaphore>,
     host_semaphores: Arc<DashMap<SocketAddr, Arc<Semaphore>>>,
+    metrics: ProxyMetrics,
 }
 
 impl ConnectionPool {
     /// Create a new connection pool
-    pub fn new(config: &PoolConfig) -> Self {
+    pub fn new(config: &PoolConfig, metrics: ProxyMetrics) -> Self {
         Self {
             config: config.clone(),
             pools: Arc::new(DashMap::new()),
             total_connections: Arc::new(Semaphore::new(config.max_total_connections as usize)),
             host_semaphores: Arc::new(DashMap::new()),
+            metrics,
         }
     }
     
@@ -87,48 +90,10 @@ impl ConnectionPool {
     }
     
     /// Get a pooled connection if available
-    async fn get_pooled_connection(&self, addr: &SocketAddr) -> Result<Option<TcpStream>> {
-        if let Some(mut pool) = self.pools.get_mut(addr) {
-            // Clean up expired connections
-            pool.retain(|conn| {
-                if let Ok(conn_guard) = conn.try_lock() {
-                    !conn_guard.is_expired(&self.config)
-                } else {
-                    true // Keep if we can't check
-                }
-            });
-            
-            // Try to find an available connection
-            while let Some(conn) = pool.pop() {
-                if let Ok(mut conn_guard) = conn.lock().await {
-                    if !conn_guard.is_expired(&self.config) {
-                        let stream = conn_guard.use_connection();
-                        
-                        // Check if connection is still alive
-                        match stream.peer_addr() {
-                            Ok(_) => {
-                                // Clone the stream for return
-                                let cloned = stream.try_clone()
-                                    .map_err(|e| ProxyError::internal(
-                                        format!("Failed to clone connection: {}", e)
-                                    ))?;
-                                
-                                // Put the original back in the pool
-                                drop(conn_guard);
-                                pool.push(conn);
-                                
-                                return Ok(Some(cloned));
-                            }
-                            Err(_) => {
-                                // Connection is dead, continue to next
-                                continue;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
+    async fn get_pooled_connection(&self, _addr: &SocketAddr) -> Result<Option<TcpStream>> {
+        // TODO: Connection pooling is disabled for now due to TcpStream ownership issues
+        // Always return None to create new connections
+        self.metrics.record_pool_miss();
         Ok(None)
     }
     

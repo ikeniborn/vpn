@@ -3,7 +3,7 @@
 use crate::error::Result;
 use prometheus::{
     register_counter, register_counter_vec, register_gauge_vec, register_histogram_vec,
-    Counter, CounterVec, Gauge, GaugeVec, Histogram, HistogramVec,
+    Counter, CounterVec, GaugeVec, HistogramVec,
     Registry, TextEncoder, Encoder,
 };
 use std::sync::Arc;
@@ -228,9 +228,9 @@ pub async fn start_metrics_server(
     use warp::Filter;
     
     let metrics = Arc::new(metrics);
-    let path = path.to_string();
+    let path_segment = path.trim_start_matches('/').to_string();
     
-    let metrics_route = warp::path(path.trim_start_matches('/'))
+    let metrics_route = warp::path(path_segment)
         .and(warp::get())
         .and(warp::any().map(move || metrics.clone()))
         .and_then(serve_metrics);
@@ -249,7 +249,7 @@ pub async fn start_metrics_server(
 
 async fn serve_metrics(
     metrics: Arc<ProxyMetrics>,
-) -> Result<impl warp::Reply, warp::Rejection> {
+) -> std::result::Result<impl warp::Reply, warp::Rejection> {
     match metrics.export() {
         Ok(output) => Ok(warp::reply::with_header(
             output,

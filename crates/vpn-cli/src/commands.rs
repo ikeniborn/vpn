@@ -47,6 +47,35 @@ impl CommandHandler {
         subnet: Option<String>,
         interactive_subnet: bool,
     ) -> Result<()> {
+        // Check if this is a proxy server installation
+        if matches!(protocol, Protocol::HttpProxy | Protocol::Socks5Proxy | Protocol::ProxyServer) {
+            // Install proxy server using ProxyInstaller
+            use vpn_server::ProxyInstaller;
+            
+            let proxy_type = match protocol {
+                Protocol::HttpProxy => "http",
+                Protocol::Socks5Proxy => "socks5",
+                Protocol::ProxyServer => "all",
+                _ => unreachable!(),
+            };
+            
+            let pb = ProgressBar::new_spinner();
+            pb.set_style(ProgressStyle::default_spinner()
+                .template("{spinner:.green} {msg}")
+                .unwrap());
+            pb.set_message("Installing proxy server...");
+            
+            let installer = ProxyInstaller::new(self.install_path.clone(), port.unwrap_or(8080))?;
+            installer.install(proxy_type).await
+                .map_err(|e| CliError::ServerError(e))?;
+            
+            pb.finish_and_clear();
+            display::success(&format!("{} proxy server installed successfully!", proxy_type));
+            
+            return Ok(());
+        }
+        
+        // Regular VPN server installation
         let installer = ServerInstaller::new()?;
         
         let options = InstallationOptions {

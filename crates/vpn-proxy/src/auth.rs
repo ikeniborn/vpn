@@ -29,8 +29,18 @@ impl AuthManager {
     pub fn new(config: &AuthConfig) -> Result<Self> {
         let user_manager = match &config.backend {
             AuthBackend::VpnUsers => {
-                // Initialize user manager
-                let user_mgr = UserManager::new(std::path::Path::new("/var/lib/vpn/users"))
+                // Initialize user manager with a default server config
+                let server_config = vpn_users::config::ServerConfig {
+                    host: "proxy.local".to_string(),
+                    port: 8080,
+                    sni: None,
+                    public_key: None,
+                    private_key: None,
+                    short_id: None,
+                    reality_dest: None,
+                    reality_server_names: vec![],
+                };
+                let user_mgr = UserManager::new(std::path::Path::new("/var/lib/vpn/users"), server_config)
                     .map_err(|e| ProxyError::config(format!("Failed to init user manager: {}", e)))?;
                 Some(Arc::new(user_mgr))
             }
@@ -90,7 +100,7 @@ impl AuthManager {
             .ok_or_else(|| ProxyError::config("User manager not initialized"))?;
         
         // Find user by name
-        let users = user_manager.list_users().await
+        let users = user_manager.list_users(None).await
             .map_err(|e| ProxyError::auth_failed(format!("Failed to list users: {}", e)))?;
         
         let user = users.iter()

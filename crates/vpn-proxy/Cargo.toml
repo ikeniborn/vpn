@@ -5,6 +5,10 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[[bin]]
+name = "vpn-proxy-auth"
+path = "src/bin/vpn-proxy-auth.rs"
+
 [dependencies]
 vpn-types = { path = "../vpn-types" }
 vpn-crypto = { path = "../vpn-crypto" }
@@ -65,6 +69,10 @@ nonzero_ext = "0.3"
 # Connection pooling
 deadpool = "0.9"
 dashmap = "5.5"
+
+# Web framework for auth service
+axum = "0.7"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
 
 [dev-dependencies]
 tempfile = "3.8"

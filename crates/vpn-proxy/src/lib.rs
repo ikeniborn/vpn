@@ -18,7 +18,6 @@ pub use error::{ProxyError, Result};
 pub use manager::ProxyManager;
 pub use metrics::ProxyMetrics;
 
-use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tracing::{info, error};
 
@@ -108,7 +107,8 @@ impl ProxyServer {
         };
         
         // Wait for both servers
-        tokio::try_join!(http_handle, socks_handle)?;
+        tokio::try_join!(http_handle, socks_handle)
+            .map_err(|e| ProxyError::internal(format!("Task join error: {}", e)))?;
         Ok(())
     }
     

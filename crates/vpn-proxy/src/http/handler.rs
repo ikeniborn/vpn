@@ -26,7 +26,7 @@ impl HttpProxy {
     /// Handle an incoming connection
     pub async fn handle_connection(
         &self,
-        mut client: TcpStream,
+        client: TcpStream,
         peer_addr: SocketAddr,
     ) -> Result<()> {
         let start_time = Instant::now();
@@ -34,7 +34,7 @@ impl HttpProxy {
         
         self.manager.metrics().record_connection(protocol, true);
         
-        let result = self.handle_connection_inner(&mut client, peer_addr).await;
+        let result = self.handle_connection_inner(client, peer_addr).await;
         
         // Record metrics
         let duration = start_time.elapsed().as_secs_f64();
@@ -46,12 +46,12 @@ impl HttpProxy {
     
     async fn handle_connection_inner(
         &self,
-        client: &mut TcpStream,
+        mut client: TcpStream,
         peer_addr: SocketAddr,
     ) -> Result<()> {
         loop {
             // Read request
-            let request = match super::parser::parse_request(client).await {
+            let request = match super::parser::parse_request(&mut client).await {
                 Ok(req) => req,
                 Err(e) => {
                     if matches!(e, ProxyError::Io(_)) {
@@ -60,7 +60,7 @@ impl HttpProxy {
                         return Ok(());
                     }
                     error!("Failed to parse request from {}: {}", peer_addr, e);
-                    self.send_error_response(client, 400, "Bad Request").await?;
+                    self.send_error_response(&mut client, 400, "Bad Request").await?;
                     return Err(e);
                 }
             };
@@ -72,7 +72,7 @@ impl HttpProxy {
                 Ok(id) => id,
                 Err(e) => {
                     warn!("Authentication failed for {}: {}", peer_addr, e);
-                    self.send_auth_required_response(client).await?;
+                    self.send_auth_required_response(&mut client).await?;
                     continue;
                 }
             };
@@ -80,7 +80,7 @@ impl HttpProxy {
             // Check rate limit
             if let Err(e) = self.manager.check_rate_limit(&user_id).await {
                 warn!("Rate limit exceeded for user {}: {}", user_id, e);
-                self.send_error_response(client, 429, "Too Many Requests").await?;
+                self.send_error_response(&mut client, 429, "Too Many Requests").await?;
                 continue;
             }
             
@@ -96,7 +96,7 @@ impl HttpProxy {
                 }
                 _ => {
                     // Regular HTTP proxy
-                    self.handle_http_request(client, request, &user_id).await?;
+                    self.handle_http_request(&mut client, request, &user_id).await?;
                 }
             }
             
@@ -111,7 +111,7 @@ impl HttpProxy {
     /// Handle CONNECT method for HTTPS tunneling
     async fn handle_connect(
         &self,
-        client: &mut TcpStream,
+        mut client: TcpStream,
         request: HttpRequest,
         user_id: &str,
     ) -> Result<()> {
@@ -125,7 +125,7 @@ impl HttpProxy {
             Ok(conn) => conn,
             Err(e) => {
                 error!("Failed to connect to {}: {}", target_addr, e);
-                self.send_error_response(client, 502, "Bad Gateway").await?;
+                self.send_error_response(&mut client, 502, "Bad Gateway").await?;
                 return Err(e);
             }
         };

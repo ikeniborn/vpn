@@ -10,12 +10,12 @@ use tracing::{debug, error};
 
 /// Tunnel data between client and upstream server
 pub async fn tunnel_data(
-    client: &mut TcpStream,
+    client: TcpStream,
     upstream: TcpStream,
     user_id: &str,
     manager: &ProxyManager,
 ) -> Result<()> {
-    let (client_reader, client_writer) = client.split();
+    let (client_reader, client_writer) = client.into_split();
     let (upstream_reader, upstream_writer) = upstream.into_split();
     
     let client_to_upstream = tokio::spawn({

@@ -2,7 +2,7 @@
 
 use crate::{
     config::RateLimitConfig,
-    error::{ProxyError, Result},
+    error::Result,
 };
 use dashmap::DashMap;
 use std::sync::Arc;
@@ -182,7 +182,7 @@ impl RateLimiter {
     /// Clean up expired entries
     pub async fn cleanup(&self) {
         // Remove inactive users after 1 hour
-        let cutoff = Instant::now() - Duration::from_secs(3600);
+        let _cutoff = Instant::now() - Duration::from_secs(3600);
         
         // Note: This is a simplified cleanup that doesn't check actual last access time
         // In production, you'd want to track last access time for each bucket

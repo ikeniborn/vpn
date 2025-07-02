@@ -4,6 +4,7 @@ pub mod lifecycle;
 pub mod rotation;
 pub mod templates;
 pub mod error;
+pub mod proxy_installer;
 
 pub use installer::{ServerInstaller, InstallationOptions};
 pub use validator::ConfigValidator;
@@ -11,3 +12,4 @@ pub use lifecycle::ServerLifecycle;
 pub use rotation::KeyRotationManager;
 pub use templates::DockerComposeTemplate;
 pub use error::{ServerError, Result};
+pub use proxy_installer::ProxyInstaller;
