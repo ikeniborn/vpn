@@ -26,7 +26,7 @@ impl Socks5Server {
     /// Handle an incoming SOCKS5 connection
     pub async fn handle_connection(
         &self,
-        mut client: TcpStream,
+        client: TcpStream,
         peer_addr: SocketAddr,
     ) -> Result<()> {
         let start_time = Instant::now();
@@ -34,7 +34,7 @@ impl Socks5Server {
         
         self.manager.metrics().record_connection(protocol, true);
         
-        let result = self.handle_connection_inner(&mut client, peer_addr).await;
+        let result = self.handle_connection_inner(client, peer_addr).await;
         
         // Record metrics
         let duration = start_time.elapsed().as_secs_f64();
@@ -46,16 +46,16 @@ impl Socks5Server {
     
     async fn handle_connection_inner(
         &self,
-        client: &mut TcpStream,
+        mut client: TcpStream,
         peer_addr: SocketAddr,
     ) -> Result<()> {
         debug!("New SOCKS5 connection from {}", peer_addr);
         
         // Handle authentication
-        let user_id = self.handle_authentication(client, peer_addr).await?;
+        let user_id = self.handle_authentication(&mut client, peer_addr).await?;
         
         // Handle request
-        let request = super::protocol::read_request(client).await?;
+        let request = super::protocol::read_request(&mut client).await?;
         
         debug!("SOCKS5 {:?} request from {} to {:?}:{}", 
             request.command, user_id, request.address, request.port);
@@ -63,7 +63,7 @@ impl Socks5Server {
         // Check rate limit
         if let Err(e) = self.manager.check_rate_limit(&user_id).await {
             warn!("Rate limit exceeded for user {}: {}", user_id, e);
-            super::protocol::send_reply(client, Reply::ConnectionNotAllowed, peer_addr).await?;
+            super::protocol::send_reply(&mut client, Reply::ConnectionNotAllowed, peer_addr).await?;
             return Err(e);
         }
         
@@ -73,12 +73,10 @@ impl Socks5Server {
                 self.handle_connect(client, request, &user_id).await
             }
             Command::Bind => {
-                super::protocol::send_reply(client, Reply::CommandNotSupported, peer_addr).await?;
-                Err(ProxyError::socks5("BIND command not supported"))
+                self.handle_bind(client, request, &user_id).await
             }
             Command::UdpAssociate => {
-                super::protocol::send_reply(client, Reply::CommandNotSupported, peer_addr).await?;
-                Err(ProxyError::socks5("UDP ASSOCIATE command not supported"))
+                self.handle_udp_associate(client, request, &user_id, peer_addr).await
             }
         }
     }
@@ -133,7 +131,7 @@ impl Socks5Server {
     /// Handle CONNECT command
     async fn handle_connect(
         &self,
-        client: &mut TcpStream,
+        mut client: TcpStream,
         request: Socks5Request,
         user_id: &str,
     ) -> Result<()> {
@@ -152,7 +150,7 @@ impl Socks5Server {
                     ProxyError::UpstreamConnectionFailed(_) => Reply::ConnectionRefused,
                     _ => Reply::GeneralFailure,
                 };
-                super::protocol::send_reply(client, reply, target_addr).await?;
+                super::protocol::send_reply(&mut client, reply, target_addr).await?;
                 return Err(e);
             }
         };
@@ -160,12 +158,10 @@ impl Socks5Server {
         // Send success reply
         let local_addr = upstream.local_addr()
             .unwrap_or_else(|_| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0));
-        super::protocol::send_reply(client, Reply::Success, local_addr).await?;
+        super::protocol::send_reply(&mut client, Reply::Success, local_addr).await?;
         
         // Start proxying data
-        // TODO: Fix ownership issue - proxy_data needs ownership of client but we only have &mut
-        // self.proxy_data(client, upstream, user_id).await
-        Err(ProxyError::internal("SOCKS5 tunneling temporarily disabled due to ownership issues"))
+        self.proxy_data(client, upstream, user_id).await
     }
     
     /// Resolve address from SOCKS5 address type
@@ -248,6 +244,90 @@ impl Socks5Server {
         
         Ok(())
     }
+    
+    /// Handle BIND command
+    async fn handle_bind(
+        &self,
+        mut client: TcpStream,
+        request: Socks5Request,
+        user_id: &str,
+    ) -> Result<()> {
+        // BIND is used for FTP-style protocols where the server initiates a connection back
+        info!("SOCKS5 BIND request from {} to {:?}:{}", user_id, request.address, request.port);
+        
+        // Create a listener on a random port
+        let bind_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
+        let listener = tokio::net::TcpListener::bind(bind_addr).await?;
+        let local_addr = listener.local_addr()?;
+        
+        info!("BIND listener created at {} for user {}", local_addr, user_id);
+        
+        // Send first reply with the bind address
+        super::protocol::send_reply(&mut client, Reply::Success, local_addr).await?;
+        
+        // Wait for incoming connection (with timeout)
+        let (inbound, remote_addr) = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            listener.accept()
+        )
+        .await
+        .map_err(|_| ProxyError::Timeout)??;
+        
+        info!("BIND connection received from {} for user {}", remote_addr, user_id);
+        
+        // Verify the connection is from expected address if specified
+        use super::AddressType;
+        if let AddressType::IPv4(bytes) = &request.address {
+            let expected_ip = Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3]);
+            if expected_ip != Ipv4Addr::new(0, 0, 0, 0) && remote_addr.ip() != IpAddr::V4(expected_ip) {
+                return Err(ProxyError::socks5("BIND connection from unexpected address"));
+            }
+        }
+        
+        // Send second reply with the remote address
+        super::protocol::send_reply(&mut client, Reply::Success, remote_addr).await?;
+        
+        // Start proxying data between client and inbound connection
+        self.proxy_data(client, inbound, user_id).await
+    }
+    
+    /// Handle UDP ASSOCIATE command
+    async fn handle_udp_associate(
+        &self,
+        mut client: TcpStream,
+        request: Socks5Request,
+        user_id: &str,
+        peer_addr: SocketAddr,
+    ) -> Result<()> {
+        info!("SOCKS5 UDP ASSOCIATE request from {} for {:?}:{}", 
+            user_id, request.address, request.port);
+        
+        // Create UDP socket for relay
+        let udp_bind_addr = match peer_addr {
+            SocketAddr::V4(_) => SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
+            SocketAddr::V6(_) => SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0),
+        };
+        
+        let udp_socket = tokio::net::UdpSocket::bind(udp_bind_addr).await?;
+        let udp_addr = udp_socket.local_addr()?;
+        
+        info!("UDP relay socket created at {} for user {}", udp_addr, user_id);
+        
+        // Send reply with UDP relay address
+        super::protocol::send_reply(&mut client, Reply::Success, udp_addr).await?;
+        
+        // Start UDP relay task
+        let manager = self.manager.clone();
+        let user_id_clone = user_id.to_string();
+        
+        tokio::spawn(async move {
+            if let Err(e) = handle_udp_relay(udp_socket, client, &user_id_clone, manager).await {
+                error!("UDP relay error for user {}: {}", user_id_clone, e);
+            }
+        });
+        
+        Ok(())
+    }
 }
 
 /// Proxy data in one direction
@@ -304,5 +384,129 @@ where
     let metric_direction = if direction == "client->upstream" { "upload" } else { "download" };
     manager.metrics().record_bytes_transferred(total_bytes, metric_direction);
     
+    Ok(())
+}
+
+/// Handle UDP relay for SOCKS5 UDP ASSOCIATE
+async fn handle_udp_relay(
+    udp_socket: tokio::net::UdpSocket,
+    tcp_client: TcpStream,
+    user_id: &str,
+    manager: ProxyManager,
+) -> Result<()> {
+    
+    info!("Starting UDP relay for user {}", user_id);
+    
+    let mut udp_buf = vec![0u8; 65535]; // Maximum UDP packet size
+    let mut associations: std::collections::HashMap<SocketAddr, SocketAddr> = std::collections::HashMap::new();
+    
+    loop {
+        tokio::select! {
+            // Check if TCP connection is still alive
+            _ = tcp_client.readable() => {
+                let mut buf = [0u8; 1];
+                match tcp_client.try_read(&mut buf) {
+                    Ok(0) => {
+                        info!("TCP control connection closed for user {}", user_id);
+                        break;
+                    }
+                    Ok(_) => {
+                        // Control connection should not send data after UDP ASSOCIATE
+                        warn!("Unexpected data on control connection from user {}", user_id);
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        // Connection still alive
+                    }
+                    Err(e) => {
+                        error!("Error reading control connection: {}", e);
+                        break;
+                    }
+                }
+            }
+            
+            // Handle UDP packets
+            result = udp_socket.recv_from(&mut udp_buf) => {
+                match result {
+                    Ok((len, from_addr)) => {
+                        // Parse SOCKS5 UDP header
+                        if len < 10 {
+                            warn!("UDP packet too small from {}", from_addr);
+                            continue;
+                        }
+                        
+                        // SOCKS5 UDP header format:
+                        // +----+------+------+----------+----------+----------+
+                        // |RSV | FRAG | ATYP | DST.ADDR | DST.PORT |   DATA   |
+                        // +----+------+------+----------+----------+----------+
+                        // | 2  |  1   |  1   | Variable |    2     | Variable |
+                        // +----+------+------+----------+----------+----------+
+                        
+                        let frag = udp_buf[2];
+                        if frag != 0 {
+                            warn!("Fragmented UDP packets not supported");
+                            continue;
+                        }
+                        
+                        // Parse destination address
+                        let atyp = udp_buf[3];
+                        let (dst_addr, header_len) = match atyp {
+                            0x01 => {
+                                // IPv4
+                                if len < 10 {
+                                    continue;
+                                }
+                                let ip = Ipv4Addr::new(udp_buf[4], udp_buf[5], udp_buf[6], udp_buf[7]);
+                                let port = u16::from_be_bytes([udp_buf[8], udp_buf[9]]);
+                                (SocketAddr::new(IpAddr::V4(ip), port), 10)
+                            }
+                            0x03 => {
+                                // Domain name
+                                let domain_len = udp_buf[4] as usize;
+                                if len < 7 + domain_len {
+                                    continue;
+                                }
+                                // For now, skip domain resolution in UDP relay
+                                warn!("Domain names in UDP relay not yet supported");
+                                continue;
+                            }
+                            0x04 => {
+                                // IPv6
+                                if len < 22 {
+                                    continue;
+                                }
+                                let mut ipv6_bytes = [0u8; 16];
+                                ipv6_bytes.copy_from_slice(&udp_buf[4..20]);
+                                let ip = Ipv6Addr::from(ipv6_bytes);
+                                let port = u16::from_be_bytes([udp_buf[20], udp_buf[21]]);
+                                (SocketAddr::new(IpAddr::V6(ip), port), 22)
+                            }
+                            _ => {
+                                warn!("Invalid address type in UDP packet: {}", atyp);
+                                continue;
+                            }
+                        };
+                        
+                        // Store association
+                        associations.insert(dst_addr, from_addr);
+                        
+                        // Forward the data (without SOCKS5 header)
+                        let data = &udp_buf[header_len..len];
+                        if let Err(e) = udp_socket.send_to(data, dst_addr).await {
+                            error!("Failed to forward UDP packet to {}: {}", dst_addr, e);
+                        }
+                        
+                        // Record bandwidth
+                        let _ = manager.record_bandwidth(user_id, data.len() as u64).await;
+                    }
+                    Err(e) => {
+                        error!("UDP receive error: {}", e);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    info!("UDP relay ended for user {}", user_id);
     Ok(())
 }

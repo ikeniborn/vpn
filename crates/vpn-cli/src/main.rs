@@ -147,6 +147,9 @@ async fn execute_command(
                 cli.verbose
             ).await.map_err(CliError::from)
         }
+        Commands::Proxy(proxy_cmd) => {
+            handler.handle_proxy_command(proxy_cmd).await
+        }
         Commands::Menu => {
             start_interactive_menu(handler).await
         }

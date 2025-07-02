@@ -53,6 +53,9 @@ pub enum CliError {
     #[error("Crypto error: {0}")]
     CryptoError(#[from] vpn_crypto::CryptoError),
     
+    #[error("Docker Compose error: {0}")]
+    ComposeError(String),
+    
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
     

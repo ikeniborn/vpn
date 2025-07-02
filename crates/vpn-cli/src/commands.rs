@@ -9,6 +9,7 @@ use vpn_users::manager::UserListOptions;
 // use vpn_monitor::{TrafficMonitor, HealthMonitor, LogAnalyzer, MetricsCollector, AlertManager};
 // use vpn_monitor::traffic::MonitoringConfig;
 use crate::{cli::*, config::ConfigManager, runtime::RuntimeManager, utils::display, CliError, Result};
+use serde_json;
 
 pub struct CommandHandler {
     #[allow(dead_code)]
@@ -677,6 +678,235 @@ impl CommandHandler {
             RuntimeCommands::Capabilities => {
                 eprintln!("⚠️  NOTE: Containerd capabilities shown for reference only - containerd support deprecated");
                 runtime_manager.show_capabilities()?;
+            }
+        }
+        
+        Ok(())
+    }
+
+    pub async fn handle_proxy_command(&mut self, command: ProxyCommands) -> Result<()> {
+        match command {
+            ProxyCommands::Status { detailed, format } => {
+                self.show_proxy_status(detailed, format).await
+            }
+            ProxyCommands::Monitor { user, interval, active_only } => {
+                self.monitor_proxy_connections(user, interval, active_only).await
+            }
+            ProxyCommands::Stats { hours, by_user, format } => {
+                self.show_proxy_stats(hours, by_user, format).await
+            }
+            ProxyCommands::Test { url, protocol, auth, username, password } => {
+                self.test_proxy_connectivity(url, protocol, auth, username, password).await
+            }
+            ProxyCommands::Config { command } => {
+                self.handle_proxy_config_command(command).await
+            }
+            ProxyCommands::Access { command } => {
+                self.handle_proxy_access_command(command).await
+            }
+        }
+    }
+
+    async fn show_proxy_status(&self, detailed: bool, format: StatusFormat) -> Result<()> {
+        display::info("🔍 Checking proxy server status...");
+        
+        // Check if proxy services are running
+        let mut config = vpn_compose::config::ComposeConfig::default();
+        config.compose_dir = self.install_path.join("docker-compose");
+        let compose_manager = vpn_compose::manager::ComposeManager::new(&config).await
+            .map_err(|e| CliError::ComposeError(format!("Failed to create compose manager: {}", e)))?;
+        let compose_status = compose_manager.get_status().await
+            .map_err(|e| CliError::ComposeError(format!("Failed to get compose status: {}", e)))?;
+        
+        let proxy_services = ["traefik", "vpn-proxy-auth"];
+        let mut proxy_status = vec![];
+        
+        for service_name in &proxy_services {
+            if let Some(service) = compose_status.services.iter().find(|s| s.name == *service_name) {
+                proxy_status.push(service.clone());
+            }
+        }
+        
+        if proxy_status.is_empty() {
+            display::error("Proxy server is not installed");
+            return Ok(());
+        }
+        
+        match format {
+            StatusFormat::Json => {
+                println!("{}", serde_json::to_string_pretty(&proxy_status)?);
+            }
+            _ => {
+                for service in proxy_status {
+                    display::section(&format!("Service: {}", service.name));
+                    println!("  State: {}", service.state);
+                    
+                    if detailed {
+                        if let Some(health) = &service.health {
+                            println!("  Health: {}", health);
+                        }
+                        if !service.ports.is_empty() {
+                            println!("  Ports: {}", service.ports.join(", "));
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    async fn monitor_proxy_connections(&self, user: Option<String>, interval: u64, active_only: bool) -> Result<()> {
+        display::info("📊 Monitoring proxy connections...");
+        display::info(&format!("Refresh interval: {}s", interval));
+        if let Some(u) = &user {
+            display::info(&format!("Filtering by user: {}", u));
+        }
+        if active_only {
+            display::info("Showing only active connections");
+        }
+        
+        // TODO: Implement real-time monitoring by querying Prometheus metrics
+        display::warning("Real-time monitoring not yet implemented. Use `docker logs -f traefik` for now.");
+        
+        Ok(())
+    }
+
+    async fn show_proxy_stats(&self, hours: u32, by_user: bool, format: StatusFormat) -> Result<()> {
+        display::info(&format!("📈 Proxy statistics for the last {} hours", hours));
+        
+        // TODO: Query Prometheus for proxy metrics
+        display::warning("Proxy statistics not yet implemented. Use Grafana dashboards for now.");
+        
+        Ok(())
+    }
+
+    async fn test_proxy_connectivity(&self, url: String, protocol: String, auth: bool, username: Option<String>, password: Option<String>) -> Result<()> {
+        display::info(&format!("🧪 Testing proxy connectivity to {}", url));
+        
+        // Get proxy addresses from configuration
+        let config_path = self.install_path.join("proxy-config.yaml");
+        if !config_path.exists() {
+            display::error("Proxy configuration not found. Is the proxy server installed?");
+            return Ok(());
+        }
+        
+        let protocols_to_test: Vec<&str> = match protocol.as_str() {
+            "both" => vec!["http", "socks5"],
+            p => vec![p],
+        };
+        
+        for proto in protocols_to_test {
+            display::section(&format!("Testing {} proxy", proto.to_uppercase()));
+            
+            let proxy_addr = match proto {
+                "http" => "http://localhost:8888",
+                "socks5" => "socks5://localhost:1080",
+                _ => {
+                    display::error(&format!("Unknown protocol: {}", proto));
+                    continue;
+                }
+            };
+            
+            // TODO: Implement actual proxy testing with curl or custom HTTP client
+            display::info(&format!("Proxy address: {}", proxy_addr));
+            
+            if auth {
+                if username.is_none() || password.is_none() {
+                    display::error("Authentication test requires both username and password");
+                    continue;
+                }
+                display::info("Testing with authentication...");
+            }
+            
+            display::warning("Proxy connectivity test not yet fully implemented");
+        }
+        
+        Ok(())
+    }
+
+    async fn handle_proxy_config_command(&self, command: ProxyConfigCommands) -> Result<()> {
+        match command {
+            ProxyConfigCommands::Show => {
+                display::info("📋 Current proxy configuration:");
+                
+                let config_path = self.install_path.join("proxy-config.yaml");
+                if !config_path.exists() {
+                    display::error("Proxy configuration not found");
+                    return Ok(());
+                }
+                
+                let config = std::fs::read_to_string(&config_path)?;
+                println!("{}", config);
+            }
+            ProxyConfigCommands::Update { max_connections, rate_limit, auth_enabled, bind_address, socks5_address } => {
+                display::info("🔧 Updating proxy configuration...");
+                
+                // TODO: Implement configuration update
+                if let Some(max) = max_connections {
+                    display::info(&format!("Setting max connections per user: {}", max));
+                }
+                if let Some(rate) = rate_limit {
+                    display::info(&format!("Setting rate limit: {} RPS", rate));
+                }
+                if let Some(auth) = auth_enabled {
+                    display::info(&format!("Authentication: {}", if auth { "enabled" } else { "disabled" }));
+                }
+                if let Some(addr) = bind_address {
+                    display::info(&format!("HTTP proxy bind address: {}", addr));
+                }
+                if let Some(addr) = socks5_address {
+                    display::info(&format!("SOCKS5 bind address: {}", addr));
+                }
+                
+                display::warning("Configuration update not yet implemented");
+            }
+            ProxyConfigCommands::Reload => {
+                display::info("🔄 Reloading proxy configuration...");
+                
+                // Restart proxy services to apply new configuration
+                let mut config = vpn_compose::config::ComposeConfig::default();
+                config.compose_dir = self.install_path.join("docker-compose");
+                let compose_manager = vpn_compose::manager::ComposeManager::new(&config).await
+                    .map_err(|e| CliError::ComposeError(format!("Failed to create compose manager: {}", e)))?;
+                
+                // Restart each proxy service
+                for service in &["traefik", "vpn-proxy-auth"] {
+                    compose_manager.restart_service(service).await
+                        .map_err(|e| CliError::ComposeError(format!("Failed to restart {}: {}", service, e)))?;
+                }
+                
+                display::success("Proxy configuration reloaded");
+            }
+        }
+        
+        Ok(())
+    }
+
+    async fn handle_proxy_access_command(&self, command: ProxyAccessCommands) -> Result<()> {
+        match command {
+            ProxyAccessCommands::List => {
+                display::info("📜 Access control rules:");
+                display::warning("Access control management not yet implemented");
+            }
+            ProxyAccessCommands::AddIp { ip, description } => {
+                display::info(&format!("➕ Adding IP {} to whitelist", ip));
+                if let Some(desc) = description {
+                    display::info(&format!("Description: {}", desc));
+                }
+                display::warning("IP whitelist management not yet implemented");
+            }
+            ProxyAccessCommands::RemoveIp { ip } => {
+                display::info(&format!("➖ Removing IP {} from whitelist", ip));
+                display::warning("IP whitelist management not yet implemented");
+            }
+            ProxyAccessCommands::SetBandwidth { user, limit } => {
+                display::info(&format!("🔧 Setting bandwidth limit for user {}: {} MB/s", user, limit));
+                display::warning("Bandwidth limit management not yet implemented");
+            }
+            ProxyAccessCommands::SetConnections { user, limit } => {
+                display::info(&format!("🔧 Setting connection limit for user {}: {}", user, limit));
+                display::warning("Connection limit management not yet implemented");
             }
         }
         

@@ -168,6 +168,163 @@ pub enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+    
+    /// Proxy server management commands
+    #[command(subcommand)]
+    Proxy(ProxyCommands),
+}
+
+#[derive(Subcommand, Clone)]
+pub enum ProxyCommands {
+    /// Show proxy server status
+    Status {
+        /// Show detailed metrics
+        #[arg(short, long)]
+        detailed: bool,
+        
+        /// Output format (json, table)
+        #[arg(short, long, default_value = "table")]
+        format: StatusFormat,
+    },
+    
+    /// Monitor proxy connections in real-time
+    Monitor {
+        /// Filter by user
+        #[arg(short, long)]
+        user: Option<String>,
+        
+        /// Refresh interval in seconds
+        #[arg(short, long, default_value = "1")]
+        interval: u64,
+        
+        /// Show only active connections
+        #[arg(long)]
+        active_only: bool,
+    },
+    
+    /// Show proxy statistics
+    Stats {
+        /// Time period in hours
+        #[arg(short = 't', long, default_value = "24")]
+        hours: u32,
+        
+        /// Group by user
+        #[arg(long)]
+        by_user: bool,
+        
+        /// Output format (json, table)
+        #[arg(short, long, default_value = "table")]
+        format: StatusFormat,
+    },
+    
+    /// Test proxy connectivity
+    Test {
+        /// Target URL to test
+        #[arg(default_value = "https://example.com")]
+        url: String,
+        
+        /// Proxy protocol to test (http, socks5, both)
+        #[arg(short, long, default_value = "both")]
+        protocol: String,
+        
+        /// Test authentication
+        #[arg(long)]
+        auth: bool,
+        
+        /// Username for authentication test
+        #[arg(short, long)]
+        username: Option<String>,
+        
+        /// Password for authentication test
+        #[arg(short = 'P', long)]
+        password: Option<String>,
+    },
+    
+    /// Manage proxy configuration
+    Config {
+        /// Configuration subcommands
+        #[command(subcommand)]
+        command: ProxyConfigCommands,
+    },
+    
+    /// Manage proxy access control
+    Access {
+        /// Access control subcommands
+        #[command(subcommand)]
+        command: ProxyAccessCommands,
+    },
+}
+
+#[derive(Subcommand, Clone)]
+pub enum ProxyConfigCommands {
+    /// Show current proxy configuration
+    Show,
+    
+    /// Update proxy configuration
+    Update {
+        /// Maximum connections per user
+        #[arg(long)]
+        max_connections: Option<u32>,
+        
+        /// Rate limit (requests per second)
+        #[arg(long)]
+        rate_limit: Option<u32>,
+        
+        /// Enable/disable authentication
+        #[arg(long)]
+        auth_enabled: Option<bool>,
+        
+        /// Proxy bind address
+        #[arg(long)]
+        bind_address: Option<String>,
+        
+        /// SOCKS5 bind address
+        #[arg(long)]
+        socks5_address: Option<String>,
+    },
+    
+    /// Reload proxy configuration
+    Reload,
+}
+
+#[derive(Subcommand, Clone)]
+pub enum ProxyAccessCommands {
+    /// List access rules
+    List,
+    
+    /// Add IP to whitelist
+    AddIp {
+        /// IP address or CIDR
+        ip: String,
+        
+        /// Description
+        #[arg(short, long)]
+        description: Option<String>,
+    },
+    
+    /// Remove IP from whitelist
+    RemoveIp {
+        /// IP address or CIDR
+        ip: String,
+    },
+    
+    /// Set user bandwidth limit
+    SetBandwidth {
+        /// User name or ID
+        user: String,
+        
+        /// Bandwidth limit in MB/s (0 for unlimited)
+        limit: u32,
+    },
+    
+    /// Set user connection limit
+    SetConnections {
+        /// User name or ID
+        user: String,
+        
+        /// Maximum concurrent connections (0 for unlimited)
+        limit: u32,
+    },
 }
 
 #[derive(Subcommand, Clone)]

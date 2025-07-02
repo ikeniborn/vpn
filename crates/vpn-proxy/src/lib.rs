@@ -12,6 +12,7 @@ pub mod metrics;
 pub mod manager;
 pub mod pool;
 pub mod rate_limit;
+pub mod zero_copy;
 
 pub use config::{ProxyConfig, ProxyProtocol};
 pub use error::{ProxyError, Result};

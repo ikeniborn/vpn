@@ -1,10 +1,10 @@
 //! Proxy server installer implementation
 
 use crate::error::{Result, ServerError};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tokio::fs;
-use log::{info, debug};
-use vpn_docker::ContainerManager;
+use tracing::{info, debug};
+use vpn_docker::{ContainerManager, ContainerStatus};
 
 pub struct ProxyInstaller {
     install_path: PathBuf,
@@ -122,8 +122,8 @@ impl ProxyInstaller {
             let mut attempts = 0;
             loop {
                 match self.container_manager.get_container_status(service).await {
-                    Ok(info) => {
-                        if info.state.running {
+                    Ok(status) => {
+                        if status == ContainerStatus::Running {
                             debug!("Service {} is running", service);
                             break;
                         }
