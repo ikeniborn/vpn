@@ -21,7 +21,7 @@ toml.workspace = true
 
 # Template engine
 tera = "1.19"
-handlebars = "4.4"
+handlebars = "6.3"
 
 # Process management
 subprocess = "0.2"
