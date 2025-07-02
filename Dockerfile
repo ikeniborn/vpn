@@ -87,4 +87,4 @@ LABEL org.opencontainers.image.title="VPN Server" \
       org.opencontainers.image.vendor="VPN Project Team" \
       org.opencontainers.image.version="0.1.0" \
       org.opencontainers.image.source="https://github.com/yourusername/vpn-rust" \
-      org.opencontainers.image.documentation="https://github.com/yourusername/vpn-rust/blob/main/README.md"
+      org.opencontainers.image.documentation="https://github.com/yourusername/vpn-rust/blob/master/README.md"

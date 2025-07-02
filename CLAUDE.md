@@ -74,7 +74,7 @@ docker buildx build --platform linux/amd64,linux/arm64 -t vpn-rust:latest .
 docker-compose -f docker-compose.hub.yml up -d
 
 # Quick start with Docker
-curl -L https://raw.githubusercontent.com/yourusername/vpn-rust/main/docker-compose.hub.yml -o docker-compose.yml
+curl -L https://raw.githubusercontent.com/yourusername/vpn-rust/master/docker-compose.hub.yml -o docker-compose.yml
 docker-compose up -d
 ```
 

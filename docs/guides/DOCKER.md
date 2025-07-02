@@ -8,7 +8,7 @@ This guide explains how to deploy the VPN server using Docker and Docker Compose
 
 ```bash
 # Download docker-compose file
-curl -L https://raw.githubusercontent.com/yourusername/vpn-rust/main/docker-compose.hub.yml -o docker-compose.yml
+curl -L https://raw.githubusercontent.com/yourusername/vpn-rust/master/docker-compose.hub.yml -o docker-compose.yml
 
 # Set environment variables
 export VPN_PROTOCOL=vless

@@ -223,7 +223,7 @@ clone_repository() {
     if [ -d "$REPO_DIR" ]; then
         print_status "Repository exists, updating..."
         cd "$REPO_DIR"
-        git pull origin main || git pull origin master
+        git pull origin master || git pull origin main
     else
         print_status "Cloning repository..."
         git clone "$REPO_URL" "$REPO_DIR"

@@ -176,7 +176,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: 'rollback.yml',
-              ref: 'main',
+              ref: 'master',
               inputs: {
                 environment: '${{ inputs.environment }}',
                 reason: 'Smoke tests failed'

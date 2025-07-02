@@ -81,7 +81,7 @@ update_repository() {
     fi
     
     # Save current branch
-    CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "main")
+    CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "master")
     
     # Stash any local changes
     if ! git diff-index --quiet HEAD --; then
@@ -98,8 +98,8 @@ update_repository() {
         print_status "Pulling latest changes from origin/$CURRENT_BRANCH..."
         git pull origin "$CURRENT_BRANCH"
     else
-        print_warning "Branch origin/$CURRENT_BRANCH not found, trying main..."
-        git pull origin main || git pull origin master
+        print_warning "Branch origin/$CURRENT_BRANCH not found, trying master..."
+        git pull origin master || git pull origin main
     fi
     
     print_success "Repository updated"
