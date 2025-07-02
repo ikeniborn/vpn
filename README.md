@@ -5,10 +5,8 @@
 [![CI Status](https://github.com/ikeniborn/vpn/workflows/CI/badge.svg)](https://github.com/ikeniborn/vpn/actions)
 [![Docker Build](https://github.com/ikeniborn/vpn/workflows/Docker%20Build%20and%20Publish/badge.svg)](https://github.com/ikeniborn/vpn/actions)
 [![Security Audit](https://github.com/ikeniborn/vpn/workflows/Security%20Audit/badge.svg)](https://github.com/ikeniborn/vpn/actions)
-[![Code Coverage](https://codecov.io/gh/ikeniborn/vpn/branch/main/graph/badge.svg)](https://codecov.io/gh/ikeniborn/vpn)
 [![Rust Version](https://img.shields.io/badge/rust-1.75+-blue.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Docker Pulls](https://img.shields.io/docker/pulls/ikeniborn/vpn-rust.svg)](https://hub.docker.com/r/ikeniborn/vpn-rust)
 
 ## ✨ Features
 
@@ -28,7 +26,7 @@
 - **Cross-Platform**: Native support for x86_64, ARM64 architectures
 
 ### 🐳 **Deployment & Management**
-- **Production-Ready**: Docker Hub images with multi-arch support
+- **Production-Ready**: Local Docker image building with multi-arch support
 - **Complete Orchestration**: Docker Compose with Traefik, monitoring, and identity services
 - **Load Balancing**: Automatic SSL/TLS termination with Let's Encrypt
 - **Service Discovery**: Dynamic service routing and health monitoring
@@ -116,6 +114,7 @@ chmod +x update.sh
 - 🐳 Installs Docker + Docker Compose (optional)
 - 📥 Clones VPN repository from GitHub
 - 🔨 Builds the entire project from source
+- 🐳 Builds Docker images locally (vpn-rust, proxy-auth, identity)
 - 📦 Installs VPN CLI tool via cargo
 - ⚙️ Creates default configuration
 - 🎯 Sets up shell completions
@@ -126,17 +125,18 @@ chmod +x update.sh
 - 📥 Updates repository with latest code
 - 🦀 Updates Rust toolchain if needed
 - 🔨 Rebuilds project with latest changes
+- 🐳 Rebuilds Docker images with updated code
 - 📦 Reinstalls VPN CLI with new version
 - 🩺 Runs system diagnostics
 - 🎮 Launches interactive menu
 
-### 🐳 Using Pre-built Docker Images
+### 🐳 Using Docker Images
 
-If you prefer using Docker without building:
+Docker images are built locally during installation:
 
 ```bash
-# Quick start with Docker Compose
-curl -L https://raw.githubusercontent.com/ikeniborn/vpn/main/docker-compose.hub.yml -o docker-compose.yml
+# Install and build Docker images
+./scripts/install.sh
 
 # Set environment variables
 export VPN_PROTOCOL=vless
@@ -153,14 +153,15 @@ docker exec vpn-server vpn users create alice
 docker exec vpn-server vpn users link alice --qr
 ```
 
-### 📦 Available Docker Images
+### 📦 Docker Images Built Locally
+
+During installation, the following Docker images are built locally:
 
 | Image | Description | Size | Architectures |
 |-------|-------------|------|---------------|
-| `ikeniborn/vpn-rust:latest` | Main VPN server with CLI | ~50MB | amd64, arm64 |
-| `ikeniborn/vpn-rust-proxy-auth:latest` | Proxy authentication service | ~20MB | amd64, arm64 |
-| `ikeniborn/vpn-rust-identity:latest` | Identity management service | ~25MB | amd64, arm64 |
-| `ikeniborn/vpn-rust-cluster:latest` | Distributed clustering service | ~30MB | amd64, arm64 |
+| `vpn-rust:latest` | Main VPN server with CLI | ~50MB | Local arch |
+| `vpn-rust-proxy-auth:latest` | Proxy authentication service | ~20MB | Local arch |
+| `vpn-rust-identity:latest` | Identity management service | ~25MB | Local arch |
 
 ### 🛠️ Build from Source
 
@@ -331,12 +332,11 @@ cargo build --release --workspace -j 1  # Use single thread
 
 ## 🔧 Installation Options
 
-### Option 1: Docker Hub (Recommended)
+### Option 1: Local Docker Build (Recommended)
 
 ```bash
-# Use pre-built multi-arch images
-docker pull yourusername/vpn-rust:latest
-docker-compose -f docker-compose.hub.yml up -d
+# Build multi-arch images locally during installation
+./scripts/install.sh  # Includes Docker image building
 ```
 
 ### Option 2: Binary Releases
@@ -766,8 +766,8 @@ cargo run --bin vpn-cli -- doctor
 # Run tests
 cargo test --workspace
 
-# Build Docker images
-./scripts/docker-build.sh
+# Build Docker images (included in install/update scripts)
+./scripts/install.sh  # or ./scripts/update.sh
 ```
 
 ### Code Quality
@@ -807,7 +807,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - ✅ Identity service with LDAP/OAuth2 support
 - ✅ Docker Compose orchestration with Traefik load balancing
 - ✅ Monitoring stack (Prometheus, Grafana, Jaeger)
-- ✅ Multi-arch Docker images on Docker Hub
+- ✅ Local Docker image building with multi-arch support
 - ✅ Comprehensive CLI with privilege management
 - ✅ Complete architecture documentation
 - ✅ Performance optimization (0.005s startup, ~10MB memory)
@@ -844,4 +844,4 @@ Complete documentation is available in the [`docs/`](docs/) directory:
 
 **Made with ❤️ and 🦀 Rust**
 
-[📚 Documentation](docs/) | [🐛 Issues](https://github.com/ikeniborn/vpn/issues) | [💬 Discussions](https://github.com/ikeniborn/vpn/discussions) | [🐳 Docker Hub](https://hub.docker.com/r/ikeniborn/vpn-rust)
+[📚 Documentation](docs/) | [🐛 Issues](https://github.com/ikeniborn/vpn/issues) | [💬 Discussions](https://github.com/ikeniborn/vpn/discussions)

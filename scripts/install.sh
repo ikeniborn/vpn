@@ -261,6 +261,66 @@ build_project() {
     print_success "Project built successfully"
 }
 
+# Function to build Docker images
+build_docker_images() {
+    if [ "$SKIP_DOCKER" = true ]; then
+        print_warning "Skipping Docker image building"
+        return
+    fi
+    
+    print_status "Building Docker images..."
+    
+    cd "$REPO_DIR"
+    
+    # Check if Docker buildx is available
+    if ! docker buildx version &> /dev/null; then
+        print_warning "Docker Buildx not available, skipping multi-arch builds"
+        return
+    fi
+    
+    # Check if multi-arch builder exists, create if not
+    if ! docker buildx ls | grep -q "multi-arch"; then
+        print_status "Creating multi-arch builder..."
+        docker buildx create --name multi-arch --driver docker-container --use
+        docker buildx inspect --bootstrap
+    else
+        docker buildx use multi-arch
+    fi
+    
+    # Build main VPN server image
+    print_status "Building VPN server image..."
+    docker buildx build \
+        --platform linux/$(uname -m) \
+        --file Dockerfile \
+        --tag vpn-rust:latest \
+        --load \
+        . || print_warning "Failed to build VPN server image"
+    
+    # Build proxy auth service if Dockerfile exists
+    if [ -f "docker/proxy/Dockerfile.auth" ]; then
+        print_status "Building proxy auth service image..."
+        docker buildx build \
+            --platform linux/$(uname -m) \
+            --file docker/proxy/Dockerfile.auth \
+            --tag vpn-rust-proxy-auth:latest \
+            --load \
+            . || print_warning "Failed to build proxy auth image"
+    fi
+    
+    # Build identity service if Dockerfile exists
+    if [ -f "docker/Dockerfile.identity" ]; then
+        print_status "Building identity service image..."
+        docker buildx build \
+            --platform linux/$(uname -m) \
+            --file docker/Dockerfile.identity \
+            --tag vpn-rust-identity:latest \
+            --load \
+            . || print_warning "Failed to build identity service image"
+    fi
+    
+    print_success "Docker images built successfully"
+}
+
 # Function to install the CLI
 install_cli() {
     print_status "Installing VPN CLI..."
@@ -456,9 +516,10 @@ show_help() {
     echo "  3. Install Docker (optional)"
     echo "  4. Clone VPN repository"
     echo "  5. Build the project"
-    echo "  6. Install VPN CLI"
-    echo "  7. Run system diagnostics"
-    echo "  8. Launch interactive menu (optional)"
+    echo "  6. Build Docker images"
+    echo "  7. Install VPN CLI"
+    echo "  8. Run system diagnostics"
+    echo "  9. Launch interactive menu (optional)"
 }
 
 # Parse command line arguments
@@ -530,6 +591,7 @@ main() {
     
     # Build and install
     build_project
+    build_docker_images
     install_cli
     
     # Post-installation setup

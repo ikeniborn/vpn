@@ -151,6 +151,66 @@ rebuild_project() {
     print_success "Project rebuilt successfully"
 }
 
+# Function to rebuild Docker images
+rebuild_docker_images() {
+    if ! command -v docker &> /dev/null; then
+        print_warning "Docker not installed, skipping image rebuild"
+        return
+    fi
+    
+    print_status "Rebuilding Docker images..."
+    
+    cd "$REPO_DIR"
+    
+    # Check if Docker buildx is available
+    if ! docker buildx version &> /dev/null; then
+        print_warning "Docker Buildx not available, skipping multi-arch builds"
+        return
+    fi
+    
+    # Use existing multi-arch builder or create one
+    if ! docker buildx ls | grep -q "multi-arch"; then
+        print_status "Creating multi-arch builder..."
+        docker buildx create --name multi-arch --driver docker-container --use
+        docker buildx inspect --bootstrap
+    else
+        docker buildx use multi-arch
+    fi
+    
+    # Build main VPN server image
+    print_status "Rebuilding VPN server image..."
+    docker buildx build \
+        --platform linux/$(uname -m) \
+        --file Dockerfile \
+        --tag vpn-rust:latest \
+        --load \
+        . || print_warning "Failed to rebuild VPN server image"
+    
+    # Build proxy auth service if Dockerfile exists
+    if [ -f "docker/proxy/Dockerfile.auth" ]; then
+        print_status "Rebuilding proxy auth service image..."
+        docker buildx build \
+            --platform linux/$(uname -m) \
+            --file docker/proxy/Dockerfile.auth \
+            --tag vpn-rust-proxy-auth:latest \
+            --load \
+            . || print_warning "Failed to rebuild proxy auth image"
+    fi
+    
+    # Build identity service if Dockerfile exists
+    if [ -f "docker/Dockerfile.identity" ]; then
+        print_status "Rebuilding identity service image..."
+        docker buildx build \
+            --platform linux/$(uname -m) \
+            --file docker/Dockerfile.identity \
+            --tag vpn-rust-identity:latest \
+            --load \
+            . || print_warning "Failed to rebuild identity service image"
+    fi
+    
+    print_success "Docker images rebuilt successfully"
+}
+
 # Function to reinstall CLI
 reinstall_cli() {
     print_status "Reinstalling VPN CLI..."
@@ -208,6 +268,7 @@ show_completion_message() {
     echo "What was updated:"
     echo "  ✓ Repository code"
     echo "  ✓ Project build"
+    echo "  ✓ Docker images"
     echo "  ✓ VPN CLI binary"
     echo
     echo "Next steps:"
@@ -244,9 +305,10 @@ show_help() {
     echo "  1. Update VPN repository from Git"
     echo "  2. Update Rust toolchain if needed"
     echo "  3. Rebuild the project"
-    echo "  4. Reinstall VPN CLI"
-    echo "  5. Run system diagnostics"
-    echo "  6. Launch interactive menu (optional)"
+    echo "  4. Rebuild Docker images"
+    echo "  5. Reinstall VPN CLI"
+    echo "  6. Run system diagnostics"
+    echo "  7. Launch interactive menu (optional)"
     echo
     echo "Prerequisites:"
     echo "  • VPN repository must exist at $REPO_DIR"
@@ -310,6 +372,7 @@ main() {
     update_repository
     update_rust
     rebuild_project
+    rebuild_docker_images
     reinstall_cli
     
     # Run diagnostics
