@@ -25,7 +25,7 @@ clap = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 # Kubernetes dependencies
-kube = { version = "0.90", features = ["runtime", "derive", "client", "ws", "admission"] }
+kube = { version = "1.1", features = ["runtime", "derive", "client", "ws", "admission"] }
 k8s-openapi = { version = "0.21", features = ["v1_29"] }
 schemars = "0.8"
 futures = "0.3"
