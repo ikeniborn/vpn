@@ -187,7 +187,7 @@ impl RuntimeManager {
     /// Test connectivity to configured runtimes
     async fn test_connectivity(&self) -> Result<()> {
         let runtime_config = self.config_manager.get_runtime_config();
-        let vpn_runtime_config = self.config_manager.to_runtime_config();
+        let _vpn_runtime_config = self.config_manager.to_runtime_config();
 
         if runtime_config.docker.enabled {
             let available = RuntimeFactory::is_runtime_available(RuntimeType::Docker).await;

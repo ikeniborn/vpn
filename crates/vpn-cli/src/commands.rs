@@ -667,14 +667,6 @@ impl CommandHandler {
                 }
                 runtime_manager.update_socket(&runtime, &path)?;
             }
-            RuntimeCommands::Migrate => {
-                eprintln!("⚠️  WARNING: Docker to Containerd migration has been deprecated!");
-                eprintln!("   Use Docker Compose orchestration instead: `vpn compose up`");
-                eprintln!("   For migration guidance, see Phase 5 in TASK.md");
-                return Err(CliError::FeatureDeprecated(
-                    "Containerd migration has been deprecated in favor of Docker Compose orchestration".to_string()
-                ));
-            }
             RuntimeCommands::Capabilities => {
                 eprintln!("⚠️  NOTE: Containerd capabilities shown for reference only - containerd support deprecated");
                 runtime_manager.show_capabilities()?;
@@ -772,7 +764,7 @@ impl CommandHandler {
         Ok(())
     }
 
-    async fn show_proxy_stats(&self, hours: u32, by_user: bool, format: StatusFormat) -> Result<()> {
+    async fn show_proxy_stats(&self, hours: u32, _by_user: bool, _format: StatusFormat) -> Result<()> {
         display::info(&format!("📈 Proxy statistics for the last {} hours", hours));
         
         // TODO: Query Prometheus for proxy metrics

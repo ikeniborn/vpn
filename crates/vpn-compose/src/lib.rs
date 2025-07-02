@@ -125,7 +125,7 @@ impl ComposeOrchestrator {
 
     /// Pull images for services
     pub async fn pull_images(&self, service: Option<&str>) -> Result<()> {
-        if let Some(service_name) = service {
+        if let Some(_service_name) = service {
             // Pull specific service - need to extend manager
             self.manager.pull().await
         } else {

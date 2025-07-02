@@ -37,7 +37,7 @@ impl Default for PoolConfig {
 #[derive(Debug)]
 struct PooledConnection {
     docker: Docker,
-    created_at: Instant,
+    _created_at: Instant,
     last_used: Mutex<Instant>,
 }
 
@@ -46,7 +46,7 @@ impl PooledConnection {
         let now = Instant::now();
         Self {
             docker,
-            created_at: now,
+            _created_at: now,
             last_used: Mutex::new(now),
         }
     }
@@ -55,7 +55,7 @@ impl PooledConnection {
         *self.last_used.lock().await = Instant::now();
     }
 
-    async fn is_idle(&self, max_idle: Duration) -> bool {
+    async fn _is_idle(&self, max_idle: Duration) -> bool {
         let last_used = *self.last_used.lock().await;
         Instant::now().duration_since(last_used) > max_idle
     }

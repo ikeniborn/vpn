@@ -430,7 +430,7 @@ impl ComposeConfig {
     /// Load configuration from file
     pub async fn load_from_file(path: &PathBuf) -> Result<Self> {
         let content = tokio::fs::read_to_string(path).await
-            .map_err(|e| ComposeError::file_operation_failed("read", path.to_string_lossy()))?;
+            .map_err(|_e| ComposeError::file_operation_failed("read", path.to_string_lossy()))?;
 
         let config: ComposeConfig = toml::from_str(&content)
             .map_err(|e| ComposeError::config_error(format!("Failed to parse config: {}", e)))?;
@@ -444,7 +444,7 @@ impl ComposeConfig {
             .map_err(|e| ComposeError::config_error(format!("Failed to serialize config: {}", e)))?;
 
         tokio::fs::write(path, content).await
-            .map_err(|e| ComposeError::file_operation_failed("write", path.to_string_lossy()))?;
+            .map_err(|_e| ComposeError::file_operation_failed("write", path.to_string_lossy()))?;
 
         Ok(())
     }

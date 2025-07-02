@@ -87,7 +87,7 @@ impl ComposeGenerator {
         let output_path = self.options.output_dir.join("docker-compose.yml");
 
         tokio::fs::write(&output_path, compose_content).await
-            .map_err(|e| ComposeError::file_operation_failed("write", output_path.to_string_lossy()))?;
+            .map_err(|_e| ComposeError::file_operation_failed("write", output_path.to_string_lossy()))?;
 
         info!("Generated docker-compose.yml");
         Ok(())
@@ -103,7 +103,7 @@ impl ComposeGenerator {
                 let output_path = self.options.output_dir.join(filename);
 
                 tokio::fs::write(&output_path, override_content).await
-                    .map_err(|e| ComposeError::file_operation_failed("write", output_path.to_string_lossy()))?;
+                    .map_err(|_e| ComposeError::file_operation_failed("write", output_path.to_string_lossy()))?;
 
                 info!("Generated environment override: {}", env_name);
             }
@@ -161,7 +161,7 @@ impl ComposeGenerator {
 
         let output_path = self.options.output_dir.join(".env");
         tokio::fs::write(&output_path, env_content).await
-            .map_err(|e| ComposeError::file_operation_failed("write", output_path.to_string_lossy()))?;
+            .map_err(|_e| ComposeError::file_operation_failed("write", output_path.to_string_lossy()))?;
 
         info!("Generated .env file");
         Ok(())

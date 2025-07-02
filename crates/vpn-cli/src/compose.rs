@@ -17,7 +17,7 @@ pub async fn handle_compose_command(
     command: ComposeCommands,
     config_path: Option<PathBuf>,
     install_path: PathBuf,
-    verbose: bool,
+    _verbose: bool,
 ) -> Result<()> {
     match command {
         ComposeCommands::Up { detach, remove_orphans, services } => {
@@ -67,9 +67,9 @@ pub async fn handle_compose_command(
 
 /// Start VPN services using Docker Compose
 async fn handle_compose_up(
-    detach: bool,
-    remove_orphans: bool,
-    services: Vec<String>,
+    _detach: bool,
+    _remove_orphans: bool,
+    _services: Vec<String>,
     config_path: Option<PathBuf>,
     install_path: PathBuf,
 ) -> Result<()> {
@@ -87,9 +87,9 @@ async fn handle_compose_up(
 
 /// Stop VPN services
 async fn handle_compose_down(
-    volumes: bool,
-    remove_orphans: bool,
-    timeout: u32,
+    _volumes: bool,
+    _remove_orphans: bool,
+    _timeout: u32,
     config_path: Option<PathBuf>,
     install_path: PathBuf,
 ) -> Result<()> {
@@ -108,7 +108,7 @@ async fn handle_compose_down(
 /// Restart specific services
 async fn handle_compose_restart(
     services: Vec<String>,
-    timeout: u32,
+    _timeout: u32,
     config_path: Option<PathBuf>,
     install_path: PathBuf,
 ) -> Result<()> {
@@ -271,9 +271,9 @@ fn display_service_health(service: &ComposeServiceStatus) {
 /// View service logs
 async fn handle_compose_logs(
     service: Option<String>,
-    follow: bool,
-    tail: usize,
-    timestamps: bool,
+    _follow: bool,
+    _tail: usize,
+    _timestamps: bool,
     config_path: Option<PathBuf>,
     install_path: PathBuf,
 ) -> Result<()> {
@@ -373,8 +373,8 @@ async fn handle_compose_build(
 async fn handle_compose_generate(
     environment: String,
     output: PathBuf,
-    monitoring: bool,
-    dev_tools: bool,
+    _monitoring: bool,
+    _dev_tools: bool,
     config_path: Option<PathBuf>,
 ) -> Result<()> {
     println!("{}", format!("Generating Docker Compose files for {} environment...", environment).cyan());
@@ -454,8 +454,8 @@ async fn handle_compose_config(
 /// Handle environment management commands
 async fn handle_environment_command(
     command: EnvironmentCommands,
-    config_path: Option<PathBuf>,
-    install_path: PathBuf,
+    _config_path: Option<PathBuf>,
+    _install_path: PathBuf,
 ) -> Result<()> {
     match command {
         EnvironmentCommands::List => {
@@ -549,7 +549,7 @@ async fn handle_compose_health(
 /// Update service configurations
 async fn handle_compose_update(
     recreate: bool,
-    services: Vec<String>,
+    _services: Vec<String>,
     config_path: Option<PathBuf>,
     install_path: PathBuf,
 ) -> Result<()> {

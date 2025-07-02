@@ -635,9 +635,6 @@ pub enum RuntimeCommands {
         path: String,
     },
 
-    /// Migrate from Docker to containerd (DEPRECATED: Feature removed)
-    #[deprecated = "Containerd support has been deprecated in favor of Docker Compose orchestration"]
-    Migrate,
 
     /// Show runtime capabilities comparison
     Capabilities,

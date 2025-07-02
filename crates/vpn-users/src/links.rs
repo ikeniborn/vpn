@@ -79,7 +79,7 @@ impl ConnectionLinkGenerator {
         Ok(url)
     }
     
-    fn generate_trojan_link(user: &User, server_config: &ServerConfig) -> Result<String> {
+    fn _generate_trojan_link(user: &User, server_config: &ServerConfig) -> Result<String> {
         let password = user.config.private_key.as_ref()
             .unwrap_or(&user.id);
         
@@ -105,7 +105,7 @@ impl ConnectionLinkGenerator {
         Ok(url.to_string())
     }
     
-    fn generate_vmess_link(user: &User, server_config: &ServerConfig) -> Result<String> {
+    fn _generate_vmess_link(user: &User, server_config: &ServerConfig) -> Result<String> {
         let vmess_config = serde_json::json!({
             "v": "2",
             "ps": user.name,
@@ -170,7 +170,7 @@ impl ConnectionLinkGenerator {
         ))
     }
     
-    fn generate_proxy_server_link(user: &User, server_config: &ServerConfig) -> Result<String> {
+    fn generate_proxy_server_link(_user: &User, server_config: &ServerConfig) -> Result<String> {
         // Return both HTTP and SOCKS5 endpoints
         Ok(format!(
             "http://{}:{} | socks5://{}:{}",

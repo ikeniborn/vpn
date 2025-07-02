@@ -65,7 +65,7 @@ impl TemplateManager {
         }
 
         let content = tokio::fs::read_to_string(&template_path).await
-            .map_err(|e| ComposeError::file_operation_failed("read", template_path.to_string_lossy()))?;
+            .map_err(|_e| ComposeError::file_operation_failed("read", template_path.to_string_lossy()))?;
 
         // Register with both engines
         self.handlebars.register_template_string(name, &content)
@@ -105,7 +105,7 @@ impl TemplateManager {
         }
 
         let content = tokio::fs::read_to_string(path).await
-            .map_err(|e| ComposeError::file_operation_failed("read", path.to_string_lossy()))?;
+            .map_err(|_e| ComposeError::file_operation_failed("read", path.to_string_lossy()))?;
 
         self.handlebars.register_template_string(name, &content)
             .map_err(|e| ComposeError::template_error(format!("Handlebars error: {}", e)))?;

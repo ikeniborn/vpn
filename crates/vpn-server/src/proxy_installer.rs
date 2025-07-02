@@ -85,7 +85,7 @@ impl ProxyInstaller {
         Ok(())
     }
     
-    async fn deploy_proxy(&self, proxy_type: &str) -> Result<()> {
+    async fn deploy_proxy(&self, _proxy_type: &str) -> Result<()> {
         info!("Deploying proxy server with Docker Compose");
         
         let compose_path = self.install_path.join("proxy/docker-compose.yml");

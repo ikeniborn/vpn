@@ -30,7 +30,7 @@ impl<T> CacheEntry<T> {
         self.timestamp.elapsed() > self.ttl
     }
 
-    fn into_data(self) -> T {
+    fn _into_data(self) -> T {
         self.data
     }
 }
