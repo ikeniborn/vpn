@@ -8,7 +8,7 @@ This guide explains how to deploy the VPN server using Docker and Docker Compose
 
 ```bash
 # Download docker-compose file
-curl -L https://raw.githubusercontent.com/yourusername/vpn-rust/master/docker-compose.hub.yml -o docker-compose.yml
+curl -L https://raw.githubusercontent.com/yourusername/vpn/master/docker-compose.hub.yml -o docker-compose.yml
 
 # Set environment variables
 export VPN_PROTOCOL=vless
@@ -23,8 +23,8 @@ docker-compose up -d
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/vpn-rust.git
-cd vpn-rust
+git clone https://github.com/yourusername/vpn.git
+cd vpn
 
 # Build multi-arch images
 ./scripts/docker-build.sh
@@ -37,9 +37,9 @@ docker-compose -f docker-compose.hub.yml up -d
 
 | Image | Description | Size |
 |-------|-------------|------|
-| `vpn-rust:latest` | Main VPN server with CLI | ~50MB |
-| `vpn-rust-proxy-auth:latest` | Proxy authentication service | ~20MB |
-| `vpn-rust-identity:latest` | Identity management service | ~25MB |
+| `vpn:latest` | Main VPN server with CLI | ~50MB |
+| `vpn-proxy-auth:latest` | Proxy authentication service | ~20MB |
+| `vpn-identity:latest` | Identity management service | ~25MB |
 
 ## Architecture Support
 

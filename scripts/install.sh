@@ -24,7 +24,7 @@ LAUNCH_MENU=true
 SKIP_DOCKER=false
 VERBOSE=false
 REPO_URL="https://github.com/ikeniborn/vpn.git"
-REPO_DIR="$HOME/vpn-rust"
+REPO_DIR="$HOME/vpn"
 
 # Function to print colored output
 print_status() {
@@ -292,7 +292,7 @@ build_docker_images() {
     docker buildx build \
         --platform linux/$(uname -m) \
         --file Dockerfile \
-        --tag vpn-rust:latest \
+        --tag vpn:latest \
         --load \
         . || print_warning "Failed to build VPN server image"
     
@@ -302,7 +302,7 @@ build_docker_images() {
         docker buildx build \
             --platform linux/$(uname -m) \
             --file docker/proxy/Dockerfile.auth \
-            --tag vpn-rust-proxy-auth:latest \
+            --tag vpn-proxy-auth:latest \
             --load \
             . || print_warning "Failed to build proxy auth image"
     fi
@@ -313,7 +313,7 @@ build_docker_images() {
         docker buildx build \
             --platform linux/$(uname -m) \
             --file docker/Dockerfile.identity \
-            --tag vpn-rust-identity:latest \
+            --tag vpn-identity:latest \
             --load \
             . || print_warning "Failed to build identity service image"
     fi

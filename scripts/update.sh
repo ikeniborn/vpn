@@ -23,7 +23,7 @@ NC='\033[0m' # No Color
 LAUNCH_MENU=true
 CLEAN_BUILD=false
 VERBOSE=false
-REPO_DIR="$HOME/vpn-rust"
+REPO_DIR="$HOME/vpn"
 
 # Function to print colored output
 print_status() {
@@ -182,7 +182,7 @@ rebuild_docker_images() {
     docker buildx build \
         --platform linux/$(uname -m) \
         --file Dockerfile \
-        --tag vpn-rust:latest \
+        --tag vpn:latest \
         --load \
         . || print_warning "Failed to rebuild VPN server image"
     
@@ -192,7 +192,7 @@ rebuild_docker_images() {
         docker buildx build \
             --platform linux/$(uname -m) \
             --file docker/proxy/Dockerfile.auth \
-            --tag vpn-rust-proxy-auth:latest \
+            --tag vpn-proxy-auth:latest \
             --load \
             . || print_warning "Failed to rebuild proxy auth image"
     fi
@@ -203,7 +203,7 @@ rebuild_docker_images() {
         docker buildx build \
             --platform linux/$(uname -m) \
             --file docker/Dockerfile.identity \
-            --tag vpn-rust-identity:latest \
+            --tag vpn-identity:latest \
             --load \
             . || print_warning "Failed to rebuild identity service image"
     fi

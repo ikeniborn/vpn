@@ -114,7 +114,7 @@ chmod +x update.sh
 - 🐳 Installs Docker + Docker Compose (optional)
 - 📥 Clones VPN repository from GitHub
 - 🔨 Builds the entire project from source
-- 🐳 Builds Docker images locally (vpn-rust, proxy-auth, identity)
+- 🐳 Builds Docker images locally (vpn, proxy-auth, identity)
 - 📦 Installs VPN CLI tool via cargo
 - ⚙️ Creates default configuration
 - 🎯 Sets up shell completions
@@ -159,9 +159,9 @@ During installation, the following Docker images are built locally:
 
 | Image | Description | Size | Architectures |
 |-------|-------------|------|---------------|
-| `vpn-rust:latest` | Main VPN server with CLI | ~50MB | Local arch |
-| `vpn-rust-proxy-auth:latest` | Proxy authentication service | ~20MB | Local arch |
-| `vpn-rust-identity:latest` | Identity management service | ~25MB | Local arch |
+| `vpn:latest` | Main VPN server with CLI | ~50MB | Local arch |
+| `vpn-proxy-auth:latest` | Proxy authentication service | ~20MB | Local arch |
+| `vpn-identity:latest` | Identity management service | ~25MB | Local arch |
 
 ### 🛠️ Build from Source
 
@@ -568,10 +568,10 @@ cd vpn
 
 ```bash
 # Pull pre-built image
-docker pull ikeniborn/vpn-rust:latest
+docker pull ikeniborn/vpn:latest
 
 # Run CLI through Docker
-docker run -it --rm ikeniborn/vpn-rust:latest vpn menu
+docker run -it --rm ikeniborn/vpn:latest vpn menu
 ```
 
 ### Using the VPN CLI
@@ -649,6 +649,111 @@ sudo vpn backup create
 # Restore from backup
 sudo vpn backup restore /path/to/backup.tar.gz
 ```
+
+### 🚀 Production Deployment (Pre-built Binaries)
+
+Поскольку процесс сборки требует значительных ресурсов, рекомендуется собирать бинарные файлы на мощной машине и доставлять готовые артефакты на production-сервер.
+
+#### Вариант 1: Docker Images (Рекомендуется)
+
+**На сборочной машине:**
+```bash
+# Сборка multi-arch образов
+./scripts/docker-build.sh
+
+# Экспорт образов в tar-архивы
+docker save vpn:latest | gzip > vpn-latest.tar.gz
+docker save vpn-proxy-auth:latest | gzip > vpn-proxy-auth-latest.tar.gz
+docker save vpn-identity:latest | gzip > vpn-identity-latest.tar.gz
+
+# Альтернатива: push в private registry
+docker tag vpn:latest your-registry.com/vpn:latest
+docker push your-registry.com/vpn:latest
+```
+
+**На production-сервере:**
+```bash
+# Загрузка образов из архивов
+docker load < vpn-latest.tar.gz
+docker load < vpn-proxy-auth-latest.tar.gz
+docker load < vpn-identity-latest.tar.gz
+
+# Или pull из registry
+docker pull your-registry.com/vpn:latest
+
+# Запуск через Docker Compose
+docker-compose up -d
+```
+
+#### Вариант 2: Бинарные файлы
+
+**На сборочной машине:**
+```bash
+# Сборка оптимизированного релиза
+cargo build --release --workspace
+
+# Создание дистрибутива
+mkdir -p dist/bin
+cp target/release/vpn dist/bin/
+cp -r scripts dist/
+cp -r configs dist/
+
+# Архивация
+tar -czf vpn-dist.tar.gz dist/
+```
+
+**На production-сервере:**
+```bash
+# Распаковка дистрибутива
+tar -xzf vpn-dist.tar.gz
+
+# Установка бинарного файла
+sudo cp dist/bin/vpn /usr/local/bin/
+sudo chmod +x /usr/local/bin/vpn
+
+# Создание необходимых директорий
+sudo mkdir -p /etc/vpn /var/log/vpn
+
+# Запуск
+sudo vpn install --protocol vless
+```
+
+#### Вариант 3: GitHub Releases
+
+**Автоматическая загрузка последнего релиза:**
+```bash
+# Скрипт установки автоматически скачает бинарный файл для вашей архитектуры
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install.sh | bash -s -- --binary-only
+```
+
+**Ручная загрузка:**
+```bash
+# Определение архитектуры
+ARCH=$(uname -m)
+case $ARCH in
+    x86_64) ARCH="amd64" ;;
+    aarch64) ARCH="arm64" ;;
+esac
+
+# Загрузка бинарного файла
+wget https://github.com/ikeniborn/vpn/releases/latest/download/vpn-linux-$ARCH
+sudo mv vpn-linux-$ARCH /usr/local/bin/vpn
+sudo chmod +x /usr/local/bin/vpn
+```
+
+#### Системные требования для production
+
+**Минимальные требования сервера:**
+- CPU: 1 vCPU
+- RAM: 256MB (для запуска)
+- Storage: 100MB
+- Docker: 20.10+ (для контейнерного варианта)
+
+**Сборочная машина:**
+- CPU: 4+ vCPU
+- RAM: 4GB+
+- Storage: 10GB+
+- Rust: 1.75+
 
 ## 📊 Performance Metrics
 

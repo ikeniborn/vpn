@@ -24,7 +24,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["VPN Project Team"]
 license = "MIT"
-repository = "https://github.com/your-org/vpn-rust"
+repository = "https://github.com/your-org/vpn"
 
 [workspace.dependencies]
 tokio = { version = "1.35", features = ["full"] }

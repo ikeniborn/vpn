@@ -5,7 +5,7 @@ version: '3.8'
 
 services:
   vpn-server:
-    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_ORG:-yourusername}/vpn-rust:${VPN_VERSION:-latest}
+    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_ORG:-yourusername}/vpn:${VPN_VERSION:-latest}
     container_name: vpn-server
     restart: unless-stopped
     privileged: true
@@ -30,7 +30,7 @@ services:
       start_period: 60s
 
   vpn-proxy-auth:
-    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_ORG:-yourusername}/vpn-rust-proxy-auth:${VPN_VERSION:-latest}
+    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_ORG:-yourusername}/vpn-proxy-auth:${VPN_VERSION:-latest}
     container_name: vpn-proxy-auth
     restart: unless-stopped
     depends_on:
