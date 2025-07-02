@@ -53,26 +53,28 @@
 
 ### ⚡ One-Line Installation (Fastest)
 
-Install the VPN CLI tool with a single command:
+Install the VPN CLI tool with a single command **(run as regular user, not root)**:
 
 ```bash
-# Install VPN CLI and launch interactive menu
+# Install VPN CLI and launch interactive menu (as regular user)
 curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-install.sh | bash
 
-# Install without launching menu
+# Install without launching menu (as regular user)
 curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-install.sh | bash -s -- --no-menu
 ```
+
+**⚠️ Important:** Do not run with `sudo` - the script will prompt for sudo only when needed for system packages.
 
 ### 🔧 Installation Script
 
 For more control over the installation process:
 
 ```bash
-# Download the installation script
+# Download the installation script (as regular user)
 wget https://raw.githubusercontent.com/your-org/vpn/main/scripts/install.sh
 chmod +x install.sh
 
-# Standard installation (builds from source)
+# Standard installation - builds from source (as regular user)
 ./install.sh
 
 # Installation without launching menu
@@ -87,6 +89,11 @@ chmod +x install.sh
 # View all options
 ./install.sh --help
 ```
+
+**Permission Requirements:**
+- 🔓 **Regular user** for Rust installation and building
+- 🔒 **Sudo access** only for system package installation
+- 📂 CLI installs to `~/.cargo/bin/` (user directory)
 
 **Installation Script Features:**
 - 🔍 Automatic OS detection (Ubuntu, Debian, Fedora, RHEL, CentOS, Arch)
@@ -138,9 +145,15 @@ docker exec vpn-server vpn users link alice --qr
 
 Before building from source, ensure you have the following installed:
 
+**Important: Permissions and User Setup**
+- Build process should be run as a **regular user** (not root)
+- Only system dependency installation requires sudo privileges
+- Rust toolchain installs to user's home directory (`~/.cargo/`)
+- Project builds and installs to user's cargo directory
+
 **1. Rust Toolchain (Required)**
 ```bash
-# Install Rust using rustup (recommended)
+# Install Rust using rustup (recommended) - run as regular user, not root
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # Follow the on-screen instructions, then reload your shell
@@ -154,7 +167,7 @@ cargo --version
 rustup update stable
 ```
 
-**2. System Dependencies**
+**2. System Dependencies (requires sudo)**
 ```bash
 # Ubuntu/Debian
 sudo apt update
@@ -197,23 +210,30 @@ sudo usermod -aG docker $USER
 
 #### Building the Project
 
+**Important: Run these commands as a regular user, not root!**
+
 ```bash
-# Clone the repository
+# Clone the repository (as regular user)
 git clone https://github.com/your-org/vpn.git
 cd vpn
 
-# Build the entire workspace
+# Build the entire workspace (as regular user)
 cargo build --release --workspace
 
-# Install the CLI tool
+# Install the CLI tool to user's cargo bin (as regular user)
 cargo install --path crates/vpn-cli
 
-# Verify installation
+# Verify installation (CLI installed to ~/.cargo/bin/)
 vpn --version
 
 # Run system compatibility check
 vpn doctor
 ```
+
+**Note about installation path:**
+- The `vpn` binary is installed to `~/.cargo/bin/`
+- Make sure `~/.cargo/bin` is in your `$PATH`
+- If not in PATH, add to your shell profile: `export PATH="$HOME/.cargo/bin:$PATH"`
 
 #### Additional Build Options
 
@@ -235,6 +255,31 @@ cross build --target armv7-unknown-linux-gnueabihf --release
 - 1GB free disk space
 
 **Troubleshooting Build Issues**
+
+**Permission Issues:**
+```bash
+# ❌ WRONG: Don't run as root
+sudo cargo build --release    # This will cause permission problems
+
+# ✅ CORRECT: Run as regular user
+cargo build --release         # Builds to user's target directory
+
+# If you accidentally built as root, fix ownership:
+sudo chown -R $USER:$USER ~/.cargo target/
+```
+
+**PATH Issues:**
+```bash
+# If 'vpn' command not found after installation
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# Or for zsh
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+**Build Errors:**
 ```bash
 # If you encounter linking errors on Linux
 export PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/local/lib/pkgconfig"
@@ -246,6 +291,9 @@ export PKG_CONFIG_PATH="$OPENSSL_DIR/lib/pkgconfig"
 # Clean build if you have issues
 cargo clean
 cargo build --release --workspace
+
+# If running out of memory during build
+cargo build --release --workspace -j 1  # Use single thread
 ```
 
 ## 📈 Performance Metrics
