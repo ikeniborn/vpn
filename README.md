@@ -53,54 +53,56 @@
 
 ### ⚡ One-Line Installation (Fastest)
 
-Deploy a fully configured VPN server with a single command:
+Install the VPN CLI tool with a single command:
 
 ```bash
-# Basic installation with all defaults
-curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-deploy.sh | sudo bash
+# Install VPN CLI and launch interactive menu
+curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-install.sh | bash
 
-# Or with custom options
-curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-deploy.sh | sudo bash -s -- --protocol vless --port 443
+# Install without launching menu
+curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-install.sh | bash -s -- --no-menu
 ```
 
-### 🔧 Automated Deployment Script
+### 🔧 Installation Script
 
-For more control over the deployment process:
+For more control over the installation process:
 
 ```bash
-# Download the deployment script
-wget https://raw.githubusercontent.com/your-org/vpn/main/scripts/deploy.sh
-chmod +x deploy.sh
+# Download the installation script
+wget https://raw.githubusercontent.com/your-org/vpn/main/scripts/install.sh
+chmod +x install.sh
 
-# Run with default settings (VLESS on port 443)
-sudo ./deploy.sh
+# Standard installation (builds from source)
+./install.sh
 
-# Deploy with custom protocol and port
-sudo ./deploy.sh --protocol outline --port 8388
+# Installation without launching menu
+./install.sh --no-menu
 
-# Deploy with domain and auto SSL
-sudo ./deploy.sh --domain vpn.example.com --email admin@example.com
+# Skip Docker installation
+./install.sh --skip-docker
 
-# Build from source instead of using Docker
-sudo ./deploy.sh --build-from-source
+# Use existing Rust installation
+./install.sh --skip-rust
 
 # View all options
-./deploy.sh --help
+./install.sh --help
 ```
 
-**Deployment Script Features:**
+**Installation Script Features:**
 - 🔍 Automatic OS detection (Ubuntu, Debian, Fedora, RHEL, CentOS, Arch)
-- 📦 Installs all required dependencies
-- 🐳 Docker and Docker Compose installation
-- 🔥 Automatic firewall configuration
-- ⚙️ System optimization for VPN performance
-- 🛡️ Security hardening
-- ✅ Post-deployment health checks
-- 👤 Optional first user creation
+- 📦 Installs all required dependencies (build tools, SSL, protobuf)
+- 🦀 Installs Rust toolchain (if not present)
+- 🐳 Optional Docker installation
+- 🔨 Builds the entire project from source
+- 📦 Installs the VPN CLI tool via cargo
+- ⚙️ Creates default configuration
+- 🎯 Sets up shell completions
+- ✅ Runs post-installation checks
+- 🎮 Optionally launches interactive menu
 
-### 🐳 Manual Docker Deployment
+### 🐳 Using Pre-built Docker Images
 
-If you prefer manual control:
+If you prefer using Docker without building:
 
 ```bash
 # Quick start with Docker Compose
@@ -427,11 +429,11 @@ crates/
 - **Regular Updates**: Automated security updates
 - **Audit Logging**: Comprehensive security event logging
 
-## 🚢 Deployment Guide
+## 🚢 Installation & Usage Guide
 
 ### Supported Platforms
 
-The deployment script supports the following platforms:
+The installation script supports the following platforms:
 
 | Platform | Version | Architecture | Status |
 |----------|---------|--------------|---------|
@@ -457,84 +459,92 @@ The deployment script supports the following platforms:
 - Storage: 10GB+ free space
 - Network: Dedicated IP with open ports
 
-### Deployment Options
+### Installation Methods
 
-#### 1. Cloud Providers
+#### 1. Cloud Servers (VPS)
 
-**DigitalOcean (One-Click)**
+**DigitalOcean**
 ```bash
-# Deploy on DigitalOcean droplet
-doctl compute droplet create vpn-server \
-  --image ubuntu-22-04-x64 \
-  --size s-1vcpu-1gb \
-  --region nyc1 \
-  --user-data-file <(curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-deploy.sh)
+# SSH into your droplet and run
+curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-install.sh | bash
 ```
 
 **AWS EC2**
 ```bash
-# Use user data script during instance creation
+# Add to user data or run after instance creation
 #!/bin/bash
-curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-deploy.sh | bash
+curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-install.sh | bash
 ```
 
-**Google Cloud Platform**
-```bash
-# Create instance with startup script
-gcloud compute instances create vpn-server \
-  --metadata startup-script-url=https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-deploy.sh
-```
-
-#### 2. VPS Providers
-
-The deployment script works with any VPS provider:
+**Other VPS Providers**
+The installation works with any VPS provider:
 - Vultr
 - Linode
 - Hetzner
 - OVH
 - Contabo
 
-Simply SSH into your VPS and run:
-```bash
-curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-deploy.sh | sudo bash
-```
+#### 2. Local Development
 
-#### 3. Self-Hosted / On-Premise
-
-For dedicated servers or home labs:
 ```bash
-# Clone and customize deployment
+# Clone repository and install
 git clone https://github.com/your-org/vpn.git
-cd vpn/scripts
-
-# Edit configuration as needed
-./deploy.sh --protocol vless --port 443 --domain vpn.mycompany.com
+cd vpn
+./scripts/install.sh
 ```
 
-### Post-Deployment Configuration
+#### 3. Docker Installation
 
-#### SSL/TLS Certificates
-
-If you have a domain, the deployment script can automatically configure SSL:
 ```bash
-sudo ./deploy.sh --domain vpn.example.com --email admin@example.com
+# Pull pre-built image
+docker pull yourusername/vpn-rust:latest
+
+# Run CLI through Docker
+docker run -it --rm yourusername/vpn-rust:latest vpn menu
 ```
 
-#### Firewall Rules
+### Using the VPN CLI
 
-The script automatically configures firewall rules, but you can customize them:
+After installation, the VPN CLI provides a comprehensive management interface:
+
+#### Interactive Menu
 ```bash
-# Additional ports for multiple protocols
-sudo ufw allow 8388/tcp  # Shadowsocks
-sudo ufw allow 51820/udp # WireGuard
+# Launch interactive menu (easiest way to start)
+vpn menu
 ```
 
-#### Performance Tuning
-
-The script applies optimal settings, but for high-traffic servers:
+#### Common Commands
 ```bash
-# Edit /etc/sysctl.d/99-vpn-performance.conf
-sudo sysctl -p /etc/sysctl.d/99-vpn-performance.conf
+# Install VPN server
+sudo vpn install --protocol vless --port 443
+
+# Manage users
+sudo vpn users create alice
+sudo vpn users list
+sudo vpn users link alice --qr
+
+# Server management
+sudo vpn start
+sudo vpn stop
+sudo vpn status
+
+# Monitoring
+sudo vpn monitor
+sudo vpn monitor logs
+```
+
+#### Configuration
+
+The CLI uses a configuration file at `~/.config/vpn-cli/config.toml`:
+```bash
+# Edit configuration
+vpn config edit
+
+# View current configuration
+vpn config show
+
+# Set specific values
+vpn config set server.port 8443
 ```
 
 ### Monitoring and Maintenance
