@@ -51,7 +51,56 @@
 
 ## 🚀 Quick Start
 
-### 🐳 Docker Deployment (Recommended)
+### ⚡ One-Line Installation (Fastest)
+
+Deploy a fully configured VPN server with a single command:
+
+```bash
+# Basic installation with all defaults
+curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-deploy.sh | sudo bash
+
+# Or with custom options
+curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-deploy.sh | sudo bash -s -- --protocol vless --port 443
+```
+
+### 🔧 Automated Deployment Script
+
+For more control over the deployment process:
+
+```bash
+# Download the deployment script
+wget https://raw.githubusercontent.com/your-org/vpn/main/scripts/deploy.sh
+chmod +x deploy.sh
+
+# Run with default settings (VLESS on port 443)
+sudo ./deploy.sh
+
+# Deploy with custom protocol and port
+sudo ./deploy.sh --protocol outline --port 8388
+
+# Deploy with domain and auto SSL
+sudo ./deploy.sh --domain vpn.example.com --email admin@example.com
+
+# Build from source instead of using Docker
+sudo ./deploy.sh --build-from-source
+
+# View all options
+./deploy.sh --help
+```
+
+**Deployment Script Features:**
+- 🔍 Automatic OS detection (Ubuntu, Debian, Fedora, RHEL, CentOS, Arch)
+- 📦 Installs all required dependencies
+- 🐳 Docker and Docker Compose installation
+- 🔥 Automatic firewall configuration
+- ⚙️ System optimization for VPN performance
+- 🛡️ Security hardening
+- ✅ Post-deployment health checks
+- 👤 Optional first user creation
+
+### 🐳 Manual Docker Deployment
+
+If you prefer manual control:
 
 ```bash
 # Quick start with Docker Compose
@@ -377,6 +426,148 @@ crates/
 - **Network Isolation**: Segmented networks with minimal exposure
 - **Regular Updates**: Automated security updates
 - **Audit Logging**: Comprehensive security event logging
+
+## 🚢 Deployment Guide
+
+### Supported Platforms
+
+The deployment script supports the following platforms:
+
+| Platform | Version | Architecture | Status |
+|----------|---------|--------------|---------|
+| Ubuntu | 20.04, 22.04, 24.04 | x86_64, arm64 | ✅ Fully Supported |
+| Debian | 10, 11, 12 | x86_64, arm64 | ✅ Fully Supported |
+| Fedora | 37, 38, 39 | x86_64, arm64 | ✅ Fully Supported |
+| RHEL/CentOS | 8, 9 | x86_64, arm64 | ✅ Fully Supported |
+| Arch Linux | Latest | x86_64, arm64 | ✅ Fully Supported |
+| Raspberry Pi OS | Latest | armv7, arm64 | ✅ Fully Supported |
+
+### System Requirements
+
+**Minimum Requirements:**
+- CPU: 1 vCPU (any x86_64 or ARM processor)
+- RAM: 512MB
+- Storage: 2GB free space
+- Network: Public IP address
+- OS: Linux with systemd
+
+**Recommended Requirements:**
+- CPU: 2+ vCPUs
+- RAM: 1GB+
+- Storage: 10GB+ free space
+- Network: Dedicated IP with open ports
+
+### Deployment Options
+
+#### 1. Cloud Providers
+
+**DigitalOcean (One-Click)**
+```bash
+# Deploy on DigitalOcean droplet
+doctl compute droplet create vpn-server \
+  --image ubuntu-22-04-x64 \
+  --size s-1vcpu-1gb \
+  --region nyc1 \
+  --user-data-file <(curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-deploy.sh)
+```
+
+**AWS EC2**
+```bash
+# Use user data script during instance creation
+#!/bin/bash
+curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-deploy.sh | bash
+```
+
+**Google Cloud Platform**
+```bash
+# Create instance with startup script
+gcloud compute instances create vpn-server \
+  --metadata startup-script-url=https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-deploy.sh
+```
+
+#### 2. VPS Providers
+
+The deployment script works with any VPS provider:
+- Vultr
+- Linode
+- Hetzner
+- OVH
+- Contabo
+
+Simply SSH into your VPS and run:
+```bash
+curl -sSL https://raw.githubusercontent.com/your-org/vpn/main/scripts/quick-deploy.sh | sudo bash
+```
+
+#### 3. Self-Hosted / On-Premise
+
+For dedicated servers or home labs:
+```bash
+# Clone and customize deployment
+git clone https://github.com/your-org/vpn.git
+cd vpn/scripts
+
+# Edit configuration as needed
+./deploy.sh --protocol vless --port 443 --domain vpn.mycompany.com
+```
+
+### Post-Deployment Configuration
+
+#### SSL/TLS Certificates
+
+If you have a domain, the deployment script can automatically configure SSL:
+```bash
+sudo ./deploy.sh --domain vpn.example.com --email admin@example.com
+```
+
+#### Firewall Rules
+
+The script automatically configures firewall rules, but you can customize them:
+```bash
+# Additional ports for multiple protocols
+sudo ufw allow 8388/tcp  # Shadowsocks
+sudo ufw allow 51820/udp # WireGuard
+```
+
+#### Performance Tuning
+
+The script applies optimal settings, but for high-traffic servers:
+```bash
+# Edit /etc/sysctl.d/99-vpn-performance.conf
+sudo sysctl -p /etc/sysctl.d/99-vpn-performance.conf
+```
+
+### Monitoring and Maintenance
+
+#### Health Checks
+```bash
+# Check server status
+sudo vpn status
+
+# Run diagnostics
+sudo vpn doctor
+
+# Monitor real-time connections
+sudo vpn monitor
+```
+
+#### Automated Updates
+```bash
+# Enable automatic updates
+sudo vpn config set auto_update true
+
+# Manual update
+sudo vpn update
+```
+
+#### Backup and Restore
+```bash
+# Backup server configuration and users
+sudo vpn backup create
+
+# Restore from backup
+sudo vpn backup restore /path/to/backup.tar.gz
+```
 
 ## 📊 Performance Metrics
 
