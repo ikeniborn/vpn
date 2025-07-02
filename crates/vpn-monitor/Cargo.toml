@@ -8,7 +8,7 @@ license.workspace = true
 [dependencies]
 vpn-docker = { path = "../vpn-docker" }
 vpn-users = { path = "../vpn-users" }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["rt", "fs", "net", "time", "macros"] }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }

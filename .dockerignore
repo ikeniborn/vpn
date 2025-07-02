@@ -1,83 +1,59 @@
-# Git
-.git
+# Git files
+.git/
 .gitignore
 .gitattributes
 
-# CI/CD
-.github
-.gitlab-ci.yml
+# Build artifacts
+target/
+Dockerfile*
+.dockerignore
 
-# Documentation
-README.md
-CHANGELOG.md
-SECURITY.md
-OPERATIONS.md
+# Development files
 *.md
+!README.md
+docs/
+benches/
+examples/
 
-# IDE
-.vscode
-.idea
+# IDE files
+.vscode/
+.idea/
 *.swp
 *.swo
 *~
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db
 
-# Rust
-target/
-**/target/
-Cargo.lock
-*.pdb
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
 
-# Logs
-*.log
-logs/
-*.log.*
+# Test files
+tests/
+*.test
+*.spec
 
 # Temporary files
 tmp/
 temp/
-.tmp
-
-# Test files
-**/tests/
-test-*
-*_test.rs
-
-# Development
-.env
-.env.local
-.env.development
-.env.test
-
-# Docker
-Dockerfile.*
-docker-compose*.yml
-.docker
-
-# Build artifacts
-dist/
-build/
-out/
-
-# Coverage
-coverage/
-*.profraw
-
-# Backups
+*.tmp
 *.bak
-*.backup
+*.log
 
-# Node modules (if any)
-node_modules/
+# Local configuration
+.env
+.env.*
+config.local.toml
 
-# Examples and docs
-examples/
-docs/
-doc/
+# Analysis files
+*.profraw
+*.profdata
+flamegraph.svg
 
-# Benchmarks
-benches/
-**/benches/
+# Coverage reports
+coverage/
+*.lcov
+tarpaulin-report.html

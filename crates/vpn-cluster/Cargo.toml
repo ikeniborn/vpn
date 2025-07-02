@@ -8,7 +8,7 @@ repository.workspace = true
 
 [dependencies]
 # Core dependencies
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time", "macros"] }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }

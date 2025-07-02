@@ -7,7 +7,7 @@ license.workspace = true
 
 [dependencies]
 bollard = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }

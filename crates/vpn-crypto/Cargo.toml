@@ -23,7 +23,7 @@ zeroize = "1.7"
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = "0.4"
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["rt", "fs", "macros"] }
 
 [dev-dependencies]
 tempfile = "3.8"

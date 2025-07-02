@@ -12,7 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Core dependencies
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "signal", "macros"] }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }

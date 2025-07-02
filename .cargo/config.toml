@@ -1,0 +1,41 @@
+# Cargo build configuration for VPN project
+
+[build]
+# Use parallel compilation
+jobs = 16                        # Adjust based on your CPU cores
+incremental = true               # Enable incremental compilation
+target-dir = "target"           # Shared target directory
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = [
+    "-C", "target-cpu=native",       # Optimize for native CPU
+]
+
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"
+rustflags = ["-C", "target-cpu=native"]
+
+# Alias for common commands
+[alias]
+# Build with fast profile
+build-fast = "build --profile=release-fast"
+# Run all tests with optimizations
+test-fast = "test --profile=test"
+# Check all features
+check-all = "check --all-features --workspace"
+# Format and check
+fmt-check = "fmt --all -- --check"
+
+# Registry configuration
+[registries.crates-io]
+protocol = "sparse"             # Use sparse protocol for faster index updates
+
+# Network configuration
+[net]
+retry = 3                       # Number of retries for network requests
+offline = false                 # Allow network access
+
+# Terminal output
+[term]
+verbose = false                 # Less verbose output by default
+color = "auto"                  # Automatic color detection

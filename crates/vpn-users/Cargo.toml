@@ -9,7 +9,7 @@ license.workspace = true
 vpn-types = { path = "../vpn-types" }
 vpn-crypto = { path = "../vpn-crypto" }
 vpn-network = { path = "../vpn-network" }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync", "macros"] }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }

@@ -225,38 +225,47 @@ pub async fn start_metrics_server(
     bind_address: &str,
     path: &str,
 ) -> Result<()> {
-    use warp::Filter;
+    use axum::{Router, routing::get};
     
     let metrics = Arc::new(metrics);
-    let path_segment = path.trim_start_matches('/').to_string();
+    let path = format!("/{}", path.trim_start_matches('/'));
     
-    let metrics_route = warp::path(path_segment)
-        .and(warp::get())
-        .and(warp::any().map(move || metrics.clone()))
-        .and_then(serve_metrics);
+    let app = Router::new()
+        .route(&path, get({
+            let metrics = metrics.clone();
+            move || serve_metrics(metrics.clone())
+        }));
     
     let addr: std::net::SocketAddr = bind_address.parse()
         .map_err(|e| crate::ProxyError::config(format!("Invalid metrics address: {}", e)))?;
     
     info!("Starting metrics server on {}", bind_address);
     
-    warp::serve(metrics_route)
-        .run(addr)
-        .await;
+    let listener = tokio::net::TcpListener::bind(addr).await
+        .map_err(|e| crate::ProxyError::config(format!("Failed to bind metrics server: {}", e)))?;
+    
+    axum::serve(listener, app).await
+        .map_err(|e| crate::ProxyError::internal(format!("Metrics server error: {}", e)))?;
     
     Ok(())
 }
 
 async fn serve_metrics(
     metrics: Arc<ProxyMetrics>,
-) -> std::result::Result<impl warp::Reply, warp::Rejection> {
+) -> impl axum::response::IntoResponse {
+    use http::{Response, StatusCode, header};
+    use axum::body::Body;
+    
     match metrics.export() {
-        Ok(output) => Ok(warp::reply::with_header(
-            output,
-            "Content-Type",
-            "text/plain; version=0.0.4",
-        )),
-        Err(_) => Err(warp::reject::reject()),
+        Ok(output) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "text/plain; version=0.0.4")
+            .body(Body::from(output))
+            .unwrap(),
+        Err(_) => Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(Body::empty())
+            .unwrap(),
     }
 }
 

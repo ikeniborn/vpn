@@ -82,9 +82,11 @@ docker-compose up -d
 
 **Бинарные файлы:**
 ```bash
-# Скачать готовый релиз
-wget https://github.com/ikeniborn/vpn/releases/latest/download/vpn-linux-amd64
-sudo mv vpn-linux-amd64 /usr/local/bin/vpn
+# Клонировать и собрать локально
+git clone https://github.com/ikeniborn/vpn.git
+cd vpn
+cargo build --release
+sudo cp target/release/vpn /usr/local/bin/
 sudo chmod +x /usr/local/bin/vpn
 ```
 

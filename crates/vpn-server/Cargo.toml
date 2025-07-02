@@ -11,7 +11,7 @@ vpn-docker = { path = "../vpn-docker" }
 vpn-crypto = { path = "../vpn-crypto" }
 vpn-network = { path = "../vpn-network" }
 vpn-users = { path = "../vpn-users" }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["rt", "fs", "process", "time", "macros"] }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }

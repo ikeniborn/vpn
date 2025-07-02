@@ -1,11 +1,20 @@
-# Multi-stage Dockerfile for VPN Server
+# Multi-stage Dockerfile for VPN Server with cargo-chef optimization
 # Supports multi-arch builds (amd64, arm64)
 
-# Build stage
-FROM --platform=$BUILDPLATFORM rust:1.75-alpine AS builder
-
-# Install build dependencies
+# Chef stage - prepares dependencies
+FROM --platform=$BUILDPLATFORM rust:1.75-alpine AS chef
 RUN apk add --no-cache musl-dev openssl-dev perl make
+RUN cargo install cargo-chef --version 0.1.66
+WORKDIR /app
+
+# Planner stage - creates recipe.json
+FROM chef AS planner
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ ./crates/
+RUN cargo chef prepare --recipe-path recipe.json
+
+# Builder stage - builds dependencies and binary
+FROM chef AS builder
 
 # Set up cross compilation
 ARG TARGETARCH
@@ -16,23 +25,26 @@ RUN case "$TARGETARCH" in \
     *) echo "Unsupported architecture: $TARGETARCH" && exit 1 ;; \
     esac
 
-# Create app directory
-WORKDIR /app
-
-# Copy workspace files
-COPY Cargo.toml Cargo.lock ./
-COPY crates/ ./crates/
-
 # Install cross compilation tools if needed
 RUN if [ "$BUILDPLATFORM" != "linux/$TARGETARCH" ]; then \
         rustup target add $(cat /target.txt); \
     fi
 
-# Build release binary
+# Copy recipe and build dependencies (cached unless dependencies change)
+COPY --from=planner /app/recipe.json recipe.json
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
-    cargo build --release --target $(cat /target.txt) --bin vpn && \
-    cp target/$(cat /target.txt)/release/vpn /vpn-binary
+    cargo chef cook --release --target $(cat /target.txt) --recipe-path recipe.json
+
+# Copy source code and build binary
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ ./crates/
+
+# Build release binary with optimizations
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/target \
+    cargo build --profile=release-fast --target $(cat /target.txt) --bin vpn && \
+    cp target/$(cat /target.txt)/release-fast/vpn /vpn-binary
 
 # Runtime stage
 FROM alpine:3.19
