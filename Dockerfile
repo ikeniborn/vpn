@@ -2,7 +2,7 @@
 # Supports multi-arch builds (amd64, arm64)
 
 # Chef stage - prepares dependencies
-FROM --platform=$BUILDPLATFORM rust:1.75-alpine AS chef
+FROM --platform=$BUILDPLATFORM rust:1.88-alpine AS chef
 RUN apk add --no-cache musl-dev openssl-dev perl make
 RUN cargo install cargo-chef --version 0.1.66
 WORKDIR /app
