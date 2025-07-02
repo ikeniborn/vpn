@@ -8,7 +8,7 @@ pub mod error;
 #[cfg(test)]
 pub mod proptest;
 
-pub use user::{User, UserStatus, UserConfig};
+pub use user::{User, UserStatus, UserConfig, UserStats};
 pub use manager::UserManager;
 pub use links::ConnectionLinkGenerator;
 pub use batch::BatchOperations;

@@ -1,6 +1,6 @@
 use vpn_users::{
-    UserManager, User, UserConfig, UserStatus,
-    ConnectionLinkGenerator, BatchOperations, VpnProtocol
+    UserManager, User, UserConfig, UserStatus, UserStats,
+    ConnectionLinkGenerator, VpnProtocol
 };
 use vpn_users::config::ServerConfig;
 use tempfile::tempdir;
@@ -47,9 +47,9 @@ async fn test_user_listing() -> Result<(), Box<dyn std::error::Error>> {
     let user_manager = UserManager::new(temp_dir.path().to_path_buf(), server_config)?;
     
     // Create multiple users
-    let user1 = user_manager.create_user("user1".to_string(), VpnProtocol::Vless).await?;
-    let user2 = user_manager.create_user("user2".to_string(), VpnProtocol::Vless).await?;
-    let user3 = user_manager.create_user("user3".to_string(), VpnProtocol::Vless).await?;
+    let _user1 = user_manager.create_user("user1".to_string(), VpnProtocol::Vless).await?;
+    let _user2 = user_manager.create_user("user2".to_string(), VpnProtocol::Vless).await?;
+    let _user3 = user_manager.create_user("user3".to_string(), VpnProtocol::Vless).await?;
     
     // List all users
     let users = user_manager.list_users(None).await?;
@@ -71,13 +71,14 @@ async fn test_user_update() -> Result<(), Box<dyn std::error::Error>> {
     
     // Create and update user
     let mut user = user_manager.create_user("testuser".to_string(), VpnProtocol::Vless).await?;
+    let user_id = user.id.clone();
     user.email = Some("test@example.com".to_string());
     user.status = UserStatus::Suspended;
     
-    user_manager.update_user(&user).await?;
+    user_manager.update_user(user).await?;
     
     // Verify update
-    let updated_user = user_manager.get_user(&user.id).await?;
+    let updated_user = user_manager.get_user(&user_id).await?;
     assert_eq!(updated_user.email, Some("test@example.com".to_string()));
     assert_eq!(updated_user.status, UserStatus::Suspended);
     
@@ -220,8 +221,8 @@ async fn test_user_statistics() -> Result<(), Box<dyn std::error::Error>> {
     let _user1 = user_manager.create_user("user1".to_string(), VpnProtocol::Vless).await?;
     let mut user2 = user_manager.create_user("user2".to_string(), VpnProtocol::Vless).await?;
     user2.status = UserStatus::Suspended;
-    user_manager.update_user(&user2).await?;
-    let _user3 = user_manager.create_user("user3".to_string(), VpnProtocol::Vless).await?;
+    user_manager.update_user(user2).await?;
+    let _user3 = user_manager.create_user("user3".to_string(), VpnProtocol::Outline).await?;
     
     // Get user statistics
     let stats = user_manager.get_user_statistics().await?;
@@ -229,7 +230,7 @@ async fn test_user_statistics() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(stats.active_users, 2);
     assert_eq!(stats.suspended_users, 1);
     assert_eq!(stats.users_by_protocol.get(&VpnProtocol::Vless), Some(&2));
-    assert_eq!(stats.users_by_protocol.get(&VpnProtocol::Vmess), Some(&1));
+    assert_eq!(stats.users_by_protocol.get(&VpnProtocol::Outline), Some(&1));
     
     Ok(())
 }
@@ -269,23 +270,32 @@ async fn test_user_backup_and_restore() -> Result<(), Box<dyn std::error::Error>
 fn test_user_serialization() -> Result<(), Box<dyn std::error::Error>> {
     let user = User {
         id: Uuid::new_v4().to_string(),
+        short_id: "short".to_string(),
         name: "testuser".to_string(),
         email: Some("test@example.com".to_string()),
+        created_at: chrono::Utc::now(),
+        last_active: None,
+        status: UserStatus::Active,
         protocol: VpnProtocol::Vless,
         config: UserConfig {
+            public_key: Some("pubkey".to_string()),
+            private_key: Some("key".to_string()),
             server_host: "example.com".to_string(),
             server_port: 443,
-            private_key: Some("key".to_string()),
-            public_key: Some("pubkey".to_string()),
-            short_id: Some("short".to_string()),
             sni: Some("google.com".to_string()),
-            reality_dest: Some("dest".to_string()),
-            additional_settings: HashMap::new(),
+            path: Some("/path".to_string()),
+            security: "reality".to_string(),
+            network: "tcp".to_string(),
+            header_type: Some("none".to_string()),
+            flow: Some("xtls-rprx-vision".to_string()),
         },
-        status: UserStatus::Active,
-        created_at: chrono::Utc::now(),
-        last_seen: None,
-        traffic_stats: None,
+        stats: UserStats {
+            bytes_sent: 0,
+            bytes_received: 0,
+            connection_count: 0,
+            last_connection: None,
+            total_uptime: 0,
+        },
     };
     
     // Test JSON serialization
@@ -303,16 +313,16 @@ fn test_user_serialization() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_vpn_protocol_conversion() {
     // Test protocol string conversion
-    assert_eq!(VpnProtocol::Vless.to_string(), "vless");
-    assert_eq!(VpnProtocol::Vmess.to_string(), "vmess");
-    assert_eq!(VpnProtocol::Trojan.to_string(), "trojan");
-    assert_eq!(VpnProtocol::Shadowsocks.to_string(), "shadowsocks");
+    assert_eq!(VpnProtocol::Vless.to_string(), "VLESS");
+    assert_eq!(VpnProtocol::Wireguard.to_string(), "WireGuard");
+    assert_eq!(VpnProtocol::OpenVPN.to_string(), "OpenVPN");
+    assert_eq!(VpnProtocol::Outline.to_string(), "Outline");
     
     // Test protocol from string
     assert_eq!("vless".parse::<VpnProtocol>().unwrap(), VpnProtocol::Vless);
-    assert_eq!("vmess".parse::<VpnProtocol>().unwrap(), VpnProtocol::Vmess);
-    assert_eq!("trojan".parse::<VpnProtocol>().unwrap(), VpnProtocol::Trojan);
-    assert_eq!("shadowsocks".parse::<VpnProtocol>().unwrap(), VpnProtocol::Shadowsocks);
+    assert_eq!("wireguard".parse::<VpnProtocol>().unwrap(), VpnProtocol::Wireguard);
+    assert_eq!("openvpn".parse::<VpnProtocol>().unwrap(), VpnProtocol::OpenVPN);
+    assert_eq!("shadowsocks".parse::<VpnProtocol>().unwrap(), VpnProtocol::Outline);
     
     assert!("invalid".parse::<VpnProtocol>().is_err());
 }

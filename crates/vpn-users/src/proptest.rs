@@ -38,9 +38,9 @@ pub fn port_strategy() -> impl Strategy<Value = u16> {
 pub fn protocol_strategy() -> impl Strategy<Value = VpnProtocol> {
     prop_oneof![
         Just(VpnProtocol::Vless),
-        Just(VpnProtocol::Shadowsocks),
-        Just(VpnProtocol::Trojan),
-        Just(VpnProtocol::Vmess),
+        Just(VpnProtocol::Outline),
+        Just(VpnProtocol::Wireguard),
+        Just(VpnProtocol::OpenVPN),
     ]
 }
 
