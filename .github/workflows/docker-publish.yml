@@ -59,7 +59,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             
       - name: Build and push VPN Server image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
@@ -75,7 +75,7 @@ jobs:
             BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
             
       - name: Build and push Auth Proxy image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./docker/proxy/Dockerfile.auth
@@ -89,7 +89,7 @@ jobs:
           cache-to: type=gha,mode=max
           
       - name: Build and push Identity Service image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./docker/Dockerfile.identity
