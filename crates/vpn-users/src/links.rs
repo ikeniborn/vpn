@@ -1,6 +1,7 @@
 use url::Url;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use crate::user::{User, VpnProtocol};
+use crate::user::User;
+use vpn_types::protocol::VpnProtocol;
 use crate::config::ServerConfig;
 use crate::error::{UserError, Result};
 
@@ -10,9 +11,12 @@ impl ConnectionLinkGenerator {
     pub fn generate(user: &User, server_config: &ServerConfig) -> Result<String> {
         match user.protocol {
             VpnProtocol::Vless => Self::generate_vless_link(user, server_config),
-            VpnProtocol::Shadowsocks => Self::generate_shadowsocks_link(user, server_config),
-            VpnProtocol::Trojan => Self::generate_trojan_link(user, server_config),
-            VpnProtocol::Vmess => Self::generate_vmess_link(user, server_config),
+            VpnProtocol::Outline => Self::generate_shadowsocks_link(user, server_config),
+            VpnProtocol::Wireguard => Self::generate_wireguard_link(user, server_config),
+            VpnProtocol::OpenVPN => Self::generate_openvpn_link(user, server_config),
+            VpnProtocol::HttpProxy => Self::generate_http_proxy_link(user, server_config),
+            VpnProtocol::Socks5Proxy => Self::generate_socks5_link(user, server_config),
+            VpnProtocol::ProxyServer => Self::generate_proxy_server_link(user, server_config),
         }
     }
     
@@ -125,6 +129,58 @@ impl ConnectionLinkGenerator {
         Ok(format!("vmess://{}", encoded))
     }
     
+    fn generate_wireguard_link(user: &User, server_config: &ServerConfig) -> Result<String> {
+        // WireGuard doesn't have a standard URI format, return config instructions
+        Ok(format!(
+            "wireguard://{}:{}?publickey={}&privatekey={}",
+            server_config.host,
+            server_config.port,
+            server_config.public_key.as_deref().unwrap_or("MISSING_PUBLIC_KEY"),
+            user.config.private_key.as_deref().unwrap_or("MISSING_PRIVATE_KEY")
+        ))
+    }
+    
+    fn generate_openvpn_link(user: &User, server_config: &ServerConfig) -> Result<String> {
+        // OpenVPN doesn't have a standard URI format, return config file path
+        Ok(format!(
+            "openvpn://{}@{}:{}",
+            user.name,
+            server_config.host,
+            server_config.port
+        ))
+    }
+    
+    fn generate_http_proxy_link(user: &User, server_config: &ServerConfig) -> Result<String> {
+        Ok(format!(
+            "http://{}:{}@{}:{}",
+            user.name,
+            user.config.private_key.as_deref().unwrap_or(&user.id),
+            server_config.host,
+            server_config.port
+        ))
+    }
+    
+    fn generate_socks5_link(user: &User, server_config: &ServerConfig) -> Result<String> {
+        Ok(format!(
+            "socks5://{}:{}@{}:{}",
+            user.name,
+            user.config.private_key.as_deref().unwrap_or(&user.id),
+            server_config.host,
+            server_config.port
+        ))
+    }
+    
+    fn generate_proxy_server_link(user: &User, server_config: &ServerConfig) -> Result<String> {
+        // Return both HTTP and SOCKS5 endpoints
+        Ok(format!(
+            "http://{}:{} | socks5://{}:{}",
+            server_config.host,
+            server_config.port,
+            server_config.host,
+            server_config.port.saturating_add(1000) // SOCKS5 on port+1000
+        ))
+    }
+    
     pub fn parse_vless_link(link: &str) -> Result<(String, String, u16, Vec<(String, String)>)> {
         let url = Url::parse(link)
             .map_err(|e| UserError::LinkGenerationError(e.to_string()))?;
@@ -190,7 +246,7 @@ impl ConnectionLinkGenerator {
                             "servername": server_config.sni.as_deref().unwrap_or("www.google.com")
                         })
                     }
-                    VpnProtocol::Shadowsocks => {
+                    VpnProtocol::Outline => {
                         serde_json::json!({
                             "name": proxy_name,
                             "type": "ss",
@@ -224,7 +280,8 @@ impl ConnectionLinkGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::user::{User, VpnProtocol};
+    use crate::user::User;
+use vpn_types::protocol::VpnProtocol;
     
     #[test]
     fn test_vless_link_generation() {

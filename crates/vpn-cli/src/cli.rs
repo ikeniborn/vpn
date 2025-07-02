@@ -764,6 +764,9 @@ pub enum Protocol {
     Shadowsocks,
     Trojan,
     Vmess,
+    HttpProxy,
+    Socks5Proxy,
+    ProxyServer,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]
@@ -796,13 +799,16 @@ pub enum ImportFormat {
     V2ray,
 }
 
-impl From<Protocol> for vpn_users::user::VpnProtocol {
+impl From<Protocol> for vpn_types::protocol::VpnProtocol {
     fn from(protocol: Protocol) -> Self {
         match protocol {
-            Protocol::Vless => vpn_users::user::VpnProtocol::Vless,
-            Protocol::Shadowsocks => vpn_users::user::VpnProtocol::Shadowsocks,
-            Protocol::Trojan => vpn_users::user::VpnProtocol::Trojan,
-            Protocol::Vmess => vpn_users::user::VpnProtocol::Vmess,
+            Protocol::Vless => vpn_types::protocol::VpnProtocol::Vless,
+            Protocol::Shadowsocks => vpn_types::protocol::VpnProtocol::Outline,
+            Protocol::Trojan => vpn_types::protocol::VpnProtocol::Vless, // Map to VLESS for now
+            Protocol::Vmess => vpn_types::protocol::VpnProtocol::Vless, // Map to VLESS for now
+            Protocol::HttpProxy => vpn_types::protocol::VpnProtocol::HttpProxy,
+            Protocol::Socks5Proxy => vpn_types::protocol::VpnProtocol::Socks5Proxy,
+            Protocol::ProxyServer => vpn_types::protocol::VpnProtocol::ProxyServer,
         }
     }
 }

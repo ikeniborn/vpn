@@ -6,7 +6,7 @@ use vpn_network::{PortChecker, IpDetector, FirewallManager, FirewallRule, Subnet
 use vpn_network::firewall::{Protocol, Direction};
 use vpn_crypto::{X25519KeyManager, UuidGenerator};
 use vpn_users::{UserManager, User};
-use vpn_users::user::VpnProtocol;
+use vpn_types::protocol::VpnProtocol;
 use vpn_types::validation::{PortValidator, PathValidator};
 use uuid::Uuid;
 use crate::templates::DockerComposeTemplate;
@@ -268,13 +268,19 @@ impl ServerInstaller {
                     subnet,
                 ).await?;
             }
-            VpnProtocol::Shadowsocks => {
+            VpnProtocol::Outline => {
                 template.generate_outline_compose(
                     &options.install_path,
                     server_config,
                     options,
                     subnet,
                 ).await?;
+            }
+            VpnProtocol::HttpProxy | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer => {
+                // TODO: Implement proxy server installation
+                return Err(ServerError::InstallationError(
+                    format!("Proxy protocol {:?} installation coming soon", options.protocol)
+                ));
             }
             _ => {
                 return Err(ServerError::InstallationError(

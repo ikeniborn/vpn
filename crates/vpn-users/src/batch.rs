@@ -3,7 +3,8 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
-use crate::user::{User, VpnProtocol, UserStatus};
+use crate::user::{User, UserStatus};
+use vpn_types::protocol::VpnProtocol;
 use crate::manager::UserManager;
 use crate::error::{Result};
 use tokio::task::JoinSet;
@@ -402,7 +403,8 @@ impl BatchOperations {
                 let protocol = checkpoint.metadata.get("protocol")
                     .and_then(|p| match p.as_str() {
                         "Vless" => Some(VpnProtocol::Vless),
-                        "Shadowsocks" => Some(VpnProtocol::Shadowsocks),
+                        "Shadowsocks" => Some(VpnProtocol::Outline),
+                        "Outline" => Some(VpnProtocol::Outline),
                         _ => None,
                     })
                     .unwrap_or(VpnProtocol::Vless);

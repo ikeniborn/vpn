@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
+use vpn_types::protocol::VpnProtocol;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
@@ -47,13 +48,7 @@ pub enum UserStatus {
     Expired,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum VpnProtocol {
-    Vless,
-    Shadowsocks,
-    Trojan,
-    Vmess,
-}
+// VpnProtocol is now imported from vpn_types::protocol
 
 impl User {
     pub fn new(name: String, protocol: VpnProtocol) -> Self {
@@ -169,22 +164,4 @@ impl UserStatus {
     }
 }
 
-impl VpnProtocol {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            VpnProtocol::Vless => "vless",
-            VpnProtocol::Shadowsocks => "shadowsocks",
-            VpnProtocol::Trojan => "trojan",
-            VpnProtocol::Vmess => "vmess",
-        }
-    }
-    
-    pub fn default_port(&self) -> u16 {
-        match self {
-            VpnProtocol::Vless => 443,
-            VpnProtocol::Shadowsocks => 8388,
-            VpnProtocol::Trojan => 443,
-            VpnProtocol::Vmess => 10086,
-        }
-    }
-}
+// VpnProtocol methods are now provided by vpn_types::protocol::VpnProtocol

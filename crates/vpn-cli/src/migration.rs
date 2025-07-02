@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use indicatif::{ProgressBar, ProgressStyle};
 use vpn_users::{User, UserStatus};
-use vpn_users::user::VpnProtocol;
+use vpn_types::protocol::VpnProtocol;
 use crate::error::{CliError, Result};
 use crate::utils::display;
 
