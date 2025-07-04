@@ -165,3 +165,82 @@ impl UserStatus {
 }
 
 // VpnProtocol methods are now provided by vpn_types::protocol::VpnProtocol
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_user_deserialization_with_uppercase_protocol() {
+        let json = r#"{
+            "id": "123e4567-e89b-12d3-a456-426614174000",
+            "short_id": "abc123",
+            "name": "testuser",
+            "email": null,
+            "created_at": "2024-01-01T00:00:00Z",
+            "last_active": null,
+            "status": "Active",
+            "protocol": "Vless",
+            "config": {
+                "public_key": null,
+                "private_key": null,
+                "server_host": "example.com",
+                "server_port": 8443,
+                "sni": null,
+                "path": null,
+                "security": "reality",
+                "network": "tcp",
+                "header_type": null,
+                "flow": null
+            },
+            "stats": {
+                "bytes_sent": 0,
+                "bytes_received": 0,
+                "connection_count": 0,
+                "last_connection": null,
+                "total_uptime": 0
+            }
+        }"#;
+        
+        let user: User = serde_json::from_str(json).unwrap();
+        assert_eq!(user.protocol, VpnProtocol::Vless);
+        assert_eq!(user.name, "testuser");
+    }
+    
+    #[test]
+    fn test_user_deserialization_with_lowercase_protocol() {
+        let json = r#"{
+            "id": "123e4567-e89b-12d3-a456-426614174000",
+            "short_id": "abc123",
+            "name": "testuser",
+            "email": null,
+            "created_at": "2024-01-01T00:00:00Z",
+            "last_active": null,
+            "status": "Active",
+            "protocol": "vless",
+            "config": {
+                "public_key": null,
+                "private_key": null,
+                "server_host": "example.com",
+                "server_port": 8443,
+                "sni": null,
+                "path": null,
+                "security": "reality",
+                "network": "tcp",
+                "header_type": null,
+                "flow": null
+            },
+            "stats": {
+                "bytes_sent": 0,
+                "bytes_received": 0,
+                "connection_count": 0,
+                "last_connection": null,
+                "total_uptime": 0
+            }
+        }"#;
+        
+        let user: User = serde_json::from_str(json).unwrap();
+        assert_eq!(user.protocol, VpnProtocol::Vless);
+        assert_eq!(user.name, "testuser");
+    }
+}

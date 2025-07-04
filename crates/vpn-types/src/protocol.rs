@@ -1,9 +1,10 @@
 //! VPN protocol types shared across crates
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+use std::str::FromStr;
 
 /// VPN protocol types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum VpnProtocol {
     /// VLESS protocol (Xray)
@@ -107,6 +108,71 @@ impl std::str::FromStr for VpnProtocol {
             "socks" | "socks5" | "socks5proxy" | "socks5-proxy" => Ok(VpnProtocol::Socks5Proxy),
             "proxy" | "proxyserver" | "proxy-server" => Ok(VpnProtocol::ProxyServer),
             _ => Err(format!("Unknown protocol: {}", s)),
+        }
+    }
+}
+
+// Custom deserializer that accepts both uppercase and lowercase variants
+impl<'de> Deserialize<'de> for VpnProtocol {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Self::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_protocol_deserialization_lowercase() {
+        let json = r#""vless""#;
+        let protocol: VpnProtocol = serde_json::from_str(json).unwrap();
+        assert_eq!(protocol, VpnProtocol::Vless);
+    }
+
+    #[test]
+    fn test_protocol_deserialization_uppercase() {
+        let json = r#""Vless""#;
+        let protocol: VpnProtocol = serde_json::from_str(json).unwrap();
+        assert_eq!(protocol, VpnProtocol::Vless);
+    }
+
+    #[test]
+    fn test_protocol_deserialization_mixed_case() {
+        let json = r#""VLESS""#;
+        let protocol: VpnProtocol = serde_json::from_str(json).unwrap();
+        assert_eq!(protocol, VpnProtocol::Vless);
+    }
+
+    #[test]
+    fn test_protocol_serialization_is_lowercase() {
+        let protocol = VpnProtocol::Vless;
+        let json = serde_json::to_string(&protocol).unwrap();
+        assert_eq!(json, r#""vless""#);
+    }
+
+    #[test]
+    fn test_all_protocols_deserialize_case_insensitive() {
+        let test_cases = vec![
+            ("vless", VpnProtocol::Vless),
+            ("Vless", VpnProtocol::Vless),
+            ("VLESS", VpnProtocol::Vless),
+            ("outline", VpnProtocol::Outline),
+            ("Outline", VpnProtocol::Outline),
+            ("OUTLINE", VpnProtocol::Outline),
+            ("wireguard", VpnProtocol::Wireguard),
+            ("WireGuard", VpnProtocol::Wireguard),
+            ("WIREGUARD", VpnProtocol::Wireguard),
+        ];
+
+        for (input, expected) in test_cases {
+            let json = format!(r#""{}""#, input);
+            let protocol: VpnProtocol = serde_json::from_str(&json).unwrap();
+            assert_eq!(protocol, expected, "Failed to deserialize {}", input);
         }
     }
 }

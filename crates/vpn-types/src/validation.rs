@@ -403,7 +403,7 @@ mod tests {
 
     #[test]
     fn test_path_validation() {
-        let validator = PathValidator::new(vec![PathBuf::from("/tmp")]);
+        let _validator = PathValidator::new(vec![PathBuf::from("/tmp")]);
         
         assert!(PathValidator::validate_filename("test.txt").is_ok());
         assert!(PathValidator::validate_filename("test/file.txt").is_err());
