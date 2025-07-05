@@ -1,7 +1,7 @@
-use std::path::Path;
+use crate::error::{Result, ServerError};
+use crate::installer::{InstallationOptions, LogLevel, ServerConfig};
 use std::fs;
-use crate::installer::{InstallationOptions, ServerConfig, LogLevel};
-use crate::error::{ServerError, Result};
+use std::path::Path;
 
 pub struct DockerComposeTemplate;
 
@@ -9,7 +9,7 @@ impl DockerComposeTemplate {
     pub fn new() -> Self {
         Self
     }
-    
+
     pub async fn generate_xray_compose(
         &self,
         install_path: &Path,
@@ -18,19 +18,20 @@ impl DockerComposeTemplate {
         subnet: Option<&str>,
     ) -> Result<()> {
         let compose_content = self.create_xray_compose_content(server_config, options, subnet)?;
-        
+
         let compose_file = install_path.join("docker-compose.yml");
         fs::write(&compose_file, compose_content)?;
-        
+
         // Create directory structure
         self.create_xray_directories(install_path)?;
-        
+
         // Generate Xray configuration
-        self.generate_xray_config(install_path, server_config, options).await?;
-        
+        self.generate_xray_config(install_path, server_config, options)
+            .await?;
+
         Ok(())
     }
-    
+
     pub async fn generate_outline_compose(
         &self,
         install_path: &Path,
@@ -38,32 +39,38 @@ impl DockerComposeTemplate {
         options: &InstallationOptions,
         subnet: Option<&str>,
     ) -> Result<()> {
-        let compose_content = self.create_outline_compose_content(server_config, options, subnet)?;
-        
+        let compose_content =
+            self.create_outline_compose_content(server_config, options, subnet)?;
+
         let compose_file = install_path.join("docker-compose.yml");
         fs::write(&compose_file, compose_content)?;
-        
+
         // Create directory structure
         self.create_outline_directories(install_path)?;
-        
+
         Ok(())
     }
-    
+
     fn create_xray_compose_content(
         &self,
         server_config: &ServerConfig,
         options: &InstallationOptions,
         subnet: Option<&str>,
     ) -> Result<String> {
-        let restart_policy = if options.auto_start { "unless-stopped" } else { "no" };
-        
-        let compose = format!(r#"services:
+        let restart_policy = if options.auto_start {
+            "unless-stopped"
+        } else {
+            "no"
+        };
+
+        let compose = format!(
+            r#"services:
   xray:
     image: ghcr.io/xtls/xray-core:latest
     container_name: xray
     restart: {}
     ports:
-      - "{}:443"
+      - "{}:{}"
     volumes:
       - ./config:/etc/xray
       - ./logs:/var/log/xray
@@ -88,28 +95,41 @@ impl DockerComposeTemplate {
     environment:
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_POLL_INTERVAL=86400
-      - WATCHTOWER_INCLUDE_STOPPED=true
-    command: ["--cleanup", "--include-stopped"]
+      - WATCHTOWER_INCLUDE_STOPPED=false
+      - WATCHTOWER_REVIVE_STOPPED=false
+      - WATCHTOWER_LIFECYCLE_HOOKS=false
+    command: ["--cleanup", "--include-restarting=false", "--include-stopped=false"]
     networks:
       - vpn-network
 
 networks:
   vpn-network:
     driver: bridge{subnet_config}
-"#, restart_policy, server_config.port, restart_policy, subnet_config = Self::format_subnet_config(subnet));
-        
+"#,
+            restart_policy,
+            server_config.port,
+            server_config.port,
+            restart_policy,
+            subnet_config = Self::format_subnet_config(subnet)
+        );
+
         Ok(compose)
     }
-    
+
     fn create_outline_compose_content(
         &self,
         server_config: &ServerConfig,
         options: &InstallationOptions,
         subnet: Option<&str>,
     ) -> Result<String> {
-        let restart_policy = if options.auto_start { "unless-stopped" } else { "no" };
-        
-        let compose = format!(r#"services:
+        let restart_policy = if options.auto_start {
+            "unless-stopped"
+        } else {
+            "no"
+        };
+
+        let compose = format!(
+            r#"services:
   shadowbox:
     image: quay.io/outline/shadowbox:stable
     container_name: shadowbox
@@ -140,44 +160,53 @@ networks:
 networks:
   vpn-network:
     driver: bridge{subnet_config}
-"#, restart_policy, server_config.port + 1000, server_config.port, 
-    server_config.log_level.as_str(), restart_policy, subnet_config = Self::format_subnet_config(subnet));
-        
+"#,
+            restart_policy,
+            server_config.port + 1000,
+            server_config.port,
+            server_config.log_level.as_str(),
+            restart_policy,
+            subnet_config = Self::format_subnet_config(subnet)
+        );
+
         Ok(compose)
     }
-    
+
     /// Format subnet configuration for Docker Compose network
     fn format_subnet_config(subnet: Option<&str>) -> String {
         match subnet {
             Some(subnet_cidr) => {
-                format!("\n    ipam:\n      config:\n        - subnet: {}", subnet_cidr)
-            },
+                format!(
+                    "\n    ipam:\n      config:\n        - subnet: {}",
+                    subnet_cidr
+                )
+            }
             None => String::new(),
         }
     }
-    
+
     fn create_xray_directories(&self, install_path: &Path) -> Result<()> {
         let directories = ["config", "logs", "users"];
-        
+
         for dir in &directories {
             let dir_path = install_path.join(dir);
             fs::create_dir_all(&dir_path)?;
         }
-        
+
         Ok(())
     }
-    
+
     fn create_outline_directories(&self, install_path: &Path) -> Result<()> {
         let directories = ["persisted-state", "management"];
-        
+
         for dir in &directories {
             let dir_path = install_path.join(dir);
             fs::create_dir_all(&dir_path)?;
         }
-        
+
         Ok(())
     }
-    
+
     async fn generate_xray_config(
         &self,
         install_path: &Path,
@@ -185,18 +214,18 @@ networks:
         options: &InstallationOptions,
     ) -> Result<()> {
         let config_dir = install_path.join("config");
-        
+
         // Save server keys
         let private_key_file = config_dir.join("private_key.txt");
         let public_key_file = config_dir.join("public_key.txt");
         let short_id_file = config_dir.join("short_id.txt");
         let sni_file = config_dir.join("sni.txt");
-        
+
         fs::write(&private_key_file, &server_config.private_key)?;
         fs::write(&public_key_file, &server_config.public_key)?;
         fs::write(&short_id_file, &server_config.short_id)?;
         fs::write(&sni_file, &server_config.sni_domain)?;
-        
+
         // Set proper permissions for private key
         #[cfg(unix)]
         {
@@ -204,15 +233,15 @@ networks:
             let private_perms = fs::Permissions::from_mode(0o600);
             fs::set_permissions(&private_key_file, private_perms)?;
         }
-        
+
         // Generate initial Xray configuration
         let xray_config = self.create_initial_xray_config(server_config, options)?;
         let config_file = config_dir.join("config.json");
         fs::write(&config_file, xray_config)?;
-        
+
         Ok(())
     }
-    
+
     fn create_initial_xray_config(
         &self,
         server_config: &ServerConfig,
@@ -220,12 +249,12 @@ networks:
     ) -> Result<String> {
         let log_level = match options.log_level {
             LogLevel::None => "none",
-            LogLevel::Error => "error", 
+            LogLevel::Error => "error",
             LogLevel::Warning => "warning",
             LogLevel::Info => "info",
             LogLevel::Debug => "debug",
         };
-        
+
         let config = serde_json::json!({
             "log": {
                 "level": log_level,
@@ -234,7 +263,7 @@ networks:
             },
             "inbounds": [{
                 "tag": "vless-in",
-                "port": 443,
+                "port": server_config.port,
                 "protocol": "vless",
                 "settings": {
                     "clients": [],
@@ -250,7 +279,8 @@ networks:
                         "xver": 0,
                         "serverNames": [server_config.sni_domain.clone()],
                         "privateKey": server_config.private_key,
-                        "shortId": [server_config.short_id.clone()]
+                        "shortIds": ["", server_config.short_id.clone()],
+                        "fingerprint": "chrome"
                     },
                     "tcpSettings": {
                         "header": {
@@ -265,17 +295,17 @@ networks:
                 "settings": {}
             }]
         });
-        
-        serde_json::to_string_pretty(&config)
-            .map_err(|e| ServerError::TemplateError(e.to_string()))
+
+        serde_json::to_string_pretty(&config).map_err(|e| ServerError::TemplateError(e.to_string()))
     }
-    
+
     pub fn generate_systemd_service(
         &self,
         install_path: &Path,
         service_name: &str,
     ) -> Result<String> {
-        let service_content = format!(r#"[Unit]
+        let service_content = format!(
+            r#"[Unit]
 Description=VPN Server ({})
 Requires=docker.service
 After=docker.service
@@ -292,17 +322,21 @@ TimeoutStartSec=0
 
 [Install]
 WantedBy=multi-user.target
-"#, service_name, install_path.display());
-        
+"#,
+            service_name,
+            install_path.display()
+        );
+
         Ok(service_content)
     }
-    
+
     pub fn generate_nginx_config(
         &self,
         server_config: &ServerConfig,
         domain: &str,
     ) -> Result<String> {
-        let nginx_config = format!(r#"server {{
+        let nginx_config = format!(
+            r#"server {{
     listen 80;
     server_name {};
     
@@ -330,13 +364,16 @@ server {{
         proxy_set_header X-Forwarded-Proto $scheme;
     }}
 }}
-"#, domain, domain, domain, domain, server_config.port);
-        
+"#,
+            domain, domain, domain, domain, server_config.port
+        );
+
         Ok(nginx_config)
     }
-    
+
     pub fn generate_health_check_script(&self, install_path: &Path) -> Result<String> {
-        let script_content = format!(r#"#!/bin/bash
+        let script_content = format!(
+            r#"#!/bin/bash
 
 # VPN Server Health Check Script
 # Generated automatically - do not edit manually
@@ -403,8 +440,10 @@ main() {{
 }}
 
 main "$@"
-"#, install_path.display());
-        
+"#,
+            install_path.display()
+        );
+
         Ok(script_content)
     }
 }
@@ -414,7 +453,7 @@ mod tests {
     use super::*;
     use crate::installer::{InstallationOptions, LogLevel};
     use tempfile::tempdir;
-    
+
     #[test]
     fn test_xray_compose_generation() {
         let template = DockerComposeTemplate::new();
@@ -429,23 +468,78 @@ mod tests {
             log_level: LogLevel::Warning,
         };
         let options = InstallationOptions::default();
-        
-        let compose_content = template.create_xray_compose_content(&server_config, &options).unwrap();
-        
+
+        let compose_content = template
+            .create_xray_compose_content(&server_config, &options, None)
+            .unwrap();
+
         assert!(compose_content.contains("xray"));
         assert!(compose_content.contains("watchtower"));
         assert!(compose_content.contains("443:443"));
     }
-    
+
     #[tokio::test]
     async fn test_directory_creation() {
         let temp_dir = tempdir().unwrap();
         let template = DockerComposeTemplate::new();
-        
+
         template.create_xray_directories(temp_dir.path()).unwrap();
-        
+
         assert!(temp_dir.path().join("config").exists());
         assert!(temp_dir.path().join("logs").exists());
         assert!(temp_dir.path().join("users").exists());
+    }
+
+    #[test]
+    fn test_xray_config_generation() {
+        let template = DockerComposeTemplate::new();
+        let server_config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 443,
+            public_key: "test-public-key".to_string(),
+            private_key: "test-private-key".to_string(),
+            short_id: "0123456789abcdef".to_string(),
+            sni_domain: "www.google.com".to_string(),
+            reality_dest: "www.google.com:443".to_string(),
+            log_level: LogLevel::Warning,
+        };
+        let options = InstallationOptions::default();
+
+        let xray_config = template
+            .create_initial_xray_config(&server_config, &options)
+            .unwrap();
+
+        // Parse the generated JSON to verify structure
+        let config: serde_json::Value = serde_json::from_str(&xray_config).unwrap();
+
+        // Check that the realitySettings contains shortIds as an array
+        let inbounds = config["inbounds"].as_array().unwrap();
+        let inbound = &inbounds[0];
+        let reality_settings = inbound["streamSettings"]["realitySettings"]
+            .as_object()
+            .unwrap();
+
+        // Verify shortIds field exists and is an array with empty string and short_id
+        assert!(reality_settings.contains_key("shortIds"));
+        let short_ids = reality_settings["shortIds"].as_array().unwrap();
+        assert_eq!(short_ids.len(), 2);
+        assert_eq!(short_ids[0], "");
+        assert_eq!(short_ids[1], "0123456789abcdef");
+
+        // Verify there's no shortId field (the problematic one)
+        assert!(!reality_settings.contains_key("shortId"));
+
+        // Verify fingerprint field is included
+        assert!(reality_settings.contains_key("fingerprint"));
+        assert_eq!(reality_settings["fingerprint"], "chrome");
+
+        // Verify other Reality settings
+        assert_eq!(reality_settings["dest"], "www.google.com:443");
+        assert_eq!(reality_settings["privateKey"], "test-private-key");
+        assert_eq!(reality_settings["show"], false);
+        assert_eq!(reality_settings["xver"], 0);
+
+        let server_names = reality_settings["serverNames"].as_array().unwrap();
+        assert_eq!(server_names[0], "www.google.com");
     }
 }

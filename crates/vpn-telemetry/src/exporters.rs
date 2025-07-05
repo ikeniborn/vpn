@@ -12,13 +12,13 @@ use tracing::{debug, info, warn};
 pub trait TelemetryExporter {
     /// Export telemetry data to the backend
     async fn export(&self, data: ExportData) -> Result<()>;
-    
+
     /// Get exporter name
     fn name(&self) -> &str;
-    
+
     /// Check if the exporter is healthy
     async fn health_check(&self) -> Result<bool>;
-    
+
     /// Get exporter configuration
     fn config(&self) -> &ExporterConfig;
 }
@@ -159,12 +159,7 @@ impl PrometheusExporter {
     fn format_prometheus_metrics(&self, metrics: &serde_json::Value) -> Result<String> {
         let mut output = String::new();
 
-        fn format_value(
-            key: &str,
-            value: &serde_json::Value,
-            prefix: &str,
-            output: &mut String,
-        ) {
+        fn format_value(key: &str, value: &serde_json::Value, prefix: &str, output: &mut String) {
             match value {
                 serde_json::Value::Number(n) => {
                     if let Some(f) = n.as_f64() {
@@ -205,14 +200,14 @@ impl TelemetryExporter for PrometheusExporter {
     async fn export(&self, data: ExportData) -> Result<()> {
         if let Some(metrics) = &data.metrics {
             let prometheus_format = self.format_prometheus_metrics(metrics)?;
-            
+
             let mut request = self.client.post(&self.config.endpoint);
-            
+
             // Add custom headers
             for (key, value) in &self.config.headers {
                 request = request.header(key, value);
             }
-            
+
             // Add authentication if configured
             if let Some(auth) = &self.config.authentication {
                 match &auth.auth_type {
@@ -235,14 +230,12 @@ impl TelemetryExporter for PrometheusExporter {
                 }
             }
 
-            let response = request
-                .body(prometheus_format)
-                .send()
-                .await
-                .map_err(|e| TelemetryError::ExportError {
+            let response = request.body(prometheus_format).send().await.map_err(|e| {
+                TelemetryError::ExportError {
                     exporter: self.config.name.clone(),
                     message: format!("HTTP request failed: {}", e),
-                })?;
+                }
+            })?;
 
             if !response.status().is_success() {
                 return Err(TelemetryError::ExportError {
@@ -334,14 +327,14 @@ impl TelemetryExporter for JaegerExporter {
     async fn export(&self, data: ExportData) -> Result<()> {
         if let Some(traces) = &data.traces {
             let jaeger_format = self.format_jaeger_traces(traces)?;
-            
+
             let mut request = self.client.post(&self.config.endpoint);
-            
+
             // Add custom headers
             for (key, value) in &self.config.headers {
                 request = request.header(key, value);
             }
-            
+
             // Add authentication if configured
             if let Some(auth) = &self.config.authentication {
                 match &auth.auth_type {
@@ -364,14 +357,12 @@ impl TelemetryExporter for JaegerExporter {
                 }
             }
 
-            let response = request
-                .json(&jaeger_format)
-                .send()
-                .await
-                .map_err(|e| TelemetryError::ExportError {
+            let response = request.json(&jaeger_format).send().await.map_err(|e| {
+                TelemetryError::ExportError {
                     exporter: self.config.name.clone(),
                     message: format!("HTTP request failed: {}", e),
-                })?;
+                }
+            })?;
 
             if !response.status().is_success() {
                 return Err(TelemetryError::ExportError {
@@ -427,12 +418,12 @@ impl HttpExporter {
 impl TelemetryExporter for HttpExporter {
     async fn export(&self, data: ExportData) -> Result<()> {
         let mut request = self.client.post(&self.config.endpoint);
-        
+
         // Add custom headers
         for (key, value) in &self.config.headers {
             request = request.header(key, value);
         }
-        
+
         // Add authentication if configured
         if let Some(auth) = &self.config.authentication {
             match &auth.auth_type {
@@ -455,14 +446,15 @@ impl TelemetryExporter for HttpExporter {
             }
         }
 
-        let response = request
-            .json(&data)
-            .send()
-            .await
-            .map_err(|e| TelemetryError::ExportError {
-                exporter: self.config.name.clone(),
-                message: format!("HTTP request failed: {}", e),
-            })?;
+        let response =
+            request
+                .json(&data)
+                .send()
+                .await
+                .map_err(|e| TelemetryError::ExportError {
+                    exporter: self.config.name.clone(),
+                    message: format!("HTTP request failed: {}", e),
+                })?;
 
         if !response.status().is_success() {
             return Err(TelemetryError::ExportError {

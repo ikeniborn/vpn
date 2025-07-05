@@ -1,18 +1,18 @@
-pub mod port;
-pub mod ip;
+pub mod error;
 pub mod firewall;
+pub mod ip;
+pub mod manager;
+pub mod port;
 pub mod sni;
 pub mod subnet;
-pub mod manager;
-pub mod error;
 
 #[cfg(test)]
 pub mod proptest;
 
-pub use port::{PortChecker, PortStatus};
-pub use ip::IpDetector;
+pub use error::{NetworkError, Result};
 pub use firewall::{FirewallManager, FirewallRule};
+pub use ip::IpDetector;
+pub use manager::{NetworkInterface, NetworkInterfaceType, NetworkManager};
+pub use port::{PortChecker, PortStatus};
 pub use sni::SniValidator;
 pub use subnet::{SubnetManager, VpnSubnet};
-pub use manager::{NetworkManager, NetworkInterface, NetworkInterfaceType};
-pub use error::{NetworkError, Result};

@@ -26,7 +26,10 @@ impl PortRange {
 
     /// Create a single port range
     pub fn single(port: u16) -> Self {
-        Self { start: port, end: port }
+        Self {
+            start: port,
+            end: port,
+        }
     }
 
     /// Check if a port is within this range

@@ -14,19 +14,18 @@ pub async fn zero_copy_transfer(
     direction: &str,
     max_bytes: Option<usize>,
 ) -> Result<u64> {
-    
     use nix::unistd::pipe;
-    
+
     let source_fd = source.as_raw_fd();
     let dest_fd = dest.as_raw_fd();
-    
+
     // Create a pipe for splice
-    let (pipe_read, pipe_write) = pipe()
-        .map_err(|e| ProxyError::internal(format!("Failed to create pipe: {}", e)))?;
-    
+    let (pipe_read, pipe_write) =
+        pipe().map_err(|e| ProxyError::internal(format!("Failed to create pipe: {}", e)))?;
+
     let mut total_transferred = 0u64;
     let chunk_size = 65536; // 64KB chunks
-    
+
     loop {
         // Check if we've reached the transfer limit
         if let Some(max) = max_bytes {
@@ -34,11 +33,14 @@ pub async fn zero_copy_transfer(
                 break;
             }
         }
-        
+
         // Splice from source to pipe
         match splice_async(source_fd, pipe_write, chunk_size).await {
             Ok(0) => {
-                debug!("Zero-copy transfer {} completed: {} bytes", direction, total_transferred);
+                debug!(
+                    "Zero-copy transfer {} completed: {} bytes",
+                    direction, total_transferred
+                );
                 break;
             }
             Ok(n) => {
@@ -65,11 +67,11 @@ pub async fn zero_copy_transfer(
             }
         }
     }
-    
+
     // Close pipe file descriptors
     let _ = nix::unistd::close(pipe_read);
     let _ = nix::unistd::close(pipe_write);
-    
+
     Ok(total_transferred)
 }
 
@@ -77,7 +79,7 @@ pub async fn zero_copy_transfer(
 #[cfg(target_os = "linux")]
 async fn splice_async(from_fd: RawFd, to_fd: RawFd, len: usize) -> std::io::Result<usize> {
     use nix::fcntl::{splice, SpliceFFlags};
-    
+
     // Run splice in blocking context
     tokio::task::spawn_blocking(move || {
         match splice(
@@ -89,7 +91,9 @@ async fn splice_async(from_fd: RawFd, to_fd: RawFd, len: usize) -> std::io::Resu
             SpliceFFlags::SPLICE_F_MOVE | SpliceFFlags::SPLICE_F_NONBLOCK,
         ) {
             Ok(n) => Ok(n),
-            Err(nix::errno::Errno::EAGAIN) => Err(std::io::Error::from(std::io::ErrorKind::WouldBlock)),
+            Err(nix::errno::Errno::EAGAIN) => {
+                Err(std::io::Error::from(std::io::ErrorKind::WouldBlock))
+            }
             Err(e) => Err(std::io::Error::new(std::io::ErrorKind::Other, e)),
         }
     })
@@ -119,7 +123,7 @@ pub async fn regular_copy_transfer(
 ) -> Result<u64> {
     let mut buffer = vec![0u8; 8192];
     let mut total_transferred = 0u64;
-    
+
     loop {
         // Check if we've reached the transfer limit
         if let Some(max) = max_bytes {
@@ -127,10 +131,13 @@ pub async fn regular_copy_transfer(
                 break;
             }
         }
-        
+
         match source.read(&mut buffer).await {
             Ok(0) => {
-                debug!("Connection closed ({}) after {} bytes", direction, total_transferred);
+                debug!(
+                    "Connection closed ({}) after {} bytes",
+                    direction, total_transferred
+                );
                 break;
             }
             Ok(n) => {
@@ -138,12 +145,12 @@ pub async fn regular_copy_transfer(
                     debug!("Write error ({}): {}", direction, e);
                     break;
                 }
-                
+
                 if let Err(e) = dest.flush().await {
                     debug!("Flush error ({}): {}", direction, e);
                     break;
                 }
-                
+
                 total_transferred += n as u64;
             }
             Err(e) => {
@@ -152,7 +159,7 @@ pub async fn regular_copy_transfer(
             }
         }
     }
-    
+
     Ok(total_transferred)
 }
 
@@ -165,41 +172,46 @@ pub async fn zero_copy_proxy(
 ) -> Result<()> {
     let (client_reader, client_writer) = client.into_split();
     let (server_reader, server_writer) = server.into_split();
-    
+
     let user_id_clone = user_id.to_string();
     let manager_clone = manager.clone();
-    
+
     // Client to server transfer
     let client_to_server = tokio::spawn(async move {
-        let mut client_stream = client_reader.reunite(client_writer)
+        let mut client_stream = client_reader
+            .reunite(client_writer)
             .map_err(|_| ProxyError::internal("Failed to reunite client stream"))?;
-        let mut server_stream = server_writer.reunite(server_reader)
+        let mut server_stream = server_writer
+            .reunite(server_reader)
             .map_err(|_| ProxyError::internal("Failed to reunite server stream"))?;
-            
+
         let bytes = zero_copy_transfer(
             &mut client_stream,
             &mut server_stream,
             "client->server",
-            None
-        ).await?;
-        
+            None,
+        )
+        .await?;
+
         // Record bandwidth
         let _ = manager_clone.record_bandwidth(&user_id_clone, bytes).await;
-        manager_clone.metrics().record_bytes_transferred(bytes, "upload");
-        
+        manager_clone
+            .metrics()
+            .record_bytes_transferred(bytes, "upload");
+
         Ok::<_, ProxyError>((client_stream, server_stream))
     });
-    
+
     // Server to client transfer
     let server_to_client = tokio::spawn(async move {
         // We need to wait for the streams to be available
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-        
+
         // For now, use regular copy for the reverse direction
         // In a real implementation, we'd need to coordinate the stream ownership better
         Ok::<_, ProxyError>(())
     });
-    
+
     // Wait for either direction to complete
     tokio::select! {
         result = client_to_server => {
@@ -213,7 +225,7 @@ pub async fn zero_copy_proxy(
             }
         }
     }
-    
+
     debug!("Zero-copy proxy closed for user {}", user_id);
     Ok(())
 }
@@ -221,7 +233,7 @@ pub async fn zero_copy_proxy(
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_regular_copy_transfer() {
         // This would need mock TcpStreams for proper testing

@@ -30,7 +30,7 @@ impl ProxyManager {
         let auth_manager = Arc::new(AuthManager::new(&config.auth)?);
         let rate_limiter = Arc::new(RateLimiter::new(&config.rate_limit));
         let connection_pool = Arc::new(ConnectionPool::new(&config.pool, metrics.clone()));
-        
+
         Ok(Self {
             config: Arc::new(config),
             auth_manager,
@@ -40,7 +40,7 @@ impl ProxyManager {
             shutdown_signal: Arc::new(RwLock::new(false)),
         })
     }
-    
+
     /// Authenticate a connection
     pub async fn authenticate(
         &self,
@@ -52,12 +52,12 @@ impl ProxyManager {
             debug!("IP {} is whitelisted", peer_addr.ip());
             return Ok(format!("ip-{}", peer_addr.ip()));
         }
-        
+
         // Check if authentication is required
         if !self.config.auth.enabled {
             return Ok("anonymous".to_string());
         }
-        
+
         // Authenticate with credentials
         if let Some((username, password)) = credentials {
             let user_id = self.auth_manager.authenticate(&username, &password).await?;
@@ -70,13 +70,13 @@ impl ProxyManager {
             Err(ProxyError::auth_failed("No credentials provided"))
         }
     }
-    
+
     /// Check rate limit for a user
     pub async fn check_rate_limit(&self, user_id: &str) -> Result<()> {
         if !self.config.rate_limit.enabled {
             return Ok(());
         }
-        
+
         if self.rate_limiter.check_rate_limit(user_id).await? {
             Ok(())
         } else {
@@ -84,56 +84,56 @@ impl ProxyManager {
             Err(ProxyError::RateLimitExceeded)
         }
     }
-    
+
     /// Record bandwidth usage
     pub async fn record_bandwidth(&self, user_id: &str, bytes: u64) -> Result<()> {
         if let Some(limit) = self.config.rate_limit.bandwidth_limit {
             self.rate_limiter.record_bandwidth(user_id, bytes).await?;
-            
+
             let current_rate = self.rate_limiter.get_bandwidth_rate(user_id).await?;
             if current_rate > limit {
                 return Err(ProxyError::RateLimitExceeded);
             }
         }
-        
+
         self.metrics.record_bytes_transferred(bytes, "upload");
         Ok(())
     }
-    
+
     /// Get or create a connection to upstream
     pub async fn get_connection(&self, addr: SocketAddr) -> Result<tokio::net::TcpStream> {
         self.connection_pool.get_or_create(addr).await
     }
-    
+
     /// Return a connection to the pool
     pub async fn return_connection(&self, addr: SocketAddr, conn: tokio::net::TcpStream) {
         self.connection_pool.return_connection(addr, conn).await;
     }
-    
+
     /// Check if shutdown is requested
     pub async fn is_shutting_down(&self) -> bool {
         *self.shutdown_signal.read().await
     }
-    
+
     /// Shutdown the manager
     pub async fn shutdown(&self) -> Result<()> {
         info!("Shutting down proxy manager");
         *self.shutdown_signal.write().await = true;
-        
+
         // Close connection pool
         self.connection_pool.close_all().await;
-        
+
         // Flush metrics
         self.metrics.flush();
-        
+
         Ok(())
     }
-    
+
     /// Get configuration
     pub fn config(&self) -> &ProxyConfig {
         &self.config
     }
-    
+
     /// Get metrics
     pub fn metrics(&self) -> &ProxyMetrics {
         &self.metrics

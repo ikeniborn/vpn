@@ -1,9 +1,6 @@
 //! HTTP tunnel implementation for CONNECT method
 
-use crate::{
-    error::Result,
-    manager::ProxyManager,
-};
+use crate::{error::Result, manager::ProxyManager};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::{debug, error};
@@ -17,7 +14,7 @@ pub async fn tunnel_data(
 ) -> Result<()> {
     let (client_reader, client_writer) = client.into_split();
     let (upstream_reader, upstream_writer) = upstream.into_split();
-    
+
     let client_to_upstream = tokio::spawn({
         let user_id = user_id.to_string();
         let manager = manager.clone();
@@ -28,10 +25,11 @@ pub async fn tunnel_data(
                 "client->upstream",
                 &user_id,
                 &manager,
-            ).await
+            )
+            .await
         }
     });
-    
+
     let upstream_to_client = tokio::spawn({
         let user_id = user_id.to_string();
         let manager = manager.clone();
@@ -42,10 +40,11 @@ pub async fn tunnel_data(
                 "upstream->client",
                 &user_id,
                 &manager,
-            ).await
+            )
+            .await
         }
     });
-    
+
     // Wait for either direction to complete
     tokio::select! {
         result = client_to_upstream => {
@@ -59,9 +58,9 @@ pub async fn tunnel_data(
             }
         }
     }
-    
+
     debug!("Tunnel closed for user {}", user_id);
-    
+
     Ok(())
 }
 
@@ -79,11 +78,14 @@ where
 {
     let mut buffer = vec![0u8; 8192];
     let mut total_bytes = 0u64;
-    
+
     loop {
         let n = match reader.read(&mut buffer).await {
             Ok(0) => {
-                debug!("Connection closed ({}) after {} bytes", direction, total_bytes);
+                debug!(
+                    "Connection closed ({}) after {} bytes",
+                    direction, total_bytes
+                );
                 break;
             }
             Ok(n) => n,
@@ -92,19 +94,19 @@ where
                 break;
             }
         };
-        
+
         if let Err(e) = writer.write_all(&buffer[..n]).await {
             debug!("Write error ({}): {}", direction, e);
             break;
         }
-        
+
         if let Err(e) = writer.flush().await {
             debug!("Flush error ({}): {}", direction, e);
             break;
         }
-        
+
         total_bytes += n as u64;
-        
+
         // Record bandwidth for client->upstream direction
         if direction == "client->upstream" {
             if let Err(e) = manager.record_bandwidth(user_id, n as u64).await {
@@ -112,12 +114,18 @@ where
             }
         }
     }
-    
+
     debug!("Tunnel {} closed after {} bytes", direction, total_bytes);
-    
+
     // Record total bytes transferred
-    let metric_direction = if direction == "client->upstream" { "upload" } else { "download" };
-    manager.metrics().record_bytes_transferred(total_bytes, metric_direction);
-    
+    let metric_direction = if direction == "client->upstream" {
+        "upload"
+    } else {
+        "download"
+    };
+    manager
+        .metrics()
+        .record_bytes_transferred(total_bytes, metric_direction);
+
     Ok(())
 }

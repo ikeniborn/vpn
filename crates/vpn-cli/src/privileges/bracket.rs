@@ -1,9 +1,9 @@
 //! Privilege bracketing implementation
 
+use super::audit::PrivilegeAuditor;
+use crate::error::{CliError, Result};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use crate::error::{CliError, Result};
-use super::audit::PrivilegeAuditor;
 
 /// Privilege bracket for temporarily elevated operations
 pub struct PrivilegeBracket {
@@ -28,11 +28,9 @@ impl PrivilegeBracket {
     /// Create a new privilege bracket
     pub fn new(operation: String, max_duration: Duration) -> Result<Self> {
         let auditor = Arc::new(PrivilegeAuditor::new()?);
-        
+
         #[cfg(unix)]
-        let (original_uid, original_gid) = unsafe {
-            (Some(libc::getuid()), Some(libc::getgid()))
-        };
+        let (original_uid, original_gid) = unsafe { (Some(libc::getuid()), Some(libc::getgid())) };
 
         Ok(Self {
             operation,
@@ -56,7 +54,7 @@ impl PrivilegeBracket {
         // Check if we're already running as root
         if !super::PrivilegeManager::is_root() {
             return Err(CliError::PermissionError(
-                "Cannot acquire privileges: not running as root".to_string()
+                "Cannot acquire privileges: not running as root".to_string(),
             ));
         }
 
@@ -87,14 +85,14 @@ impl PrivilegeBracket {
                     // Drop group privileges first
                     if libc::setgid(gid) != 0 {
                         return Err(CliError::PermissionError(
-                            "Failed to drop group privileges".to_string()
+                            "Failed to drop group privileges".to_string(),
                         ));
                     }
-                    
+
                     // Then drop user privileges
                     if libc::setuid(uid) != 0 {
                         return Err(CliError::PermissionError(
-                            "Failed to drop user privileges".to_string()
+                            "Failed to drop user privileges".to_string(),
                         ));
                     }
                 }
@@ -118,7 +116,7 @@ impl PrivilegeBracket {
         // Check expiration
         if self.is_expired() {
             return Err(CliError::PermissionError(
-                "Privilege bracket expired".to_string()
+                "Privilege bracket expired".to_string(),
             ));
         }
 
@@ -176,19 +174,17 @@ impl BracketManager {
         duration: Duration,
     ) -> Result<PrivilegeBracket> {
         let mut brackets = self.brackets.lock().unwrap();
-        
+
         // Clean old brackets (older than 1 hour)
         let one_hour_ago = Instant::now() - Duration::from_secs(3600);
         brackets.retain(|b| b.start_time > one_hour_ago);
 
         // Check rate limit
         if brackets.len() >= self.max_brackets_per_hour {
-            return Err(CliError::PermissionError(
-                format!(
-                    "Rate limit exceeded: maximum {} privilege escalations per hour",
-                    self.max_brackets_per_hour
-                )
-            ));
+            return Err(CliError::PermissionError(format!(
+                "Rate limit exceeded: maximum {} privilege escalations per hour",
+                self.max_brackets_per_hour
+            )));
         }
 
         // Add new bracket
@@ -204,7 +200,7 @@ impl BracketManager {
     pub fn get_recent_usage(&self) -> Vec<(String, Duration)> {
         let brackets = self.brackets.lock().unwrap();
         let now = Instant::now();
-        
+
         brackets
             .iter()
             .map(|b| (b.operation.clone(), now - b.start_time))
@@ -218,13 +214,12 @@ mod tests {
 
     #[test]
     fn test_privilege_bracket_expiration() {
-        let mut bracket = PrivilegeBracket::new(
-            "Test Operation".to_string(),
-            Duration::from_millis(100),
-        ).unwrap();
+        let mut bracket =
+            PrivilegeBracket::new("Test Operation".to_string(), Duration::from_millis(100))
+                .unwrap();
 
         assert!(!bracket.is_expired());
-        
+
         std::thread::sleep(Duration::from_millis(150));
         assert!(bracket.is_expired());
     }
@@ -232,21 +227,16 @@ mod tests {
     #[test]
     fn test_bracket_manager_rate_limiting() {
         let manager = BracketManager::new(3);
-        
+
         // Create 3 brackets (should succeed)
         for i in 0..3 {
-            let bracket = manager.create_bracket(
-                format!("Operation {}", i),
-                Duration::from_secs(60),
-            );
+            let bracket =
+                manager.create_bracket(format!("Operation {}", i), Duration::from_secs(60));
             assert!(bracket.is_ok());
         }
 
         // 4th bracket should fail due to rate limit
-        let bracket = manager.create_bracket(
-            "Operation 4".to_string(),
-            Duration::from_secs(60),
-        );
+        let bracket = manager.create_bracket("Operation 4".to_string(), Duration::from_secs(60));
         assert!(bracket.is_err());
     }
 }

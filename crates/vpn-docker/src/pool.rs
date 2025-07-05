@@ -3,11 +3,11 @@
 //! This module provides connection pooling for Docker API calls to reduce
 //! connection overhead and improve performance for frequent operations.
 
+use crate::error::{DockerError, Result};
 use bollard::Docker;
 use std::sync::Arc;
-use tokio::sync::{Mutex, Semaphore};
 use std::time::{Duration, Instant};
-use crate::error::{DockerError, Result};
+use tokio::sync::{Mutex, Semaphore};
 
 /// Configuration for the Docker connection pool
 #[derive(Debug, Clone)]
@@ -85,13 +85,14 @@ impl DockerPool {
     /// Get a connection from the pool
     pub async fn get_connection(&self) -> Result<PooledDocker> {
         // Acquire semaphore permit
-        let permit = self.semaphore.clone().acquire_owned().await
-            .map_err(|_| DockerError::ConnectionError("Failed to acquire connection permit".into()))?;
+        let permit = self.semaphore.clone().acquire_owned().await.map_err(|_| {
+            DockerError::ConnectionError("Failed to acquire connection permit".into())
+        })?;
 
         // Try to get an existing connection
         let connection = {
             let mut connections = self.connections.lock().await;
-            
+
             // Remove idle connections
             let now = Instant::now();
             connections.retain(|conn| {
@@ -115,9 +116,10 @@ impl DockerPool {
             }
             None => {
                 // Create new connection
-                let docker = Docker::connect_with_local_defaults()
-                    .map_err(|e| DockerError::ConnectionError(format!("Failed to connect to Docker: {}", e)))?;
-                
+                let docker = Docker::connect_with_local_defaults().map_err(|e| {
+                    DockerError::ConnectionError(format!("Failed to connect to Docker: {}", e))
+                })?;
+
                 Arc::new(PooledConnection::new(docker))
             }
         };
@@ -142,7 +144,7 @@ impl DockerPool {
     /// Perform health check on all connections
     pub async fn health_check(&self) -> Result<()> {
         let connections = self.connections.lock().await;
-        
+
         for conn in connections.iter() {
             // Simple ping to check if connection is alive
             if let Err(_) = conn.docker().ping().await {
@@ -150,7 +152,7 @@ impl DockerPool {
                 continue;
             }
         }
-        
+
         Ok(())
     }
 }
@@ -174,7 +176,7 @@ impl Drop for PooledDocker {
         // Return connection to pool
         let pool = self.pool.clone();
         let connection = self.connection.clone();
-        
+
         tokio::spawn(async move {
             let mut connections = pool.lock().await;
             connections.push(connection);
@@ -191,9 +193,8 @@ pub struct PoolStats {
 }
 
 /// Global Docker pool instance
-static DOCKER_POOL: once_cell::sync::Lazy<DockerPool> = once_cell::sync::Lazy::new(|| {
-    DockerPool::new(PoolConfig::default())
-});
+static DOCKER_POOL: once_cell::sync::Lazy<DockerPool> =
+    once_cell::sync::Lazy::new(|| DockerPool::new(PoolConfig::default()));
 
 /// Get a connection from the global Docker pool
 pub async fn get_docker_connection() -> Result<PooledDocker> {

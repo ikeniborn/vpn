@@ -32,7 +32,7 @@ impl ComposeManager {
     pub async fn initialize(&self) -> Result<()> {
         // Ensure Docker Compose is available
         self.check_docker_compose().await?;
-        
+
         // Ensure compose directory exists
         if !self.config.compose_dir.exists() {
             tokio::fs::create_dir_all(&self.config.compose_dir).await?;
@@ -45,10 +45,12 @@ impl ComposeManager {
     /// Start all services (docker-compose up)
     pub async fn up(&self) -> Result<()> {
         info!("Starting VPN system with Docker Compose");
-        
+
         let output = Command::new("docker-compose")
-            .arg("-f").arg(&self.compose_file_path)
-            .arg("-p").arg(&self.project_name)
+            .arg("-f")
+            .arg(&self.compose_file_path)
+            .arg("-p")
+            .arg(&self.project_name)
             .arg("up")
             .arg("-d")
             .arg("--remove-orphans")
@@ -69,10 +71,12 @@ impl ComposeManager {
     /// Stop all services (docker-compose down)
     pub async fn down(&self) -> Result<()> {
         info!("Stopping VPN system");
-        
+
         let output = Command::new("docker-compose")
-            .arg("-f").arg(&self.compose_file_path)
-            .arg("-p").arg(&self.project_name)
+            .arg("-f")
+            .arg(&self.compose_file_path)
+            .arg("-p")
+            .arg(&self.project_name)
             .arg("down")
             .arg("--remove-orphans")
             .stdout(Stdio::piped())
@@ -92,10 +96,12 @@ impl ComposeManager {
     /// Restart a specific service
     pub async fn restart_service(&self, service: &str) -> Result<()> {
         info!("Restarting service: {}", service);
-        
+
         let output = Command::new("docker-compose")
-            .arg("-f").arg(&self.compose_file_path)
-            .arg("-p").arg(&self.project_name)
+            .arg("-f")
+            .arg(&self.compose_file_path)
+            .arg("-p")
+            .arg(&self.project_name)
             .arg("restart")
             .arg(service)
             .stdout(Stdio::piped())
@@ -106,8 +112,8 @@ impl ComposeManager {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(ComposeError::compose_command_failed(
-                format!("restart {}", service), 
-                stderr
+                format!("restart {}", service),
+                stderr,
             ));
         }
 
@@ -118,10 +124,12 @@ impl ComposeManager {
     /// Scale a service
     pub async fn scale_service(&self, service: &str, replicas: u32) -> Result<()> {
         info!("Scaling service {} to {} replicas", service, replicas);
-        
+
         let output = Command::new("docker-compose")
-            .arg("-f").arg(&self.compose_file_path)
-            .arg("-p").arg(&self.project_name)
+            .arg("-f")
+            .arg(&self.compose_file_path)
+            .arg("-p")
+            .arg(&self.project_name)
             .arg("up")
             .arg("-d")
             .arg("--scale")
@@ -135,8 +143,8 @@ impl ComposeManager {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(ComposeError::compose_command_failed(
-                format!("scale {} to {}", service, replicas), 
-                stderr
+                format!("scale {} to {}", service, replicas),
+                stderr,
             ));
         }
 
@@ -147,12 +155,15 @@ impl ComposeManager {
     /// Get system status
     pub async fn get_status(&self) -> Result<ComposeStatus> {
         debug!("Getting system status");
-        
+
         let output = Command::new("docker-compose")
-            .arg("-f").arg(&self.compose_file_path)
-            .arg("-p").arg(&self.project_name)
+            .arg("-f")
+            .arg(&self.compose_file_path)
+            .arg("-p")
+            .arg(&self.project_name)
             .arg("ps")
-            .arg("--format").arg("json")
+            .arg("--format")
+            .arg("json")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -182,21 +193,25 @@ impl ComposeManager {
     /// Get logs from services
     pub async fn get_logs(&self, service: Option<&str>) -> Result<String> {
         debug!("Getting logs for service: {:?}", service);
-        
+
         let mut cmd = Command::new("docker-compose");
-        cmd.arg("-f").arg(&self.compose_file_path)
-           .arg("-p").arg(&self.project_name)
-           .arg("logs")
-           .arg("--tail").arg("100");
+        cmd.arg("-f")
+            .arg(&self.compose_file_path)
+            .arg("-p")
+            .arg(&self.project_name)
+            .arg("logs")
+            .arg("--tail")
+            .arg("100");
 
         if let Some(service_name) = service {
             cmd.arg(service_name);
         }
 
-        let output = cmd.stdout(Stdio::piped())
-                        .stderr(Stdio::piped())
-                        .output()
-                        .await?;
+        let output = cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -209,10 +224,12 @@ impl ComposeManager {
     /// Pull latest images
     pub async fn pull(&self) -> Result<()> {
         info!("Pulling latest images");
-        
+
         let output = Command::new("docker-compose")
-            .arg("-f").arg(&self.compose_file_path)
-            .arg("-p").arg(&self.project_name)
+            .arg("-f")
+            .arg(&self.compose_file_path)
+            .arg("-p")
+            .arg(&self.project_name)
             .arg("pull")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -231,20 +248,23 @@ impl ComposeManager {
     /// Build services
     pub async fn build(&self, service: Option<&str>) -> Result<()> {
         info!("Building services");
-        
+
         let mut cmd = Command::new("docker-compose");
-        cmd.arg("-f").arg(&self.compose_file_path)
-           .arg("-p").arg(&self.project_name)
-           .arg("build");
+        cmd.arg("-f")
+            .arg(&self.compose_file_path)
+            .arg("-p")
+            .arg(&self.project_name)
+            .arg("build");
 
         if let Some(service_name) = service {
             cmd.arg(service_name);
         }
 
-        let output = cmd.stdout(Stdio::piped())
-                        .stderr(Stdio::piped())
-                        .output()
-                        .await?;
+        let output = cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -258,28 +278,31 @@ impl ComposeManager {
     /// Execute command in a service container
     pub async fn exec(&self, service: &str, command: &[&str]) -> Result<String> {
         debug!("Executing command in service {}: {:?}", service, command);
-        
+
         let mut cmd = Command::new("docker-compose");
-        cmd.arg("-f").arg(&self.compose_file_path)
-           .arg("-p").arg(&self.project_name)
-           .arg("exec")
-           .arg("-T")
-           .arg(service);
+        cmd.arg("-f")
+            .arg(&self.compose_file_path)
+            .arg("-p")
+            .arg(&self.project_name)
+            .arg("exec")
+            .arg("-T")
+            .arg(service);
 
         for arg in command {
             cmd.arg(arg);
         }
 
-        let output = cmd.stdout(Stdio::piped())
-                        .stderr(Stdio::piped())
-                        .output()
-                        .await?;
+        let output = cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(ComposeError::compose_command_failed(
-                format!("exec {} {:?}", service, command), 
-                stderr
+                format!("exec {} {:?}", service, command),
+                stderr,
             ));
         }
 
@@ -290,10 +313,10 @@ impl ComposeManager {
     pub async fn update_config(&mut self, config: &ComposeConfig) -> Result<()> {
         self.config = config.clone();
         self.compose_file_path = config.compose_dir.join("docker-compose.yml");
-        
+
         // Recreate services with new configuration
         self.up().await?;
-        
+
         Ok(())
     }
 
@@ -308,7 +331,7 @@ impl ComposeManager {
 
         if !output.status.success() {
             return Err(ComposeError::manager_init_failed(
-                "Docker Compose not found. Please install Docker Compose."
+                "Docker Compose not found. Please install Docker Compose.",
             ));
         }
 
@@ -320,12 +343,12 @@ impl ComposeManager {
     /// Parse service status from docker-compose ps output
     fn parse_service_status(&self, output: &str) -> Result<Vec<ServiceStatus>> {
         let mut services = Vec::new();
-        
+
         for line in output.lines() {
             if line.trim().is_empty() {
                 continue;
             }
-            
+
             // Try to parse as JSON first (newer docker-compose versions)
             if let Ok(service) = serde_json::from_str::<ServiceStatus>(line) {
                 services.push(service);
@@ -350,7 +373,7 @@ impl ComposeManager {
                 }
             }
         }
-        
+
         Ok(services)
     }
 }
@@ -403,7 +426,7 @@ postgres      running    healthy    5432/tcp
 
         let result = manager.parse_service_status(output);
         assert!(result.is_ok());
-        
+
         let services = result.unwrap();
         assert_eq!(services.len(), 3);
         assert_eq!(services[0].name, "vpn-server");

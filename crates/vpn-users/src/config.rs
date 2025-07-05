@@ -1,8 +1,8 @@
+use crate::error::{Result, UserError};
+use crate::user::User;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
-use crate::user::User;
-use crate::error::{UserError, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
@@ -86,7 +86,7 @@ pub struct RealitySettings {
     pub xver: u8,
     pub server_names: Vec<String>,
     pub private_key: String,
-    pub short_id: Vec<String>,
+    pub short_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -126,13 +126,20 @@ impl ConfigGenerator {
         let reality_settings = if server_config.private_key.is_some() {
             Some(RealitySettings {
                 show: false,
-                dest: server_config.reality_dest.clone()
+                dest: server_config
+                    .reality_dest
+                    .clone()
                     .unwrap_or_else(|| "www.google.com:443".to_string()),
                 xver: 0,
                 server_names: server_config.reality_server_names.clone(),
-                private_key: server_config.private_key.clone()
-                    .ok_or_else(|| UserError::InvalidConfiguration("Private key is required for Reality".to_string()))?,
-                short_id: server_config.short_id.clone()
+                private_key: server_config.private_key.clone().ok_or_else(|| {
+                    UserError::InvalidConfiguration(
+                        "Private key is required for Reality".to_string(),
+                    )
+                })?,
+                short_ids: server_config
+                    .short_id
+                    .clone()
                     .map(|s| vec![s])
                     .unwrap_or_default(),
             })
@@ -177,7 +184,7 @@ impl ConfigGenerator {
             outbounds: vec![outbound],
         })
     }
-    
+
     pub fn generate_shadowsocks_config(
         users: &[User],
         server_config: &ServerConfig,
@@ -190,63 +197,62 @@ impl ConfigGenerator {
             "fast_open": true,
             "users": []
         });
-        
+
         let users_array: Vec<serde_json::Value> = users
             .iter()
             .filter(|u| u.is_active())
-            .map(|u| serde_json::json!({
-                "id": u.id,
-                "password": u.config.private_key.clone().unwrap_or_else(|| u.id.clone()),
-                "name": u.name
-            }))
+            .map(|u| {
+                serde_json::json!({
+                    "id": u.id,
+                    "password": u.config.private_key.clone().unwrap_or_else(|| u.id.clone()),
+                    "name": u.name
+                })
+            })
             .collect();
-        
+
         config["users"] = serde_json::Value::Array(users_array);
         Ok(config)
     }
-    
-    pub fn save_config_to_file<P: AsRef<Path>>(
-        config: &XrayConfig,
-        path: P,
-    ) -> Result<()> {
+
+    pub fn save_config_to_file<P: AsRef<Path>>(config: &XrayConfig, path: P) -> Result<()> {
         let json = serde_json::to_string_pretty(config)?;
         std::fs::write(path, json)?;
         Ok(())
     }
-    
+
     pub fn load_config_from_file<P: AsRef<Path>>(path: P) -> Result<XrayConfig> {
         let content = std::fs::read_to_string(path)?;
         let config: XrayConfig = serde_json::from_str(&content)?;
         Ok(config)
     }
-    
+
     pub fn validate_config(config: &XrayConfig) -> Result<()> {
         if config.inbounds.is_empty() {
             return Err(UserError::InvalidConfiguration(
-                "No inbounds configured".to_string()
+                "No inbounds configured".to_string(),
             ));
         }
-        
+
         if config.outbounds.is_empty() {
             return Err(UserError::InvalidConfiguration(
-                "No outbounds configured".to_string()
+                "No outbounds configured".to_string(),
             ));
         }
-        
+
         for inbound in &config.inbounds {
             if inbound.port == 0 {
                 return Err(UserError::InvalidConfiguration(
-                    "Invalid inbound port".to_string()
+                    "Invalid inbound port".to_string(),
                 ));
             }
-            
+
             if inbound.settings.clients.is_empty() {
                 return Err(UserError::InvalidConfiguration(
-                    "No clients configured for inbound".to_string()
+                    "No clients configured for inbound".to_string(),
                 ));
             }
         }
-        
+
         Ok(())
     }
 }

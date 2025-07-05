@@ -1,10 +1,10 @@
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use crate::error::Result;
 use crate::health::{HealthMonitor, HealthStatus};
 use crate::traffic::{TrafficMonitor, TrafficSummary};
-use crate::error::Result;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceMetrics {
@@ -94,24 +94,29 @@ impl MetricsCollector {
             collection_history: Vec::new(),
         }
     }
-    
+
     pub async fn collect_metrics(&mut self) -> Result<PerformanceMetrics> {
         let start_time = Instant::now();
-        
+
         // Collect health metrics
         let health_status = self.health_monitor.check_overall_health().await?;
-        
+
         // Collect traffic metrics
-        let traffic_summary = self.traffic_monitor.collect_traffic_stats(
-            &std::path::PathBuf::from("/opt/vpn")
-        ).await?;
-        
+        let traffic_summary = self
+            .traffic_monitor
+            .collect_traffic_stats(&std::path::PathBuf::from("/opt/vpn"))
+            .await?;
+
         // Build performance metrics
         let system_metrics = self.build_system_metrics(&health_status).await?;
-        let application_metrics = self.build_application_metrics(&health_status, &traffic_summary).await?;
-        let network_metrics = self.build_network_metrics(&health_status, &traffic_summary).await?;
+        let application_metrics = self
+            .build_application_metrics(&health_status, &traffic_summary)
+            .await?;
+        let network_metrics = self
+            .build_network_metrics(&health_status, &traffic_summary)
+            .await?;
         let custom_metrics = self.collect_custom_metrics().await?;
-        
+
         let metrics = PerformanceMetrics {
             timestamp: Utc::now(),
             system_metrics,
@@ -119,27 +124,30 @@ impl MetricsCollector {
             network_metrics,
             custom_metrics,
         };
-        
+
         // Store in history
         self.collection_history.push(metrics.clone());
-        
+
         // Cleanup old metrics
         self.cleanup_old_metrics();
-        
+
         // Update last metrics
         self.last_metrics = Some(metrics.clone());
-        
+
         let collection_time = start_time.elapsed();
         if collection_time > Duration::from_secs(5) {
             eprintln!("Warning: Metrics collection took {:?}", collection_time);
         }
-        
+
         Ok(metrics)
     }
-    
-    async fn build_system_metrics(&self, health_status: &HealthStatus) -> Result<SystemPerformance> {
+
+    async fn build_system_metrics(
+        &self,
+        health_status: &HealthStatus,
+    ) -> Result<SystemPerformance> {
         let system = &health_status.system_metrics;
-        
+
         Ok(SystemPerformance {
             cpu_usage: system.cpu_usage,
             memory_usage: system.memory_percentage,
@@ -152,7 +160,7 @@ impl MetricsCollector {
             uptime: health_status.uptime,
         })
     }
-    
+
     async fn build_application_metrics(
         &self,
         health_status: &HealthStatus,
@@ -164,19 +172,25 @@ impl MetricsCollector {
         } else {
             Duration::from_millis(500) // Degraded performance
         };
-        
+
         // Calculate throughput
         let period_seconds = 300.0; // 5 minutes
         let throughput = traffic_summary.total_connections as f64 / period_seconds;
-        
+
         // Calculate error rate from logs (simplified)
-        let error_rate = if health_status.is_critical() { 5.0 } else { 0.1 };
-        
+        let error_rate = if health_status.is_critical() {
+            5.0
+        } else {
+            0.1
+        };
+
         // Sum memory usage from all containers
-        let memory_footprint = health_status.containers.iter()
+        let memory_footprint = health_status
+            .containers
+            .iter()
             .map(|c| c.memory_usage)
             .sum();
-        
+
         Ok(ApplicationPerformance {
             response_time,
             throughput,
@@ -186,7 +200,7 @@ impl MetricsCollector {
             cpu_time: Duration::from_secs(0), // Would need process-specific data
         })
     }
-    
+
     async fn build_network_metrics(
         &self,
         health_status: &HealthStatus,
@@ -195,19 +209,22 @@ impl MetricsCollector {
         // Calculate bandwidth utilization
         let total_bytes = traffic_summary.total_bytes_sent + traffic_summary.total_bytes_received;
         let bandwidth_utilization = (total_bytes as f64 / (100.0 * 1024.0 * 1024.0)) * 100.0; // % of 100Mbps
-        
+
         // Network health indicators
         let (packet_loss, latency) = if health_status.network_status.connectivity {
-            let avg_response_time = health_status.network_status.response_times
+            let avg_response_time = health_status
+                .network_status
+                .response_times
                 .values()
                 .map(|&rt| rt as f64)
-                .sum::<f64>() / health_status.network_status.response_times.len().max(1) as f64;
-            
+                .sum::<f64>()
+                / health_status.network_status.response_times.len().max(1) as f64;
+
             (0.01, Duration::from_millis(avg_response_time as u64)) // 0.01% packet loss
         } else {
             (5.0, Duration::from_millis(1000)) // High packet loss and latency
         };
-        
+
         Ok(NetworkPerformance {
             bandwidth_utilization: bandwidth_utilization.min(100.0),
             packet_loss,
@@ -217,10 +234,10 @@ impl MetricsCollector {
             connection_rate: traffic_summary.total_connections as f64 / 300.0, // connections per second
         })
     }
-    
+
     async fn collect_custom_metrics(&self) -> Result<HashMap<String, f64>> {
         let mut custom_metrics = HashMap::new();
-        
+
         for metric in &self.config.custom_metrics {
             match (metric.collection_fn)() {
                 Ok(value) => {
@@ -231,14 +248,20 @@ impl MetricsCollector {
                 }
             }
         }
-        
+
         // Add some built-in custom metrics
-        custom_metrics.insert("metrics_collection_count".to_string(), self.collection_history.len() as f64);
-        custom_metrics.insert("rust_process_memory".to_string(), self.get_process_memory_usage() as f64);
-        
+        custom_metrics.insert(
+            "metrics_collection_count".to_string(),
+            self.collection_history.len() as f64,
+        );
+        custom_metrics.insert(
+            "rust_process_memory".to_string(),
+            self.get_process_memory_usage() as f64,
+        );
+
         Ok(custom_metrics)
     }
-    
+
     fn get_process_memory_usage(&self) -> u64 {
         // Get current process memory usage
         if let Ok(content) = std::fs::read_to_string("/proc/self/status") {
@@ -254,47 +277,78 @@ impl MetricsCollector {
         }
         0
     }
-    
+
     fn cleanup_old_metrics(&mut self) {
-        let cutoff_time = Utc::now() - chrono::Duration::from_std(self.config.retention_period).unwrap();
-        
-        self.collection_history.retain(|metrics| {
-            metrics.timestamp > cutoff_time
-        });
+        let cutoff_time =
+            Utc::now() - chrono::Duration::from_std(self.config.retention_period).unwrap();
+
+        self.collection_history
+            .retain(|metrics| metrics.timestamp > cutoff_time);
     }
-    
+
     pub fn get_metrics_history(&self, duration: Duration) -> Vec<&PerformanceMetrics> {
         let cutoff_time = Utc::now() - chrono::Duration::from_std(duration).unwrap();
-        
-        self.collection_history.iter()
+
+        self.collection_history
+            .iter()
             .filter(|metrics| metrics.timestamp > cutoff_time)
             .collect()
     }
-    
+
     pub fn calculate_averages(&self, duration: Duration) -> Option<PerformanceMetrics> {
         let history = self.get_metrics_history(duration);
-        
+
         if history.is_empty() {
             return None;
         }
-        
+
         let count = history.len() as f64;
-        
+
         // Calculate averages
-        let avg_cpu = history.iter().map(|m| m.system_metrics.cpu_usage).sum::<f64>() / count;
-        let avg_memory = history.iter().map(|m| m.system_metrics.memory_usage).sum::<f64>() / count;
-        let avg_disk = history.iter().map(|m| m.system_metrics.disk_usage).sum::<f64>() / count;
-        
-        let avg_response_time_ms = history.iter()
+        let avg_cpu = history
+            .iter()
+            .map(|m| m.system_metrics.cpu_usage)
+            .sum::<f64>()
+            / count;
+        let avg_memory = history
+            .iter()
+            .map(|m| m.system_metrics.memory_usage)
+            .sum::<f64>()
+            / count;
+        let avg_disk = history
+            .iter()
+            .map(|m| m.system_metrics.disk_usage)
+            .sum::<f64>()
+            / count;
+
+        let avg_response_time_ms = history
+            .iter()
             .map(|m| m.application_metrics.response_time.as_millis() as f64)
-            .sum::<f64>() / count;
-        
-        let avg_throughput = history.iter().map(|m| m.application_metrics.throughput).sum::<f64>() / count;
-        let avg_error_rate = history.iter().map(|m| m.application_metrics.error_rate).sum::<f64>() / count;
-        
-        let avg_bandwidth = history.iter().map(|m| m.network_metrics.bandwidth_utilization).sum::<f64>() / count;
-        let avg_packet_loss = history.iter().map(|m| m.network_metrics.packet_loss).sum::<f64>() / count;
-        
+            .sum::<f64>()
+            / count;
+
+        let avg_throughput = history
+            .iter()
+            .map(|m| m.application_metrics.throughput)
+            .sum::<f64>()
+            / count;
+        let avg_error_rate = history
+            .iter()
+            .map(|m| m.application_metrics.error_rate)
+            .sum::<f64>()
+            / count;
+
+        let avg_bandwidth = history
+            .iter()
+            .map(|m| m.network_metrics.bandwidth_utilization)
+            .sum::<f64>()
+            / count;
+        let avg_packet_loss = history
+            .iter()
+            .map(|m| m.network_metrics.packet_loss)
+            .sum::<f64>()
+            / count;
+
         Some(PerformanceMetrics {
             timestamp: Utc::now(),
             system_metrics: SystemPerformance {
@@ -327,72 +381,126 @@ impl MetricsCollector {
             custom_metrics: HashMap::new(),
         })
     }
-    
+
     pub fn detect_anomalies(&self, current: &PerformanceMetrics) -> Vec<String> {
         let mut anomalies = Vec::new();
-        
+
         // CPU usage anomaly
         if current.system_metrics.cpu_usage > 90.0 {
-            anomalies.push(format!("High CPU usage: {:.1}%", current.system_metrics.cpu_usage));
+            anomalies.push(format!(
+                "High CPU usage: {:.1}%",
+                current.system_metrics.cpu_usage
+            ));
         }
-        
+
         // Memory usage anomaly
         if current.system_metrics.memory_usage > 90.0 {
-            anomalies.push(format!("High memory usage: {:.1}%", current.system_metrics.memory_usage));
+            anomalies.push(format!(
+                "High memory usage: {:.1}%",
+                current.system_metrics.memory_usage
+            ));
         }
-        
+
         // Disk usage anomaly
         if current.system_metrics.disk_usage > 90.0 {
-            anomalies.push(format!("High disk usage: {:.1}%", current.system_metrics.disk_usage));
+            anomalies.push(format!(
+                "High disk usage: {:.1}%",
+                current.system_metrics.disk_usage
+            ));
         }
-        
+
         // Response time anomaly
         if current.application_metrics.response_time > Duration::from_millis(1000) {
-            anomalies.push(format!("High response time: {:?}", current.application_metrics.response_time));
+            anomalies.push(format!(
+                "High response time: {:?}",
+                current.application_metrics.response_time
+            ));
         }
-        
+
         // Error rate anomaly
         if current.application_metrics.error_rate > 5.0 {
-            anomalies.push(format!("High error rate: {:.1}%", current.application_metrics.error_rate));
+            anomalies.push(format!(
+                "High error rate: {:.1}%",
+                current.application_metrics.error_rate
+            ));
         }
-        
+
         // Network anomalies
         if current.network_metrics.packet_loss > 1.0 {
-            anomalies.push(format!("High packet loss: {:.1}%", current.network_metrics.packet_loss));
+            anomalies.push(format!(
+                "High packet loss: {:.1}%",
+                current.network_metrics.packet_loss
+            ));
         }
-        
+
         if current.network_metrics.latency > Duration::from_millis(500) {
-            anomalies.push(format!("High network latency: {:?}", current.network_metrics.latency));
+            anomalies.push(format!(
+                "High network latency: {:?}",
+                current.network_metrics.latency
+            ));
         }
-        
+
         anomalies
     }
-    
+
     pub fn export_prometheus_metrics(&self, metrics: &PerformanceMetrics) -> String {
         let mut output = String::new();
-        
+
         // System metrics
-        output.push_str(&format!("vpn_cpu_usage_percent {}\n", metrics.system_metrics.cpu_usage));
-        output.push_str(&format!("vpn_memory_usage_percent {}\n", metrics.system_metrics.memory_usage));
-        output.push_str(&format!("vpn_disk_usage_percent {}\n", metrics.system_metrics.disk_usage));
-        output.push_str(&format!("vpn_uptime_seconds {}\n", metrics.system_metrics.uptime.as_secs()));
-        
+        output.push_str(&format!(
+            "vpn_cpu_usage_percent {}\n",
+            metrics.system_metrics.cpu_usage
+        ));
+        output.push_str(&format!(
+            "vpn_memory_usage_percent {}\n",
+            metrics.system_metrics.memory_usage
+        ));
+        output.push_str(&format!(
+            "vpn_disk_usage_percent {}\n",
+            metrics.system_metrics.disk_usage
+        ));
+        output.push_str(&format!(
+            "vpn_uptime_seconds {}\n",
+            metrics.system_metrics.uptime.as_secs()
+        ));
+
         // Application metrics
-        output.push_str(&format!("vpn_response_time_ms {}\n", metrics.application_metrics.response_time.as_millis()));
-        output.push_str(&format!("vpn_throughput_rps {}\n", metrics.application_metrics.throughput));
-        output.push_str(&format!("vpn_error_rate_percent {}\n", metrics.application_metrics.error_rate));
-        output.push_str(&format!("vpn_active_connections {}\n", metrics.application_metrics.active_connections));
-        
+        output.push_str(&format!(
+            "vpn_response_time_ms {}\n",
+            metrics.application_metrics.response_time.as_millis()
+        ));
+        output.push_str(&format!(
+            "vpn_throughput_rps {}\n",
+            metrics.application_metrics.throughput
+        ));
+        output.push_str(&format!(
+            "vpn_error_rate_percent {}\n",
+            metrics.application_metrics.error_rate
+        ));
+        output.push_str(&format!(
+            "vpn_active_connections {}\n",
+            metrics.application_metrics.active_connections
+        ));
+
         // Network metrics
-        output.push_str(&format!("vpn_bandwidth_utilization_percent {}\n", metrics.network_metrics.bandwidth_utilization));
-        output.push_str(&format!("vpn_packet_loss_percent {}\n", metrics.network_metrics.packet_loss));
-        output.push_str(&format!("vpn_latency_ms {}\n", metrics.network_metrics.latency.as_millis()));
-        
+        output.push_str(&format!(
+            "vpn_bandwidth_utilization_percent {}\n",
+            metrics.network_metrics.bandwidth_utilization
+        ));
+        output.push_str(&format!(
+            "vpn_packet_loss_percent {}\n",
+            metrics.network_metrics.packet_loss
+        ));
+        output.push_str(&format!(
+            "vpn_latency_ms {}\n",
+            metrics.network_metrics.latency.as_millis()
+        ));
+
         // Custom metrics
         for (name, value) in &metrics.custom_metrics {
             output.push_str(&format!("vpn_custom_{} {}\n", name, value));
         }
-        
+
         output
     }
 }
@@ -423,32 +531,26 @@ impl MetricType {
 mod tests {
     use super::*;
     use crate::health::HealthMonitor;
-    use crate::traffic::{TrafficMonitor, MonitoringConfig};
-    
+    use crate::traffic::{MonitoringConfig, TrafficMonitor};
+
     #[tokio::test]
     async fn test_metrics_collection() {
         let health_monitor = HealthMonitor::new().unwrap();
         let traffic_monitor = TrafficMonitor::new(MonitoringConfig::default()).unwrap();
-        let mut collector = MetricsCollector::new(
-            health_monitor,
-            traffic_monitor,
-            MetricsConfig::default(),
-        );
-        
+        let mut collector =
+            MetricsCollector::new(health_monitor, traffic_monitor, MetricsConfig::default());
+
         let _metrics = collector.collect_metrics().await.unwrap();
         assert!(collector.collection_history.len() > 0);
     }
-    
+
     #[test]
     fn test_anomaly_detection() {
         let health_monitor = HealthMonitor::new().unwrap();
         let traffic_monitor = TrafficMonitor::new(MonitoringConfig::default()).unwrap();
-        let collector = MetricsCollector::new(
-            health_monitor,
-            traffic_monitor,
-            MetricsConfig::default(),
-        );
-        
+        let collector =
+            MetricsCollector::new(health_monitor, traffic_monitor, MetricsConfig::default());
+
         let high_cpu_metrics = PerformanceMetrics {
             timestamp: Utc::now(),
             system_metrics: SystemPerformance {
@@ -480,7 +582,7 @@ mod tests {
             },
             custom_metrics: HashMap::new(),
         };
-        
+
         let anomalies = collector.detect_anomalies(&high_cpu_metrics);
         assert!(anomalies.iter().any(|a| a.contains("High CPU usage")));
     }

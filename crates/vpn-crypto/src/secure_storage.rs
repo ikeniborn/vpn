@@ -1,12 +1,12 @@
-use aes_gcm::{Aes256Gcm, Key, Nonce, KeyInit, aead::Aead};
-use aes_gcm::aead::OsRng;
-use pbkdf2::pbkdf2_hmac;
-use sha2::Sha256;
-use zeroize::{Zeroize, ZeroizeOnDrop};
-use rand::RngCore;
-use base64::Engine;
-use std::path::Path;
 use crate::error::{CryptoError, Result};
+use aes_gcm::aead::OsRng;
+use aes_gcm::{aead::Aead, Aes256Gcm, Key, KeyInit, Nonce};
+use base64::Engine;
+use pbkdf2::pbkdf2_hmac;
+use rand::RngCore;
+use sha2::Sha256;
+use std::path::Path;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 const SALT_SIZE: usize = 32;
 const NONCE_SIZE: usize = 12;
@@ -29,7 +29,7 @@ impl SecureKeyManager {
     pub fn new(password: &str) -> Result<Self> {
         if password.len() < 8 {
             return Err(CryptoError::InvalidKeyFormat(
-                "Password must be at least 8 characters".to_string()
+                "Password must be at least 8 characters".to_string(),
             ));
         }
 
@@ -48,12 +48,7 @@ impl SecureKeyManager {
     /// Derive encryption key from password and salt
     fn derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32]> {
         let mut key = [0u8; 32];
-        pbkdf2_hmac::<Sha256>(
-            password.as_bytes(),
-            salt,
-            PBKDF2_ITERATIONS,
-            &mut key
-        );
+        pbkdf2_hmac::<Sha256>(password.as_bytes(), salt, PBKDF2_ITERATIONS, &mut key);
         Ok(key)
     }
 
@@ -72,7 +67,8 @@ impl SecureKeyManager {
 
         // Encrypt the data
         let cipher = Aes256Gcm::new(key);
-        let ciphertext = cipher.encrypt(nonce, data)
+        let ciphertext = cipher
+            .encrypt(nonce, data)
             .map_err(|e| CryptoError::EncryptionError(e.to_string()))?;
 
         Ok(EncryptedKeyData {
@@ -85,7 +81,7 @@ impl SecureKeyManager {
     /// Decrypt data with password-derived key
     pub fn decrypt_with_password(
         encrypted_data: &EncryptedKeyData,
-        password: &str
+        password: &str,
     ) -> Result<Vec<u8>> {
         // Derive the same encryption key
         let key_bytes = Self::derive_key(password, &encrypted_data.salt)?;
@@ -94,20 +90,17 @@ impl SecureKeyManager {
 
         // Decrypt the data
         let cipher = Aes256Gcm::new(key);
-        let plaintext = cipher.decrypt(nonce, encrypted_data.ciphertext.as_ref())
+        let plaintext = cipher
+            .decrypt(nonce, encrypted_data.ciphertext.as_ref())
             .map_err(|e| CryptoError::DecryptionError(e.to_string()))?;
 
         Ok(plaintext)
     }
 
     /// Save encrypted key to file
-    pub async fn save_encrypted_key(
-        data: &[u8],
-        password: &str,
-        file_path: &Path
-    ) -> Result<()> {
+    pub async fn save_encrypted_key(data: &[u8], password: &str, file_path: &Path) -> Result<()> {
         let encrypted = Self::encrypt_with_password(data, password)?;
-        
+
         // Serialize encrypted data as JSON
         let json_data = serde_json::json!({
             "version": "1",
@@ -134,10 +127,7 @@ impl SecureKeyManager {
     }
 
     /// Load and decrypt key from file
-    pub async fn load_encrypted_key(
-        file_path: &Path,
-        password: &str
-    ) -> Result<Vec<u8>> {
+    pub async fn load_encrypted_key(file_path: &Path, password: &str) -> Result<Vec<u8>> {
         let content = tokio::fs::read_to_string(file_path)
             .await
             .map_err(|e| CryptoError::IoError(e))?;
@@ -146,19 +136,21 @@ impl SecureKeyManager {
 
         // Extract encrypted data
         let salt = base64::prelude::BASE64_STANDARD.decode(
-            json["salt"].as_str()
-                .ok_or_else(|| CryptoError::InvalidKeyFormat("Missing salt".to_string()))?
+            json["salt"]
+                .as_str()
+                .ok_or_else(|| CryptoError::InvalidKeyFormat("Missing salt".to_string()))?,
         )?;
 
         let nonce = base64::prelude::BASE64_STANDARD.decode(
-            json["nonce"].as_str()
-                .ok_or_else(|| CryptoError::InvalidKeyFormat("Missing nonce".to_string()))?
+            json["nonce"]
+                .as_str()
+                .ok_or_else(|| CryptoError::InvalidKeyFormat("Missing nonce".to_string()))?,
         )?;
 
-        let ciphertext = base64::prelude::BASE64_STANDARD.decode(
-            json["ciphertext"].as_str()
-                .ok_or_else(|| CryptoError::InvalidKeyFormat("Missing ciphertext".to_string()))?
-        )?;
+        let ciphertext =
+            base64::prelude::BASE64_STANDARD.decode(json["ciphertext"].as_str().ok_or_else(
+                || CryptoError::InvalidKeyFormat("Missing ciphertext".to_string()),
+            )?)?;
 
         let encrypted_data = EncryptedKeyData {
             salt,
@@ -176,7 +168,7 @@ impl SecureKeyManager {
                                  abcdefghijklmnopqrstuvwxyz\
                                  0123456789\
                                  !@#$%^&*";
-        
+
         let mut rng = rand::thread_rng();
         (0..length)
             .map(|_| {
@@ -190,18 +182,21 @@ impl SecureKeyManager {
     pub fn validate_password_strength(password: &str) -> Result<()> {
         if password.len() < 12 {
             return Err(CryptoError::InvalidKeyFormat(
-                "Password must be at least 12 characters long".to_string()
+                "Password must be at least 12 characters long".to_string(),
             ));
         }
 
         let has_upper = password.chars().any(|c| c.is_ascii_uppercase());
         let has_lower = password.chars().any(|c| c.is_ascii_lowercase());
         let has_digit = password.chars().any(|c| c.is_ascii_digit());
-        let has_special = password.chars().any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c));
+        let has_special = password
+            .chars()
+            .any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c));
 
         if !(has_upper && has_lower && has_digit && has_special) {
             return Err(CryptoError::InvalidKeyFormat(
-                "Password must contain uppercase, lowercase, digit, and special character".to_string()
+                "Password must contain uppercase, lowercase, digit, and special character"
+                    .to_string(),
             ));
         }
 
@@ -212,7 +207,7 @@ impl SecureKeyManager {
     pub async fn rotate_key(
         file_path: &Path,
         old_password: &str,
-        new_password: &str
+        new_password: &str,
     ) -> Result<()> {
         // Validate new password
         Self::validate_password_strength(new_password)?;
@@ -233,14 +228,14 @@ impl SecureKeyManager {
             let metadata = tokio::fs::metadata(file_path)
                 .await
                 .map_err(|e| CryptoError::IoError(e))?;
-            
+
             let file_size = metadata.len() as usize;
-            
+
             // Overwrite with random data multiple times
             for _ in 0..3 {
                 let mut random_data = vec![0u8; file_size];
                 OsRng.fill_bytes(&mut random_data);
-                
+
                 tokio::fs::write(file_path, &random_data)
                     .await
                     .map_err(|e| CryptoError::IoError(e))?;
@@ -272,9 +267,9 @@ mod tests {
         let data = b"sensitive key data";
         let password = "TestP@ssw0rd123";
 
-        let encrypted = SecureKeyManager::encrypt_with_password(data, password)
-            .expect("Encryption failed");
-        
+        let encrypted =
+            SecureKeyManager::encrypt_with_password(data, password).expect("Encryption failed");
+
         let decrypted = SecureKeyManager::decrypt_with_password(&encrypted, password)
             .expect("Decryption failed");
 
@@ -325,8 +320,10 @@ mod tests {
         assert_eq!(data, loaded_data.as_slice());
 
         // Verify old password no longer works
-        assert!(SecureKeyManager::load_encrypted_key(&file_path, old_password)
-            .await
-            .is_err());
+        assert!(
+            SecureKeyManager::load_encrypted_key(&file_path, old_password)
+                .await
+                .is_err()
+        );
     }
 }

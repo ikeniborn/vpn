@@ -1,11 +1,11 @@
 //! Audit logging for privilege escalation events
 
+use crate::error::Result;
 use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
-use std::fs::{OpenOptions, create_dir_all};
+use serde::{Deserialize, Serialize};
+use std::fs::{create_dir_all, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
-use crate::error::Result;
 
 /// Privilege escalation event
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,12 +57,12 @@ impl PrivilegeAuditor {
     /// Log a privilege escalation event
     pub fn log_event(&self, event: PrivilegeEvent) -> Result<()> {
         let json = serde_json::to_string(&event)?;
-        
+
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&self.log_path)?;
-        
+
         writeln!(file, "{}", json)?;
         Ok(())
     }
@@ -115,8 +115,8 @@ impl PrivilegeAuditor {
 
     /// Get recent privilege events
     pub fn get_recent_events(&self, count: usize) -> Result<Vec<PrivilegeEvent>> {
-        use std::io::{BufRead, BufReader};
         use std::fs::File;
+        use std::io::{BufRead, BufReader};
 
         let file = File::open(&self.log_path)?;
         let reader = BufReader::new(file);
@@ -132,14 +132,14 @@ impl PrivilegeAuditor {
         events.reverse();
         events.truncate(count);
         events.reverse();
-        
+
         Ok(events)
     }
 
     /// Clean old audit logs
     pub fn clean_old_logs(&self, days_to_keep: i64) -> Result<()> {
-        use std::io::{BufRead, BufReader};
         use std::fs::File;
+        use std::io::{BufRead, BufReader};
 
         let cutoff_date = Utc::now() - chrono::Duration::days(days_to_keep);
         let file = File::open(&self.log_path)?;
@@ -159,7 +159,7 @@ impl PrivilegeAuditor {
             .write(true)
             .truncate(true)
             .open(&self.log_path)?;
-        
+
         for event_line in kept_events {
             writeln!(file, "{}", event_line)?;
         }
@@ -170,9 +170,9 @@ impl PrivilegeAuditor {
 
 /// Generate a unique session ID
 fn generate_session_id() -> String {
-    use rand::{thread_rng, Rng};
     use rand::distributions::Alphanumeric;
-    
+    use rand::{thread_rng, Rng};
+
     thread_rng()
         .sample_iter(&Alphanumeric)
         .take(16)
@@ -189,26 +189,30 @@ mod tests {
     fn test_privilege_auditor() {
         let temp_dir = TempDir::new().unwrap();
         let log_path = temp_dir.path().join("audit.log");
-        
+
         let auditor = PrivilegeAuditor {
             log_path: log_path.clone(),
         };
 
         // Log a grant event
-        auditor.log_grant(
-            "testuser".to_string(),
-            Some("originaluser".to_string()),
-            "Install VPN Server".to_string(),
-            vec!["vpn".to_string(), "install".to_string()],
-        ).unwrap();
+        auditor
+            .log_grant(
+                "testuser".to_string(),
+                Some("originaluser".to_string()),
+                "Install VPN Server".to_string(),
+                vec!["vpn".to_string(), "install".to_string()],
+            )
+            .unwrap();
 
         // Log a denial event
-        auditor.log_denial(
-            "testuser".to_string(),
-            "Delete User".to_string(),
-            vec!["vpn".to_string(), "users".to_string(), "delete".to_string()],
-            "User cancelled operation".to_string(),
-        ).unwrap();
+        auditor
+            .log_denial(
+                "testuser".to_string(),
+                "Delete User".to_string(),
+                vec!["vpn".to_string(), "users".to_string(), "delete".to_string()],
+                "User cancelled operation".to_string(),
+            )
+            .unwrap();
 
         // Get recent events
         let events = auditor.get_recent_events(10).unwrap();

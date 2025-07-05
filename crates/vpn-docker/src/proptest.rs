@@ -1,11 +1,11 @@
 //! Property-based tests for VPN Docker utilities
-//! 
+//!
 //! This module contains comprehensive property-based tests using proptest
 //! to ensure the correctness of Docker operations under various scenarios.
 
-use crate::{container::*};
-use proptest::prelude::*;
+use crate::container::*;
 use proptest::option;
+use proptest::prelude::*;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -48,10 +48,11 @@ pub fn port_mappings_strategy() -> impl Strategy<Value = HashMap<u16, u16>> {
 /// Strategy for generating environment variables
 pub fn env_vars_strategy() -> impl Strategy<Value = HashMap<String, String>> {
     prop::collection::btree_map(
-        "[A-Z_][A-Z0-9_]{1,20}", // Environment variable names
+        "[A-Z_][A-Z0-9_]{1,20}",   // Environment variable names
         "[a-zA-Z0-9/._:-]{0,100}", // Environment variable values
-        0..=10
-    ).prop_map(|btree| btree.into_iter().collect())
+        0..=10,
+    )
+    .prop_map(|btree| btree.into_iter().collect())
 }
 
 /// Strategy for generating volume mounts
@@ -59,8 +60,9 @@ pub fn volume_mounts_strategy() -> impl Strategy<Value = HashMap<String, String>
     prop::collection::btree_map(
         "/[a-zA-Z0-9/._-]{1,20}", // Host paths (shorter)
         "/[a-zA-Z0-9/._-]{1,20}", // Container paths (shorter)
-        0..=5
-    ).prop_map(|btree| btree.into_iter().collect())
+        0..=5,
+    )
+    .prop_map(|btree| btree.into_iter().collect())
 }
 
 /// Strategy for generating restart policies
@@ -84,7 +86,7 @@ pub fn network_strategy() -> impl Strategy<Value = Vec<String>> {
             Just("none".to_string()),
             "[a-z0-9_.-]{3,20}", // Custom network names
         ],
-        1..=3
+        1..=3,
     )
 }
 
@@ -98,17 +100,28 @@ pub fn container_config_strategy() -> impl Strategy<Value = ContainerConfig> {
         volume_mounts_strategy(),
         restart_policy_strategy(),
         network_strategy(),
-    ).prop_map(|(name, image, port_mappings, environment_variables, volume_mounts, restart_policy, networks)| {
-        ContainerConfig {
-            name,
-            image,
-            port_mappings,
-            environment_variables,
-            volume_mounts,
-            restart_policy,
-            networks,
-        }
-    })
+    )
+        .prop_map(
+            |(
+                name,
+                image,
+                port_mappings,
+                environment_variables,
+                volume_mounts,
+                restart_policy,
+                networks,
+            )| {
+                ContainerConfig {
+                    name,
+                    image,
+                    port_mappings,
+                    environment_variables,
+                    volume_mounts,
+                    restart_policy,
+                    networks,
+                }
+            },
+        )
 }
 
 /// Strategy for generating container status
@@ -132,27 +145,38 @@ pub fn container_status_strategy() -> impl Strategy<Value = ContainerStatus> {
 pub fn container_stats_strategy() -> impl Strategy<Value = ContainerStats> {
     (
         0.0f64..100.0f64, // CPU usage percentage
-        1024u64*1024u64*1024u64..1024u64*1024u64*1024u64*16u64, // Memory limit (1-16GB)
-        0u64..1024u64*1024u64*1024u64, // Network RX bytes (up to 1GB)
-        0u64..1024u64*1024u64*1024u64, // Network TX bytes (up to 1GB)
-        0u64..1024u64*1024u64*1024u64, // Block read bytes (up to 1GB)
-        0u64..1024u64*1024u64*1024u64, // Block write bytes (up to 1GB)
-        1u64..1000u64, // Process count
-    ).prop_map(|(cpu_usage_percent, memory_limit_bytes, network_rx_bytes, network_tx_bytes, block_read_bytes, block_write_bytes, pids)| {
-        // Generate memory usage that's always <= memory limit
-        let memory_usage_bytes = memory_limit_bytes / 2; // Use half of available memory
-        
-        ContainerStats {
-            cpu_usage_percent,
-            memory_usage_bytes,
-            memory_limit_bytes,
-            network_rx_bytes,
-            network_tx_bytes,
-            block_read_bytes,
-            block_write_bytes,
-            pids,
-        }
-    })
+        1024u64 * 1024u64 * 1024u64..1024u64 * 1024u64 * 1024u64 * 16u64, // Memory limit (1-16GB)
+        0u64..1024u64 * 1024u64 * 1024u64, // Network RX bytes (up to 1GB)
+        0u64..1024u64 * 1024u64 * 1024u64, // Network TX bytes (up to 1GB)
+        0u64..1024u64 * 1024u64 * 1024u64, // Block read bytes (up to 1GB)
+        0u64..1024u64 * 1024u64 * 1024u64, // Block write bytes (up to 1GB)
+        1u64..1000u64,    // Process count
+    )
+        .prop_map(
+            |(
+                cpu_usage_percent,
+                memory_limit_bytes,
+                network_rx_bytes,
+                network_tx_bytes,
+                block_read_bytes,
+                block_write_bytes,
+                pids,
+            )| {
+                // Generate memory usage that's always <= memory limit
+                let memory_usage_bytes = memory_limit_bytes / 2; // Use half of available memory
+
+                ContainerStats {
+                    cpu_usage_percent,
+                    memory_usage_bytes,
+                    memory_limit_bytes,
+                    network_rx_bytes,
+                    network_tx_bytes,
+                    block_read_bytes,
+                    block_write_bytes,
+                    pids,
+                }
+            },
+        )
 }
 
 /// Strategy for generating container operations
@@ -172,15 +196,16 @@ pub fn container_operation_strategy() -> impl Strategy<Value = ContainerOperatio
 pub fn batch_operation_options_strategy() -> impl Strategy<Value = BatchOperationOptions> {
     (
         1usize..10usize, // max_concurrent
-        1u64..60u64, // timeout in seconds
-        any::<bool>(), // fail_fast
-    ).prop_map(|(max_concurrent, timeout_secs, fail_fast)| {
-        BatchOperationOptions {
-            max_concurrent,
-            timeout: Duration::from_secs(timeout_secs),
-            fail_fast,
-        }
-    })
+        1u64..60u64,     // timeout in seconds
+        any::<bool>(),   // fail_fast
+    )
+        .prop_map(
+            |(max_concurrent, timeout_secs, fail_fast)| BatchOperationOptions {
+                max_concurrent,
+                timeout: Duration::from_secs(timeout_secs),
+                fail_fast,
+            },
+        )
 }
 
 /// Strategy for generating durations
@@ -191,7 +216,7 @@ pub fn duration_strategy() -> impl Strategy<Value = Duration> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     proptest! {
         /// Test that container configuration creation preserves fields
         #[test]
@@ -200,11 +225,11 @@ mod tests {
             image in docker_image_strategy()
         ) {
             let config = ContainerConfig::new(&name, &image);
-            
+
             // Basic fields should be set correctly
             prop_assert_eq!(config.name, name);
             prop_assert_eq!(config.image, image);
-            
+
             // Default values should be set
             prop_assert!(config.port_mappings.is_empty());
             prop_assert!(config.environment_variables.is_empty());
@@ -227,26 +252,26 @@ mod tests {
         ) {
             let original_name = config.name.clone();
             let original_image = config.image.clone();
-            
+
             // Add port mapping
             config.add_port_mapping(host_port, container_port);
             prop_assert!(config.port_mappings.contains_key(&host_port));
             prop_assert_eq!(config.port_mappings[&host_port], container_port);
-            
+
             // Add environment variable
             config.add_environment_variable(&env_key, &env_value);
             prop_assert!(config.environment_variables.contains_key(&env_key));
             prop_assert_eq!(&config.environment_variables[&env_key], &env_value);
-            
+
             // Add volume mount
             config.add_volume_mount(&host_path, &container_path);
             prop_assert!(config.volume_mounts.contains_key(&host_path));
             prop_assert_eq!(&config.volume_mounts[&host_path], &container_path);
-            
+
             // Set restart policy
             config.set_restart_policy(&restart_policy);
             prop_assert_eq!(config.restart_policy, restart_policy);
-            
+
             // Original fields should remain unchanged
             prop_assert_eq!(config.name, original_name);
             prop_assert_eq!(config.image, original_image);
@@ -260,7 +285,7 @@ mod tests {
             // All statuses should be serializable
             let json = serde_json::to_string(&status)?;
             let deserialized: ContainerStatus = serde_json::from_str(&json)?;
-            
+
             // Check serialization roundtrip
             match (&status, &deserialized) {
                 (ContainerStatus::Exited(code1), ContainerStatus::Exited(code2)) => {
@@ -276,7 +301,7 @@ mod tests {
                     prop_assert_eq!(status.clone(), deserialized);
                 }
             }
-            
+
             // All statuses should have valid debug representations
             let debug_str = format!("{:?}", status);
             prop_assert!(!debug_str.is_empty());
@@ -290,13 +315,13 @@ mod tests {
             // CPU usage should be between 0 and 100%
             prop_assert!(stats.cpu_usage_percent >= 0.0);
             prop_assert!(stats.cpu_usage_percent <= 100.0);
-            
+
             // Memory usage should not exceed memory limit
             prop_assert!(stats.memory_usage_bytes <= stats.memory_limit_bytes);
-            
+
             // Process count should be positive
             prop_assert!(stats.pids > 0);
-            
+
             // All byte counts should be non-negative (guaranteed by u64 type)
             // Stats should be serializable
             let json = serde_json::to_string(&stats)?;
@@ -334,7 +359,7 @@ mod tests {
                     prop_assert!(!name.is_empty());
                 }
             }
-            
+
             // Should be cloneable
             let cloned = operation.clone();
             let debug_original = format!("{:?}", operation);
@@ -350,11 +375,11 @@ mod tests {
             // Max concurrent should be positive and reasonable
             prop_assert!(options.max_concurrent > 0);
             prop_assert!(options.max_concurrent < 1000);
-            
+
             // Timeout should be positive and reasonable
             prop_assert!(options.timeout.as_secs() > 0);
             prop_assert!(options.timeout.as_secs() < 3600);
-            
+
             // Should be cloneable
             let cloned = options.clone();
             prop_assert_eq!(options.max_concurrent, cloned.max_concurrent);
@@ -369,13 +394,13 @@ mod tests {
         ) {
             // Should not be empty
             prop_assert!(!name.is_empty());
-            
+
             // Should not exceed Docker's limit
             prop_assert!(name.len() <= 64);
-            
+
             // Should start with alphanumeric character
             prop_assert!(name.chars().next().unwrap().is_alphanumeric());
-            
+
             // Should only contain valid characters
             for ch in name.chars() {
                 prop_assert!(ch.is_alphanumeric() || ch == '_' || ch == '.' || ch == '-');
@@ -389,10 +414,10 @@ mod tests {
         ) {
             // Should not be empty
             prop_assert!(!image.is_empty());
-            
+
             // Should not contain uppercase letters (Docker convention)
             prop_assert!(!image.chars().any(|c| c.is_uppercase()));
-            
+
             // Should not start with special characters
             let first_char = image.chars().next().unwrap();
             prop_assert!(first_char.is_alphanumeric());
@@ -408,7 +433,7 @@ mod tests {
                 prop_assert!(host_port >= 1024);
                 prop_assert!(container_port >= 1024);
             }
-            
+
             // Should not have too many mappings (resource constraint)
             prop_assert!(mappings.len() <= 5);
         }
@@ -423,11 +448,11 @@ mod tests {
                 prop_assert!(!key.is_empty());
                 prop_assert!(key.chars().all(|c| c.is_uppercase() || c.is_numeric() || c == '_'));
                 prop_assert!(key.chars().next().unwrap().is_alphabetic() || key.starts_with('_'));
-                
+
                 // Value length should be reasonable
                 prop_assert!(value.len() <= 100);
             }
-            
+
             // Should not have too many variables
             prop_assert!(env_vars.len() <= 10);
         }
@@ -441,12 +466,12 @@ mod tests {
                 // Both paths should be absolute
                 prop_assert!(host_path.starts_with('/'));
                 prop_assert!(container_path.starts_with('/'));
-                
+
                 // Paths should not be too long
                 prop_assert!(host_path.len() <= 22); // +1 for leading slash
                 prop_assert!(container_path.len() <= 22);
             }
-            
+
             // Should not have too many mounts
             prop_assert!(mounts.len() <= 5);
         }

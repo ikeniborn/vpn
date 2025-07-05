@@ -1,15 +1,13 @@
 //! High Availability integration tests
 
-use vpn_compose::{
-    ComposeConfig, HAConfig, HAManager, MultiRegionConfig, RoutingPolicy,
-};
 use std::collections::HashMap;
+use vpn_compose::{ComposeConfig, HAConfig, HAManager, MultiRegionConfig, RoutingPolicy};
 
 #[tokio::test]
 async fn test_ha_manager_creation() {
     let compose_config = ComposeConfig::default();
     let ha_config = HAConfig::default();
-    
+
     let manager = HAManager::new(ha_config, compose_config).await;
     assert!(manager.is_ok());
 }
@@ -32,7 +30,7 @@ async fn test_ha_config_with_replicas() {
         keepalived: true,
         multi_region: None,
     };
-    
+
     assert_eq!(ha_config.vpn_replicas, 5);
     assert_eq!(ha_config.api_replicas, 3);
     assert_eq!(ha_config.virtual_ip, "192.168.100.100");
@@ -45,7 +43,7 @@ async fn test_multi_region_config() {
     region_endpoints.insert("us-east".to_string(), "east.vpn.example.com".to_string());
     region_endpoints.insert("us-west".to_string(), "west.vpn.example.com".to_string());
     region_endpoints.insert("eu-central".to_string(), "eu.vpn.example.com".to_string());
-    
+
     let multi_region = MultiRegionConfig {
         primary_region: "us-east".to_string(),
         secondary_regions: vec!["us-west".to_string(), "eu-central".to_string()],
@@ -53,7 +51,7 @@ async fn test_multi_region_config() {
         region_endpoints,
         routing_policy: RoutingPolicy::GeoProximity,
     };
-    
+
     assert_eq!(multi_region.primary_region, "us-east");
     assert_eq!(multi_region.secondary_regions.len(), 2);
     assert!(multi_region.cross_region_replication);
@@ -64,24 +62,24 @@ async fn test_routing_policies() {
     // Test GeoProximity
     let geo_policy = RoutingPolicy::GeoProximity;
     assert!(matches!(geo_policy, RoutingPolicy::GeoProximity));
-    
+
     // Test Failover
     let failover_policy = RoutingPolicy::Failover;
     assert!(matches!(failover_policy, RoutingPolicy::Failover));
-    
+
     // Test Weighted
     let mut weights = HashMap::new();
     weights.insert("us-east".to_string(), 60);
     weights.insert("us-west".to_string(), 40);
     let weighted_policy = RoutingPolicy::Weighted(weights.clone());
-    
+
     if let RoutingPolicy::Weighted(w) = weighted_policy {
         assert_eq!(w.get("us-east"), Some(&60));
         assert_eq!(w.get("us-west"), Some(&40));
     } else {
         panic!("Expected Weighted routing policy");
     }
-    
+
     // Test RoundRobin
     let rr_policy = RoutingPolicy::RoundRobin;
     assert!(matches!(rr_policy, RoutingPolicy::RoundRobin));
@@ -105,13 +103,13 @@ async fn test_ha_config_serialization() {
         keepalived: true,
         multi_region: None,
     };
-    
+
     // Test JSON serialization
     let json = serde_json::to_string(&ha_config).unwrap();
     assert!(json.contains("\"enabled\":true"));
     assert!(json.contains("\"vpn_replicas\":3"));
     assert!(json.contains("\"virtual_ip\":\"10.0.0.100\""));
-    
+
     // Test deserialization
     let deserialized: HAConfig = serde_json::from_str(&json).unwrap();
     assert_eq!(deserialized.enabled, ha_config.enabled);
@@ -122,17 +120,17 @@ async fn test_ha_config_serialization() {
 #[tokio::test]
 async fn test_ha_health_status_structure() {
     use vpn_compose::HAHealthStatus;
-    
+
     let mut active_replicas = HashMap::new();
     active_replicas.insert("vpn-server".to_string(), 3);
     active_replicas.insert("vpn-api".to_string(), 2);
     active_replicas.insert("nginx-proxy".to_string(), 2);
-    
+
     let mut expected_replicas = HashMap::new();
     expected_replicas.insert("vpn-server".to_string(), 3);
     expected_replicas.insert("vpn-api".to_string(), 3);
     expected_replicas.insert("nginx-proxy".to_string(), 2);
-    
+
     let health_status = HAHealthStatus {
         overall_health: "degraded".to_string(),
         vpn_servers_healthy: true,
@@ -142,7 +140,7 @@ async fn test_ha_health_status_structure() {
         active_replicas,
         expected_replicas,
     };
-    
+
     assert_eq!(health_status.overall_health, "degraded");
     assert!(health_status.vpn_servers_healthy);
     assert!(!health_status.api_servers_healthy);
@@ -156,12 +154,12 @@ async fn test_multi_region_with_weighted_routing() {
     weights.insert("us-east".to_string(), 50);
     weights.insert("us-west".to_string(), 30);
     weights.insert("eu-central".to_string(), 20);
-    
+
     let mut region_endpoints = HashMap::new();
     region_endpoints.insert("us-east".to_string(), "east.vpn.example.com".to_string());
     region_endpoints.insert("us-west".to_string(), "west.vpn.example.com".to_string());
     region_endpoints.insert("eu-central".to_string(), "eu.vpn.example.com".to_string());
-    
+
     let multi_region = MultiRegionConfig {
         primary_region: "us-east".to_string(),
         secondary_regions: vec!["us-west".to_string(), "eu-central".to_string()],
@@ -169,7 +167,7 @@ async fn test_multi_region_with_weighted_routing() {
         region_endpoints,
         routing_policy: RoutingPolicy::Weighted(weights),
     };
-    
+
     // Verify weighted routing configuration
     if let RoutingPolicy::Weighted(w) = &multi_region.routing_policy {
         let total_weight: u32 = w.values().sum();

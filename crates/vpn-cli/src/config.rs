@@ -1,7 +1,7 @@
+use crate::error::{CliError, Result};
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
-use crate::error::{CliError, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CliConfig {
@@ -107,9 +107,7 @@ pub struct ConfigManager {
 
 impl ConfigManager {
     pub fn new(config_path: Option<PathBuf>) -> Result<Self> {
-        let config_path = config_path.unwrap_or_else(|| {
-            Self::default_config_path()
-        });
+        let config_path = config_path.unwrap_or_else(|| Self::default_config_path());
 
         let config = if config_path.exists() {
             Self::load_config(&config_path)?
@@ -164,7 +162,7 @@ impl ConfigManager {
     pub fn set_preferred_runtime(&mut self, runtime: &str) -> Result<()> {
         if !["auto", "docker", "containerd"].contains(&runtime) {
             return Err(CliError::ConfigError(
-                "Runtime must be 'auto', 'docker', or 'containerd'".to_string()
+                "Runtime must be 'auto', 'docker', or 'containerd'".to_string(),
             ));
         }
         self.config.runtime.preferred_runtime = runtime.to_string();
@@ -182,23 +180,25 @@ impl ConfigManager {
                 "containerd" => false,
                 _ => self.config.runtime.containerd.enabled,
             };
-            
+
             if !would_have_docker && !would_have_containerd {
                 return Err(CliError::ConfigError(
-                    "At least one runtime must be enabled".to_string()
+                    "At least one runtime must be enabled".to_string(),
                 ));
             }
         }
-        
+
         // Apply the change
         match runtime {
             "docker" => self.config.runtime.docker.enabled = enabled,
             "containerd" => self.config.runtime.containerd.enabled = enabled,
-            _ => return Err(CliError::ConfigError(
-                "Runtime must be 'docker' or 'containerd'".to_string()
-            )),
+            _ => {
+                return Err(CliError::ConfigError(
+                    "Runtime must be 'docker' or 'containerd'".to_string(),
+                ))
+            }
         }
-        
+
         Self::save_config(&self.config, &self.config_path)
     }
 
@@ -206,9 +206,11 @@ impl ConfigManager {
         match runtime {
             "docker" => self.config.runtime.docker.socket_path = socket_path.to_string(),
             "containerd" => self.config.runtime.containerd.socket_path = socket_path.to_string(),
-            _ => return Err(CliError::ConfigError(
-                "Runtime must be 'docker' or 'containerd'".to_string()
-            )),
+            _ => {
+                return Err(CliError::ConfigError(
+                    "Runtime must be 'docker' or 'containerd'".to_string(),
+                ))
+            }
         }
         Self::save_config(&self.config, &self.config_path)
     }
@@ -226,7 +228,7 @@ impl ConfigManager {
     /// Convert CLI runtime config to vpn-runtime config
     pub fn to_runtime_config(&self) -> vpn_runtime::RuntimeConfig {
         let runtime = &self.config.runtime;
-        
+
         let runtime_type = match runtime.preferred_runtime.as_str() {
             "docker" => vpn_runtime::RuntimeType::Docker,
             "containerd" => vpn_runtime::RuntimeType::Containerd,
@@ -259,10 +261,10 @@ impl ConfigManager {
 
         vpn_runtime::RuntimeConfig {
             runtime_type,
-            socket_path: None, // Use runtime-specific socket paths
-            namespace: None,   // Use runtime-specific namespaces
+            socket_path: None,                // Use runtime-specific socket paths
+            namespace: None,                  // Use runtime-specific namespaces
             timeout: Duration::from_secs(30), // Default timeout
-            max_connections: 10, // Default max connections
+            max_connections: 10,              // Default max connections
             docker: docker_config,
             containerd: containerd_config,
             fallback_enabled: runtime.fallback_enabled,
@@ -312,7 +314,8 @@ impl ConfigManager {
         // Validate runtime configuration
         let runtime = &self.config.runtime;
         if !["auto", "docker", "containerd"].contains(&runtime.preferred_runtime.as_str()) {
-            warnings.push("Preferred runtime must be 'auto', 'docker', or 'containerd'".to_string());
+            warnings
+                .push("Preferred runtime must be 'auto', 'docker', or 'containerd'".to_string());
         }
 
         if !runtime.docker.enabled && !runtime.containerd.enabled {
@@ -360,8 +363,9 @@ impl ConfigManager {
 
     fn save_config(config: &CliConfig, path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| CliError::ConfigError(format!("Failed to create config directory: {}", e)))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                CliError::ConfigError(format!("Failed to create config directory: {}", e))
+            })?;
         }
 
         let content = toml::to_string_pretty(config)
@@ -512,19 +516,19 @@ mod tests {
     #[test]
     fn test_config_creation_and_validation() {
         let config = CliConfig::default();
-        
+
         // Test serialization
         let toml_str = toml::to_string(&config).unwrap();
         assert!(!toml_str.is_empty());
-        
+
         // Test deserialization
         let _parsed_config: CliConfig = toml::from_str(&toml_str).unwrap();
-        
+
         // Test validation
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("config.toml");
         let manager = ConfigManager::new(Some(config_path)).unwrap();
-        
+
         let warnings = manager.validate_config().unwrap();
         assert!(warnings.is_empty(), "Default config should be valid");
     }
@@ -534,15 +538,18 @@ mod tests {
         let mut config = CliConfig::default();
         config.server.default_port_range = (5000, 4000); // Invalid range
         config.monitoring.alert_thresholds.cpu_usage = 150.0; // Invalid threshold
-        
+
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("config.toml");
         ConfigManager::save_config(&config, &config_path).unwrap();
-        
+
         let manager = ConfigManager::new(Some(config_path)).unwrap();
         let warnings = manager.validate_config().unwrap();
-        
-        assert!(!warnings.is_empty(), "Invalid config should produce warnings");
+
+        assert!(
+            !warnings.is_empty(),
+            "Invalid config should produce warnings"
+        );
     }
 
     #[test]
@@ -550,7 +557,7 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("config.toml");
         let mut manager = ConfigManager::new(Some(config_path)).unwrap();
-        
+
         // Test default runtime config
         let runtime_config = manager.get_runtime_config();
         assert_eq!(runtime_config.preferred_runtime, "auto");
@@ -558,29 +565,37 @@ mod tests {
         assert!(runtime_config.fallback_enabled);
         assert!(runtime_config.docker.enabled);
         assert!(runtime_config.containerd.enabled);
-        
+
         // Test setting preferred runtime
         manager.set_preferred_runtime("containerd").unwrap();
         assert_eq!(manager.get_runtime_config().preferred_runtime, "containerd");
-        
+
         // Test invalid runtime
         assert!(manager.set_preferred_runtime("invalid").is_err());
-        
+
         // Test enabling/disabling runtimes
         manager.enable_runtime("docker", false).unwrap();
         assert!(!manager.get_runtime_config().docker.enabled);
         assert!(manager.get_runtime_config().containerd.enabled);
-        
+
         // Test disabling all runtimes should fail
         assert!(manager.enable_runtime("containerd", false).is_err());
-        
+
         // Test socket path update
-        manager.update_runtime_socket("containerd", "/custom/path.sock").unwrap();
-        assert_eq!(manager.get_runtime_config().containerd.socket_path, "/custom/path.sock");
-        
+        manager
+            .update_runtime_socket("containerd", "/custom/path.sock")
+            .unwrap();
+        assert_eq!(
+            manager.get_runtime_config().containerd.socket_path,
+            "/custom/path.sock"
+        );
+
         // Test conversion to vpn-runtime config
         let vpn_runtime_config = manager.to_runtime_config();
-        assert_eq!(vpn_runtime_config.runtime_type, vpn_runtime::RuntimeType::Containerd);
+        assert_eq!(
+            vpn_runtime_config.runtime_type,
+            vpn_runtime::RuntimeType::Containerd
+        );
         assert!(vpn_runtime_config.containerd.is_some());
         assert!(vpn_runtime_config.docker.is_none()); // Docker is disabled
         assert!(vpn_runtime_config.fallback_enabled);
@@ -589,21 +604,21 @@ mod tests {
     #[test]
     fn test_runtime_config_validation() {
         let mut config = CliConfig::default();
-        
+
         // Test invalid preferred runtime
         config.runtime.preferred_runtime = "invalid".to_string();
         config.runtime.docker.enabled = false;
         config.runtime.containerd.enabled = false;
         config.runtime.docker.timeout_seconds = 0;
         config.runtime.migration.migration_timeout_minutes = 0;
-        
+
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("config.toml");
         ConfigManager::save_config(&config, &config_path).unwrap();
-        
+
         let manager = ConfigManager::new(Some(config_path)).unwrap();
         let warnings = manager.validate_config().unwrap();
-        
+
         // Should have multiple runtime-related warnings
         assert!(warnings.iter().any(|w| w.contains("Preferred runtime")));
         assert!(warnings.iter().any(|w| w.contains("At least one runtime")));

@@ -3,13 +3,13 @@
 use crate::{
     crd::VpnServer,
     error::Result,
-    resources::{deployment, service, configmap, secret},
+    resources::{configmap, deployment, secret, service},
     OperatorConfig,
 };
 use k8s_openapi::api::{
-        apps::v1::Deployment,
-        core::v1::{ConfigMap, Secret, Service},
-    };
+    apps::v1::Deployment,
+    core::v1::{ConfigMap, Secret, Service},
+};
 use kube::{
     api::{Api, DeleteParams, Patch, PatchParams, PostParams},
     client::Client,
@@ -35,7 +35,7 @@ impl VpnReconciler {
     pub async fn reconcile(&self, vpn: Arc<VpnServer>) -> Result<()> {
         let name = vpn.name_any();
         let namespace = vpn.namespace().unwrap_or_default();
-        
+
         tracing::info!("Reconciling VPN server {}/{}", namespace, name);
 
         // Create or update ConfigMap
@@ -66,7 +66,7 @@ impl VpnReconciler {
     pub async fn cleanup(&self, vpn: Arc<VpnServer>) -> Result<()> {
         let name = vpn.name_any();
         let namespace = vpn.namespace().unwrap_or_default();
-        
+
         tracing::info!("Cleaning up VPN server {}/{}", namespace, name);
 
         // Delete in reverse order
@@ -82,7 +82,7 @@ impl VpnReconciler {
     async fn reconcile_configmap(&self, vpn: &VpnServer) -> Result<()> {
         let name = vpn.name_any();
         let namespace = vpn.namespace().unwrap_or_default();
-        
+
         let api: Api<ConfigMap> = Api::namespaced(self.client.clone(), &namespace);
         let cm_name = format!("{}-config", name);
 
@@ -92,7 +92,8 @@ impl VpnReconciler {
             Ok(existing) => {
                 // Update existing ConfigMap
                 let patch = Patch::Apply(&cm);
-                api.patch(&cm_name, &PatchParams::apply("vpn-operator"), &patch).await?;
+                api.patch(&cm_name, &PatchParams::apply("vpn-operator"), &patch)
+                    .await?;
                 tracing::debug!("Updated ConfigMap {}/{}", namespace, cm_name);
             }
             Err(kube::Error::Api(e)) if e.code == 404 => {
@@ -110,7 +111,7 @@ impl VpnReconciler {
     async fn reconcile_secret(&self, vpn: &VpnServer) -> Result<()> {
         let name = vpn.name_any();
         let namespace = vpn.namespace().unwrap_or_default();
-        
+
         let api: Api<Secret> = Api::namespaced(self.client.clone(), &namespace);
         let secret_name = format!("{}-secret", name);
 
@@ -136,7 +137,7 @@ impl VpnReconciler {
     async fn reconcile_deployment(&self, vpn: &VpnServer) -> Result<()> {
         let name = vpn.name_any();
         let namespace = vpn.namespace().unwrap_or_default();
-        
+
         let api: Api<Deployment> = Api::namespaced(self.client.clone(), &namespace);
         let deployment_name = format!("{}-deployment", name);
 
@@ -146,7 +147,12 @@ impl VpnReconciler {
             Ok(existing) => {
                 // Update existing Deployment
                 let patch = Patch::Apply(&deployment);
-                api.patch(&deployment_name, &PatchParams::apply("vpn-operator"), &patch).await?;
+                api.patch(
+                    &deployment_name,
+                    &PatchParams::apply("vpn-operator"),
+                    &patch,
+                )
+                .await?;
                 tracing::debug!("Updated Deployment {}/{}", namespace, deployment_name);
             }
             Err(kube::Error::Api(e)) if e.code == 404 => {
@@ -164,7 +170,7 @@ impl VpnReconciler {
     async fn reconcile_service(&self, vpn: &VpnServer) -> Result<()> {
         let name = vpn.name_any();
         let namespace = vpn.namespace().unwrap_or_default();
-        
+
         let api: Api<Service> = Api::namespaced(self.client.clone(), &namespace);
         let service_name = name.clone();
 
@@ -175,7 +181,8 @@ impl VpnReconciler {
                 // Update existing Service (but preserve ClusterIP and NodePort)
                 let patch = service::create_service_patch(vpn, &existing)?;
                 let patch = Patch::Apply(patch);
-                api.patch(&service_name, &PatchParams::apply("vpn-operator"), &patch).await?;
+                api.patch(&service_name, &PatchParams::apply("vpn-operator"), &patch)
+                    .await?;
                 tracing::debug!("Updated Service {}/{}", namespace, service_name);
             }
             Err(kube::Error::Api(e)) if e.code == 404 => {
@@ -192,21 +199,21 @@ impl VpnReconciler {
     /// Reconcile HA resources
     async fn reconcile_ha_resources(&self, vpn: &VpnServer) -> Result<()> {
         tracing::info!("Reconciling HA resources for {}", vpn.name_any());
-        
+
         // TODO: Create PodDisruptionBudget
         // TODO: Configure anti-affinity rules
         // TODO: Setup health checks
-        
+
         Ok(())
     }
 
     /// Reconcile monitoring resources
     async fn reconcile_monitoring_resources(&self, vpn: &VpnServer) -> Result<()> {
         tracing::info!("Reconciling monitoring resources for {}", vpn.name_any());
-        
+
         // TODO: Create ServiceMonitor for Prometheus
         // TODO: Configure metrics endpoints
-        
+
         Ok(())
     }
 
@@ -214,7 +221,7 @@ impl VpnReconciler {
     async fn delete_configmap(&self, name: &str, namespace: &str) -> Result<()> {
         let api: Api<ConfigMap> = Api::namespaced(self.client.clone(), namespace);
         let cm_name = format!("{}-config", name);
-        
+
         match api.delete(&cm_name, &DeleteParams::default()).await {
             Ok(_) => {
                 tracing::info!("Deleted ConfigMap {}/{}", namespace, cm_name);
@@ -232,7 +239,7 @@ impl VpnReconciler {
     async fn delete_secret(&self, name: &str, namespace: &str) -> Result<()> {
         let api: Api<Secret> = Api::namespaced(self.client.clone(), namespace);
         let secret_name = format!("{}-secret", name);
-        
+
         match api.delete(&secret_name, &DeleteParams::default()).await {
             Ok(_) => {
                 tracing::info!("Deleted Secret {}/{}", namespace, secret_name);
@@ -250,7 +257,7 @@ impl VpnReconciler {
     async fn delete_deployment(&self, name: &str, namespace: &str) -> Result<()> {
         let api: Api<Deployment> = Api::namespaced(self.client.clone(), namespace);
         let deployment_name = format!("{}-deployment", name);
-        
+
         match api.delete(&deployment_name, &DeleteParams::default()).await {
             Ok(_) => {
                 tracing::info!("Deleted Deployment {}/{}", namespace, deployment_name);
@@ -267,7 +274,7 @@ impl VpnReconciler {
     /// Delete Service
     async fn delete_service(&self, name: &str, namespace: &str) -> Result<()> {
         let api: Api<Service> = Api::namespaced(self.client.clone(), namespace);
-        
+
         match api.delete(name, &DeleteParams::default()).await {
             Ok(_) => {
                 tracing::info!("Deleted Service {}/{}", namespace, name);

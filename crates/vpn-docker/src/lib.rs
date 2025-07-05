@@ -60,22 +60,26 @@
 //! └─────────────────┘    └──────────────┘
 //! ```
 
+pub mod cache;
 pub mod container;
+pub mod error;
 pub mod health;
 pub mod logs;
-pub mod volumes;
-pub mod error;
 pub mod pool;
-pub mod cache;
+pub mod volumes;
 
 #[cfg(test)]
 pub mod proptest;
 
 // Re-export main types for convenience
-pub use container::{ContainerManager, DockerManager, ContainerConfig, ContainerStatus, ContainerStats};
+pub use cache::{
+    get_container_cache, start_cache_cleanup_task, CacheConfig, CacheStats, ContainerCache,
+};
+pub use container::{
+    ContainerConfig, ContainerManager, ContainerStats, ContainerStatus, DockerManager,
+};
+pub use error::{DockerError, Result};
 pub use health::HealthChecker;
 pub use logs::LogStreamer;
+pub use pool::{get_docker_connection, get_pool_stats, DockerPool, PoolConfig, PoolStats};
 pub use volumes::VolumeManager;
-pub use error::{DockerError, Result};
-pub use pool::{DockerPool, PoolConfig, PoolStats, get_docker_connection, get_pool_stats};
-pub use cache::{ContainerCache, CacheConfig, CacheStats, get_container_cache, start_cache_cleanup_task};

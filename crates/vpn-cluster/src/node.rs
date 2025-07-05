@@ -58,16 +58,16 @@ impl Default for NodeId {
 pub enum NodeRole {
     /// Leader node - coordinates cluster operations
     Leader,
-    
+
     /// Follower node - executes commands from leader
     Follower,
-    
+
     /// Candidate node - seeking to become leader
     Candidate,
-    
+
     /// Observer node - read-only, doesn't participate in consensus
     Observer,
-    
+
     /// Bootstrap node - helps new nodes join the cluster
     Bootstrap,
 }
@@ -95,22 +95,22 @@ impl fmt::Display for NodeRole {
 pub enum NodeStatus {
     /// Node is healthy and operational
     Healthy,
-    
+
     /// Node is suspected to be failing
     Suspected,
-    
+
     /// Node has failed and is not responding
     Failed,
-    
+
     /// Node is starting up
     Starting,
-    
+
     /// Node is shutting down gracefully
     Stopping,
-    
+
     /// Node is temporarily unavailable
     Unavailable,
-    
+
     /// Node status is unknown
     Unknown,
 }
@@ -140,37 +140,37 @@ impl fmt::Display for NodeStatus {
 pub struct Node {
     /// Unique identifier for this node
     pub id: NodeId,
-    
+
     /// Human-readable name for this node
     pub name: String,
-    
+
     /// Network address where this node can be reached
     pub address: SocketAddr,
-    
+
     /// Current role of this node
     pub role: NodeRole,
-    
+
     /// Current status of this node
     pub status: NodeStatus,
-    
+
     /// When this node joined the cluster
     pub joined_at: u64,
-    
+
     /// Last time we heard from this node
     pub last_seen: u64,
-    
+
     /// Node capabilities and metadata
     pub metadata: HashMap<String, String>,
-    
+
     /// Node version information
     pub version: String,
-    
+
     /// Region/datacenter where this node is located
     pub region: Option<String>,
-    
+
     /// Available resources on this node
     pub resources: NodeResources,
-    
+
     /// Health information
     pub health: NodeHealth,
 }
@@ -179,7 +179,7 @@ impl Node {
     /// Create a new node
     pub fn new(name: String, address: SocketAddr) -> Self {
         let now = current_timestamp();
-        
+
         Self {
             id: NodeId::new(),
             name,
@@ -212,14 +212,16 @@ impl Node {
     pub fn is_alive(&self, timeout: Duration) -> bool {
         let current_time = current_timestamp();
         let timeout_secs = timeout.as_secs();
-        
+
         current_time.saturating_sub(self.last_seen) <= timeout_secs
     }
 
     /// Check if node can participate in consensus
     pub fn can_vote(&self) -> bool {
-        matches!(self.role, NodeRole::Leader | NodeRole::Follower | NodeRole::Candidate)
-            && matches!(self.status, NodeStatus::Healthy | NodeStatus::Starting)
+        matches!(
+            self.role,
+            NodeRole::Leader | NodeRole::Follower | NodeRole::Candidate
+        ) && matches!(self.status, NodeStatus::Healthy | NodeStatus::Starting)
     }
 
     /// Get node uptime in seconds
@@ -244,14 +246,24 @@ impl Node {
 
     /// Update node role
     pub fn set_role(&mut self, role: NodeRole) {
-        tracing::info!("Node {} changing role from {} to {}", self.id, self.role, role);
+        tracing::info!(
+            "Node {} changing role from {} to {}",
+            self.id,
+            self.role,
+            role
+        );
         self.role = role;
     }
 
     /// Update node status
     pub fn set_status(&mut self, status: NodeStatus) {
         if self.status != status {
-            tracing::info!("Node {} changing status from {} to {}", self.id, self.status, status);
+            tracing::info!(
+                "Node {} changing status from {} to {}",
+                self.id,
+                self.status,
+                status
+            );
             self.status = status;
         }
     }
@@ -288,22 +300,22 @@ impl Eq for Node {}
 pub struct NodeResources {
     /// CPU cores available
     pub cpu_cores: u32,
-    
+
     /// Memory in MB
     pub memory_mb: u64,
-    
+
     /// Disk space in MB
     pub disk_mb: u64,
-    
+
     /// Current CPU usage percentage
     pub cpu_usage: f64,
-    
+
     /// Current memory usage percentage
     pub memory_usage: f64,
-    
+
     /// Current disk usage percentage
     pub disk_usage: f64,
-    
+
     /// Network bandwidth in Mbps
     pub network_bandwidth: u64,
 }
@@ -327,13 +339,13 @@ impl Default for NodeResources {
 pub struct NodeHealth {
     /// Overall health score (0-100)
     pub score: u8,
-    
+
     /// Number of consecutive health check failures
     pub consecutive_failures: u32,
-    
+
     /// Last health check timestamp
     pub last_check: u64,
-    
+
     /// Health check details
     pub checks: HashMap<String, HealthCheck>,
 }
@@ -354,16 +366,16 @@ impl Default for NodeHealth {
 pub struct HealthCheck {
     /// Name of the health check
     pub name: String,
-    
+
     /// Whether the check passed
     pub passed: bool,
-    
+
     /// Check execution time in milliseconds
     pub duration_ms: u64,
-    
+
     /// Error message if check failed
     pub error: Option<String>,
-    
+
     /// When this check was performed
     pub timestamp: u64,
 }
@@ -403,7 +415,7 @@ mod tests {
     fn test_node_id_creation() {
         let id1 = NodeId::new();
         let id2 = NodeId::new();
-        
+
         assert_ne!(id1, id2);
         assert!(!id1.to_string().is_empty());
     }
@@ -419,7 +431,7 @@ mod tests {
     fn test_node_creation() {
         let address = "127.0.0.1:8080".parse().unwrap();
         let node = Node::new("test-node".to_string(), address);
-        
+
         assert_eq!(node.name, "test-node");
         assert_eq!(node.address, address);
         assert_eq!(node.role, NodeRole::Follower);
@@ -431,10 +443,10 @@ mod tests {
     fn test_node_alive_check() {
         let address = "127.0.0.1:8080".parse().unwrap();
         let mut node = Node::new("test-node".to_string(), address);
-        
+
         // Node should be alive initially
         assert!(node.is_alive(Duration::from_secs(10)));
-        
+
         // Simulate old last_seen time
         node.last_seen = current_timestamp() - 20;
         assert!(!node.is_alive(Duration::from_secs(10)));
@@ -444,19 +456,19 @@ mod tests {
     fn test_node_voting_capability() {
         let address = "127.0.0.1:8080".parse().unwrap();
         let mut node = Node::new("test-node".to_string(), address);
-        
+
         // Starting follower can vote
         assert!(node.can_vote());
-        
+
         // Observer cannot vote
         node.role = NodeRole::Observer;
         assert!(!node.can_vote());
-        
+
         // Failed node cannot vote
         node.role = NodeRole::Follower;
         node.status = NodeStatus::Failed;
         assert!(!node.can_vote());
-        
+
         // Healthy leader can vote
         node.role = NodeRole::Leader;
         node.status = NodeStatus::Healthy;
@@ -467,12 +479,18 @@ mod tests {
     fn test_node_metadata() {
         let address = "127.0.0.1:8080".parse().unwrap();
         let mut node = Node::new("test-node".to_string(), address);
-        
+
         node.add_metadata("datacenter".to_string(), "us-west".to_string());
         node.add_metadata("instance_type".to_string(), "m5.large".to_string());
-        
-        assert_eq!(node.get_metadata("datacenter"), Some(&"us-west".to_string()));
-        assert_eq!(node.get_metadata("instance_type"), Some(&"m5.large".to_string()));
+
+        assert_eq!(
+            node.get_metadata("datacenter"),
+            Some(&"us-west".to_string())
+        );
+        assert_eq!(
+            node.get_metadata("instance_type"),
+            Some(&"m5.large".to_string())
+        );
         assert_eq!(node.get_metadata("nonexistent"), None);
     }
 
@@ -480,10 +498,10 @@ mod tests {
     fn test_node_role_changes() {
         let address = "127.0.0.1:8080".parse().unwrap();
         let mut node = Node::new("test-node".to_string(), address);
-        
+
         assert_eq!(node.role, NodeRole::Follower);
         assert!(!node.is_leader());
-        
+
         node.set_role(NodeRole::Leader);
         assert_eq!(node.role, NodeRole::Leader);
         assert!(node.is_leader());
@@ -493,10 +511,10 @@ mod tests {
     fn test_node_status_changes() {
         let address = "127.0.0.1:8080".parse().unwrap();
         let mut node = Node::new("test-node".to_string(), address);
-        
+
         assert_eq!(node.status, NodeStatus::Starting);
         assert!(!node.is_healthy());
-        
+
         node.set_status(NodeStatus::Healthy);
         assert_eq!(node.status, NodeStatus::Healthy);
         assert!(node.is_healthy());
@@ -509,7 +527,7 @@ mod tests {
         assert!(check.passed);
         assert_eq!(check.duration_ms, 50);
         assert!(check.error.is_none());
-        
+
         let failed_check = HealthCheck::new("connect".to_string(), false, 1000)
             .with_error("Connection refused".to_string());
         assert!(!failed_check.passed);
@@ -520,10 +538,10 @@ mod tests {
     fn test_node_serialization() {
         let address = "127.0.0.1:8080".parse().unwrap();
         let node = Node::new("test-node".to_string(), address);
-        
+
         let serialized = serde_json::to_string(&node).unwrap();
         let deserialized: Node = serde_json::from_str(&serialized).unwrap();
-        
+
         assert_eq!(node.id, deserialized.id);
         assert_eq!(node.name, deserialized.name);
         assert_eq!(node.address, deserialized.address);

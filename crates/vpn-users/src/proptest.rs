@@ -1,12 +1,12 @@
 //! Property-based tests for VPN user management
-//! 
+//!
 //! This module contains comprehensive property-based tests using proptest
 //! to ensure the correctness of user operations under various scenarios.
 
-use crate::{user::*, error::*};
-use proptest::prelude::*;
-use proptest::option;
+use crate::{error::*, user::*};
 use chrono::Utc;
+use proptest::option;
+use proptest::prelude::*;
 use vpn_types::protocol::VpnProtocol;
 
 /// Strategy for generating valid user names
@@ -59,44 +59,46 @@ pub fn user_config_strategy() -> impl Strategy<Value = UserConfig> {
     (
         server_host_strategy(),
         port_strategy(),
-        option::of("[a-zA-Z0-9.-]{3,50}"), // SNI
+        option::of("[a-zA-Z0-9.-]{3,50}"),   // SNI
         option::of("/[a-zA-Z0-9/-]{1,100}"), // Path
-        "[a-zA-Z0-9]{3,20}", // Security
-        "[a-zA-Z0-9]{3,20}", // Network
-        option::of("[a-zA-Z0-9]{3,20}"), // Header type
-        option::of("[a-zA-Z0-9-]{3,20}"), // Flow
-    ).prop_map(|(host, port, sni, path, security, network, header_type, flow)| {
-        UserConfig {
-            public_key: None,
-            private_key: None,
-            server_host: host,
-            server_port: port,
-            sni,
-            path,
-            security,
-            network,
-            header_type,
-            flow,
-        }
-    })
+        "[a-zA-Z0-9]{3,20}",                 // Security
+        "[a-zA-Z0-9]{3,20}",                 // Network
+        option::of("[a-zA-Z0-9]{3,20}"),     // Header type
+        option::of("[a-zA-Z0-9-]{3,20}"),    // Flow
+    )
+        .prop_map(
+            |(host, port, sni, path, security, network, header_type, flow)| UserConfig {
+                public_key: None,
+                private_key: None,
+                server_host: host,
+                server_port: port,
+                sni,
+                path,
+                security,
+                network,
+                header_type,
+                flow,
+            },
+        )
 }
 
 /// Strategy for generating user stats
 pub fn user_stats_strategy() -> impl Strategy<Value = UserStats> {
     (
-        0u64..u64::MAX/2, // bytes_sent
-        0u64..u64::MAX/2, // bytes_received
-        0u64..10000u64,   // connection_count
-        0u64..86400u64*365u64, // total_uptime (max 1 year in seconds)
-    ).prop_map(|(bytes_sent, bytes_received, connection_count, total_uptime)| {
-        UserStats {
-            bytes_sent,
-            bytes_received,
-            connection_count,
-            last_connection: None,
-            total_uptime,
-        }
-    })
+        0u64..u64::MAX / 2,      // bytes_sent
+        0u64..u64::MAX / 2,      // bytes_received
+        0u64..10000u64,          // connection_count
+        0u64..86400u64 * 365u64, // total_uptime (max 1 year in seconds)
+    )
+        .prop_map(
+            |(bytes_sent, bytes_received, connection_count, total_uptime)| UserStats {
+                bytes_sent,
+                bytes_received,
+                connection_count,
+                last_connection: None,
+                total_uptime,
+            },
+        )
 }
 
 /// Strategy for generating complete users
@@ -108,16 +110,17 @@ pub fn user_strategy() -> impl Strategy<Value = User> {
         user_status_strategy(),
         user_config_strategy(),
         user_stats_strategy(),
-    ).prop_map(|(name, protocol, email, status, config, stats)| {
-        let mut user = User::new(name, protocol);
-        if let Some(email) = email {
-            user = user.with_email(email);
-        }
-        user.status = status;
-        user.config = config;
-        user.stats = stats;
-        user
-    })
+    )
+        .prop_map(|(name, protocol, email, status, config, stats)| {
+            let mut user = User::new(name, protocol);
+            if let Some(email) = email {
+                user = user.with_email(email);
+            }
+            user.status = status;
+            user.config = config;
+            user.stats = stats;
+            user
+        })
 }
 
 #[cfg(test)]
@@ -134,7 +137,7 @@ mod tests {
             protocol in protocol_strategy()
         ) {
             let user = User::new(name.clone(), protocol);
-            
+
             // Basic invariants
             prop_assert_eq!(&user.name, &name);
             prop_assert_eq!(user.protocol, protocol);
@@ -142,10 +145,10 @@ mod tests {
             prop_assert!(user.is_active());
             prop_assert!(!user.id.is_empty());
             prop_assert!(!user.short_id.is_empty());
-            
+
             // UUID format validation
             prop_assert!(uuid::Uuid::parse_str(&user.id).is_ok());
-            
+
             // Time invariants
             prop_assert!(user.created_at <= Utc::now());
             prop_assert!(user.last_active.is_none());
@@ -158,17 +161,17 @@ mod tests {
         ) {
             let original_name = user.name.clone();
             let original_protocol = user.protocol;
-            
+
             // Test activation
             user.activate();
             prop_assert_eq!(user.status, UserStatus::Active);
             prop_assert!(user.is_active());
-            
+
             // Test deactivation
             user.deactivate();
             prop_assert_eq!(user.status, UserStatus::Inactive);
             prop_assert!(!user.is_active());
-            
+
             // Test that other fields remain unchanged
             prop_assert_eq!(user.name, original_name);
             prop_assert_eq!(user.protocol, original_protocol);
@@ -184,15 +187,15 @@ mod tests {
             let original_name = user.name.clone();
             let original_protocol = user.protocol;
             let original_created_at = user.created_at;
-            
+
             let updated_user = user.with_config(new_config.clone());
-            
+
             // Identity fields should remain unchanged
             prop_assert_eq!(updated_user.id, original_id);
             prop_assert_eq!(updated_user.name, original_name);
             prop_assert_eq!(updated_user.protocol, original_protocol);
             prop_assert_eq!(updated_user.created_at, original_created_at);
-            
+
             // Config should be updated
             prop_assert_eq!(updated_user.config.server_host, new_config.server_host);
             prop_assert_eq!(updated_user.config.server_port, new_config.server_port);
@@ -206,9 +209,9 @@ mod tests {
         ) {
             let original_id = user.id.clone();
             let original_name = user.name.clone();
-            
+
             let updated_user = user.with_email(email.clone());
-            
+
             prop_assert_eq!(updated_user.id, original_id);
             prop_assert_eq!(updated_user.name, original_name);
             prop_assert_eq!(updated_user.email, Some(email));
@@ -224,7 +227,7 @@ mod tests {
             prop_assert!(stats.bytes_received < u64::MAX);
             prop_assert!(stats.connection_count < u64::MAX);
             prop_assert!(stats.total_uptime < u64::MAX);
-            
+
             // Logical invariants
             if stats.connection_count == 0 {
                 prop_assert!(stats.last_connection.is_none());
@@ -239,7 +242,7 @@ mod tests {
             // Test JSON serialization
             let json = serde_json::to_string(&user)?;
             let deserialized: User = serde_json::from_str(&json)?;
-            
+
             prop_assert_eq!(user.id, deserialized.id);
             prop_assert_eq!(user.name, deserialized.name);
             prop_assert_eq!(user.email, deserialized.email);
@@ -256,7 +259,7 @@ mod tests {
             let json = serde_json::to_string(&protocol)?;
             let deserialized: VpnProtocol = serde_json::from_str(&json)?;
             prop_assert_eq!(protocol, deserialized);
-            
+
             // All protocols should have valid string representations
             let debug_str = format!("{:?}", protocol);
             prop_assert!(!debug_str.is_empty());
@@ -271,7 +274,7 @@ mod tests {
             let json = serde_json::to_string(&status)?;
             let deserialized: UserStatus = serde_json::from_str(&json)?;
             prop_assert_eq!(status, deserialized);
-            
+
             // Test active status detection
             let is_active = matches!(status, UserStatus::Active);
             let mut user = User::new("test".to_string(), VpnProtocol::Vless);
@@ -286,14 +289,14 @@ mod tests {
         ) {
             // Port should be in valid range
             prop_assert!(config.server_port >= 1024);
-            
+
             // Host should not be empty
             prop_assert!(!config.server_host.is_empty());
-            
+
             // Required fields should not be empty
             prop_assert!(!config.security.is_empty());
             prop_assert!(!config.network.is_empty());
-            
+
             // Optional fields can be None
             // (This is handled by the Option type)
         }
@@ -302,14 +305,14 @@ mod tests {
     /// Test async user manager operations
     mod async_tests {
         use super::*;
-        use crate::{UserManager, config::ServerConfig};
+        use crate::{config::ServerConfig, UserManager};
 
         #[tokio::test]
         async fn test_user_manager_creation() {
             let temp_dir = TempDir::new().unwrap();
             let server_config = ServerConfig::default();
             let manager = UserManager::new(temp_dir.path().to_path_buf(), server_config);
-            
+
             // Manager should be created successfully
             assert!(manager.is_ok());
         }
@@ -324,7 +327,7 @@ mod tests {
                     let temp_dir = TempDir::new().unwrap();
                     let server_config = ServerConfig::default();
                     let manager = UserManager::new(temp_dir.path().to_path_buf(), server_config).unwrap();
-                    
+
                     // Add users one by one
                     for user in &users {
                         let result = manager.create_user(user.name.clone(), user.protocol).await;
@@ -334,20 +337,20 @@ mod tests {
                             prop_assert!(matches!(e, UserError::UserAlreadyExists(_)));
                         }
                     }
-                    
+
                     // Get all users using list_users method
                     let stored_users = manager.list_users(None).await.unwrap();
-                    
+
                     // Should have at least some users (duplicates filtered out)
                     prop_assert!(!stored_users.is_empty());
                     prop_assert!(stored_users.len() <= users.len());
-                    
+
                     // All stored users should have unique names
                     let mut names = std::collections::HashSet::new();
                     for user in &stored_users {
                         prop_assert!(names.insert(user.name.clone()));
                     }
-                    
+
                     Ok(())
                 });
             }

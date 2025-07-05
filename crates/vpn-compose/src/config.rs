@@ -10,28 +10,28 @@ use std::path::PathBuf;
 pub struct ComposeConfig {
     /// Project name
     pub project_name: String,
-    
+
     /// Base directory for compose files
     pub compose_dir: PathBuf,
-    
+
     /// Templates directory
     pub templates_dir: PathBuf,
-    
+
     /// Environment configuration
     pub environment: EnvironmentConfig,
-    
+
     /// Service configurations
     pub services: HashMap<String, ServiceConfig>,
-    
+
     /// Network configurations
     pub networks: HashMap<String, NetworkConfig>,
-    
+
     /// Volume configurations
     pub volumes: HashMap<String, VolumeConfig>,
-    
+
     /// Global environment variables
     pub env_vars: HashMap<String, String>,
-    
+
     /// Docker Compose version
     pub compose_version: String,
 }
@@ -44,8 +44,14 @@ impl Default for ComposeConfig {
         env_vars.insert("API_PORT".to_string(), "3000".to_string());
 
         let mut networks = HashMap::new();
-        networks.insert("vpn-network".to_string(), NetworkConfig::bridge("172.20.0.0/16"));
-        networks.insert("vpn-internal".to_string(), NetworkConfig::internal_bridge("172.21.0.0/16"));
+        networks.insert(
+            "vpn-network".to_string(),
+            NetworkConfig::bridge("172.20.0.0/16"),
+        );
+        networks.insert(
+            "vpn-internal".to_string(),
+            NetworkConfig::internal_bridge("172.21.0.0/16"),
+        );
 
         let mut volumes = HashMap::new();
         volumes.insert("vpn-data".to_string(), VolumeConfig::local());
@@ -71,16 +77,16 @@ impl Default for ComposeConfig {
 pub struct EnvironmentConfig {
     /// Environment name (dev, staging, production)
     pub name: String,
-    
+
     /// Environment-specific overrides
     pub overrides: HashMap<String, serde_json::Value>,
-    
+
     /// Resource limits
     pub resource_limits: ResourceLimits,
-    
+
     /// Security settings
     pub security: SecurityConfig,
-    
+
     /// Logging configuration
     pub logging: LoggingConfig,
 }
@@ -102,37 +108,37 @@ impl Default for EnvironmentConfig {
 pub struct ServiceConfig {
     /// Docker image
     pub image: String,
-    
+
     /// Container name
     pub container_name: Option<String>,
-    
+
     /// Ports to expose
     pub ports: Vec<PortMapping>,
-    
+
     /// Environment variables
     pub environment: HashMap<String, String>,
-    
+
     /// Volumes
     pub volumes: Vec<VolumeMount>,
-    
+
     /// Networks
     pub networks: Vec<String>,
-    
+
     /// Dependencies
     pub depends_on: Vec<String>,
-    
+
     /// Health check
     pub healthcheck: Option<HealthCheck>,
-    
+
     /// Restart policy
     pub restart: RestartPolicy,
-    
+
     /// Resource limits
     pub resources: Option<ResourceLimits>,
-    
+
     /// Security options
     pub security_opt: Vec<String>,
-    
+
     /// Capabilities
     pub cap_add: Vec<String>,
     pub cap_drop: Vec<String>,
@@ -303,9 +309,21 @@ impl HealthCheck {
         }
     }
 
-    pub fn http(path: &str, port: u16, interval_secs: u64, timeout_secs: u64, retries: u32, start_period_secs: u64) -> Self {
+    pub fn http(
+        path: &str,
+        port: u16,
+        interval_secs: u64,
+        timeout_secs: u64,
+        retries: u32,
+        start_period_secs: u64,
+    ) -> Self {
         Self {
-            test: vec!["CMD".to_string(), "curl".to_string(), "-f".to_string(), format!("http://localhost:{}{}", port, path)],
+            test: vec![
+                "CMD".to_string(),
+                "curl".to_string(),
+                "-f".to_string(),
+                format!("http://localhost:{}{}", port, path),
+            ],
             interval: format!("{}s", interval_secs),
             timeout: format!("{}s", timeout_secs),
             retries,
@@ -429,7 +447,8 @@ impl Default for LoggingConfig {
 impl ComposeConfig {
     /// Load configuration from file
     pub async fn load_from_file(path: &PathBuf) -> Result<Self> {
-        let content = tokio::fs::read_to_string(path).await
+        let content = tokio::fs::read_to_string(path)
+            .await
             .map_err(|_e| ComposeError::file_operation_failed("read", path.to_string_lossy()))?;
 
         let config: ComposeConfig = toml::from_str(&content)
@@ -440,10 +459,12 @@ impl ComposeConfig {
 
     /// Save configuration to file
     pub async fn save_to_file(&self, path: &PathBuf) -> Result<()> {
-        let content = toml::to_string_pretty(self)
-            .map_err(|e| ComposeError::config_error(format!("Failed to serialize config: {}", e)))?;
+        let content = toml::to_string_pretty(self).map_err(|e| {
+            ComposeError::config_error(format!("Failed to serialize config: {}", e))
+        })?;
 
-        tokio::fs::write(path, content).await
+        tokio::fs::write(path, content)
+            .await
             .map_err(|_e| ComposeError::file_operation_failed("write", path.to_string_lossy()))?;
 
         Ok(())
@@ -452,19 +473,23 @@ impl ComposeConfig {
     /// Validate configuration
     pub fn validate(&self) -> Result<()> {
         if self.project_name.is_empty() {
-            return Err(ComposeError::validation_failed("Project name cannot be empty"));
+            return Err(ComposeError::validation_failed(
+                "Project name cannot be empty",
+            ));
         }
 
         if !self.compose_dir.exists() {
-            return Err(ComposeError::validation_failed(
-                format!("Compose directory does not exist: {:?}", self.compose_dir)
-            ));
+            return Err(ComposeError::validation_failed(format!(
+                "Compose directory does not exist: {:?}",
+                self.compose_dir
+            )));
         }
 
         if !self.templates_dir.exists() {
-            return Err(ComposeError::validation_failed(
-                format!("Templates directory does not exist: {:?}", self.templates_dir)
-            ));
+            return Err(ComposeError::validation_failed(format!(
+                "Templates directory does not exist: {:?}",
+                self.templates_dir
+            )));
         }
 
         // Validate service dependencies
@@ -488,10 +513,10 @@ impl ComposeConfig {
         match environment {
             "development" => {
                 config.environment.resource_limits = ResourceLimits::development();
-            },
+            }
             "production" => {
                 config.environment.resource_limits = ResourceLimits::production();
-            },
+            }
             _ => {
                 // Keep default
             }
@@ -533,7 +558,7 @@ mod tests {
     fn test_config_validation() {
         let mut config = ComposeConfig::default();
         config.project_name = "".to_string();
-        
+
         let result = config.validate();
         assert!(result.is_err());
     }

@@ -32,9 +32,10 @@ impl std::str::FromStr for EnvironmentType {
             "development" | "dev" => Ok(EnvironmentType::Development),
             "staging" | "stage" => Ok(EnvironmentType::Staging),
             "production" | "prod" => Ok(EnvironmentType::Production),
-            _ => Err(ComposeError::environment_error(
-                format!("Unknown environment type: {}", s)
-            )),
+            _ => Err(ComposeError::environment_error(format!(
+                "Unknown environment type: {}",
+                s
+            ))),
         }
     }
 }
@@ -144,7 +145,7 @@ impl Environment {
     /// Get Docker Compose file names for this environment
     pub fn get_compose_files(&self) -> Vec<String> {
         let mut files = vec!["docker-compose.yml".to_string()];
-        
+
         match self.env_type {
             EnvironmentType::Development => {
                 files.push("docker-compose.development.yml".to_string());
@@ -156,7 +157,7 @@ impl Environment {
                 files.push("docker-compose.production.yml".to_string());
             }
         }
-        
+
         files
     }
 
@@ -221,7 +222,11 @@ impl Environment {
     /// Get monitoring configuration for this environment
     pub fn get_monitoring_config(&self) -> MonitoringConfig {
         MonitoringConfig {
-            enabled: !self.is_development() || self.get_variable("ENABLE_MONITORING").map(|v| v == "true").unwrap_or(false),
+            enabled: !self.is_development()
+                || self
+                    .get_variable("ENABLE_MONITORING")
+                    .map(|v| v == "true")
+                    .unwrap_or(false),
             prometheus_retention: match self.env_type {
                 EnvironmentType::Development => "7d".to_string(),
                 EnvironmentType::Staging => "30d".to_string(),
@@ -238,17 +243,20 @@ impl Environment {
     /// Get default environment variables for the environment type
     fn get_default_variables(env_type: &EnvironmentType) -> HashMap<String, String> {
         let mut vars = HashMap::new();
-        
+
         // Common variables
-        vars.insert("LOG_LEVEL".to_string(), match env_type {
-            EnvironmentType::Development => "debug".to_string(),
-            EnvironmentType::Staging => "info".to_string(),
-            EnvironmentType::Production => "warn".to_string(),
-        });
-        
+        vars.insert(
+            "LOG_LEVEL".to_string(),
+            match env_type {
+                EnvironmentType::Development => "debug".to_string(),
+                EnvironmentType::Staging => "info".to_string(),
+                EnvironmentType::Production => "warn".to_string(),
+            },
+        );
+
         vars.insert("VPN_PORT".to_string(), "8443".to_string());
         vars.insert("API_PORT".to_string(), "3000".to_string());
-        
+
         // Environment-specific variables
         match env_type {
             EnvironmentType::Development => {
@@ -261,7 +269,10 @@ impl Environment {
                 vars.insert("DEV_MODE".to_string(), "false".to_string());
                 vars.insert("DEBUG".to_string(), "false".to_string());
                 vars.insert("POSTGRES_DB".to_string(), "vpndb_staging".to_string());
-                vars.insert("DOMAIN_NAME".to_string(), "vpn-staging.example.com".to_string());
+                vars.insert(
+                    "DOMAIN_NAME".to_string(),
+                    "vpn-staging.example.com".to_string(),
+                );
             }
             EnvironmentType::Production => {
                 vars.insert("DEV_MODE".to_string(), "false".to_string());
@@ -270,7 +281,7 @@ impl Environment {
                 vars.insert("DOMAIN_NAME".to_string(), "vpn.example.com".to_string());
             }
         }
-        
+
         vars
     }
 
@@ -278,12 +289,13 @@ impl Environment {
     pub fn validate(&self) -> Result<()> {
         // Check required variables
         let required_vars = vec!["VPN_PORT", "API_PORT", "POSTGRES_DB", "DOMAIN_NAME"];
-        
+
         for var in required_vars {
             if !self.variables.contains_key(var) {
-                return Err(ComposeError::validation_failed(
-                    format!("Required environment variable missing: {}", var)
-                ));
+                return Err(ComposeError::validation_failed(format!(
+                    "Required environment variable missing: {}",
+                    var
+                )));
             }
         }
 
@@ -292,13 +304,11 @@ impl Environment {
             if let Ok(port) = vpn_port.parse::<u16>() {
                 if port < 1024 && self.is_production() {
                     return Err(ComposeError::validation_failed(
-                        "VPN port should be >= 1024 in production"
+                        "VPN port should be >= 1024 in production",
                     ));
                 }
             } else {
-                return Err(ComposeError::validation_failed(
-                    "Invalid VPN_PORT value"
-                ));
+                return Err(ComposeError::validation_failed("Invalid VPN_PORT value"));
             }
         }
 
@@ -347,9 +357,18 @@ mod tests {
 
     #[test]
     fn test_environment_type_parsing() {
-        assert_eq!("development".parse::<EnvironmentType>().unwrap(), EnvironmentType::Development);
-        assert_eq!("staging".parse::<EnvironmentType>().unwrap(), EnvironmentType::Staging);
-        assert_eq!("production".parse::<EnvironmentType>().unwrap(), EnvironmentType::Production);
+        assert_eq!(
+            "development".parse::<EnvironmentType>().unwrap(),
+            EnvironmentType::Development
+        );
+        assert_eq!(
+            "staging".parse::<EnvironmentType>().unwrap(),
+            EnvironmentType::Staging
+        );
+        assert_eq!(
+            "production".parse::<EnvironmentType>().unwrap(),
+            EnvironmentType::Production
+        );
     }
 
     #[test]

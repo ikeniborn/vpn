@@ -22,43 +22,43 @@ pub enum ProxyProtocol {
 pub struct ProxyConfig {
     /// Protocol to use
     pub protocol: ProxyProtocol,
-    
+
     /// HTTP proxy listen address
     pub http_bind: Option<String>,
-    
+
     /// SOCKS5 proxy listen address
     pub socks5_bind: Option<String>,
-    
+
     /// Default bind address if specific ones not set
     pub bind_host: IpAddr,
-    
+
     /// HTTP proxy port
     pub http_port: u16,
-    
+
     /// SOCKS5 proxy port
     pub socks5_port: u16,
-    
+
     /// Authentication configuration
     pub auth: AuthConfig,
-    
+
     /// Rate limiting configuration
     pub rate_limit: RateLimitConfig,
-    
+
     /// Connection pool configuration
     pub pool: PoolConfig,
-    
+
     /// TLS configuration
     pub tls: Option<TlsConfig>,
-    
+
     /// Upstream proxy (for chaining)
     pub upstream: Option<UpstreamConfig>,
-    
+
     /// Logging configuration
     pub log_level: String,
-    
+
     /// Metrics configuration
     pub metrics: MetricsConfig,
-    
+
     /// Timeout settings
     pub timeouts: TimeoutConfig,
 }
@@ -68,16 +68,16 @@ pub struct ProxyConfig {
 pub struct AuthConfig {
     /// Enable authentication
     pub enabled: bool,
-    
+
     /// Authentication backend
     pub backend: AuthBackend,
-    
+
     /// Cache authenticated sessions
     pub cache_ttl: Duration,
-    
+
     /// Allow anonymous access
     pub allow_anonymous: bool,
-    
+
     /// IP whitelist (no auth required)
     pub ip_whitelist: Vec<IpAddr>,
 }
@@ -101,16 +101,16 @@ pub enum AuthBackend {
 pub struct RateLimitConfig {
     /// Enable rate limiting
     pub enabled: bool,
-    
+
     /// Requests per second per user
     pub requests_per_second: u32,
-    
+
     /// Burst size
     pub burst_size: u32,
-    
+
     /// Bandwidth limit per user (bytes/sec)
     pub bandwidth_limit: Option<u64>,
-    
+
     /// Global rate limit
     pub global_limit: Option<u32>,
 }
@@ -120,13 +120,13 @@ pub struct RateLimitConfig {
 pub struct PoolConfig {
     /// Maximum connections per upstream host
     pub max_connections_per_host: u32,
-    
+
     /// Total maximum connections
     pub max_total_connections: u32,
-    
+
     /// Connection idle timeout
     pub idle_timeout: Duration,
-    
+
     /// Connection lifetime
     pub max_lifetime: Duration,
 }
@@ -136,13 +136,13 @@ pub struct PoolConfig {
 pub struct TlsConfig {
     /// Certificate file path
     pub cert_path: PathBuf,
-    
+
     /// Private key file path
     pub key_path: PathBuf,
-    
+
     /// CA certificate for client verification
     pub ca_path: Option<PathBuf>,
-    
+
     /// Require client certificates
     pub verify_client: bool,
 }
@@ -152,7 +152,7 @@ pub struct TlsConfig {
 pub struct UpstreamConfig {
     /// Upstream proxy URL
     pub url: String,
-    
+
     /// Upstream authentication
     pub auth: Option<UpstreamAuth>,
 }
@@ -169,10 +169,10 @@ pub struct UpstreamAuth {
 pub struct MetricsConfig {
     /// Enable metrics collection
     pub enabled: bool,
-    
+
     /// Metrics listen address
     pub bind_address: String,
-    
+
     /// Metrics path
     pub path: String,
 }
@@ -182,13 +182,13 @@ pub struct MetricsConfig {
 pub struct TimeoutConfig {
     /// Connect timeout
     pub connect: Duration,
-    
+
     /// Read timeout
     pub read: Duration,
-    
+
     /// Write timeout
     pub write: Duration,
-    
+
     /// Idle timeout
     pub idle: Duration,
 }
@@ -224,24 +224,25 @@ impl ProxyConfig {
             Ok(SocketAddr::new(self.bind_host, self.http_port))
         }
     }
-    
+
     /// Get SOCKS5 bind address
     pub fn socks5_bind_address(&self) -> crate::Result<SocketAddr> {
         if let Some(addr) = &self.socks5_bind {
-            addr.parse()
-                .map_err(|e| crate::ProxyError::config(format!("Invalid SOCKS5 bind address: {}", e)))
+            addr.parse().map_err(|e| {
+                crate::ProxyError::config(format!("Invalid SOCKS5 bind address: {}", e))
+            })
         } else {
             Ok(SocketAddr::new(self.bind_host, self.socks5_port))
         }
     }
-    
+
     /// Load configuration from file
     pub async fn load_from_file(path: &std::path::Path) -> crate::Result<Self> {
         let content = tokio::fs::read_to_string(path).await?;
         toml::from_str(&content)
             .map_err(|e| crate::ProxyError::config(format!("Failed to parse config: {}", e)))
     }
-    
+
     /// Save configuration to file
     pub async fn save_to_file(&self, path: &std::path::Path) -> crate::Result<()> {
         let content = toml::to_string_pretty(self)

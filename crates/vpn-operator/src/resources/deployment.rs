@@ -1,18 +1,18 @@
 //! Deployment resource generation
 
 use crate::{
-    crd::{VpnServer, VpnProtocol},
+    crd::{VpnProtocol, VpnServer},
     error::Result,
-    resources::{common_labels, common_annotations, owner_reference},
+    resources::{common_annotations, common_labels, owner_reference},
     OperatorConfig,
 };
 use k8s_openapi::{
     api::{
         apps::v1::{Deployment, DeploymentSpec, DeploymentStrategy},
         core::v1::{
-            Container, ContainerPort, EnvVar, EnvVarSource, PodSpec, PodTemplateSpec,
-            ResourceRequirements, SecretKeySelector, Volume, VolumeMount,
-            ConfigMapVolumeSource, SecretVolumeSource, Probe, HTTPGetAction,
+            ConfigMapVolumeSource, Container, ContainerPort, EnvVar, EnvVarSource, HTTPGetAction,
+            PodSpec, PodTemplateSpec, Probe, ResourceRequirements, SecretKeySelector,
+            SecretVolumeSource, Volume, VolumeMount,
         },
     },
     apimachinery::pkg::{
@@ -27,13 +27,13 @@ use std::collections::BTreeMap;
 pub fn create_vpn_deployment(vpn: &VpnServer, config: &OperatorConfig) -> Result<Deployment> {
     let name = format!("{}-deployment", vpn.name_any());
     let namespace = vpn.namespace().unwrap_or_default();
-    
+
     let labels = common_labels(vpn);
     let annotations = common_annotations(vpn);
-    
+
     // Create container
     let container = create_vpn_container(vpn, config)?;
-    
+
     // Create pod spec
     let pod_spec = PodSpec {
         containers: vec![container],
@@ -46,7 +46,7 @@ pub fn create_vpn_deployment(vpn: &VpnServer, config: &OperatorConfig) -> Result
         }),
         ..Default::default()
     };
-    
+
     // Create deployment spec
     let deployment_spec = DeploymentSpec {
         replicas: Some(vpn.spec.replicas),
@@ -72,7 +72,7 @@ pub fn create_vpn_deployment(vpn: &VpnServer, config: &OperatorConfig) -> Result
         }),
         ..Default::default()
     };
-    
+
     Ok(Deployment {
         metadata: ObjectMeta {
             name: Some(name),
@@ -95,24 +95,22 @@ fn create_vpn_container(vpn: &VpnServer, config: &OperatorConfig) -> Result<Cont
         VpnProtocol::Wireguard => format!("{}-wireguard", config.vpn_image),
         VpnProtocol::OpenVPN => format!("{}-openvpn", config.vpn_image),
     };
-    
+
     let mut container = Container {
         name: "vpn-server".to_string(),
         image: Some(image),
-        ports: Some(vec![
-            ContainerPort {
-                container_port: vpn.spec.port as i32,
-                protocol: Some("TCP".to_string()),
-                name: Some("vpn".to_string()),
-                ..Default::default()
-            },
-        ]),
+        ports: Some(vec![ContainerPort {
+            container_port: vpn.spec.port as i32,
+            protocol: Some("TCP".to_string()),
+            name: Some("vpn".to_string()),
+            ..Default::default()
+        }]),
         env: Some(create_env_vars(vpn)),
         volume_mounts: Some(create_volume_mounts(vpn)),
         resources: Some(create_resource_requirements(&vpn.spec.resources)),
         ..Default::default()
     };
-    
+
     // Add metrics port if enabled
     if vpn.spec.monitoring.enable_metrics {
         if let Some(ref mut ports) = container.ports {
@@ -124,11 +122,11 @@ fn create_vpn_container(vpn: &VpnServer, config: &OperatorConfig) -> Result<Cont
             });
         }
     }
-    
+
     // Add health checks
     container.liveness_probe = Some(create_liveness_probe(vpn));
     container.readiness_probe = Some(create_readiness_probe(vpn));
-    
+
     Ok(container)
 }
 
@@ -146,7 +144,7 @@ fn create_env_vars(vpn: &VpnServer) -> Vec<EnvVar> {
             ..Default::default()
         },
     ];
-    
+
     // Add secret-based environment variables
     match &vpn.spec.protocol {
         VpnProtocol::Vless => {
@@ -179,7 +177,7 @@ fn create_env_vars(vpn: &VpnServer) -> Vec<EnvVar> {
         }
         _ => {}
     }
-    
+
     env_vars
 }
 
@@ -233,16 +231,24 @@ fn create_volumes(vpn: &VpnServer) -> Vec<Volume> {
 }
 
 /// Create resource requirements
-fn create_resource_requirements(resources: &crate::crd::ResourceRequirements) -> ResourceRequirements {
+fn create_resource_requirements(
+    resources: &crate::crd::ResourceRequirements,
+) -> ResourceRequirements {
     let mut requests = BTreeMap::new();
     let mut limits = BTreeMap::new();
-    
+
     requests.insert("cpu".to_string(), Quantity(resources.cpu_request.clone()));
-    requests.insert("memory".to_string(), Quantity(resources.memory_request.clone()));
-    
+    requests.insert(
+        "memory".to_string(),
+        Quantity(resources.memory_request.clone()),
+    );
+
     limits.insert("cpu".to_string(), Quantity(resources.cpu_limit.clone()));
-    limits.insert("memory".to_string(), Quantity(resources.memory_limit.clone()));
-    
+    limits.insert(
+        "memory".to_string(),
+        Quantity(resources.memory_limit.clone()),
+    );
+
     ResourceRequirements {
         requests: Some(requests),
         limits: Some(limits),
@@ -256,7 +262,7 @@ fn create_liveness_probe(vpn: &VpnServer) -> Probe {
         http_get: Some(HTTPGetAction {
             path: Some("/health".to_string()),
             port: k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(
-                vpn.spec.monitoring.metrics_port as i32
+                vpn.spec.monitoring.metrics_port as i32,
             ),
             ..Default::default()
         }),
@@ -274,7 +280,7 @@ fn create_readiness_probe(vpn: &VpnServer) -> Probe {
         http_get: Some(HTTPGetAction {
             path: Some("/ready".to_string()),
             port: k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(
-                vpn.spec.monitoring.metrics_port as i32
+                vpn.spec.monitoring.metrics_port as i32,
             ),
             ..Default::default()
         }),

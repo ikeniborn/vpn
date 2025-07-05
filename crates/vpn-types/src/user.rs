@@ -1,7 +1,7 @@
 //! User-related types shared across crates
 
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// User status enumeration
@@ -99,13 +99,13 @@ impl QuotaSettings {
         if self.max_traffic > 0 && stats.total_bytes() >= self.max_traffic {
             return true;
         }
-        
+
         if let Some(expires_at) = self.expires_at {
             if Utc::now() >= expires_at {
                 return true;
             }
         }
-        
+
         false
     }
 }

@@ -1,5 +1,5 @@
 //! VPN Proxy Authentication Service
-//! 
+//!
 //! This service provides ForwardAuth authentication for Traefik proxy
 
 use anyhow::Result;
@@ -50,22 +50,21 @@ struct HealthResponse {
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize tracing
-    tracing_subscriber::fmt()
-        .init();
+    tracing_subscriber::fmt().init();
 
     info!("Starting VPN Proxy Authentication Service");
 
     // Load configuration
     let config = load_config().await?;
-    
+
     // Create metrics
-    let metrics = ProxyMetrics::new()
-        .map_err(|e| anyhow::anyhow!("Failed to create metrics: {}", e))?;
-    
+    let metrics =
+        ProxyMetrics::new().map_err(|e| anyhow::anyhow!("Failed to create metrics: {}", e))?;
+
     // Create proxy manager
     let manager = ProxyManager::new(config.clone(), metrics)
         .map_err(|e| anyhow::anyhow!("Failed to create proxy manager: {}", e))?;
-    
+
     let state = AppState {
         manager: Arc::new(manager),
     };
@@ -80,11 +79,11 @@ async fn main() -> Result<()> {
     // Start server
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     let listener = TcpListener::bind(&addr).await?;
-    
+
     info!("Authentication service listening on {}", addr);
-    
+
     axum::serve(listener, app).await?;
-    
+
     Ok(())
 }
 
@@ -102,44 +101,56 @@ async fn verify_auth(
 ) -> impl IntoResponse {
     // Extract credentials from Authorization header or query params
     let credentials = extract_credentials(&headers, query);
-    
+
     // Get client IP from X-Forwarded-For or X-Real-IP
     let client_ip = extract_client_ip(&headers);
     let peer_addr = match client_ip.parse::<SocketAddr>() {
         Ok(addr) => addr,
         Err(_) => SocketAddr::from(([0, 0, 0, 0], 0)),
     };
-    
+
     // Authenticate
-    match state.manager.authenticate(credentials.map(|(u, p)| (u, p)), peer_addr).await {
+    match state
+        .manager
+        .authenticate(credentials.map(|(u, p)| (u, p)), peer_addr)
+        .await
+    {
         Ok(user_id) => {
             info!("Authentication successful for user: {}", user_id);
-            
+
             // Return success with custom headers
             let mut headers = HeaderMap::new();
             headers.insert("X-User-ID", user_id.parse().unwrap());
             headers.insert("X-Auth-Status", "success".parse().unwrap());
-            
-            (StatusCode::OK, headers, Json(AuthResponse {
-                success: true,
-                user_id: Some(user_id),
-                message: None,
-            }))
+
+            (
+                StatusCode::OK,
+                headers,
+                Json(AuthResponse {
+                    success: true,
+                    user_id: Some(user_id),
+                    message: None,
+                }),
+            )
         }
         Err(e) => {
             error!("Authentication failed: {}", e);
-            
+
             let status = match e {
                 ProxyError::RateLimitExceeded => StatusCode::TOO_MANY_REQUESTS,
                 ProxyError::AuthenticationFailed(_) => StatusCode::UNAUTHORIZED,
                 _ => StatusCode::INTERNAL_SERVER_ERROR,
             };
-            
-            (status, HeaderMap::new(), Json(AuthResponse {
-                success: false,
-                user_id: None,
-                message: Some(format!("Authentication failed: {}", e)),
-            }))
+
+            (
+                status,
+                HeaderMap::new(),
+                Json(AuthResponse {
+                    success: false,
+                    user_id: None,
+                    message: Some(format!("Authentication failed: {}", e)),
+                }),
+            )
         }
     }
 }
@@ -165,7 +176,7 @@ fn extract_credentials(headers: &HeaderMap, query: AuthQuery) -> Option<(String,
         if let Ok(auth_str) = auth_header.to_str() {
             if auth_str.starts_with("Basic ") {
                 let encoded = &auth_str[6..];
-                use base64::{Engine as _, engine::general_purpose};
+                use base64::{engine::general_purpose, Engine as _};
                 if let Ok(decoded) = general_purpose::STANDARD.decode(encoded) {
                     if let Ok(creds) = String::from_utf8(decoded) {
                         let parts: Vec<&str> = creds.splitn(2, ':').collect();
@@ -177,13 +188,13 @@ fn extract_credentials(headers: &HeaderMap, query: AuthQuery) -> Option<(String,
             }
         }
     }
-    
+
     // Check Proxy-Authorization header
     if let Some(auth_header) = headers.get("proxy-authorization") {
         if let Ok(auth_str) = auth_header.to_str() {
             if auth_str.starts_with("Basic ") {
                 let encoded = &auth_str[6..];
-                use base64::{Engine as _, engine::general_purpose};
+                use base64::{engine::general_purpose, Engine as _};
                 if let Ok(decoded) = general_purpose::STANDARD.decode(encoded) {
                     if let Ok(creds) = String::from_utf8(decoded) {
                         let parts: Vec<&str> = creds.splitn(2, ':').collect();
@@ -195,12 +206,12 @@ fn extract_credentials(headers: &HeaderMap, query: AuthQuery) -> Option<(String,
             }
         }
     }
-    
+
     // Fall back to query parameters
     if let (Some(username), Some(password)) = (query.username, query.password) {
         return Some((username, password));
     }
-    
+
     None
 }
 
@@ -214,25 +225,26 @@ fn extract_client_ip(headers: &HeaderMap) -> String {
             }
         }
     }
-    
+
     // Check X-Real-IP
     if let Some(real_ip) = headers.get("x-real-ip") {
         if let Ok(ip_str) = real_ip.to_str() {
             return ip_str.to_string();
         }
     }
-    
+
     // Default
     "0.0.0.0".to_string()
 }
 
 async fn load_config() -> Result<ProxyConfig> {
     // Try to load from file first
-    let config_path = std::env::var("CONFIG_PATH")
-        .unwrap_or_else(|_| "/etc/proxy/config.toml".to_string());
-    
+    let config_path =
+        std::env::var("CONFIG_PATH").unwrap_or_else(|_| "/etc/proxy/config.toml".to_string());
+
     if std::path::Path::new(&config_path).exists() {
-        ProxyConfig::load_from_file(std::path::Path::new(&config_path)).await
+        ProxyConfig::load_from_file(std::path::Path::new(&config_path))
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))
     } else {
         // Use environment variables

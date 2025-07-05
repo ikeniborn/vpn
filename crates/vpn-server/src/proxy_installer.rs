@@ -3,7 +3,7 @@
 use crate::error::{Result, ServerError};
 use std::path::PathBuf;
 use tokio::fs;
-use tracing::{info, debug};
+use tracing::{debug, info};
 use vpn_docker::{ContainerManager, ContainerStatus};
 
 pub struct ProxyInstaller {
@@ -14,32 +14,36 @@ pub struct ProxyInstaller {
 
 impl ProxyInstaller {
     pub fn new(install_path: PathBuf, port: u16) -> Result<Self> {
-        let container_manager = ContainerManager::new()
-            .map_err(|e| ServerError::InstallationError(format!("Failed to create container manager: {}", e)))?;
-        
+        let container_manager = ContainerManager::new().map_err(|e| {
+            ServerError::InstallationError(format!("Failed to create container manager: {}", e))
+        })?;
+
         Ok(Self {
             install_path,
             container_manager,
             port,
         })
     }
-    
+
     pub async fn install(&self, proxy_type: &str) -> Result<()> {
-        info!("Installing {} proxy server on port {}", proxy_type, self.port);
-        
+        info!(
+            "Installing {} proxy server on port {}",
+            proxy_type, self.port
+        );
+
         // Create directory structure
         self.create_directories().await?;
-        
+
         // Generate configuration files
         self.generate_configs(proxy_type).await?;
-        
+
         // Deploy with Docker Compose
         self.deploy_proxy(proxy_type).await?;
-        
+
         info!("Proxy server installation completed successfully");
         Ok(())
     }
-    
+
     async fn create_directories(&self) -> Result<()> {
         let dirs = [
             self.install_path.join("proxy"),
@@ -47,49 +51,54 @@ impl ProxyInstaller {
             self.install_path.join("proxy/logs"),
             self.install_path.join("proxy/certs"),
         ];
-        
+
         for dir in &dirs {
             fs::create_dir_all(dir).await?;
         }
-        
+
         Ok(())
     }
-    
+
     async fn generate_configs(&self, proxy_type: &str) -> Result<()> {
         // Generate Docker Compose file
         let compose_content = match proxy_type {
             "http" => self.generate_http_compose(),
             "socks5" => self.generate_socks5_compose(),
             "all" => self.generate_http_compose(),
-            _ => return Err(ServerError::ValidationError(format!("Unknown proxy type: {}", proxy_type))),
+            _ => {
+                return Err(ServerError::ValidationError(format!(
+                    "Unknown proxy type: {}",
+                    proxy_type
+                )))
+            }
         };
-        
+
         let compose_path = self.install_path.join("proxy/docker-compose.yml");
         fs::write(&compose_path, compose_content).await?;
-        
+
         // Generate dynamic configuration
         let dynamic_config = self.generate_dynamic_config();
         let dynamic_path = self.install_path.join("proxy/dynamic/http-proxy.yml");
         fs::write(&dynamic_path, dynamic_config).await?;
-        
+
         // Generate auth configuration
         let auth_config = self.generate_auth_config();
         let auth_path = self.install_path.join("proxy/auth-config.toml");
         fs::write(&auth_path, auth_config).await?;
-        
+
         // Generate Prometheus configuration
         let prometheus_config = self.generate_prometheus_config();
         let prometheus_path = self.install_path.join("proxy/prometheus.yml");
         fs::write(&prometheus_path, prometheus_config).await?;
-        
+
         Ok(())
     }
-    
+
     async fn deploy_proxy(&self, _proxy_type: &str) -> Result<()> {
         info!("Deploying proxy server with Docker Compose");
-        
+
         let compose_path = self.install_path.join("proxy/docker-compose.yml");
-        
+
         // Run docker-compose up -d
         let output = tokio::process::Command::new("docker-compose")
             .arg("-f")
@@ -97,27 +106,29 @@ impl ProxyInstaller {
             .arg("up")
             .arg("-d")
             .output()
-            .await
-?;
-        
+            .await?;
+
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(ServerError::InstallationError(format!("Docker compose failed: {}", stderr)));
+            return Err(ServerError::InstallationError(format!(
+                "Docker compose failed: {}",
+                stderr
+            )));
         }
-        
+
         // Wait for services to be healthy
         self.wait_for_health().await?;
-        
+
         Ok(())
     }
-    
+
     async fn wait_for_health(&self) -> Result<()> {
         info!("Waiting for proxy services to be healthy");
-        
+
         let services = ["vpn-traefik-proxy", "vpn-proxy-auth", "vpn-proxy-metrics"];
         let max_attempts = 30;
         let delay = std::time::Duration::from_secs(2);
-        
+
         for service in &services {
             let mut attempts = 0;
             loop {
@@ -132,22 +143,26 @@ impl ProxyInstaller {
                         debug!("Service {} not ready yet: {}", service, e);
                     }
                 }
-                
+
                 attempts += 1;
                 if attempts >= max_attempts {
-                    return Err(ServerError::InstallationError(format!("Service {} failed to start", service)));
+                    return Err(ServerError::InstallationError(format!(
+                        "Service {} failed to start",
+                        service
+                    )));
                 }
-                
+
                 tokio::time::sleep(delay).await;
             }
         }
-        
+
         info!("All proxy services are healthy");
         Ok(())
     }
-    
+
     fn generate_http_compose(&self) -> String {
-        format!(r#"version: '3.8'
+        format!(
+            r#"version: '3.8'
 
 services:
   traefik-proxy:
@@ -245,11 +260,14 @@ volumes:
   vpn-users-data:
     external: true
   prometheus-data:
-    driver: local"#, self.port)
+    driver: local"#,
+            self.port
+        )
     }
-    
+
     fn generate_socks5_compose(&self) -> String {
-        format!(r#"version: '3.8'
+        format!(
+            r#"version: '3.8'
 
 services:
   vpn-socks5-proxy:
@@ -277,9 +295,11 @@ networks:
 
 volumes:
   vpn-users-data:
-    external: true"#, self.port)
+    external: true"#,
+            self.port
+        )
     }
-    
+
     fn generate_dynamic_config(&self) -> &'static str {
         r#"# Dynamic configuration for HTTP/HTTPS proxy
 
@@ -361,7 +381,7 @@ tcp:
         servers:
           - address: "vpn-proxy:1080""#
     }
-    
+
     fn generate_auth_config(&self) -> &'static str {
         r#"# VPN Proxy Authentication Service Configuration
 
@@ -406,7 +426,7 @@ idle = { secs = 300, nanos = 0 }
 
 log_level = "info""#
     }
-    
+
     fn generate_prometheus_config(&self) -> &'static str {
         r#"global:
   scrape_interval: 15s
@@ -444,12 +464,12 @@ scrape_configs:
           service: 'vpn-proxy'
     metrics_path: '/metrics'"#
     }
-    
+
     pub async fn uninstall(&self) -> Result<()> {
         info!("Uninstalling proxy server");
-        
+
         let compose_path = self.install_path.join("proxy/docker-compose.yml");
-        
+
         if compose_path.exists() {
             // Run docker-compose down
             let output = tokio::process::Command::new("docker-compose")
@@ -458,20 +478,22 @@ scrape_configs:
                 .arg("down")
                 .arg("-v")
                 .output()
-                .await
-?;
-            
+                .await?;
+
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                return Err(ServerError::InstallationError(format!("Docker compose down failed: {}", stderr)));
+                return Err(ServerError::InstallationError(format!(
+                    "Docker compose down failed: {}",
+                    stderr
+                )));
             }
         }
-        
+
         // Remove configuration files
         if let Err(e) = fs::remove_dir_all(self.install_path.join("proxy")).await {
             debug!("Failed to remove proxy directory: {}", e);
         }
-        
+
         info!("Proxy server uninstalled successfully");
         Ok(())
     }

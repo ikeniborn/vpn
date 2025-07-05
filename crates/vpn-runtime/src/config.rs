@@ -118,18 +118,16 @@ impl RuntimeConfig {
         }
 
         match self.runtime_type {
-            RuntimeType::Docker => {
-                self.docker
-                    .as_ref()
-                    .map(|c| c.socket_path.clone())
-                    .unwrap_or_else(|| "/var/run/docker.sock".to_string())
-            }
-            RuntimeType::Containerd => {
-                self.containerd
-                    .as_ref()
-                    .map(|c| c.socket_path.clone())
-                    .unwrap_or_else(|| "/run/containerd/containerd.sock".to_string())
-            }
+            RuntimeType::Docker => self
+                .docker
+                .as_ref()
+                .map(|c| c.socket_path.clone())
+                .unwrap_or_else(|| "/var/run/docker.sock".to_string()),
+            RuntimeType::Containerd => self
+                .containerd
+                .as_ref()
+                .map(|c| c.socket_path.clone())
+                .unwrap_or_else(|| "/run/containerd/containerd.sock".to_string()),
             RuntimeType::Auto => "/run/containerd/containerd.sock".to_string(),
         }
     }
@@ -141,12 +139,11 @@ impl RuntimeConfig {
         }
 
         match self.runtime_type {
-            RuntimeType::Containerd => {
-                self.containerd
-                    .as_ref()
-                    .map(|c| c.namespace.clone())
-                    .unwrap_or_else(|| "default".to_string())
-            }
+            RuntimeType::Containerd => self
+                .containerd
+                .as_ref()
+                .map(|c| c.namespace.clone())
+                .unwrap_or_else(|| "default".to_string()),
             _ => "default".to_string(),
         }
     }

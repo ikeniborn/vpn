@@ -25,8 +25,9 @@ impl TemplateManager {
 
         // Initialize Tera with templates directory
         let templates_glob = format!("{}/**/*", config.templates_dir.to_string_lossy());
-        let tera = Tera::new(&templates_glob)
-            .map_err(|e| ComposeError::template_error(format!("Failed to initialize Tera: {}", e)))?;
+        let tera = Tera::new(&templates_glob).map_err(|e| {
+            ComposeError::template_error(format!("Failed to initialize Tera: {}", e))
+        })?;
 
         Ok(Self {
             config: config.clone(),
@@ -42,12 +43,12 @@ impl TemplateManager {
 
         // Load base template
         self.load_template("base", "base.yml").await?;
-        
+
         // Load environment-specific templates
         self.load_template("development", "development.yml").await?;
         self.load_template("staging", "staging.yml").await?;
         self.load_template("production", "production.yml").await?;
-        
+
         // Load configuration templates
         self.load_config_templates().await?;
 
@@ -58,21 +59,25 @@ impl TemplateManager {
     /// Load a specific template
     async fn load_template(&mut self, name: &str, filename: &str) -> Result<()> {
         let template_path = self.config.templates_dir.join(filename);
-        
+
         if !template_path.exists() {
             debug!("Template not found: {:?}", template_path);
             return Ok(());
         }
 
-        let content = tokio::fs::read_to_string(&template_path).await
-            .map_err(|_e| ComposeError::file_operation_failed("read", template_path.to_string_lossy()))?;
+        let content = tokio::fs::read_to_string(&template_path)
+            .await
+            .map_err(|_e| {
+                ComposeError::file_operation_failed("read", template_path.to_string_lossy())
+            })?;
 
         // Register with both engines
-        self.handlebars.register_template_string(name, &content)
+        self.handlebars
+            .register_template_string(name, &content)
             .map_err(|e| ComposeError::template_error(format!("Handlebars error: {}", e)))?;
 
         self.templates.insert(name.to_string(), content);
-        
+
         debug!("Loaded template: {}", name);
         Ok(())
     }
@@ -80,19 +85,25 @@ impl TemplateManager {
     /// Load configuration templates (nginx, xray, etc.)
     async fn load_config_templates(&mut self) -> Result<()> {
         let configs_dir = self.config.templates_dir.join("configs");
-        
+
         if !configs_dir.exists() {
             return Ok(());
         }
 
         // Load nginx config templates
-        self.load_config_template("nginx-default", &configs_dir.join("nginx/default.conf")).await?;
-        
+        self.load_config_template("nginx-default", &configs_dir.join("nginx/default.conf"))
+            .await?;
+
         // Load xray config templates
-        self.load_config_template("xray-config", &configs_dir.join("xray/config.json")).await?;
-        
+        self.load_config_template("xray-config", &configs_dir.join("xray/config.json"))
+            .await?;
+
         // Load prometheus config templates
-        self.load_config_template("prometheus-config", &configs_dir.join("prometheus/prometheus.yml")).await?;
+        self.load_config_template(
+            "prometheus-config",
+            &configs_dir.join("prometheus/prometheus.yml"),
+        )
+        .await?;
 
         Ok(())
     }
@@ -104,37 +115,50 @@ impl TemplateManager {
             return Ok(());
         }
 
-        let content = tokio::fs::read_to_string(path).await
+        let content = tokio::fs::read_to_string(path)
+            .await
             .map_err(|_e| ComposeError::file_operation_failed("read", path.to_string_lossy()))?;
 
-        self.handlebars.register_template_string(name, &content)
+        self.handlebars
+            .register_template_string(name, &content)
             .map_err(|e| ComposeError::template_error(format!("Handlebars error: {}", e)))?;
 
         self.templates.insert(name.to_string(), content);
-        
+
         debug!("Loaded config template: {}", name);
         Ok(())
     }
 
     /// Render a template with the given context
-    pub fn render_template(&self, template_name: &str, context: &TemplateContext) -> Result<String> {
+    pub fn render_template(
+        &self,
+        template_name: &str,
+        context: &TemplateContext,
+    ) -> Result<String> {
         debug!("Rendering template: {}", template_name);
 
         // Convert context to serde_json::Value for handlebars
-        let json_context = serde_json::to_value(context)
-            .map_err(|e| ComposeError::template_error(format!("Failed to serialize context: {}", e)))?;
+        let json_context = serde_json::to_value(context).map_err(|e| {
+            ComposeError::template_error(format!("Failed to serialize context: {}", e))
+        })?;
 
         // Try handlebars first
         if self.handlebars.get_template(template_name).is_some() {
-            return self.handlebars.render(template_name, &json_context)
-                .map_err(|e| ComposeError::template_error(format!("Handlebars render error: {}", e)));
+            return self
+                .handlebars
+                .render(template_name, &json_context)
+                .map_err(|e| {
+                    ComposeError::template_error(format!("Handlebars render error: {}", e))
+                });
         }
 
         // Fallback to Tera
-        let tera_context = tera::Context::from_serialize(context)
-            .map_err(|e| ComposeError::template_error(format!("Failed to create Tera context: {}", e)))?;
+        let tera_context = tera::Context::from_serialize(context).map_err(|e| {
+            ComposeError::template_error(format!("Failed to create Tera context: {}", e))
+        })?;
 
-        self.tera.render(template_name, &tera_context)
+        self.tera
+            .render(template_name, &tera_context)
             .map_err(|e| ComposeError::template_error(format!("Tera render error: {}", e)))
     }
 
@@ -155,7 +179,11 @@ impl TemplateManager {
     }
 
     /// Generate configuration files
-    pub fn generate_config_files(&self, context: &TemplateContext, output_dir: &PathBuf) -> Result<()> {
+    pub fn generate_config_files(
+        &self,
+        context: &TemplateContext,
+        output_dir: &PathBuf,
+    ) -> Result<()> {
         // Generate nginx configuration
         if let Ok(nginx_config) = self.render_template("nginx-default", context) {
             let nginx_dir = output_dir.join("configs/nginx");
@@ -183,18 +211,22 @@ impl TemplateManager {
     /// Merge two Docker Compose YAML files
     fn merge_compose_files(&self, base: &str, override_content: &str) -> Result<String> {
         // Parse both YAML files
-        let mut base_value: serde_yaml::Value = serde_yaml::from_str(base)
-            .map_err(|e| ComposeError::template_error(format!("Failed to parse base YAML: {}", e)))?;
+        let mut base_value: serde_yaml::Value = serde_yaml::from_str(base).map_err(|e| {
+            ComposeError::template_error(format!("Failed to parse base YAML: {}", e))
+        })?;
 
-        let override_value: serde_yaml::Value = serde_yaml::from_str(override_content)
-            .map_err(|e| ComposeError::template_error(format!("Failed to parse override YAML: {}", e)))?;
+        let override_value: serde_yaml::Value =
+            serde_yaml::from_str(override_content).map_err(|e| {
+                ComposeError::template_error(format!("Failed to parse override YAML: {}", e))
+            })?;
 
         // Merge the values
         self.merge_yaml_values(&mut base_value, override_value);
 
         // Convert back to YAML
-        serde_yaml::to_string(&base_value)
-            .map_err(|e| ComposeError::template_error(format!("Failed to serialize merged YAML: {}", e)))
+        serde_yaml::to_string(&base_value).map_err(|e| {
+            ComposeError::template_error(format!("Failed to serialize merged YAML: {}", e))
+        })
     }
 
     /// Recursively merge YAML values
@@ -218,17 +250,18 @@ impl TemplateManager {
     /// Validate template syntax
     pub fn validate_template(&self, template_name: &str) -> Result<()> {
         if !self.templates.contains_key(template_name) {
-            return Err(ComposeError::template_error(
-                format!("Template not found: {}", template_name)
-            ));
+            return Err(ComposeError::template_error(format!(
+                "Template not found: {}",
+                template_name
+            )));
         }
 
         // Create a minimal context for validation
         let context = TemplateContext::default();
-        
+
         // Try to render the template
         self.render_template(template_name, &context)?;
-        
+
         Ok(())
     }
 
@@ -363,13 +396,13 @@ pub struct ServiceContext {
 pub enum TemplateError {
     #[error("Template not found: {name}")]
     NotFound { name: String },
-    
+
     #[error("Template syntax error: {message}")]
     SyntaxError { message: String },
-    
+
     #[error("Template rendering error: {message}")]
     RenderError { message: String },
-    
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -392,8 +425,10 @@ services:
     environment:
       - TEST_VAR={{env_vars.TEST_VAR}}
 "#;
-        
-        tokio::fs::write(templates_dir.join("base.yml"), template_content).await.unwrap();
+
+        tokio::fs::write(templates_dir.join("base.yml"), template_content)
+            .await
+            .unwrap();
 
         let config = ComposeConfig {
             templates_dir,
@@ -419,10 +454,10 @@ services:
     #[tokio::test]
     async fn test_template_loading() {
         let (mut manager, _temp_dir) = create_test_template_manager().await;
-        
+
         let result = manager.load_templates().await;
         assert!(result.is_ok());
-        
+
         assert!(manager.templates.contains_key("base"));
     }
 
@@ -432,11 +467,13 @@ services:
         manager.load_templates().await.unwrap();
 
         let mut context = TemplateContext::default();
-        context.env_vars.insert("TEST_VAR".to_string(), "test_value".to_string());
+        context
+            .env_vars
+            .insert("TEST_VAR".to_string(), "test_value".to_string());
 
         let result = manager.render_template("base", &context);
         assert!(result.is_ok());
-        
+
         let rendered = result.unwrap();
         assert!(rendered.contains("test_value"));
     }

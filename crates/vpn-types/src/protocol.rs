@@ -54,7 +54,10 @@ impl VpnProtocol {
     pub fn supports_udp(&self) -> bool {
         matches!(
             self,
-            VpnProtocol::Wireguard | VpnProtocol::OpenVPN | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer
+            VpnProtocol::Wireguard
+                | VpnProtocol::OpenVPN
+                | VpnProtocol::Socks5Proxy
+                | VpnProtocol::ProxyServer
         )
     }
 
@@ -66,7 +69,7 @@ impl VpnProtocol {
             VpnProtocol::Wireguard => false,
         }
     }
-    
+
     /// Check if this is a proxy protocol
     pub fn is_proxy(&self) -> bool {
         matches!(
@@ -74,7 +77,7 @@ impl VpnProtocol {
             VpnProtocol::HttpProxy | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer
         )
     }
-    
+
     /// Get protocol as string
     pub fn as_str(&self) -> &'static str {
         match self {

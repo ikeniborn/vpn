@@ -6,7 +6,6 @@ mod tunnel;
 
 pub use handler::HttpProxy;
 
-
 /// HTTP methods we support
 #[derive(Debug, Clone, PartialEq)]
 pub enum HttpMethod {
@@ -36,7 +35,7 @@ impl HttpMethod {
             _ => None,
         }
     }
-    
+
     fn as_str(&self) -> &'static str {
         match self {
             Self::Connect => "CONNECT",
@@ -70,7 +69,7 @@ impl HttpRequest {
             .find(|(name, _)| name.to_lowercase() == "host")
             .map(|(_, value)| value.as_str())
     }
-    
+
     /// Get Proxy-Authorization header
     pub fn proxy_auth(&self) -> Option<(String, String)> {
         self.headers
@@ -79,7 +78,7 @@ impl HttpRequest {
             .and_then(|(_, value)| {
                 if value.starts_with("Basic ") {
                     let encoded = &value[6..];
-                    use base64::{Engine as _, engine::general_purpose};
+                    use base64::{engine::general_purpose, Engine as _};
                     if let Ok(decoded) = general_purpose::STANDARD.decode(encoded) {
                         if let Ok(creds) = String::from_utf8(decoded) {
                             let parts: Vec<&str> = creds.splitn(2, ':').collect();
@@ -92,25 +91,19 @@ impl HttpRequest {
                 None
             })
     }
-    
+
     /// Check if connection should be kept alive
     pub fn keep_alive(&self) -> bool {
         // HTTP/1.1 defaults to keep-alive
         if self.version == "HTTP/1.1" {
-            !self.headers
-                .iter()
-                .any(|(name, value)| {
-                    name.to_lowercase() == "connection" && 
-                    value.to_lowercase() == "close"
-                })
+            !self.headers.iter().any(|(name, value)| {
+                name.to_lowercase() == "connection" && value.to_lowercase() == "close"
+            })
         } else {
             // HTTP/1.0 defaults to close
-            self.headers
-                .iter()
-                .any(|(name, value)| {
-                    name.to_lowercase() == "connection" && 
-                    value.to_lowercase() == "keep-alive"
-                })
+            self.headers.iter().any(|(name, value)| {
+                name.to_lowercase() == "connection" && value.to_lowercase() == "keep-alive"
+            })
         }
     }
 }

@@ -102,20 +102,23 @@ impl HealthCollector {
         check_config: HealthCheckConfig,
     ) -> Result<()> {
         let component_name = provider.component_name().to_string();
-        
+
         // Register the provider
         {
             let mut components = self.components.write().await;
             components.insert(component_name.clone(), provider);
         }
-        
+
         // Register the health check configuration
         {
             let mut health_checks = self.health_checks.write().await;
             health_checks.insert(component_name.clone(), check_config);
         }
-        
-        info!("Registered component for health monitoring: {}", component_name);
+
+        info!(
+            "Registered component for health monitoring: {}",
+            component_name
+        );
         Ok(())
     }
 
@@ -151,7 +154,8 @@ impl HealthCollector {
                     current_health,
                     running_flag,
                     config,
-                ).await;
+                )
+                .await;
             });
 
             handles.push(handle);
@@ -210,17 +214,17 @@ impl HealthCollector {
         while *running.read().await {
             interval.tick().await;
 
-            let check_result = Self::perform_component_health_check(
-                &component_name,
-                &check_config,
-                &components,
-            ).await;
+            let check_result =
+                Self::perform_component_health_check(&component_name, &check_config, &components)
+                    .await;
 
             // Update the overall health status
             let mut health = current_health.write().await;
             match check_result {
                 Ok(component_health) => {
-                    health.components.insert(component_name.clone(), component_health);
+                    health
+                        .components
+                        .insert(component_name.clone(), component_health);
                 }
                 Err(e) => {
                     warn!("Health check failed for {}: {}", component_name, e);
@@ -233,7 +237,9 @@ impl HealthCollector {
                         metrics: HashMap::new(),
                         dependencies: vec![],
                     };
-                    health.components.insert(component_name.clone(), failed_health);
+                    health
+                        .components
+                        .insert(component_name.clone(), failed_health);
                 }
             }
 
@@ -252,17 +258,16 @@ impl HealthCollector {
         let start_time = Instant::now();
 
         let components_guard = components.read().await;
-        let provider = components_guard.get(component_name)
-            .ok_or_else(|| TelemetryError::HealthCheckError {
+        let provider = components_guard.get(component_name).ok_or_else(|| {
+            TelemetryError::HealthCheckError {
                 component: component_name.to_string(),
                 message: "Component not found".to_string(),
-            })?;
+            }
+        })?;
 
         // Perform health check with timeout
-        let health_result = tokio::time::timeout(
-            check_config.timeout,
-            provider.get_health_status(),
-        ).await;
+        let health_result =
+            tokio::time::timeout(check_config.timeout, provider.get_health_status()).await;
 
         let response_time = start_time.elapsed();
 
@@ -286,35 +291,35 @@ impl HealthCollector {
                 Ok(ComponentHealth {
                     name: component_name.to_string(),
                     status,
-                    message: if is_healthy { "OK".to_string() } else { "Unhealthy".to_string() },
+                    message: if is_healthy {
+                        "OK".to_string()
+                    } else {
+                        "Unhealthy".to_string()
+                    },
                     last_check: chrono::Utc::now(),
                     response_time: Some(response_time),
                     metrics,
                     dependencies: vec![], // Would be configured per component
                 })
             }
-            Ok(Err(e)) => {
-                Ok(ComponentHealth {
-                    name: component_name.to_string(),
-                    status: HealthStatus::Critical,
-                    message: format!("Health check error: {}", e),
-                    last_check: chrono::Utc::now(),
-                    response_time: Some(response_time),
-                    metrics: HashMap::new(),
-                    dependencies: vec![],
-                })
-            }
-            Err(_) => {
-                Ok(ComponentHealth {
-                    name: component_name.to_string(),
-                    status: HealthStatus::Critical,
-                    message: format!("Health check timed out after {:?}", check_config.timeout),
-                    last_check: chrono::Utc::now(),
-                    response_time: Some(response_time),
-                    metrics: HashMap::new(),
-                    dependencies: vec![],
-                })
-            }
+            Ok(Err(e)) => Ok(ComponentHealth {
+                name: component_name.to_string(),
+                status: HealthStatus::Critical,
+                message: format!("Health check error: {}", e),
+                last_check: chrono::Utc::now(),
+                response_time: Some(response_time),
+                metrics: HashMap::new(),
+                dependencies: vec![],
+            }),
+            Err(_) => Ok(ComponentHealth {
+                name: component_name.to_string(),
+                status: HealthStatus::Critical,
+                message: format!("Health check timed out after {:?}", check_config.timeout),
+                last_check: chrono::Utc::now(),
+                response_time: Some(response_time),
+                metrics: HashMap::new(),
+                dependencies: vec![],
+            }),
         }
     }
 
@@ -400,9 +405,9 @@ impl HealthCollector {
     async fn collect_system_metrics() -> Result<SystemMetrics> {
         // This is a simplified implementation
         // In a real implementation, you would use system APIs to collect actual metrics
-        
+
         debug!("Collecting system metrics");
-        
+
         Ok(SystemMetrics {
             cpu_usage_percent: 0.0,
             memory_usage_percent: 0.0,
@@ -516,7 +521,7 @@ mod tests {
         });
 
         let metrics = HealthCollector::extract_metrics_from_json(json_value);
-        
+
         assert_eq!(metrics.get("cpu"), Some(&45.5));
         assert_eq!(metrics.get("memory.usage"), Some(&1024.0));
         assert_eq!(metrics.get("memory.total"), Some(&2048.0));
@@ -528,44 +533,62 @@ mod tests {
     #[tokio::test]
     async fn test_overall_status_calculation() {
         let mut components = HashMap::new();
-        
+
         // All healthy
-        components.insert("comp1".to_string(), ComponentHealth {
-            name: "comp1".to_string(),
-            status: HealthStatus::Healthy,
-            message: "OK".to_string(),
-            last_check: chrono::Utc::now(),
-            response_time: None,
-            metrics: HashMap::new(),
-            dependencies: vec![],
-        });
-        
-        assert_eq!(HealthCollector::calculate_overall_status(&components), HealthStatus::Healthy);
-        
+        components.insert(
+            "comp1".to_string(),
+            ComponentHealth {
+                name: "comp1".to_string(),
+                status: HealthStatus::Healthy,
+                message: "OK".to_string(),
+                last_check: chrono::Utc::now(),
+                response_time: None,
+                metrics: HashMap::new(),
+                dependencies: vec![],
+            },
+        );
+
+        assert_eq!(
+            HealthCollector::calculate_overall_status(&components),
+            HealthStatus::Healthy
+        );
+
         // Add warning
-        components.insert("comp2".to_string(), ComponentHealth {
-            name: "comp2".to_string(),
-            status: HealthStatus::Warning,
-            message: "Warning".to_string(),
-            last_check: chrono::Utc::now(),
-            response_time: None,
-            metrics: HashMap::new(),
-            dependencies: vec![],
-        });
-        
-        assert_eq!(HealthCollector::calculate_overall_status(&components), HealthStatus::Warning);
-        
+        components.insert(
+            "comp2".to_string(),
+            ComponentHealth {
+                name: "comp2".to_string(),
+                status: HealthStatus::Warning,
+                message: "Warning".to_string(),
+                last_check: chrono::Utc::now(),
+                response_time: None,
+                metrics: HashMap::new(),
+                dependencies: vec![],
+            },
+        );
+
+        assert_eq!(
+            HealthCollector::calculate_overall_status(&components),
+            HealthStatus::Warning
+        );
+
         // Add critical
-        components.insert("comp3".to_string(), ComponentHealth {
-            name: "comp3".to_string(),
-            status: HealthStatus::Critical,
-            message: "Critical".to_string(),
-            last_check: chrono::Utc::now(),
-            response_time: None,
-            metrics: HashMap::new(),
-            dependencies: vec![],
-        });
-        
-        assert_eq!(HealthCollector::calculate_overall_status(&components), HealthStatus::Critical);
+        components.insert(
+            "comp3".to_string(),
+            ComponentHealth {
+                name: "comp3".to_string(),
+                status: HealthStatus::Critical,
+                message: "Critical".to_string(),
+                last_check: chrono::Utc::now(),
+                response_time: None,
+                metrics: HashMap::new(),
+                dependencies: vec![],
+            },
+        );
+
+        assert_eq!(
+            HealthCollector::calculate_overall_status(&components),
+            HealthStatus::Critical
+        );
     }
 }

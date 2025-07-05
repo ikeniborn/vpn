@@ -1,18 +1,18 @@
-pub mod user;
-pub mod manager;
-pub mod config;
-pub mod links;
 pub mod batch;
+pub mod config;
 pub mod error;
+pub mod links;
+pub mod manager;
+pub mod user;
 
 #[cfg(test)]
 pub mod proptest;
 
-pub use user::{User, UserStatus, UserConfig, UserStats};
-pub use manager::UserManager;
-pub use links::ConnectionLinkGenerator;
 pub use batch::BatchOperations;
-pub use error::{UserError, Result};
+pub use error::{Result, UserError};
+pub use links::ConnectionLinkGenerator;
+pub use manager::UserManager;
+pub use user::{User, UserConfig, UserStats, UserStatus};
 
 // Re-export VpnProtocol for external use
 pub use vpn_types::protocol::VpnProtocol;

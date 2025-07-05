@@ -1,11 +1,11 @@
 //! Property-based tests for VPN network utilities
-//! 
+//!
 //! This module contains comprehensive property-based tests using proptest
 //! to ensure the correctness of network operations under various scenarios.
 
-use crate::{port::*, firewall::*, subnet::*, error::*};
-use proptest::prelude::*;
+use crate::{error::*, firewall::*, port::*, subnet::*};
 use proptest::option;
+use proptest::prelude::*;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 /// Strategy for generating valid IPv4 addresses
@@ -74,15 +74,16 @@ pub fn firewall_rule_strategy() -> impl Strategy<Value = FirewallRule> {
         direction_strategy(),
         option::of(ip_strategy()),
         option::of("[a-zA-Z0-9 ._-]{3,50}"), // comment
-    ).prop_map(|(port, protocol, direction, source, comment)| {
-        FirewallRule {
-            port,
-            protocol,
-            direction,
-            source,
-            comment,
-        }
-    })
+    )
+        .prop_map(
+            |(port, protocol, direction, source, comment)| FirewallRule {
+                port,
+                protocol,
+                direction,
+                source,
+                comment,
+            },
+        )
 }
 
 /// Strategy for generating port ranges
@@ -109,9 +110,8 @@ pub fn cidr_strategy() -> impl Strategy<Value = String> {
     (
         ipv4_strategy(),
         prop_oneof![Just(8u8), Just(16u8), Just(24u8)], // Common CIDR suffixes
-    ).prop_map(|(ip, suffix)| {
-        format!("{}/{}", ip, suffix)
-    })
+    )
+        .prop_map(|(ip, suffix)| format!("{}/{}", ip, suffix))
 }
 
 /// Strategy for generating VPN subnet objects
@@ -121,20 +121,19 @@ pub fn vpn_subnet_strategy() -> impl Strategy<Value = VpnSubnet> {
         "[a-zA-Z0-9 ._-]{10,50}", // description
         ipv4_strategy(),
         ipv4_strategy(),
-    ).prop_map(|(cidr, description, start_ip, end_ip)| {
-        VpnSubnet {
+    )
+        .prop_map(|(cidr, description, start_ip, end_ip)| VpnSubnet {
             cidr,
             description,
             range_start: start_ip.to_string(),
             range_end: end_ip.to_string(),
-        }
-    })
+        })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     proptest! {
         /// Test that port validation works correctly
         #[test]
@@ -144,10 +143,10 @@ mod tests {
         ) {
             // Valid ports should pass validation
             prop_assert!(PortChecker::validate_port(valid_port).is_ok());
-            
+
             // Port 0 should fail validation
             prop_assert!(PortChecker::validate_port(invalid_port).is_err());
-            
+
             // Reserved ports should fail validation
             prop_assert!(PortChecker::validate_port(22).is_err());
             prop_assert!(PortChecker::validate_port(80).is_err());
@@ -162,7 +161,7 @@ mod tests {
             prop_assert!(start < end);
             prop_assert!(start >= 1024);
             // end is already constrained by type (u16 max is 65535)
-            
+
             // Test find_available_port with valid range
             let _result = PortChecker::find_available_port(start, end);
             // The result can be Ok or Err, both are valid depending on system state
@@ -190,7 +189,7 @@ mod tests {
             let json = serde_json::to_string(&status)?;
             let deserialized: PortStatus = serde_json::from_str(&json)?;
             prop_assert_eq!(status.clone(), deserialized);
-            
+
             // All statuses should have valid debug representations
             let debug_str = format!("{:?}", status);
             prop_assert!(!debug_str.is_empty());
@@ -203,7 +202,7 @@ mod tests {
         ) {
             let str_repr = protocol.as_str();
             prop_assert!(!str_repr.is_empty());
-            
+
             match protocol {
                 Protocol::Tcp => prop_assert_eq!(str_repr, "tcp"),
                 Protocol::Udp => prop_assert_eq!(str_repr, "udp"),
@@ -218,7 +217,7 @@ mod tests {
         ) {
             let str_repr = direction.as_str();
             prop_assert!(!str_repr.is_empty());
-            
+
             match direction {
                 Direction::In => prop_assert_eq!(str_repr, "in"),
                 Direction::Out => prop_assert_eq!(str_repr, "out"),
@@ -234,13 +233,13 @@ mod tests {
             // Port should be valid
             prop_assert!(rule.port >= 1024);
             // port is already constrained by type (u16 max is 65535)
-            
+
             // Rule should be cloneable
             let cloned_rule = rule.clone();
             prop_assert_eq!(rule.port, cloned_rule.port);
             prop_assert_eq!(rule.protocol.as_str(), cloned_rule.protocol.as_str());
             prop_assert_eq!(rule.direction.as_str(), cloned_rule.direction.as_str());
-            
+
             // Debug representation should not be empty
             let debug_str = format!("{:?}", rule);
             prop_assert!(!debug_str.is_empty());
@@ -255,10 +254,10 @@ mod tests {
             let ip_str = ip.to_string();
             let parsed_ip: IpAddr = ip_str.parse().unwrap();
             prop_assert_eq!(ip, parsed_ip);
-            
+
             // All IPs should have non-empty string representations
             prop_assert!(!ip_str.is_empty());
-            
+
             // Test specific properties
             match ip {
                 IpAddr::V4(ipv4) => {
@@ -277,15 +276,15 @@ mod tests {
         ) {
             // Should contain exactly one slash
             prop_assert_eq!(cidr.matches('/').count(), 1);
-            
+
             // Should split into IP and suffix
             let parts: Vec<&str> = cidr.split('/').collect();
             prop_assert_eq!(parts.len(), 2);
-            
+
             // IP part should be valid
             let ip_part = parts[0];
             prop_assert!(ip_part.parse::<Ipv4Addr>().is_ok());
-            
+
             // Suffix should be valid
             let suffix = parts[1].parse::<u8>().unwrap();
             prop_assert!(suffix == 8 || suffix == 16 || suffix == 24);
@@ -298,14 +297,14 @@ mod tests {
         ) {
             // Description should not be empty
             prop_assert!(!subnet.description.is_empty());
-            
+
             // CIDR should be valid format
             prop_assert!(subnet.cidr.contains('/'));
-            
+
             // Range IPs should be valid IPv4 addresses
             prop_assert!(subnet.range_start.parse::<Ipv4Addr>().is_ok());
             prop_assert!(subnet.range_end.parse::<Ipv4Addr>().is_ok());
-            
+
             // Should be cloneable
             let cloned = subnet.clone();
             prop_assert_eq!(subnet.cidr, cloned.cidr);
@@ -321,7 +320,7 @@ mod tests {
             if let Some(suffix_str) = subnet.cidr.split('/').nth(1) {
                 if let Ok(suffix) = suffix_str.parse::<u8>() {
                     let mask_result = subnet.get_subnet_mask();
-                    
+
                     match suffix {
                         8 => prop_assert_eq!(mask_result.unwrap(), "255.0.0.0"),
                         16 => prop_assert_eq!(mask_result.unwrap(), "255.255.0.0"),
@@ -338,7 +337,7 @@ mod tests {
             subnet in vpn_subnet_strategy()
         ) {
             let gateway_result = subnet.get_gateway_ip();
-            
+
             // If CIDR is valid format, gateway should be generated
             if subnet.cidr.contains('/') && subnet.cidr.split('/').count() == 2 {
                 if let Some(network_part) = subnet.cidr.split('/').next() {
@@ -360,10 +359,10 @@ mod tests {
         ) {
             // Hostnames should not be empty
             prop_assert!(!hostname.is_empty());
-            
+
             // Should be reasonable length
             prop_assert!(hostname.len() <= 253); // DNS limit
-            
+
             // Should not start or end with special characters (for domain names)
             if hostname.contains('.') && !hostname.parse::<IpAddr>().is_ok() {
                 prop_assert!(!hostname.starts_with('-'));
@@ -379,13 +378,13 @@ mod tests {
             (start, end) in port_range_strategy()
         ) {
             let available_ports = PortChecker::check_port_range(start, end);
-            
+
             // All returned ports should be within the specified range
             for &port in &available_ports {
                 prop_assert!(port >= start);
                 prop_assert!(port <= end);
             }
-            
+
             // The number of available ports should not exceed the range size
             let range_size = (end - start + 1) as usize;
             prop_assert!(available_ports.len() <= range_size);
@@ -397,21 +396,21 @@ mod tests {
             ipv4 in ipv4_strategy()
         ) {
             let octets = ipv4.octets();
-            
+
             // Should have exactly 4 octets
             prop_assert_eq!(octets.len(), 4);
-            
+
             // String representation should be parseable
             let ip_str = ipv4.to_string();
             let parsed: Ipv4Addr = ip_str.parse().unwrap();
             prop_assert_eq!(ipv4, parsed);
-            
+
             // Test special address properties
             let is_loopback = ipv4.is_loopback();
             let is_private = ipv4.is_private();
             let is_multicast = ipv4.is_multicast();
             let is_broadcast = ipv4.is_broadcast();
-            
+
             // These are just property checks, no assertions needed
             let _ = (is_loopback, is_private, is_multicast, is_broadcast);
         }
@@ -422,19 +421,19 @@ mod tests {
             ipv6 in ipv6_strategy()
         ) {
             let segments = ipv6.segments();
-            
+
             // Should have exactly 8 segments
             prop_assert_eq!(segments.len(), 8);
-            
+
             // String representation should be parseable
             let ip_str = ipv6.to_string();
             let parsed: Ipv6Addr = ip_str.parse().unwrap();
             prop_assert_eq!(ipv6, parsed);
-            
+
             // Test special address properties
             let is_loopback = ipv6.is_loopback();
             let is_multicast = ipv6.is_multicast();
-            
+
             // These are just property checks, no assertions needed
             let _ = (is_loopback, is_multicast);
         }
@@ -456,11 +455,11 @@ mod tests {
                 let _ = tokio_test::block_on(async {
                     // Test port connectivity
                     let is_open = PortChecker::is_port_open(&hostname, port, timeout).await;
-                    
+
                     // The result can be true or false, both are valid
                     // We're just testing that the operation completes without panic
                     let _ = is_open;
-                    
+
                     Ok::<(), TestCaseError>(())
                 });
             }
@@ -475,7 +474,7 @@ mod tests {
                 let _ = tokio_test::block_on(async {
                     // Most ports should timeout (unless we're very lucky)
                     let result = PortChecker::wait_for_port(&hostname, port, timeout).await;
-                    
+
                     // Either succeeds or times out, both are valid outcomes
                     match result {
                         Ok(()) => {
@@ -488,7 +487,7 @@ mod tests {
                             // Other errors are also possible (DNS resolution, etc.)
                         }
                     }
-                    
+
                     Ok::<(), TestCaseError>(())
                 });
             }

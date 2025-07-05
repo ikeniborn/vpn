@@ -1,8 +1,9 @@
 //! VPN Cluster Management
-//! 
+//!
 //! This crate provides distributed state management, cluster coordination,
 //! and horizontal scaling capabilities for the VPN system.
 
+pub mod communication;
 pub mod config;
 pub mod consensus;
 pub mod coordination;
@@ -13,16 +14,15 @@ pub mod leader_election;
 pub mod membership;
 pub mod node;
 pub mod state;
-pub mod communication;
 
+pub use communication::{ClusterGrpcClient, ClusterGrpcServer};
 pub use config::ClusterConfig;
-pub use error::{ClusterError, Result};
-pub use node::{Node, NodeId, NodeRole, NodeStatus};
-pub use state::{ClusterState, DistributedState};
 pub use consensus::{ConsensusEngine, RaftConsensus};
 pub use coordination::{ClusterCoordinator, CoordinationEvent};
 pub use distributed_storage::DistributedConfigStorage;
-pub use communication::{ClusterGrpcServer, ClusterGrpcClient};
+pub use error::{ClusterError, Result};
+pub use node::{Node, NodeId, NodeRole, NodeStatus};
+pub use state::{ClusterState, DistributedState};
 
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -42,21 +42,25 @@ impl ClusterManager {
     /// Create a new cluster manager
     pub async fn new(config: ClusterConfig) -> Result<Self> {
         let node_id = NodeId::new();
-        let state = Arc::new(RwLock::new(ClusterState::with_cluster_name(node_id.clone(), config.cluster_name.clone())));
-        
+        let state = Arc::new(RwLock::new(ClusterState::with_cluster_name(
+            node_id.clone(),
+            config.cluster_name.clone(),
+        )));
+
         // Initialize storage backend (simplified to memory storage for now)
         let storage = Arc::new(distributed_storage::MemoryStorage::new());
-        
+
         // Initialize consensus engine (simplified to simple consensus for now)
         let consensus = Arc::new(consensus::SimpleConsensus::new(node_id.clone()));
-        
+
         // Initialize coordinator
         let coordinator = ClusterCoordinator::new(
             node_id.clone(),
             config.clone(),
             state.clone(),
             consensus.clone(),
-        ).await?;
+        )
+        .await?;
 
         // Add this node to its own cluster state
         {
@@ -85,7 +89,7 @@ impl ClusterManager {
             self.state.clone(),
             self.config.bind_address,
         );
-        
+
         tokio::spawn(async move {
             if let Err(e) = grpc_server.start().await {
                 tracing::error!("gRPC server failed: {}", e);
@@ -112,7 +116,9 @@ impl ClusterManager {
 
     /// Join an existing cluster
     pub async fn join_cluster(&mut self) -> Result<()> {
-        self.coordinator.join_cluster(&self.config.bootstrap_nodes).await
+        self.coordinator
+            .join_cluster(&self.config.bootstrap_nodes)
+            .await
     }
 
     /// Leave the cluster gracefully
@@ -170,11 +176,11 @@ impl ClusterManager {
     /// Shutdown cluster manager
     pub async fn shutdown(&mut self) -> Result<()> {
         tracing::info!("Shutting down cluster manager");
-        
+
         self.leave_cluster().await?;
         self.coordinator.shutdown().await?;
         self.consensus.shutdown().await?;
-        
+
         Ok(())
     }
 }

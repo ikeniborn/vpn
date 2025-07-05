@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use vpn_types::protocol::VpnProtocol;
 
@@ -54,8 +54,10 @@ impl User {
     pub fn new(name: String, protocol: VpnProtocol) -> Self {
         let id = Uuid::new_v4().to_string();
         let uuid_gen = vpn_crypto::UuidGenerator::new();
-        let short_id = uuid_gen.generate_short_id(&id).unwrap_or_else(|_| "default".to_string());
-        
+        let short_id = uuid_gen
+            .generate_short_id(&id)
+            .unwrap_or_else(|_| "default".to_string());
+
         Self {
             id,
             short_id,
@@ -69,53 +71,53 @@ impl User {
             stats: UserStats::default(),
         }
     }
-    
+
     pub fn with_email(mut self, email: String) -> Self {
         self.email = Some(email);
         self
     }
-    
+
     pub fn with_config(mut self, config: UserConfig) -> Self {
         self.config = config;
         self
     }
-    
+
     pub fn is_active(&self) -> bool {
         matches!(self.status, UserStatus::Active)
     }
-    
+
     pub fn activate(&mut self) {
         self.status = UserStatus::Active;
     }
-    
+
     pub fn deactivate(&mut self) {
         self.status = UserStatus::Inactive;
     }
-    
+
     pub fn suspend(&mut self) {
         self.status = UserStatus::Suspended;
     }
-    
+
     pub fn update_last_active(&mut self) {
         self.last_active = Some(Utc::now());
     }
-    
+
     pub fn add_traffic(&mut self, sent: u64, received: u64) {
         self.stats.bytes_sent += sent;
         self.stats.bytes_received += received;
         self.stats.connection_count += 1;
         self.stats.last_connection = Some(Utc::now());
     }
-    
+
     pub fn total_traffic(&self) -> u64 {
         self.stats.bytes_sent + self.stats.bytes_received
     }
-    
+
     pub fn days_since_creation(&self) -> i64 {
         let now = Utc::now();
         (now - self.created_at).num_days()
     }
-    
+
     pub fn days_since_last_active(&self) -> Option<i64> {
         self.last_active.map(|last| {
             let now = Utc::now();
@@ -169,7 +171,7 @@ impl UserStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_user_deserialization_with_uppercase_protocol() {
         let json = r#"{
@@ -201,12 +203,12 @@ mod tests {
                 "total_uptime": 0
             }
         }"#;
-        
+
         let user: User = serde_json::from_str(json).unwrap();
         assert_eq!(user.protocol, VpnProtocol::Vless);
         assert_eq!(user.name, "testuser");
     }
-    
+
     #[test]
     fn test_user_deserialization_with_lowercase_protocol() {
         let json = r#"{
@@ -238,7 +240,7 @@ mod tests {
                 "total_uptime": 0
             }
         }"#;
-        
+
         let user: User = serde_json::from_str(json).unwrap();
         assert_eq!(user.protocol, VpnProtocol::Vless);
         assert_eq!(user.name, "testuser");

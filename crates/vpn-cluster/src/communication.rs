@@ -80,28 +80,31 @@ impl ClusterService for ClusterServiceImpl {
         request: Request<JoinClusterRequest>,
     ) -> std::result::Result<Response<JoinClusterResponse>, Status> {
         let req = request.into_inner();
-        
-        tracing::info!("Received join cluster request from node: {:?}", req.node_info);
+
+        tracing::info!(
+            "Received join cluster request from node: {:?}",
+            req.node_info
+        );
 
         // Convert protobuf NodeInfo to our Node struct
-        let node_info = req.node_info.ok_or_else(|| {
-            Status::invalid_argument("Missing node info")
-        })?;
+        let node_info = req
+            .node_info
+            .ok_or_else(|| Status::invalid_argument("Missing node info"))?;
 
         let node = convert_proto_to_node(node_info)?;
-        
+
         // Add node to cluster state
         let mut state = self.state.write().await;
         match state.add_node(node) {
             Ok(_) => {
                 let cluster_state = convert_state_to_proto(&*state);
-                
+
                 let response = JoinClusterResponse {
                     success: true,
                     message: "Successfully joined cluster".to_string(),
                     cluster_state: Some(cluster_state),
                 };
-                
+
                 Ok(Response::new(response))
             }
             Err(e) => {
@@ -110,7 +113,7 @@ impl ClusterService for ClusterServiceImpl {
                     message: format!("Failed to join cluster: {}", e),
                     cluster_state: None,
                 };
-                
+
                 Ok(Response::new(response))
             }
         }
@@ -121,7 +124,7 @@ impl ClusterService for ClusterServiceImpl {
         request: Request<LeaveClusterRequest>,
     ) -> std::result::Result<Response<LeaveClusterResponse>, Status> {
         let req = request.into_inner();
-        
+
         let node_id = NodeId::from_string(&req.node_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid node ID: {}", e)))?;
 
@@ -149,7 +152,7 @@ impl ClusterService for ClusterServiceImpl {
         request: Request<HeartbeatRequest>,
     ) -> std::result::Result<Response<HeartbeatResponse>, Status> {
         let req = request.into_inner();
-        
+
         let node_id = NodeId::from_string(&req.node_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid node ID: {}", e)))?;
 
@@ -163,7 +166,11 @@ impl ClusterService for ClusterServiceImpl {
         let response = HeartbeatResponse {
             success: true,
             server_time: current_timestamp(),
-            leader_id: state.leader_id.as_ref().map(|id| id.to_string()).unwrap_or_default(),
+            leader_id: state
+                .leader_id
+                .as_ref()
+                .map(|id| id.to_string())
+                .unwrap_or_default(),
             term: state.term,
         };
 
@@ -175,10 +182,10 @@ impl ClusterService for ClusterServiceImpl {
         request: Request<SyncStateRequest>,
     ) -> std::result::Result<Response<SyncStateResponse>, Status> {
         let _req = request.into_inner();
-        
+
         let state = self.state.read().await;
         let cluster_state = convert_state_to_proto(&*state);
-        
+
         let response = SyncStateResponse {
             success: true,
             cluster_state: Some(cluster_state),
@@ -192,9 +199,9 @@ impl ClusterService for ClusterServiceImpl {
         request: Request<ForwardMessage>,
     ) -> std::result::Result<Response<ForwardResponse>, Status> {
         let req = request.into_inner();
-        
+
         tracing::debug!("Forwarding message type '{}' to leader", req.message_type);
-        
+
         // In a real implementation, this would forward the message to the leader
         // For now, just return a simple response
         let response = ForwardResponse {
@@ -211,14 +218,15 @@ impl ClusterService for ClusterServiceImpl {
         request: Request<StatusRequest>,
     ) -> std::result::Result<Response<StatusResponse>, Status> {
         let _req = request.into_inner();
-        
+
         let state = self.state.read().await;
         let cluster_state = convert_state_to_proto(&*state);
-        let nodes: Vec<NodeInfo> = state.get_all_nodes()
+        let nodes: Vec<NodeInfo> = state
+            .get_all_nodes()
             .into_iter()
             .map(convert_node_to_proto)
             .collect();
-        
+
         let response = StatusResponse {
             cluster_state: Some(cluster_state),
             nodes,
@@ -243,13 +251,17 @@ impl ConsensusService for ConsensusServiceImpl {
         request: Request<VoteRequest>,
     ) -> std::result::Result<Response<VoteResponse>, Status> {
         let req = request.into_inner();
-        
-        tracing::debug!("Received vote request from {} for term {}", req.candidate_id, req.term);
-        
+
+        tracing::debug!(
+            "Received vote request from {} for term {}",
+            req.candidate_id,
+            req.term
+        );
+
         // Simple vote granting logic (in real Raft, this would be more complex)
         let state = self.state.read().await;
         let vote_granted = req.term > state.term;
-        
+
         let response = VoteResponse {
             term: state.term,
             vote_granted,
@@ -263,13 +275,17 @@ impl ConsensusService for ConsensusServiceImpl {
         request: Request<AppendEntriesRequest>,
     ) -> std::result::Result<Response<AppendEntriesResponse>, Status> {
         let req = request.into_inner();
-        
-        tracing::debug!("Received append entries from {} for term {}", req.leader_id, req.term);
-        
+
+        tracing::debug!(
+            "Received append entries from {} for term {}",
+            req.leader_id,
+            req.term
+        );
+
         // Simple append entries response (in real Raft, this would be more complex)
         let state = self.state.read().await;
         let success = req.term >= state.term;
-        
+
         let response = AppendEntriesResponse {
             term: state.term,
             success,
@@ -283,13 +299,17 @@ impl ConsensusService for ConsensusServiceImpl {
         request: Request<SnapshotRequest>,
     ) -> std::result::Result<Response<SnapshotResponse>, Status> {
         let req = request.into_inner();
-        
-        tracing::debug!("Received snapshot from {} for term {}", req.leader_id, req.term);
-        
+
+        tracing::debug!(
+            "Received snapshot from {} for term {}",
+            req.leader_id,
+            req.term
+        );
+
         // Simple snapshot installation response
         let state = self.state.read().await;
         let success = req.term >= state.term;
-        
+
         let response = SnapshotResponse {
             term: state.term,
             success,
@@ -316,9 +336,10 @@ impl ClusterGrpcClient {
         node_info: Node,
         cluster_name: String,
     ) -> Result<JoinClusterResponse> {
-        let mut client = cluster::cluster_service_client::ClusterServiceClient::connect(
-            format!("http://{}", target_address)
-        )
+        let mut client = cluster::cluster_service_client::ClusterServiceClient::connect(format!(
+            "http://{}",
+            target_address
+        ))
         .await
         .map_err(|e| ClusterError::network(format!("Failed to connect: {}", e)))?;
 
@@ -343,9 +364,10 @@ impl ClusterGrpcClient {
         target_address: SocketAddr,
         resources: crate::node::NodeResources,
     ) -> Result<HeartbeatResponse> {
-        let mut client = cluster::cluster_service_client::ClusterServiceClient::connect(
-            format!("http://{}", target_address)
-        )
+        let mut client = cluster::cluster_service_client::ClusterServiceClient::connect(format!(
+            "http://{}",
+            target_address
+        ))
         .await
         .map_err(|e| ClusterError::network(format!("Failed to connect: {}", e)))?;
 
@@ -366,9 +388,10 @@ impl ClusterGrpcClient {
 
     /// Get cluster status from a node
     pub async fn get_cluster_status(&self, target_address: SocketAddr) -> Result<StatusResponse> {
-        let mut client = cluster::cluster_service_client::ClusterServiceClient::connect(
-            format!("http://{}", target_address)
-        )
+        let mut client = cluster::cluster_service_client::ClusterServiceClient::connect(format!(
+            "http://{}",
+            target_address
+        ))
         .await
         .map_err(|e| ClusterError::network(format!("Failed to connect: {}", e)))?;
 
@@ -407,8 +430,10 @@ fn convert_node_to_proto(node: &Node) -> NodeInfo {
 fn convert_proto_to_node(proto: NodeInfo) -> std::result::Result<Node, Status> {
     let node_id = NodeId::from_string(&proto.node_id)
         .map_err(|e| Status::invalid_argument(format!("Invalid node ID: {}", e)))?;
-    
-    let address: SocketAddr = proto.address.parse()
+
+    let address: SocketAddr = proto
+        .address
+        .parse()
         .map_err(|e| Status::invalid_argument(format!("Invalid address: {}", e)))?;
 
     let mut node = Node::with_id(node_id, proto.name, address);
@@ -419,7 +444,7 @@ fn convert_proto_to_node(proto: NodeInfo) -> std::result::Result<Node, Status> {
     if !proto.region.is_empty() {
         node.region = Some(proto.region);
     }
-    
+
     if let Some(resources) = proto.resources {
         node.resources = convert_proto_to_resources(resources);
     }
@@ -452,13 +477,15 @@ fn convert_proto_to_resources(proto: NodeResources) -> crate::node::NodeResource
 }
 
 fn convert_state_to_proto(state: &ClusterState) -> cluster::ClusterState {
-    let nodes: Vec<NodeInfo> = state.get_all_nodes()
+    let nodes: Vec<NodeInfo> = state
+        .get_all_nodes()
         .into_iter()
         .map(convert_node_to_proto)
         .collect();
 
     // Convert config_data to string map
-    let config_data: HashMap<String, String> = state.config_data
+    let config_data: HashMap<String, String> = state
+        .config_data
         .iter()
         .map(|(k, v)| (k.clone(), v.to_string()))
         .collect();
@@ -466,7 +493,11 @@ fn convert_state_to_proto(state: &ClusterState) -> cluster::ClusterState {
     cluster::ClusterState {
         cluster_name: state.cluster_name.clone(),
         nodes,
-        leader_id: state.leader_id.as_ref().map(|id| id.to_string()).unwrap_or_default(),
+        leader_id: state
+            .leader_id
+            .as_ref()
+            .map(|id| id.to_string())
+            .unwrap_or_default(),
         term: state.term,
         config_version: state.config_version,
         config_data,
@@ -493,10 +524,10 @@ mod tests {
     fn test_node_conversion() {
         let address: SocketAddr = "127.0.0.1:8080".parse().unwrap();
         let original_node = Node::new("test-node".to_string(), address);
-        
+
         let proto = convert_node_to_proto(&original_node);
         let converted_node = convert_proto_to_node(proto).unwrap();
-        
+
         assert_eq!(original_node.id, converted_node.id);
         assert_eq!(original_node.name, converted_node.name);
         assert_eq!(original_node.address, converted_node.address);
@@ -513,10 +544,10 @@ mod tests {
             disk_usage: 45.2,
             network_bandwidth: 1000,
         };
-        
+
         let proto = convert_resources_to_proto(&original_resources);
         let converted_resources = convert_proto_to_resources(proto);
-        
+
         assert_eq!(original_resources.cpu_cores, converted_resources.cpu_cores);
         assert_eq!(original_resources.memory_mb, converted_resources.memory_mb);
         assert_eq!(original_resources.disk_mb, converted_resources.disk_mb);

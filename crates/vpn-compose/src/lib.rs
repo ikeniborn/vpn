@@ -1,27 +1,27 @@
 //! VPN Docker Compose Orchestration
-//! 
+//!
 //! This crate provides comprehensive Docker Compose orchestration for the VPN system,
 //! replacing the complex containerd abstraction with a proven, reliable solution.
 
 pub mod config;
-pub mod template;
+pub mod environment;
+pub mod error;
 pub mod generator;
 pub mod ha;
 pub mod manager;
-pub mod environment;
 pub mod services;
-pub mod error;
+pub mod template;
 
 // Re-export commonly used types
-pub use config::{ComposeConfig, ServiceConfig, NetworkConfig, VolumeConfig};
-pub use template::{TemplateManager, TemplateContext, TemplateError};
-pub use generator::{ComposeGenerator, GeneratorOptions};
-pub use ha::{HAConfig, HAManager, HAHealthStatus, MultiRegionConfig, RoutingPolicy};
-pub use manager::{ComposeManager, ComposeStatus, ServiceStatus as ComposeServiceStatus};
-pub use environment::Environment;
 pub use config::EnvironmentConfig;
-pub use services::{ServiceManager, ServiceDefinition, ServiceStatus as ServiceDefinitionStatus};
+pub use config::{ComposeConfig, NetworkConfig, ServiceConfig, VolumeConfig};
+pub use environment::Environment;
 pub use error::{ComposeError, Result};
+pub use generator::{ComposeGenerator, GeneratorOptions};
+pub use ha::{HAConfig, HAHealthStatus, HAManager, MultiRegionConfig, RoutingPolicy};
+pub use manager::{ComposeManager, ComposeStatus, ServiceStatus as ComposeServiceStatus};
+pub use services::{ServiceDefinition, ServiceManager, ServiceStatus as ServiceDefinitionStatus};
+pub use template::{TemplateContext, TemplateError, TemplateManager};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -57,13 +57,13 @@ impl ComposeOrchestrator {
     pub async fn initialize(&mut self) -> Result<()> {
         // Ensure templates are available
         self.template_manager.load_templates().await?;
-        
+
         // Generate compose files for the current environment
         self.generator.generate_compose_files().await?;
-        
+
         // Initialize the compose manager
         self.manager.initialize().await?;
-        
+
         Ok(())
     }
 
@@ -144,16 +144,16 @@ impl ComposeOrchestrator {
 pub trait ComposeProvider {
     /// Get the service definition for this component
     async fn get_service_definition(&self) -> Result<ServiceDefinition>;
-    
+
     /// Get environment variables needed by this service
     async fn get_environment_vars(&self) -> Result<HashMap<String, String>>;
-    
+
     /// Get volumes needed by this service
     async fn get_volumes(&self) -> Result<Vec<VolumeConfig>>;
-    
+
     /// Get networks needed by this service
     async fn get_networks(&self) -> Result<Vec<NetworkConfig>>;
-    
+
     /// Validate service configuration
     async fn validate_config(&self) -> Result<()>;
 }

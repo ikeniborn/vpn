@@ -10,40 +10,40 @@ pub type Result<T> = std::result::Result<T, ClusterError>;
 pub enum ClusterError {
     #[error("Consensus error: {0}")]
     Consensus(String),
-    
+
     #[error("Storage error: {0}")]
     Storage(String),
-    
+
     #[error("Network error: {0}")]
     Network(String),
-    
+
     #[error("Node not found: {0}")]
     NodeNotFound(String),
-    
+
     #[error("Cluster not initialized")]
     NotInitialized,
-    
+
     #[error("Leader election failed: {0}")]
     LeaderElectionFailed(String),
-    
+
     #[error("Configuration error: {0}")]
     Configuration(String),
-    
+
     #[error("Membership error: {0}")]
     Membership(String),
-    
+
     #[error("Coordination error: {0}")]
     Coordination(String),
-    
+
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
-    
+
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Address parse error: {0}")]
     AddrParse(#[from] AddrParseError),
-    
+
     #[error("Generic error: {0}")]
     Generic(#[from] anyhow::Error),
 

@@ -1,6 +1,6 @@
 //! Service management for Docker Compose
 
-use crate::config::{VolumeMount, PortMapping, HealthCheck, RestartPolicy};
+use crate::config::{HealthCheck, PortMapping, RestartPolicy, VolumeMount};
 use crate::error::{ComposeError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -44,10 +44,7 @@ impl ServiceManager {
             image: "ghcr.io/xtls/xray-core:latest".to_string(),
             container_name: Some("vpn-server".to_string()),
             restart: RestartPolicy::UnlessStopped,
-            ports: vec![
-                PortMapping::tcp(8443, 8443),
-                PortMapping::tcp(443, 443),
-            ],
+            ports: vec![PortMapping::tcp(8443, 8443), PortMapping::tcp(443, 443)],
             volumes: vec![
                 VolumeMount::new("vpn-config", "/etc/xray"),
                 VolumeMount::new("vpn-logs", "/var/log/xray"),
@@ -56,12 +53,15 @@ impl ServiceManager {
             environment: {
                 let mut env = HashMap::new();
                 env.insert("XRAY_VMESS_ALTID".to_string(), "0".to_string());
-                env.insert("XRAY_LOG_LEVEL".to_string(), "${LOG_LEVEL:-warning}".to_string());
+                env.insert(
+                    "XRAY_LOG_LEVEL".to_string(),
+                    "${LOG_LEVEL:-warning}".to_string(),
+                );
                 env
             },
             depends_on: vec!["postgres".to_string(), "redis".to_string()],
             healthcheck: Some(HealthCheck::cmd_shell(
-                "wget --quiet --tries=1 --spider http://localhost:8080/health || exit 1"
+                "wget --quiet --tries=1 --spider http://localhost:8080/health || exit 1",
             )),
             networks: vec!["vpn-network".to_string(), "vpn-internal".to_string()],
             security_opt: vec!["no-new-privileges:true".to_string()],
@@ -73,10 +73,22 @@ impl ServiceManager {
                 labels.insert("service.role".to_string(), "core".to_string());
                 // Traefik labels for VPN server
                 labels.insert("traefik.enable".to_string(), "true".to_string());
-                labels.insert("traefik.tcp.routers.vpn-xray.rule".to_string(), "HostSNI(`*`)".to_string());
-                labels.insert("traefik.tcp.routers.vpn-xray.entrypoints".to_string(), "vpn-xray".to_string());
-                labels.insert("traefik.tcp.routers.vpn-xray.service".to_string(), "vpn-xray".to_string());
-                labels.insert("traefik.tcp.services.vpn-xray.loadbalancer.server.port".to_string(), "8443".to_string());
+                labels.insert(
+                    "traefik.tcp.routers.vpn-xray.rule".to_string(),
+                    "HostSNI(`*`)".to_string(),
+                );
+                labels.insert(
+                    "traefik.tcp.routers.vpn-xray.entrypoints".to_string(),
+                    "vpn-xray".to_string(),
+                );
+                labels.insert(
+                    "traefik.tcp.routers.vpn-xray.service".to_string(),
+                    "vpn-xray".to_string(),
+                );
+                labels.insert(
+                    "traefik.tcp.services.vpn-xray.loadbalancer.server.port".to_string(),
+                    "8443".to_string(),
+                );
                 labels
             },
             deploy: Some(DeployConfig {
@@ -155,12 +167,31 @@ impl ServiceManager {
                 env.insert("TRAEFIK_API_DASHBOARD".to_string(), "true".to_string());
                 env.insert("TRAEFIK_API_INSECURE".to_string(), "false".to_string());
                 env.insert("TRAEFIK_PROVIDERS_DOCKER".to_string(), "true".to_string());
-                env.insert("TRAEFIK_PROVIDERS_DOCKER_EXPOSEDBYDEFAULT".to_string(), "false".to_string());
-                env.insert("TRAEFIK_ENTRYPOINTS_WEB_ADDRESS".to_string(), ":80".to_string());
-                env.insert("TRAEFIK_ENTRYPOINTS_WEBSECURE_ADDRESS".to_string(), ":443".to_string());
-                env.insert("TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL".to_string(), "${ACME_EMAIL:-admin@vpn.local}".to_string());
-                env.insert("TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_STORAGE".to_string(), "/etc/traefik/acme.json".to_string());
-                env.insert("TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_HTTPCHALLENGE_ENTRYPOINT".to_string(), "web".to_string());
+                env.insert(
+                    "TRAEFIK_PROVIDERS_DOCKER_EXPOSEDBYDEFAULT".to_string(),
+                    "false".to_string(),
+                );
+                env.insert(
+                    "TRAEFIK_ENTRYPOINTS_WEB_ADDRESS".to_string(),
+                    ":80".to_string(),
+                );
+                env.insert(
+                    "TRAEFIK_ENTRYPOINTS_WEBSECURE_ADDRESS".to_string(),
+                    ":443".to_string(),
+                );
+                env.insert(
+                    "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL".to_string(),
+                    "${ACME_EMAIL:-admin@vpn.local}".to_string(),
+                );
+                env.insert(
+                    "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_STORAGE".to_string(),
+                    "/etc/traefik/acme.json".to_string(),
+                );
+                env.insert(
+                    "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_HTTPCHALLENGE_ENTRYPOINT"
+                        .to_string(),
+                    "web".to_string(),
+                );
                 env
             },
             depends_on: vec![],
@@ -174,11 +205,26 @@ impl ServiceManager {
                 labels.insert("service.type".to_string(), "proxy".to_string());
                 labels.insert("service.role".to_string(), "edge".to_string());
                 labels.insert("traefik.enable".to_string(), "true".to_string());
-                labels.insert("traefik.http.routers.traefik.rule".to_string(), "Host(`traefik.${DOMAIN_NAME:-vpn.local}`)".to_string());
-                labels.insert("traefik.http.routers.traefik.entrypoints".to_string(), "websecure".to_string());
-                labels.insert("traefik.http.routers.traefik.tls.certresolver".to_string(), "letsencrypt".to_string());
-                labels.insert("traefik.http.routers.traefik.service".to_string(), "api@internal".to_string());
-                labels.insert("traefik.http.routers.traefik.middlewares".to_string(), "admin-auth".to_string());
+                labels.insert(
+                    "traefik.http.routers.traefik.rule".to_string(),
+                    "Host(`traefik.${DOMAIN_NAME:-vpn.local}`)".to_string(),
+                );
+                labels.insert(
+                    "traefik.http.routers.traefik.entrypoints".to_string(),
+                    "websecure".to_string(),
+                );
+                labels.insert(
+                    "traefik.http.routers.traefik.tls.certresolver".to_string(),
+                    "letsencrypt".to_string(),
+                );
+                labels.insert(
+                    "traefik.http.routers.traefik.service".to_string(),
+                    "api@internal".to_string(),
+                );
+                labels.insert(
+                    "traefik.http.routers.traefik.middlewares".to_string(),
+                    "admin-auth".to_string(),
+                );
                 labels
             },
             deploy: Some(DeployConfig {
@@ -215,9 +261,7 @@ impl ServiceManager {
                     opts
                 },
             }),
-            tmpfs: vec![
-                "/tmp:noexec,nosuid,size=64m".to_string(),
-            ],
+            tmpfs: vec!["/tmp:noexec,nosuid,size=64m".to_string()],
             read_only: false,
             user: None,
             working_dir: None,
@@ -248,20 +292,37 @@ impl ServiceManager {
             ],
             environment: {
                 let mut env = HashMap::new();
-                env.insert("POSTGRES_DB".to_string(), "${POSTGRES_DB:-vpndb}".to_string());
-                env.insert("POSTGRES_USER".to_string(), "${POSTGRES_USER:-vpnuser}".to_string());
-                env.insert("POSTGRES_PASSWORD".to_string(), "${POSTGRES_PASSWORD:-changepassword}".to_string());
-                env.insert("POSTGRES_INITDB_ARGS".to_string(), "--auth-host=scram-sha-256".to_string());
+                env.insert(
+                    "POSTGRES_DB".to_string(),
+                    "${POSTGRES_DB:-vpndb}".to_string(),
+                );
+                env.insert(
+                    "POSTGRES_USER".to_string(),
+                    "${POSTGRES_USER:-vpnuser}".to_string(),
+                );
+                env.insert(
+                    "POSTGRES_PASSWORD".to_string(),
+                    "${POSTGRES_PASSWORD:-changepassword}".to_string(),
+                );
+                env.insert(
+                    "POSTGRES_INITDB_ARGS".to_string(),
+                    "--auth-host=scram-sha-256".to_string(),
+                );
                 env
             },
             depends_on: vec![],
             healthcheck: Some(HealthCheck::cmd_shell(
-                "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"
+                "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}",
             )),
             networks: vec!["vpn-internal".to_string()],
             security_opt: vec!["no-new-privileges:true".to_string()],
             cap_drop: vec!["ALL".to_string()],
-            cap_add: vec!["CHOWN".to_string(), "DAC_OVERRIDE".to_string(), "SETGID".to_string(), "SETUID".to_string()],
+            cap_add: vec![
+                "CHOWN".to_string(),
+                "DAC_OVERRIDE".to_string(),
+                "SETGID".to_string(),
+                "SETUID".to_string(),
+            ],
             labels: {
                 let mut labels = HashMap::new();
                 labels.insert("service.type".to_string(), "database".to_string());
@@ -407,7 +468,7 @@ impl ServiceManager {
             environment: HashMap::new(),
             depends_on: vec![],
             healthcheck: Some(HealthCheck::cmd_shell(
-                "wget --quiet --tries=1 --spider http://localhost:9090/-/healthy || exit 1"
+                "wget --quiet --tries=1 --spider http://localhost:9090/-/healthy || exit 1",
             )),
             networks: vec!["vpn-internal".to_string()],
             security_opt: vec!["no-new-privileges:true".to_string()],
@@ -486,14 +547,20 @@ impl ServiceManager {
             ],
             environment: {
                 let mut env = HashMap::new();
-                env.insert("GF_SECURITY_ADMIN_PASSWORD".to_string(), "${GRAFANA_PASSWORD:-admin}".to_string());
+                env.insert(
+                    "GF_SECURITY_ADMIN_PASSWORD".to_string(),
+                    "${GRAFANA_PASSWORD:-admin}".to_string(),
+                );
                 env.insert("GF_USERS_ALLOW_SIGN_UP".to_string(), "false".to_string());
-                env.insert("GF_SECURITY_DISABLE_GRAVATAR".to_string(), "true".to_string());
+                env.insert(
+                    "GF_SECURITY_DISABLE_GRAVATAR".to_string(),
+                    "true".to_string(),
+                );
                 env
             },
             depends_on: vec!["prometheus".to_string()],
             healthcheck: Some(HealthCheck::cmd_shell(
-                "wget --quiet --tries=1 --spider http://localhost:3000/api/health || exit 1"
+                "wget --quiet --tries=1 --spider http://localhost:3000/api/health || exit 1",
             )),
             networks: vec!["vpn-internal".to_string()],
             security_opt: vec!["no-new-privileges:true".to_string()],
@@ -505,11 +572,26 @@ impl ServiceManager {
                 labels.insert("service.role".to_string(), "visualization".to_string());
                 // Traefik labels for Grafana
                 labels.insert("traefik.enable".to_string(), "true".to_string());
-                labels.insert("traefik.http.routers.grafana.rule".to_string(), "Host(`grafana.${DOMAIN_NAME:-vpn.local}`)".to_string());
-                labels.insert("traefik.http.routers.grafana.entrypoints".to_string(), "websecure".to_string());
-                labels.insert("traefik.http.routers.grafana.tls.certresolver".to_string(), "letsencrypt".to_string());
-                labels.insert("traefik.http.services.grafana.loadbalancer.server.port".to_string(), "3000".to_string());
-                labels.insert("traefik.http.routers.grafana.middlewares".to_string(), "default-middlewares".to_string());
+                labels.insert(
+                    "traefik.http.routers.grafana.rule".to_string(),
+                    "Host(`grafana.${DOMAIN_NAME:-vpn.local}`)".to_string(),
+                );
+                labels.insert(
+                    "traefik.http.routers.grafana.entrypoints".to_string(),
+                    "websecure".to_string(),
+                );
+                labels.insert(
+                    "traefik.http.routers.grafana.tls.certresolver".to_string(),
+                    "letsencrypt".to_string(),
+                );
+                labels.insert(
+                    "traefik.http.services.grafana.loadbalancer.server.port".to_string(),
+                    "3000".to_string(),
+                );
+                labels.insert(
+                    "traefik.http.routers.grafana.middlewares".to_string(),
+                    "default-middlewares".to_string(),
+                );
                 labels
             },
             deploy: Some(DeployConfig {
@@ -566,19 +648,22 @@ impl ServiceManager {
             container_name: Some("vpn-jaeger".to_string()),
             restart: RestartPolicy::UnlessStopped,
             ports: vec![
-                PortMapping::tcp(16686, 16686),  // UI
-                PortMapping::tcp(14268, 14268),  // Collector
+                PortMapping::tcp(16686, 16686), // UI
+                PortMapping::tcp(14268, 14268), // Collector
             ],
             volumes: vec![],
             environment: {
                 let mut env = HashMap::new();
                 env.insert("COLLECTOR_OTLP_ENABLED".to_string(), "true".to_string());
-                env.insert("COLLECTOR_ZIPKIN_HOST_PORT".to_string(), ":9411".to_string());
+                env.insert(
+                    "COLLECTOR_ZIPKIN_HOST_PORT".to_string(),
+                    ":9411".to_string(),
+                );
                 env
             },
             depends_on: vec![],
             healthcheck: Some(HealthCheck::cmd_shell(
-                "wget --quiet --tries=1 --spider http://localhost:16686/ || exit 1"
+                "wget --quiet --tries=1 --spider http://localhost:16686/ || exit 1",
             )),
             networks: vec!["vpn-internal".to_string()],
             security_opt: vec!["no-new-privileges:true".to_string()],
@@ -644,18 +729,31 @@ impl ServiceManager {
             container_name: Some("vpn-identity".to_string()),
             restart: RestartPolicy::UnlessStopped,
             ports: vec![PortMapping::tcp(8080, 8080)],
-            volumes: vec![
-                VolumeMount::new("identity-config", "/etc/vpn-identity"),
-            ],
+            volumes: vec![VolumeMount::new("identity-config", "/etc/vpn-identity")],
             environment: {
                 let mut env = HashMap::new();
-                env.insert("DATABASE_URL".to_string(), "postgres://vpn:vpn@postgres-identity:5432/vpn_identity".to_string());
-                env.insert("REDIS_URL".to_string(), "redis://redis-identity:6379".to_string());
-                env.insert("JWT_SECRET".to_string(), "${JWT_SECRET:-change-me-in-production}".to_string());
-                env.insert("RUST_LOG".to_string(), "info,vpn_identity=debug".to_string());
+                env.insert(
+                    "DATABASE_URL".to_string(),
+                    "postgres://vpn:vpn@postgres-identity:5432/vpn_identity".to_string(),
+                );
+                env.insert(
+                    "REDIS_URL".to_string(),
+                    "redis://redis-identity:6379".to_string(),
+                );
+                env.insert(
+                    "JWT_SECRET".to_string(),
+                    "${JWT_SECRET:-change-me-in-production}".to_string(),
+                );
+                env.insert(
+                    "RUST_LOG".to_string(),
+                    "info,vpn_identity=debug".to_string(),
+                );
                 env
             },
-            depends_on: vec!["postgres-identity".to_string(), "redis-identity".to_string()],
+            depends_on: vec![
+                "postgres-identity".to_string(),
+                "redis-identity".to_string(),
+            ],
             healthcheck: Some(HealthCheck::http("/health", 8080, 30, 10, 3, 40)),
             networks: vec!["vpn-network".to_string()],
             security_opt: vec!["no-new-privileges:true".to_string()],
@@ -667,11 +765,26 @@ impl ServiceManager {
                 labels.insert("service.role".to_string(), "auth".to_string());
                 // Traefik labels for identity service
                 labels.insert("traefik.enable".to_string(), "true".to_string());
-                labels.insert("traefik.http.routers.vpn-identity.rule".to_string(), "Host(`auth.${DOMAIN_NAME:-vpn.local}`)".to_string());
-                labels.insert("traefik.http.routers.vpn-identity.entrypoints".to_string(), "websecure".to_string());
-                labels.insert("traefik.http.routers.vpn-identity.tls.certresolver".to_string(), "letsencrypt".to_string());
-                labels.insert("traefik.http.services.vpn-identity.loadbalancer.server.port".to_string(), "8080".to_string());
-                labels.insert("traefik.http.routers.vpn-identity.middlewares".to_string(), "default-middlewares".to_string());
+                labels.insert(
+                    "traefik.http.routers.vpn-identity.rule".to_string(),
+                    "Host(`auth.${DOMAIN_NAME:-vpn.local}`)".to_string(),
+                );
+                labels.insert(
+                    "traefik.http.routers.vpn-identity.entrypoints".to_string(),
+                    "websecure".to_string(),
+                );
+                labels.insert(
+                    "traefik.http.routers.vpn-identity.tls.certresolver".to_string(),
+                    "letsencrypt".to_string(),
+                );
+                labels.insert(
+                    "traefik.http.services.vpn-identity.loadbalancer.server.port".to_string(),
+                    "8080".to_string(),
+                );
+                labels.insert(
+                    "traefik.http.routers.vpn-identity.middlewares".to_string(),
+                    "default-middlewares".to_string(),
+                );
                 labels
             },
             deploy: Some(DeployConfig {
@@ -735,7 +848,10 @@ impl ServiceManager {
         self.add_service("prometheus".to_string(), Self::create_prometheus_service());
         self.add_service("grafana".to_string(), Self::create_grafana_service());
         self.add_service("jaeger".to_string(), Self::create_jaeger_service());
-        self.add_service("vpn-identity".to_string(), Self::create_vpn_identity_service());
+        self.add_service(
+            "vpn-identity".to_string(),
+            Self::create_vpn_identity_service(),
+        );
     }
 
     /// Validate service dependencies
@@ -769,7 +885,7 @@ impl ServiceManager {
                     "circular dependency detected".to_string(),
                 ));
             }
-            
+
             if visited.contains(service_name) {
                 return Ok(());
             }
@@ -790,7 +906,13 @@ impl ServiceManager {
         }
 
         for service_name in self.services.keys() {
-            visit(service_name, &self.services, &mut ordered, &mut visited, &mut visiting)?;
+            visit(
+                service_name,
+                &self.services,
+                &mut ordered,
+                &mut visited,
+                &mut visiting,
+            )?;
         }
 
         Ok(ordered)
@@ -931,7 +1053,7 @@ mod tests {
     fn test_predefined_services() {
         let mut manager = ServiceManager::new();
         manager.load_predefined_services();
-        
+
         assert!(manager.get_service("vpn-server").is_some());
         assert!(manager.get_service("nginx-proxy").is_some());
         assert!(manager.get_service("postgres").is_some());
@@ -942,7 +1064,7 @@ mod tests {
     fn test_dependency_validation() {
         let mut manager = ServiceManager::new();
         manager.load_predefined_services();
-        
+
         let result = manager.validate_dependencies();
         assert!(result.is_ok());
     }
@@ -951,14 +1073,14 @@ mod tests {
     fn test_service_ordering() {
         let mut manager = ServiceManager::new();
         manager.load_predefined_services();
-        
+
         let result = manager.get_services_in_order();
         assert!(result.is_ok());
-        
+
         let ordered = result.unwrap();
         let postgres_pos = ordered.iter().position(|s| s == "postgres").unwrap();
         let vpn_server_pos = ordered.iter().position(|s| s == "vpn-server").unwrap();
-        
+
         // postgres should come before vpn-server
         assert!(postgres_pos < vpn_server_pos);
     }

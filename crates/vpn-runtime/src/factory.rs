@@ -8,24 +8,38 @@ impl RuntimeFactory {
     /// Create a runtime instance based on configuration
     pub async fn create_runtime(
         config: RuntimeConfig,
-    ) -> Result<Arc<dyn ContainerRuntime<Container = Box<dyn crate::Container>, Task = Box<dyn crate::Task>, Volume = Box<dyn crate::Volume>, Image = Box<dyn crate::Image>>>, RuntimeError> {
+    ) -> Result<
+        Arc<
+            dyn ContainerRuntime<
+                Container = Box<dyn crate::Container>,
+                Task = Box<dyn crate::Task>,
+                Volume = Box<dyn crate::Volume>,
+                Image = Box<dyn crate::Image>,
+            >,
+        >,
+        RuntimeError,
+    > {
         match config.runtime_type {
-            RuntimeType::Docker => {
-                Self::create_docker_runtime(config).await
-            }
-            RuntimeType::Containerd => {
-                Self::create_containerd_runtime(config).await
-            }
-            RuntimeType::Auto => {
-                Self::auto_detect_runtime(config).await
-            }
+            RuntimeType::Docker => Self::create_docker_runtime(config).await,
+            RuntimeType::Containerd => Self::create_containerd_runtime(config).await,
+            RuntimeType::Auto => Self::auto_detect_runtime(config).await,
         }
     }
 
     /// Automatically detect and create the best available runtime
     async fn auto_detect_runtime(
         config: RuntimeConfig,
-    ) -> Result<Arc<dyn ContainerRuntime<Container = Box<dyn crate::Container>, Task = Box<dyn crate::Task>, Volume = Box<dyn crate::Volume>, Image = Box<dyn crate::Image>>>, RuntimeError> {
+    ) -> Result<
+        Arc<
+            dyn ContainerRuntime<
+                Container = Box<dyn crate::Container>,
+                Task = Box<dyn crate::Task>,
+                Volume = Box<dyn crate::Volume>,
+                Image = Box<dyn crate::Image>,
+            >,
+        >,
+        RuntimeError,
+    > {
         // Try containerd first if enabled
         if config.containerd.is_some() {
             if let Ok(runtime) = Self::create_containerd_runtime(config.clone()).await {
@@ -46,7 +60,17 @@ impl RuntimeFactory {
     /// Create Docker runtime instance
     async fn create_docker_runtime(
         _config: RuntimeConfig,
-    ) -> Result<Arc<dyn ContainerRuntime<Container = Box<dyn crate::Container>, Task = Box<dyn crate::Task>, Volume = Box<dyn crate::Volume>, Image = Box<dyn crate::Image>>>, RuntimeError> {
+    ) -> Result<
+        Arc<
+            dyn ContainerRuntime<
+                Container = Box<dyn crate::Container>,
+                Task = Box<dyn crate::Task>,
+                Volume = Box<dyn crate::Volume>,
+                Image = Box<dyn crate::Image>,
+            >,
+        >,
+        RuntimeError,
+    > {
         // This will be implemented when we integrate with existing vpn-docker
         Err(RuntimeError::ConfigError {
             message: "Docker runtime not yet integrated".to_string(),
@@ -56,7 +80,17 @@ impl RuntimeFactory {
     /// Create containerd runtime instance
     async fn create_containerd_runtime(
         _config: RuntimeConfig,
-    ) -> Result<Arc<dyn ContainerRuntime<Container = Box<dyn crate::Container>, Task = Box<dyn crate::Task>, Volume = Box<dyn crate::Volume>, Image = Box<dyn crate::Image>>>, RuntimeError> {
+    ) -> Result<
+        Arc<
+            dyn ContainerRuntime<
+                Container = Box<dyn crate::Container>,
+                Task = Box<dyn crate::Task>,
+                Volume = Box<dyn crate::Volume>,
+                Image = Box<dyn crate::Image>,
+            >,
+        >,
+        RuntimeError,
+    > {
         // For now, return an error. The actual implementation should be
         // provided by the application that links both vpn-runtime and vpn-containerd
         Err(RuntimeError::ConfigError {
@@ -100,10 +134,10 @@ impl RuntimeFactory {
                 network_management: true,
             },
             RuntimeType::Containerd => RuntimeCapabilities {
-                native_logging: false, // Requires custom implementation
-                native_stats: false,   // Requires cgroup access
+                native_logging: false,       // Requires custom implementation
+                native_stats: false,         // Requires cgroup access
                 native_health_checks: false, // Custom implementation needed
-                native_volumes: true,  // Via snapshots
+                native_volumes: true,        // Via snapshots
                 event_streaming: true,
                 exec_support: true,
                 network_management: false, // Limited support
@@ -154,7 +188,7 @@ mod tests {
         // These tests will pass/fail based on system configuration
         let docker_available = RuntimeFactory::is_docker_available().await;
         let containerd_available = RuntimeFactory::is_containerd_available().await;
-        
+
         // At least log what's available for debugging
         println!("Docker available: {}", docker_available);
         println!("containerd available: {}", containerd_available);

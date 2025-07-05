@@ -125,69 +125,69 @@ macro_rules! telemetry_error {
             message: $msg.to_string(),
         }
     };
-    
+
     (init, $reason:expr) => {
         $crate::TelemetryError::InitializationFailed {
             reason: $reason.to_string(),
         }
     };
-    
+
     (tracing, $msg:expr) => {
         $crate::TelemetryError::TracingError {
             message: $msg.to_string(),
         }
     };
-    
+
     (metrics, $msg:expr) => {
         $crate::TelemetryError::MetricsError {
             message: $msg.to_string(),
         }
     };
-    
+
     (dashboard, $msg:expr) => {
         $crate::TelemetryError::DashboardError {
             message: $msg.to_string(),
         }
     };
-    
+
     (export, $exporter:expr, $msg:expr) => {
         $crate::TelemetryError::ExportError {
             exporter: $exporter.to_string(),
             message: $msg.to_string(),
         }
     };
-    
+
     (health, $component:expr, $msg:expr) => {
         $crate::TelemetryError::HealthCheckError {
             component: $component.to_string(),
             message: $msg.to_string(),
         }
     };
-    
+
     (performance, $msg:expr) => {
         $crate::TelemetryError::PerformanceError {
             message: $msg.to_string(),
         }
     };
-    
+
     (not_found, $resource:expr) => {
         $crate::TelemetryError::NotFound {
             resource: $resource.to_string(),
         }
     };
-    
+
     (permission_denied, $operation:expr) => {
         $crate::TelemetryError::PermissionDenied {
             operation: $operation.to_string(),
         }
     };
-    
+
     (timeout, $operation:expr) => {
         $crate::TelemetryError::Timeout {
             operation: $operation.to_string(),
         }
     };
-    
+
     (operation_failed, $operation:expr, $msg:expr) => {
         $crate::TelemetryError::OperationFailed {
             operation: $operation.to_string(),
@@ -223,7 +223,7 @@ mod tests {
     fn test_error_conversions() {
         let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
         let telemetry_error: TelemetryError = io_error.into();
-        
+
         match telemetry_error {
             TelemetryError::IoError { message } => {
                 assert!(message.contains("file not found"));

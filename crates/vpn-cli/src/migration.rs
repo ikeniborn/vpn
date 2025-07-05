@@ -1,11 +1,11 @@
 use std::path::{Path, PathBuf};
 // use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
-use indicatif::{ProgressBar, ProgressStyle};
-use vpn_users::{User, UserStatus};
-use vpn_types::protocol::VpnProtocol;
 use crate::error::{CliError, Result};
 use crate::utils::display;
+use indicatif::{ProgressBar, ProgressStyle};
+use serde::{Deserialize, Serialize};
+use vpn_types::protocol::VpnProtocol;
+use vpn_users::{User, UserStatus};
 
 #[derive(Debug, Clone)]
 pub struct MigrationOptions {
@@ -83,7 +83,9 @@ impl MigrationManager {
         pb.set_position(10);
 
         if let Err(e) = self.validate_bash_installation(&options.source_path) {
-            report.errors.push(format!("Source validation failed: {}", e));
+            report
+                .errors
+                .push(format!("Source validation failed: {}", e));
             return Ok(report);
         }
 
@@ -92,7 +94,9 @@ impl MigrationManager {
         pb.set_position(20);
 
         if let Err(e) = self.create_target_structure(&options.target_path) {
-            report.errors.push(format!("Failed to create target structure: {}", e));
+            report
+                .errors
+                .push(format!("Failed to create target structure: {}", e));
             return Ok(report);
         }
 
@@ -101,13 +105,18 @@ impl MigrationManager {
         pb.set_position(30);
 
         if options.migrate_config {
-            match self.migrate_server_config(&options.source_path, &options.target_path).await {
+            match self
+                .migrate_server_config(&options.source_path, &options.target_path)
+                .await
+            {
                 Ok(_) => {
                     report.configs_migrated += 1;
                     display::success("Server configuration migrated successfully");
                 }
                 Err(e) => {
-                    report.errors.push(format!("Config migration failed: {}", e));
+                    report
+                        .errors
+                        .push(format!("Config migration failed: {}", e));
                 }
             }
         }
@@ -117,7 +126,10 @@ impl MigrationManager {
         pb.set_position(40);
 
         let discovered_users = self.discover_bash_users(&options.source_path)?;
-        display::info(&format!("Found {} users to migrate", discovered_users.len()));
+        display::info(&format!(
+            "Found {} users to migrate",
+            discovered_users.len()
+        ));
 
         if options.migrate_users && !discovered_users.is_empty() {
             pb.set_message("Migrating users...");
@@ -134,7 +146,9 @@ impl MigrationManager {
                         report.users_migrated += 1;
                     }
                     Err(e) => {
-                        report.errors.push(format!("Failed to migrate user {}: {}", bash_user.name, e));
+                        report
+                            .errors
+                            .push(format!("Failed to migrate user {}: {}", bash_user.name, e));
                     }
                 }
             }
@@ -150,7 +164,9 @@ impl MigrationManager {
                     report.files_migrated += count;
                 }
                 Err(e) => {
-                    report.warnings.push(format!("Log migration partially failed: {}", e));
+                    report
+                        .warnings
+                        .push(format!("Log migration partially failed: {}", e));
                 }
             }
         }
@@ -161,7 +177,9 @@ impl MigrationManager {
 
         if options.validate_after_migration {
             if let Err(e) = self.validate_migration(&options.target_path).await {
-                report.warnings.push(format!("Migration validation warnings: {}", e));
+                report
+                    .warnings
+                    .push(format!("Migration validation warnings: {}", e));
             }
         }
 
@@ -188,17 +206,15 @@ impl MigrationManager {
 
     fn validate_bash_installation(&self, source_path: &Path) -> Result<()> {
         // Check if it looks like a valid Bash VPN installation
-        let required_indicators = [
-            "docker-compose.yml",
-            "config",
-        ];
+        let required_indicators = ["docker-compose.yml", "config"];
 
         for indicator in &required_indicators {
             let path = source_path.join(indicator);
             if !path.exists() {
-                return Err(CliError::MigrationError(
-                    format!("Source installation missing: {}", indicator)
-                ));
+                return Err(CliError::MigrationError(format!(
+                    "Source installation missing: {}",
+                    indicator
+                )));
             }
         }
 
@@ -207,7 +223,7 @@ impl MigrationManager {
         if let Ok(content) = std::fs::read_to_string(&compose_file) {
             if !content.contains("xray") && !content.contains("shadowbox") {
                 return Err(CliError::MigrationError(
-                    "Docker compose file doesn't appear to be for a VPN server".to_string()
+                    "Docker compose file doesn't appear to be for a VPN server".to_string(),
                 ));
             }
         }
@@ -216,19 +232,17 @@ impl MigrationManager {
     }
 
     fn create_target_structure(&self, target_path: &Path) -> Result<()> {
-        let directories = [
-            "config",
-            "users",
-            "logs",
-            "backups",
-        ];
+        let directories = ["config", "users", "logs", "backups"];
 
         for dir in &directories {
             let dir_path = target_path.join(dir);
-            std::fs::create_dir_all(&dir_path)
-                .map_err(|e| CliError::MigrationError(
-                    format!("Failed to create directory {}: {}", dir_path.display(), e)
-                ))?;
+            std::fs::create_dir_all(&dir_path).map_err(|e| {
+                CliError::MigrationError(format!(
+                    "Failed to create directory {}: {}",
+                    dir_path.display(),
+                    e
+                ))
+            })?;
         }
 
         Ok(())
@@ -237,15 +251,15 @@ impl MigrationManager {
     async fn migrate_server_config(&self, source_path: &Path, target_path: &Path) -> Result<()> {
         // Read Bash configuration
         let bash_config = self.read_bash_config(source_path)?;
-        
+
         // Convert to Rust format
         let rust_config = self.convert_config_format(&bash_config)?;
-        
+
         // Save to target location
         let target_config_file = target_path.join("config").join("config.json");
         let config_json = serde_json::to_string_pretty(&rust_config)
             .map_err(|e| CliError::MigrationError(format!("Failed to serialize config: {}", e)))?;
-        
+
         std::fs::write(&target_config_file, config_json)
             .map_err(|e| CliError::MigrationError(format!("Failed to write config: {}", e)))?;
 
@@ -257,7 +271,7 @@ impl MigrationManager {
 
     fn read_bash_config(&self, source_path: &Path) -> Result<BashVpnConfig> {
         let config_dir = source_path.join("config");
-        
+
         // Try to read from various possible locations
         let config_sources = [
             config_dir.join("config.json"),
@@ -272,7 +286,7 @@ impl MigrationManager {
                     if let Ok(json_config) = serde_json::from_str::<serde_json::Value>(&content) {
                         return self.parse_json_config(&json_config);
                     }
-                    
+
                     // Fall back to parsing as key-value pairs
                     return self.parse_text_config(&content);
                 }
@@ -302,7 +316,7 @@ impl MigrationManager {
                 if let Some(port) = inbound["port"].as_u64() {
                     config.server_port = port as u16;
                 }
-                
+
                 if let Some(protocol) = inbound["protocol"].as_str() {
                     config.protocol = protocol.to_string();
                 }
@@ -311,13 +325,13 @@ impl MigrationManager {
                 if let Some(reality) = inbound["streamSettings"]["realitySettings"].as_object() {
                     config.private_key = reality["privateKey"].as_str().map(|s| s.to_string());
                     config.reality_dest = reality["dest"].as_str().map(|s| s.to_string());
-                    
+
                     if let Some(server_names) = reality["serverNames"].as_array() {
                         if let Some(sni) = server_names.first().and_then(|s| s.as_str()) {
                             config.sni = Some(sni.to_string());
                         }
                     }
-                    
+
                     if let Some(short_ids) = reality["shortId"].as_array() {
                         if let Some(short_id) = short_ids.first().and_then(|s| s.as_str()) {
                             config.short_id = Some(short_id.to_string());
@@ -469,10 +483,9 @@ impl MigrationManager {
             let target_file = target_config.join(key_file);
 
             if source_file.exists() {
-                std::fs::copy(&source_file, &target_file)
-                    .map_err(|e| CliError::MigrationError(
-                        format!("Failed to copy {}: {}", key_file, e)
-                    ))?;
+                std::fs::copy(&source_file, &target_file).map_err(|e| {
+                    CliError::MigrationError(format!("Failed to copy {}: {}", key_file, e))
+                })?;
             }
         }
 
@@ -487,9 +500,9 @@ impl MigrationManager {
             return Ok(users);
         }
 
-        for entry in std::fs::read_dir(&users_dir)
-            .map_err(|e| CliError::MigrationError(format!("Failed to read users directory: {}", e)))?
-        {
+        for entry in std::fs::read_dir(&users_dir).map_err(|e| {
+            CliError::MigrationError(format!("Failed to read users directory: {}", e))
+        })? {
             let entry = entry?;
             if entry.file_type()?.is_dir() {
                 let user_dir = entry.path();
@@ -517,7 +530,7 @@ impl MigrationManager {
         let config_file = user_dir.join("config.json");
         if config_file.exists() {
             user.config_file = Some(config_file.clone());
-            
+
             // Try to extract UUID from config
             if let Ok(content) = std::fs::read_to_string(&config_file) {
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
@@ -549,7 +562,7 @@ impl MigrationManager {
     async fn migrate_user(&self, bash_user: &BashUser, target_path: &Path) -> Result<()> {
         // Create new user in Rust format
         let protocol = VpnProtocol::Vless; // Default, could be inferred from config
-        
+
         let mut user = User::new(bash_user.name.clone(), protocol);
         user.id = bash_user.id.clone();
         user.email = bash_user.email.clone();
@@ -572,8 +585,9 @@ impl MigrationManager {
 
         // Save user to target directory
         let target_user_dir = target_path.join("users").join(&user.id);
-        std::fs::create_dir_all(&target_user_dir)
-            .map_err(|e| CliError::MigrationError(format!("Failed to create user directory: {}", e)))?;
+        std::fs::create_dir_all(&target_user_dir).map_err(|e| {
+            CliError::MigrationError(format!("Failed to create user directory: {}", e))
+        })?;
 
         let user_config_file = target_user_dir.join("config.json");
         let user_json = serde_json::to_string_pretty(&user)
@@ -611,7 +625,7 @@ impl MigrationManager {
             if entry.file_type()?.is_file() {
                 let source_file = entry.path();
                 let target_file = target_logs.join(entry.file_name());
-                
+
                 std::fs::copy(&source_file, &target_file)?;
                 files_copied += 1;
             }
@@ -622,16 +636,15 @@ impl MigrationManager {
 
     async fn validate_migration(&self, target_path: &Path) -> Result<()> {
         // Validate that the migration was successful
-        let required_files = [
-            "config/config.json",
-        ];
+        let required_files = ["config/config.json"];
 
         for file in &required_files {
             let file_path = target_path.join(file);
             if !file_path.exists() {
-                return Err(CliError::MigrationError(
-                    format!("Migration validation failed: missing {}", file)
-                ));
+                return Err(CliError::MigrationError(format!(
+                    "Migration validation failed: missing {}",
+                    file
+                )));
             }
         }
 
@@ -647,18 +660,22 @@ impl MigrationManager {
     fn cleanup_original(&self, source_path: &Path) -> Result<()> {
         // Create a backup before cleanup
         let backup_path = source_path.with_extension("backup");
-        
+
         display::warning("Creating backup of original installation before cleanup...");
-        
+
         // Copy instead of move to be safe
         self.copy_directory_recursive(source_path, &backup_path)?;
-        
-        display::info(&format!("Original installation backed up to: {}", backup_path.display()));
-        
+
+        display::info(&format!(
+            "Original installation backed up to: {}",
+            backup_path.display()
+        ));
+
         // Only remove if backup was successful
         if backup_path.exists() {
-            std::fs::remove_dir_all(source_path)
-                .map_err(|e| CliError::MigrationError(format!("Failed to cleanup original: {}", e)))?;
+            std::fs::remove_dir_all(source_path).map_err(|e| {
+                CliError::MigrationError(format!("Failed to cleanup original: {}", e))
+            })?;
         }
 
         Ok(())
@@ -684,7 +701,7 @@ impl MigrationManager {
 
     fn print_migration_summary(&self, report: &MigrationReport) {
         display::header("Migration Summary");
-        
+
         if report.success {
             display::success("Migration completed successfully!");
         } else {
@@ -768,8 +785,11 @@ mod tests {
         assert!(manager.validate_bash_installation(temp_dir.path()).is_err());
 
         // Create required files
-        std::fs::write(temp_dir.path().join("docker-compose.yml"), "version: '3'\nservices:\n  xray: {}")
-            .unwrap();
+        std::fs::write(
+            temp_dir.path().join("docker-compose.yml"),
+            "version: '3'\nservices:\n  xray: {}",
+        )
+        .unwrap();
         std::fs::create_dir_all(temp_dir.path().join("config")).unwrap();
 
         // Should now pass
@@ -786,10 +806,13 @@ mod tests {
         let source_path = temp_source.path();
         let config_dir = source_path.join("config");
         std::fs::create_dir_all(&config_dir).unwrap();
-        
-        std::fs::write(source_path.join("docker-compose.yml"), 
-            "version: '3'\nservices:\n  xray:\n    image: xray").unwrap();
-        
+
+        std::fs::write(
+            source_path.join("docker-compose.yml"),
+            "version: '3'\nservices:\n  xray:\n    image: xray",
+        )
+        .unwrap();
+
         std::fs::write(config_dir.join("private_key.txt"), "test-private-key").unwrap();
         std::fs::write(config_dir.join("sni.txt"), "example.com").unwrap();
 

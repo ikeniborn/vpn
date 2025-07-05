@@ -8,31 +8,31 @@ use std::time::Duration;
 pub struct TelemetryConfig {
     /// Whether telemetry is enabled
     pub enabled: bool,
-    
+
     /// Service name for tracing
     pub service_name: String,
-    
+
     /// Service version
     pub service_version: String,
-    
+
     /// Environment (e.g., "production", "staging", "development")
     pub environment: String,
-    
+
     /// Tracing configuration
     pub tracing: TracingConfig,
-    
+
     /// Metrics configuration
     pub metrics: MetricsConfig,
-    
+
     /// Dashboard configuration
     pub dashboard: DashboardConfig,
-    
+
     /// Whether to enable the built-in dashboard
     pub dashboard_enabled: bool,
-    
+
     /// Health monitoring configuration
     pub health: HealthConfig,
-    
+
     /// Performance monitoring configuration
     pub performance: PerformanceConfig,
 }
@@ -42,19 +42,19 @@ pub struct TelemetryConfig {
 pub struct TracingConfig {
     /// Whether tracing is enabled
     pub enabled: bool,
-    
+
     /// Jaeger configuration
     pub jaeger: Option<JaegerConfig>,
-    
+
     /// OTLP configuration
     pub otlp: Option<OtlpConfig>,
-    
+
     /// Sampling ratio (0.0 to 1.0)
     pub sampling_ratio: f32,
-    
+
     /// Maximum span batch size
     pub max_batch_size: usize,
-    
+
     /// Maximum export timeout
     pub export_timeout: Duration,
 }
@@ -64,13 +64,13 @@ pub struct TracingConfig {
 pub struct JaegerConfig {
     /// Jaeger endpoint URL
     pub endpoint: String,
-    
+
     /// Agent endpoint (for UDP)
     pub agent_endpoint: Option<String>,
-    
+
     /// Username for authentication
     pub username: Option<String>,
-    
+
     /// Password for authentication
     pub password: Option<String>,
 }
@@ -80,10 +80,10 @@ pub struct JaegerConfig {
 pub struct OtlpConfig {
     /// OTLP endpoint URL
     pub endpoint: String,
-    
+
     /// Headers to include in requests
     pub headers: std::collections::HashMap<String, String>,
-    
+
     /// Timeout for OTLP requests
     pub timeout: Duration,
 }
@@ -93,13 +93,13 @@ pub struct OtlpConfig {
 pub struct MetricsConfig {
     /// Whether metrics collection is enabled
     pub enabled: bool,
-    
+
     /// Prometheus configuration
     pub prometheus: PrometheusConfig,
-    
+
     /// Collection interval
     pub collection_interval: Duration,
-    
+
     /// Custom metrics to collect
     pub custom_metrics: Vec<CustomMetricConfig>,
 }
@@ -109,13 +109,13 @@ pub struct MetricsConfig {
 pub struct PrometheusConfig {
     /// Whether Prometheus metrics are enabled
     pub enabled: bool,
-    
+
     /// Address to bind the metrics server to
     pub bind_address: String,
-    
+
     /// Port for the metrics server
     pub port: u16,
-    
+
     /// Path for metrics endpoint
     pub path: String,
 }
@@ -125,13 +125,13 @@ pub struct PrometheusConfig {
 pub struct CustomMetricConfig {
     /// Metric name
     pub name: String,
-    
+
     /// Metric description
     pub description: String,
-    
+
     /// Metric type (counter, gauge, histogram)
     pub metric_type: MetricType,
-    
+
     /// Labels to apply to the metric
     pub labels: Vec<String>,
 }
@@ -150,22 +150,22 @@ pub enum MetricType {
 pub struct DashboardConfig {
     /// Dashboard bind address
     pub bind_address: String,
-    
+
     /// Dashboard port
     pub port: u16,
-    
+
     /// Dashboard title
     pub title: String,
-    
+
     /// Refresh interval for real-time updates
     pub refresh_interval: Duration,
-    
+
     /// Whether to enable authentication
     pub auth_enabled: bool,
-    
+
     /// Username for basic auth
     pub username: Option<String>,
-    
+
     /// Password for basic auth
     pub password: Option<String>,
 }
@@ -175,13 +175,13 @@ pub struct DashboardConfig {
 pub struct HealthConfig {
     /// Whether health monitoring is enabled
     pub enabled: bool,
-    
+
     /// Health check interval
     pub check_interval: Duration,
-    
+
     /// Components to monitor
     pub components: Vec<String>,
-    
+
     /// Thresholds for health alerts
     pub thresholds: HealthThresholds,
 }
@@ -191,13 +191,13 @@ pub struct HealthConfig {
 pub struct HealthThresholds {
     /// CPU usage threshold (percentage)
     pub cpu_threshold: f64,
-    
+
     /// Memory usage threshold (percentage)
     pub memory_threshold: f64,
-    
+
     /// Disk usage threshold (percentage)
     pub disk_threshold: f64,
-    
+
     /// Network error rate threshold (percentage)
     pub network_error_threshold: f64,
 }
@@ -207,13 +207,13 @@ pub struct HealthThresholds {
 pub struct PerformanceConfig {
     /// Whether performance monitoring is enabled
     pub enabled: bool,
-    
+
     /// Performance data collection interval
     pub collection_interval: Duration,
-    
+
     /// Number of samples to keep in memory
     pub sample_size: usize,
-    
+
     /// Whether to enable benchmark comparison
     pub benchmark_enabled: bool,
 }
@@ -336,32 +336,30 @@ impl Default for PerformanceConfig {
 impl TelemetryConfig {
     /// Load configuration from a file
     pub fn from_file(path: &str) -> crate::Result<Self> {
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| crate::TelemetryError::ConfigError {
+        let content =
+            std::fs::read_to_string(path).map_err(|e| crate::TelemetryError::ConfigError {
                 message: format!("Failed to read config file: {}", e),
             })?;
-        
-        toml::from_str(&content)
-            .map_err(|e| crate::TelemetryError::ConfigError {
-                message: format!("Failed to parse config: {}", e),
-            })
+
+        toml::from_str(&content).map_err(|e| crate::TelemetryError::ConfigError {
+            message: format!("Failed to parse config: {}", e),
+        })
     }
-    
+
     /// Save configuration to a file
     pub fn to_file(&self, path: &str) -> crate::Result<()> {
-        let content = toml::to_string_pretty(self)
-            .map_err(|e| crate::TelemetryError::ConfigError {
+        let content =
+            toml::to_string_pretty(self).map_err(|e| crate::TelemetryError::ConfigError {
                 message: format!("Failed to serialize config: {}", e),
             })?;
-        
-        std::fs::write(path, content)
-            .map_err(|e| crate::TelemetryError::ConfigError {
-                message: format!("Failed to write config file: {}", e),
-            })?;
-        
+
+        std::fs::write(path, content).map_err(|e| crate::TelemetryError::ConfigError {
+            message: format!("Failed to write config file: {}", e),
+        })?;
+
         Ok(())
     }
-    
+
     /// Validate the configuration
     pub fn validate(&self) -> crate::Result<()> {
         if self.service_name.is_empty() {
@@ -369,25 +367,26 @@ impl TelemetryConfig {
                 message: "Service name cannot be empty".to_string(),
             });
         }
-        
+
         if self.tracing.enabled && self.tracing.jaeger.is_none() && self.tracing.otlp.is_none() {
             return Err(crate::TelemetryError::ConfigError {
-                message: "At least one tracing exporter must be configured when tracing is enabled".to_string(),
+                message: "At least one tracing exporter must be configured when tracing is enabled"
+                    .to_string(),
             });
         }
-        
+
         if self.tracing.sampling_ratio < 0.0 || self.tracing.sampling_ratio > 1.0 {
             return Err(crate::TelemetryError::ConfigError {
                 message: "Sampling ratio must be between 0.0 and 1.0".to_string(),
             });
         }
-        
+
         if self.dashboard_enabled && self.dashboard.port == 0 {
             return Err(crate::TelemetryError::ConfigError {
                 message: "Dashboard port must be specified when dashboard is enabled".to_string(),
             });
         }
-        
+
         Ok(())
     }
 }
@@ -406,41 +405,41 @@ pub mod env {
 /// Load configuration from environment variables
 pub fn from_env() -> TelemetryConfig {
     let mut config = TelemetryConfig::default();
-    
+
     if let Ok(enabled) = std::env::var(env::TELEMETRY_ENABLED) {
         config.enabled = enabled.parse().unwrap_or(true);
     }
-    
+
     if let Ok(service_name) = std::env::var(env::SERVICE_NAME) {
         config.service_name = service_name;
     }
-    
+
     if let Ok(service_version) = std::env::var(env::SERVICE_VERSION) {
         config.service_version = service_version;
     }
-    
+
     if let Ok(environment) = std::env::var(env::ENVIRONMENT) {
         config.environment = environment;
     }
-    
+
     if let Ok(jaeger_endpoint) = std::env::var(env::JAEGER_ENDPOINT) {
         if let Some(ref mut jaeger) = config.tracing.jaeger {
             jaeger.endpoint = jaeger_endpoint;
         }
     }
-    
+
     if let Ok(prometheus_port) = std::env::var(env::PROMETHEUS_PORT) {
         if let Ok(port) = prometheus_port.parse() {
             config.metrics.prometheus.port = port;
         }
     }
-    
+
     if let Ok(dashboard_port) = std::env::var(env::DASHBOARD_PORT) {
         if let Ok(port) = dashboard_port.parse() {
             config.dashboard.port = port;
         }
     }
-    
+
     config
 }
 
@@ -461,7 +460,7 @@ mod tests {
     fn test_config_validation() {
         let mut config = TelemetryConfig::default();
         assert!(config.validate().is_ok());
-        
+
         config.service_name = String::new();
         assert!(config.validate().is_err());
     }

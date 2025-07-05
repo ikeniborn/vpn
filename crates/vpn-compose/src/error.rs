@@ -8,67 +8,40 @@ pub type Result<T> = std::result::Result<T, ComposeError>;
 #[derive(Error, Debug)]
 pub enum ComposeError {
     #[error("Template error: {message}")]
-    TemplateError {
-        message: String,
-    },
+    TemplateError { message: String },
 
     #[error("Configuration error: {message}")]
-    ConfigError {
-        message: String,
-    },
+    ConfigError { message: String },
 
     #[error("Docker Compose command failed: {command} - {stderr}")]
-    ComposeCommandFailed {
-        command: String,
-        stderr: String,
-    },
+    ComposeCommandFailed { command: String, stderr: String },
 
     #[error("Service not found: {service}")]
-    ServiceNotFound {
-        service: String,
-    },
+    ServiceNotFound { service: String },
 
     #[error("Environment error: {message}")]
-    EnvironmentError {
-        message: String,
-    },
+    EnvironmentError { message: String },
 
     #[error("File operation failed: {operation} - {path}")]
-    FileOperationFailed {
-        operation: String,
-        path: String,
-    },
+    FileOperationFailed { operation: String, path: String },
 
     #[error("Validation failed: {message}")]
-    ValidationFailed {
-        message: String,
-    },
+    ValidationFailed { message: String },
 
     #[error("Service dependency error: {service} depends on {dependency}")]
-    DependencyError {
-        service: String,
-        dependency: String,
-    },
+    DependencyError { service: String, dependency: String },
 
     #[error("Network configuration error: {message}")]
-    NetworkError {
-        message: String,
-    },
+    NetworkError { message: String },
 
     #[error("Volume configuration error: {message}")]
-    VolumeError {
-        message: String,
-    },
+    VolumeError { message: String },
 
     #[error("Generation failed: {message}")]
-    GenerationFailed {
-        message: String,
-    },
+    GenerationFailed { message: String },
 
     #[error("Manager initialization failed: {message}")]
-    ManagerInitFailed {
-        message: String,
-    },
+    ManagerInitFailed { message: String },
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -98,9 +71,7 @@ pub enum ComposeError {
     VpnNetwork(#[from] vpn_network::error::NetworkError),
 
     #[error("High availability error: {message}")]
-    HAError {
-        message: String,
-    },
+    HAError { message: String },
 }
 
 impl ComposeError {

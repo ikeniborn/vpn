@@ -1,25 +1,25 @@
 //! VPN Telemetry Crate
-//! 
+//!
 //! Provides comprehensive observability for the VPN system using OpenTelemetry.
 //! Includes distributed tracing, custom metrics, and real-time dashboards.
 
 pub mod config;
-pub mod metrics;
-pub mod tracing;
 pub mod dashboard;
-pub mod exporters;
 pub mod error;
+pub mod exporters;
 pub mod health;
+pub mod metrics;
 pub mod performance;
+pub mod tracing;
 
 // Re-export commonly used types
 pub use config::TelemetryConfig;
-pub use error::{TelemetryError, Result};
-pub use metrics::{MetricsCollector, VpnMetrics};
-pub use tracing::{TracingManager, TraceContext};
-pub use dashboard::{DashboardManager, DashboardConfig};
+pub use dashboard::{DashboardConfig, DashboardManager};
+pub use error::{Result, TelemetryError};
 pub use health::{HealthCollector, SystemHealth};
-pub use performance::{PerformanceMonitor, PerformanceMetrics};
+pub use metrics::{MetricsCollector, VpnMetrics};
+pub use performance::{PerformanceMetrics, PerformanceMonitor};
+pub use tracing::{TraceContext, TracingManager};
 
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -39,25 +39,15 @@ pub struct TelemetrySystem {
 impl TelemetrySystem {
     /// Create a new telemetry system with the given configuration
     pub async fn new(config: TelemetryConfig) -> Result<Self> {
-        let metrics_collector = Arc::new(RwLock::new(
-            MetricsCollector::new(&config).await?
-        ));
-        
-        let tracing_manager = Arc::new(RwLock::new(
-            TracingManager::new(&config).await?
-        ));
-        
-        let dashboard_manager = Arc::new(RwLock::new(
-            DashboardManager::new(&config).await?
-        ));
-        
-        let health_collector = Arc::new(RwLock::new(
-            HealthCollector::new(&config).await?
-        ));
-        
-        let performance_monitor = Arc::new(RwLock::new(
-            PerformanceMonitor::new(&config).await?
-        ));
+        let metrics_collector = Arc::new(RwLock::new(MetricsCollector::new(&config).await?));
+
+        let tracing_manager = Arc::new(RwLock::new(TracingManager::new(&config).await?));
+
+        let dashboard_manager = Arc::new(RwLock::new(DashboardManager::new(&config).await?));
+
+        let health_collector = Arc::new(RwLock::new(HealthCollector::new(&config).await?));
+
+        let performance_monitor = Arc::new(RwLock::new(PerformanceMonitor::new(&config).await?));
 
         Ok(Self {
             config,
@@ -184,7 +174,12 @@ impl TelemetrySystem {
     }
 
     /// Record a custom metric
-    pub async fn record_metric(&self, name: &str, value: f64, labels: Vec<(&str, &str)>) -> Result<()> {
+    pub async fn record_metric(
+        &self,
+        name: &str,
+        value: f64,
+        labels: Vec<(&str, &str)>,
+    ) -> Result<()> {
         let mut metrics_collector = self.metrics_collector.write().await;
         metrics_collector.record_metric(name, value, labels).await
     }
@@ -206,7 +201,7 @@ impl TelemetrySystem {
         if !self.config.dashboard_enabled {
             return None;
         }
-        
+
         let dashboard_manager = self.dashboard_manager.read().await;
         dashboard_manager.get_url()
     }
@@ -217,10 +212,10 @@ impl TelemetrySystem {
 pub trait TelemetryProvider {
     /// Get component-specific metrics
     async fn get_telemetry_metrics(&self) -> Result<serde_json::Value>;
-    
+
     /// Get component health status
     async fn get_health_status(&self) -> Result<bool>;
-    
+
     /// Get component name for labeling
     fn component_name(&self) -> &str;
 }
@@ -231,12 +226,12 @@ static TELEMETRY: tokio::sync::OnceCell<Arc<TelemetrySystem>> = tokio::sync::Onc
 /// Initialize the global telemetry system
 pub async fn init_telemetry(config: TelemetryConfig) -> Result<()> {
     let telemetry = Arc::new(TelemetrySystem::new(config).await?);
-    TELEMETRY.set(telemetry.clone()).map_err(|_| {
-        TelemetryError::InitializationFailed {
+    TELEMETRY
+        .set(telemetry.clone())
+        .map_err(|_| TelemetryError::InitializationFailed {
             reason: "Telemetry system already initialized".to_string(),
-        }
-    })?;
-    
+        })?;
+
     telemetry.start().await?;
     Ok(())
 }
@@ -263,7 +258,7 @@ macro_rules! traced {
             async move $block.instrument(info_span!($operation)).await
         }
     };
-    
+
     ($operation:expr, $($field:tt)*) => {
         {
             use tracing::{info_span, Instrument};
@@ -280,7 +275,7 @@ macro_rules! record_metric {
             let _ = telemetry.record_metric($name, $value, vec![]).await;
         }
     };
-    
+
     ($name:expr, $value:expr, $($label_key:expr => $label_value:expr),*) => {
         if let Some(telemetry) = $crate::telemetry() {
             let labels = vec![$(($label_key, $label_value)),*];
@@ -314,13 +309,13 @@ mod tests {
     async fn test_telemetry_system_lifecycle() {
         let config = TelemetryConfig::default();
         let telemetry = TelemetrySystem::new(config).await.unwrap();
-        
+
         assert!(!telemetry.is_running().await);
-        
+
         let result = telemetry.start().await;
         assert!(result.is_ok());
         assert!(telemetry.is_running().await);
-        
+
         let result = telemetry.stop().await;
         assert!(result.is_ok());
         assert!(!telemetry.is_running().await);

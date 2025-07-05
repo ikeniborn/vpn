@@ -165,7 +165,7 @@ impl PerformanceMonitor {
     /// Get current performance metrics
     pub async fn get_current_metrics(&self) -> Result<PerformanceMetrics> {
         let samples = self.samples.read().await;
-        
+
         if let Some(latest) = samples.back() {
             Ok(latest.metrics.clone())
         } else {
@@ -175,7 +175,10 @@ impl PerformanceMonitor {
     }
 
     /// Get performance trends over time
-    pub async fn get_performance_trends(&self, duration: Duration) -> Result<Vec<PerformanceMetrics>> {
+    pub async fn get_performance_trends(
+        &self,
+        duration: Duration,
+    ) -> Result<Vec<PerformanceMetrics>> {
         let samples = self.samples.read().await;
         let cutoff_time = Instant::now() - duration;
 
@@ -189,28 +192,32 @@ impl PerformanceMonitor {
     }
 
     /// Run a performance benchmark
-    pub async fn run_benchmark(&self, name: &str, benchmark_fn: impl Fn() -> Result<()>) -> Result<BenchmarkResult> {
+    pub async fn run_benchmark(
+        &self,
+        name: &str,
+        benchmark_fn: impl Fn() -> Result<()>,
+    ) -> Result<BenchmarkResult> {
         info!("Running benchmark: {}", name);
-        
+
         let start_time = Instant::now();
         let start_memory = Self::get_memory_usage().await?;
-        
+
         let operations = 1000; // Fixed number of operations for benchmarking
         let mut success_count = 0;
-        
+
         for _ in 0..operations {
             if benchmark_fn().is_ok() {
                 success_count += 1;
             }
         }
-        
+
         let duration = start_time.elapsed();
         let end_memory = Self::get_memory_usage().await?;
         let memory_usage_mb = (end_memory - start_memory) as f64 / 1024.0 / 1024.0;
-        
+
         let ops_per_second = operations as f64 / duration.as_secs_f64();
         let success_rate = success_count as f64 / operations as f64;
-        
+
         // Calculate improvement factor if baseline exists
         let (comparison_baseline, improvement_factor) = {
             let benchmarks = self.benchmarks.read().await;
@@ -221,7 +228,7 @@ impl PerformanceMonitor {
                 (None, None)
             }
         };
-        
+
         let result = BenchmarkResult {
             name: name.to_string(),
             duration,
@@ -231,43 +238,49 @@ impl PerformanceMonitor {
             comparison_baseline,
             improvement_factor,
         };
-        
+
         // Store the benchmark result
         {
             let mut benchmarks = self.benchmarks.write().await;
             benchmarks.insert(name.to_string(), result.clone());
         }
-        
-        info!("Benchmark {} completed: {:.2} ops/sec, {:.2}% success rate", 
-               name, ops_per_second, success_rate * 100.0);
-        
+
+        info!(
+            "Benchmark {} completed: {:.2} ops/sec, {:.2}% success rate",
+            name,
+            ops_per_second,
+            success_rate * 100.0
+        );
+
         Ok(result)
     }
 
     /// Establish baseline performance metrics
     async fn establish_baseline(&self) -> Result<()> {
         info!("Establishing performance baseline");
-        
+
         let baseline = Self::collect_current_metrics().await?;
         *self.baseline_metrics.write().await = Some(baseline);
-        
+
         // Run baseline benchmarks
         self.run_baseline_benchmarks().await?;
-        
+
         Ok(())
     }
 
     /// Run baseline benchmarks
     async fn run_baseline_benchmarks(&self) -> Result<()> {
         // CPU benchmark
-        let cpu_result = self.run_benchmark("cpu_baseline", || {
-            // Simple CPU-intensive operation
-            let mut sum = 0u64;
-            for i in 0..10000 {
-                sum = sum.wrapping_add(i * i);
-            }
-            Ok(())
-        }).await?;
+        let cpu_result = self
+            .run_benchmark("cpu_baseline", || {
+                // Simple CPU-intensive operation
+                let mut sum = 0u64;
+                for i in 0..10000 {
+                    sum = sum.wrapping_add(i * i);
+                }
+                Ok(())
+            })
+            .await?;
 
         // Store as baseline
         {
@@ -276,10 +289,12 @@ impl PerformanceMonitor {
         }
 
         // Memory allocation benchmark
-        let memory_result = self.run_benchmark("memory_baseline", || {
-            let _data: Vec<u8> = vec![0; 1024 * 1024]; // Allocate 1MB
-            Ok(())
-        }).await?;
+        let memory_result = self
+            .run_benchmark("memory_baseline", || {
+                let _data: Vec<u8> = vec![0; 1024 * 1024]; // Allocate 1MB
+                Ok(())
+            })
+            .await?;
 
         {
             let mut benchmarks = self.benchmarks.write().await;
@@ -329,7 +344,7 @@ impl PerformanceMonitor {
 
         // This is a simplified implementation
         // In a real implementation, you would use system APIs to collect actual metrics
-        
+
         let system_performance = SystemPerformance {
             cpu_usage_percent: Self::get_cpu_usage().await?,
             memory_usage_bytes: Self::get_memory_usage().await?,
@@ -407,32 +422,34 @@ impl PerformanceMonitor {
     /// Compare current performance with baseline
     pub async fn compare_with_baseline(&self) -> Result<HashMap<String, f64>> {
         let baseline = self.baseline_metrics.read().await;
-        let baseline_metrics = baseline.as_ref()
-            .ok_or_else(|| TelemetryError::PerformanceError {
-                message: "No baseline metrics available".to_string(),
-            })?;
+        let baseline_metrics =
+            baseline
+                .as_ref()
+                .ok_or_else(|| TelemetryError::PerformanceError {
+                    message: "No baseline metrics available".to_string(),
+                })?;
 
         let current_metrics = self.get_current_metrics().await?;
         let mut comparison = HashMap::new();
 
         // Compare CPU usage
         if baseline_metrics.system_performance.cpu_usage_percent > 0.0 {
-            let cpu_ratio = current_metrics.system_performance.cpu_usage_percent / 
-                          baseline_metrics.system_performance.cpu_usage_percent;
+            let cpu_ratio = current_metrics.system_performance.cpu_usage_percent
+                / baseline_metrics.system_performance.cpu_usage_percent;
             comparison.insert("cpu_usage_ratio".to_string(), cpu_ratio);
         }
 
         // Compare memory usage
         if baseline_metrics.system_performance.memory_usage_bytes > 0 {
-            let memory_ratio = current_metrics.system_performance.memory_usage_bytes as f64 / 
-                             baseline_metrics.system_performance.memory_usage_bytes as f64;
+            let memory_ratio = current_metrics.system_performance.memory_usage_bytes as f64
+                / baseline_metrics.system_performance.memory_usage_bytes as f64;
             comparison.insert("memory_usage_ratio".to_string(), memory_ratio);
         }
 
         // Compare network performance
         if baseline_metrics.network_performance.bytes_received_per_sec > 0 {
-            let network_ratio = current_metrics.network_performance.bytes_received_per_sec as f64 / 
-                              baseline_metrics.network_performance.bytes_received_per_sec as f64;
+            let network_ratio = current_metrics.network_performance.bytes_received_per_sec as f64
+                / baseline_metrics.network_performance.bytes_received_per_sec as f64;
             comparison.insert("network_throughput_ratio".to_string(), network_ratio);
         }
 
@@ -442,18 +459,20 @@ impl PerformanceMonitor {
     /// Get performance summary
     pub async fn get_performance_summary(&self, duration: Duration) -> Result<PerformanceSummary> {
         let trends = self.get_performance_trends(duration).await?;
-        
+
         if trends.is_empty() {
             return Err(TelemetryError::PerformanceError {
                 message: "No performance data available".to_string(),
             });
         }
 
-        let cpu_usage: Vec<f64> = trends.iter()
+        let cpu_usage: Vec<f64> = trends
+            .iter()
             .map(|m| m.system_performance.cpu_usage_percent)
             .collect();
-        
-        let memory_usage: Vec<u64> = trends.iter()
+
+        let memory_usage: Vec<u64> = trends
+            .iter()
             .map(|m| m.system_performance.memory_usage_bytes)
             .collect();
 
@@ -571,11 +590,13 @@ mod tests {
         let config = TelemetryConfig::default();
         let monitor = PerformanceMonitor::new(&config).await.unwrap();
 
-        let result = monitor.run_benchmark("test_benchmark", || {
-            // Simple test operation
-            let _sum: u64 = (0..1000).sum();
-            Ok(())
-        }).await;
+        let result = monitor
+            .run_benchmark("test_benchmark", || {
+                // Simple test operation
+                let _sum: u64 = (0..1000).sum();
+                Ok(())
+            })
+            .await;
 
         assert!(result.is_ok());
         let benchmark = result.unwrap();

@@ -1,5 +1,5 @@
 //! Kubernetes Operator for VPN Management
-//! 
+//!
 //! This crate provides a Kubernetes operator that manages VPN deployments,
 //! including automated provisioning, scaling, and lifecycle management.
 
@@ -86,8 +86,9 @@ impl VpnOperator {
     /// Create a new VPN operator
     pub async fn new(config: OperatorConfig) -> Result<Self> {
         let client = Client::try_default().await?;
-        let controller = Arc::new(VpnOperatorController::new(client.clone(), config.clone()).await?);
-        
+        let controller =
+            Arc::new(VpnOperatorController::new(client.clone(), config.clone()).await?);
+
         Ok(Self {
             client,
             config,
@@ -114,9 +115,13 @@ impl VpnOperator {
 
         // Wait for shutdown
         if let Some(webhook) = webhook_handle {
-            webhook.await.map_err(|e| OperatorError::internal(format!("Webhook task failed: {}", e)))?;
+            webhook
+                .await
+                .map_err(|e| OperatorError::internal(format!("Webhook task failed: {}", e)))?;
         }
-        metrics_handle.await.map_err(|e| OperatorError::internal(format!("Metrics task failed: {}", e)))?;
+        metrics_handle
+            .await
+            .map_err(|e| OperatorError::internal(format!("Metrics task failed: {}", e)))?;
 
         Ok(())
     }

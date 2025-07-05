@@ -1,9 +1,9 @@
 //! Docker Compose file generation
 
 use crate::config::ComposeConfig;
-use crate::error::{ComposeError, Result};
-use crate::template::{TemplateManager, TemplateContext};
 use crate::environment::Environment;
+use crate::error::{ComposeError, Result};
+use crate::template::{TemplateContext, TemplateManager};
 use std::path::PathBuf;
 use tracing::{debug, info};
 
@@ -52,7 +52,10 @@ impl ComposeGenerator {
 
     /// Generate all Docker Compose files
     pub async fn generate_compose_files(&mut self) -> Result<()> {
-        info!("Generating Docker Compose files for environment: {}", self.options.environment);
+        info!(
+            "Generating Docker Compose files for environment: {}",
+            self.options.environment
+        );
 
         // Ensure output directory exists
         tokio::fs::create_dir_all(&self.options.output_dir).await?;
@@ -86,8 +89,11 @@ impl ComposeGenerator {
         let compose_content = self.template_manager.generate_compose_file(context)?;
         let output_path = self.options.output_dir.join("docker-compose.yml");
 
-        tokio::fs::write(&output_path, compose_content).await
-            .map_err(|_e| ComposeError::file_operation_failed("write", output_path.to_string_lossy()))?;
+        tokio::fs::write(&output_path, compose_content)
+            .await
+            .map_err(|_e| {
+                ComposeError::file_operation_failed("write", output_path.to_string_lossy())
+            })?;
 
         info!("Generated docker-compose.yml");
         Ok(())
@@ -95,15 +101,21 @@ impl ComposeGenerator {
 
     /// Generate environment-specific override file
     async fn generate_environment_override(&self, context: &TemplateContext) -> Result<()> {
-        debug!("Generating environment override: {}", self.options.environment);
+        debug!(
+            "Generating environment override: {}",
+            self.options.environment
+        );
 
         if let Some(env_name) = &context.environment {
             if let Ok(override_content) = self.template_manager.render_template(env_name, context) {
                 let filename = format!("docker-compose.{}.yml", env_name);
                 let output_path = self.options.output_dir.join(filename);
 
-                tokio::fs::write(&output_path, override_content).await
-                    .map_err(|_e| ComposeError::file_operation_failed("write", output_path.to_string_lossy()))?;
+                tokio::fs::write(&output_path, override_content)
+                    .await
+                    .map_err(|_e| {
+                        ComposeError::file_operation_failed("write", output_path.to_string_lossy())
+                    })?;
 
                 info!("Generated environment override: {}", env_name);
             }
@@ -120,7 +132,8 @@ impl ComposeGenerator {
         tokio::fs::create_dir_all(&configs_dir).await?;
 
         // Generate configuration files using template manager
-        self.template_manager.generate_config_files(context, &self.options.output_dir)?;
+        self.template_manager
+            .generate_config_files(context, &self.options.output_dir)?;
 
         info!("Generated service configuration files");
         Ok(())
@@ -138,20 +151,41 @@ impl ComposeGenerator {
         env_content.push_str(&format!("DOMAIN_NAME={}\n", context.domain_name));
         env_content.push_str(&format!("VPN_PORT={}\n", context.ports.vpn_port));
         env_content.push_str(&format!("API_PORT={}\n", context.ports.api_port));
-        env_content.push_str(&format!("NGINX_HTTP_PORT={}\n", context.ports.nginx_http_port));
-        env_content.push_str(&format!("NGINX_HTTPS_PORT={}\n", context.ports.nginx_https_port));
-        
+        env_content.push_str(&format!(
+            "NGINX_HTTP_PORT={}\n",
+            context.ports.nginx_http_port
+        ));
+        env_content.push_str(&format!(
+            "NGINX_HTTPS_PORT={}\n",
+            context.ports.nginx_https_port
+        ));
+
         env_content.push_str(&format!("POSTGRES_DB={}\n", context.database.postgres_db));
-        env_content.push_str(&format!("POSTGRES_USER={}\n", context.database.postgres_user));
-        env_content.push_str(&format!("POSTGRES_PASSWORD={}\n", context.database.postgres_password));
-        env_content.push_str(&format!("REDIS_PASSWORD={}\n", context.database.redis_password));
-        
+        env_content.push_str(&format!(
+            "POSTGRES_USER={}\n",
+            context.database.postgres_user
+        ));
+        env_content.push_str(&format!(
+            "POSTGRES_PASSWORD={}\n",
+            context.database.postgres_password
+        ));
+        env_content.push_str(&format!(
+            "REDIS_PASSWORD={}\n",
+            context.database.redis_password
+        ));
+
         env_content.push_str(&format!("JWT_SECRET={}\n", context.security.jwt_secret));
-        
+
         if context.monitoring.enabled {
-            env_content.push_str(&format!("PROMETHEUS_PORT={}\n", context.ports.prometheus_port));
+            env_content.push_str(&format!(
+                "PROMETHEUS_PORT={}\n",
+                context.ports.prometheus_port
+            ));
             env_content.push_str(&format!("GRAFANA_PORT={}\n", context.ports.grafana_port));
-            env_content.push_str(&format!("GRAFANA_PASSWORD={}\n", context.monitoring.grafana_password));
+            env_content.push_str(&format!(
+                "GRAFANA_PASSWORD={}\n",
+                context.monitoring.grafana_password
+            ));
         }
 
         // Add custom environment variables
@@ -160,8 +194,11 @@ impl ComposeGenerator {
         }
 
         let output_path = self.options.output_dir.join(".env");
-        tokio::fs::write(&output_path, env_content).await
-            .map_err(|_e| ComposeError::file_operation_failed("write", output_path.to_string_lossy()))?;
+        tokio::fs::write(&output_path, env_content)
+            .await
+            .map_err(|_e| {
+                ComposeError::file_operation_failed("write", output_path.to_string_lossy())
+            })?;
 
         info!("Generated .env file");
         Ok(())
@@ -174,7 +211,10 @@ impl ComposeGenerator {
         let mut context = TemplateContext {
             project_name: self.config.project_name.clone(),
             environment: Some(self.options.environment.clone()),
-            domain_name: self.config.env_vars.get("DOMAIN_NAME")
+            domain_name: self
+                .config
+                .env_vars
+                .get("DOMAIN_NAME")
                 .cloned()
                 .unwrap_or_else(|| "vpn.localhost".to_string()),
             ..TemplateContext::default()
@@ -253,10 +293,14 @@ impl ComposeGenerator {
         let context = self.create_template_context().await?;
         let template_name = format!("{}-config", service_name);
 
-        self.template_manager.render_template(&template_name, &context)
-            .map_err(|e| ComposeError::generation_failed(
-                format!("Failed to generate config for {}: {}", service_name, e)
-            ))
+        self.template_manager
+            .render_template(&template_name, &context)
+            .map_err(|e| {
+                ComposeError::generation_failed(format!(
+                    "Failed to generate config for {}: {}",
+                    service_name, e
+                ))
+            })
     }
 
     /// Validate generated files
@@ -266,16 +310,18 @@ impl ComposeGenerator {
         let compose_file = self.options.output_dir.join("docker-compose.yml");
         if !compose_file.exists() {
             return Err(ComposeError::validation_failed(
-                "Main docker-compose.yml file not found"
+                "Main docker-compose.yml file not found",
             ));
         }
 
         // Validate YAML syntax
         let content = tokio::fs::read_to_string(&compose_file).await?;
-        serde_yaml::from_str::<serde_yaml::Value>(&content)
-            .map_err(|e| ComposeError::validation_failed(
-                format!("Invalid YAML syntax in docker-compose.yml: {}", e)
-            ))?;
+        serde_yaml::from_str::<serde_yaml::Value>(&content).map_err(|e| {
+            ComposeError::validation_failed(format!(
+                "Invalid YAML syntax in docker-compose.yml: {}",
+                e
+            ))
+        })?;
 
         info!("Docker Compose files validation passed");
         Ok(())
@@ -302,7 +348,9 @@ services:
   test:
     image: nginx
 "#;
-        tokio::fs::write(templates_dir.join("base.yml"), template_content).await.unwrap();
+        tokio::fs::write(templates_dir.join("base.yml"), template_content)
+            .await
+            .unwrap();
 
         let config = ComposeConfig {
             templates_dir,
@@ -329,7 +377,7 @@ services:
     #[tokio::test]
     async fn test_generate_compose_files() {
         let (mut generator, _temp_dir) = create_test_generator().await;
-        
+
         let result = generator.generate_compose_files().await;
         assert!(result.is_ok());
 
@@ -341,7 +389,7 @@ services:
     #[tokio::test]
     async fn test_template_context_creation() {
         let (generator, _temp_dir) = create_test_generator().await;
-        
+
         let result = generator.create_template_context().await;
         assert!(result.is_ok());
 

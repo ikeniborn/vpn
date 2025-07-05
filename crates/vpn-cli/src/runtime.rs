@@ -22,27 +22,47 @@ impl RuntimeManager {
         println!("{}", "=".repeat(50).cyan());
 
         let runtime_config = self.config_manager.get_runtime_config();
-        
+
         // Show current configuration
         println!("\n{}", "Configuration:".bold());
-        println!("  Preferred Runtime: {}", runtime_config.preferred_runtime.yellow());
-        println!("  Auto Detection: {}", format_bool(runtime_config.auto_detect));
-        println!("  Fallback Enabled: {}", format_bool(runtime_config.fallback_enabled));
+        println!(
+            "  Preferred Runtime: {}",
+            runtime_config.preferred_runtime.yellow()
+        );
+        println!(
+            "  Auto Detection: {}",
+            format_bool(runtime_config.auto_detect)
+        );
+        println!(
+            "  Fallback Enabled: {}",
+            format_bool(runtime_config.fallback_enabled)
+        );
 
         // Check runtime availability
         println!("\n{}", "Runtime Availability:".bold());
-        
+
         let docker_available = RuntimeFactory::is_runtime_available(RuntimeType::Docker).await;
-        let containerd_available = RuntimeFactory::is_runtime_available(RuntimeType::Containerd).await;
-        
-        println!("  Docker: {} ({})", 
+        let containerd_available =
+            RuntimeFactory::is_runtime_available(RuntimeType::Containerd).await;
+
+        println!(
+            "  Docker: {} ({})",
             format_bool(runtime_config.docker.enabled),
-            if docker_available { "Available".green() } else { "Not Available".red() }
+            if docker_available {
+                "Available".green()
+            } else {
+                "Not Available".red()
+            }
         );
-        
-        println!("  Containerd: {} ({}) {}", 
+
+        println!(
+            "  Containerd: {} ({}) {}",
             format_bool(runtime_config.containerd.enabled),
-            if containerd_available { "Available".green() } else { "Not Available".red() },
+            if containerd_available {
+                "Available".green()
+            } else {
+                "Not Available".red()
+            },
             "[DEPRECATED]".red().bold()
         );
 
@@ -51,16 +71,29 @@ impl RuntimeManager {
             println!("\n{}", "Docker Configuration:".bold());
             println!("  Socket Path: {}", runtime_config.docker.socket_path);
             println!("  Timeout: {}s", runtime_config.docker.timeout_seconds);
-            println!("  Max Connections: {}", runtime_config.docker.max_connections);
+            println!(
+                "  Max Connections: {}",
+                runtime_config.docker.max_connections
+            );
         }
 
         if runtime_config.containerd.enabled {
-            println!("\n{} {}", "Containerd Configuration:".bold(), "[DEPRECATED]".red().bold());
-            println!("  {} Use Docker Compose orchestration instead", "⚠️ ".yellow());
+            println!(
+                "\n{} {}",
+                "Containerd Configuration:".bold(),
+                "[DEPRECATED]".red().bold()
+            );
+            println!(
+                "  {} Use Docker Compose orchestration instead",
+                "⚠️ ".yellow()
+            );
             println!("  Socket Path: {}", runtime_config.containerd.socket_path);
             println!("  Namespace: {}", runtime_config.containerd.namespace);
             println!("  Timeout: {}s", runtime_config.containerd.timeout_seconds);
-            println!("  Max Connections: {}", runtime_config.containerd.max_connections);
+            println!(
+                "  Max Connections: {}",
+                runtime_config.containerd.max_connections
+            );
             println!("  Snapshotter: {}", runtime_config.containerd.snapshotter);
             println!("  Runtime: {}", runtime_config.containerd.runtime);
         }
@@ -77,14 +110,15 @@ impl RuntimeManager {
         // Check for deprecated containerd usage
         if runtime == "containerd" {
             return Err(CliError::FeatureDeprecated(
-                "Containerd runtime is deprecated. Use Docker Compose orchestration instead.".to_string()
+                "Containerd runtime is deprecated. Use Docker Compose orchestration instead."
+                    .to_string(),
             ));
         }
-        
+
         // Validate runtime choice
         if !["auto", "docker"].contains(&runtime) {
             return Err(CliError::InvalidInput(
-                "Runtime must be 'auto' or 'docker' (containerd deprecated)".to_string()
+                "Runtime must be 'auto' or 'docker' (containerd deprecated)".to_string(),
             ));
         }
 
@@ -94,36 +128,38 @@ impl RuntimeManager {
             let (enabled, available) = match runtime {
                 "docker" => (
                     runtime_config.docker.enabled,
-                    RuntimeFactory::is_runtime_available(RuntimeType::Docker).await
+                    RuntimeFactory::is_runtime_available(RuntimeType::Docker).await,
                 ),
                 "containerd" => (
                     runtime_config.containerd.enabled,
-                    RuntimeFactory::is_runtime_available(RuntimeType::Containerd).await
+                    RuntimeFactory::is_runtime_available(RuntimeType::Containerd).await,
                 ),
                 _ => unreachable!(),
             };
 
             if !enabled {
-                return Err(CliError::ConfigError(
-                    format!("Runtime '{}' is not enabled in configuration", runtime)
-                ));
+                return Err(CliError::ConfigError(format!(
+                    "Runtime '{}' is not enabled in configuration",
+                    runtime
+                )));
             }
 
             if !available {
-                return Err(CliError::RuntimeError(
-                    format!("Runtime '{}' is not available on this system", runtime)
-                ));
+                return Err(CliError::RuntimeError(format!(
+                    "Runtime '{}' is not available on this system",
+                    runtime
+                )));
             }
         }
 
         // Perform the switch
         println!("Switching to runtime: {}", runtime.yellow());
         self.config_manager.set_preferred_runtime(runtime)?;
-        
+
         // Test the new runtime
         println!("Testing new runtime configuration...");
         self.test_connectivity().await?;
-        
+
         println!("{}", "Runtime switched successfully!".green());
         Ok(())
     }
@@ -133,24 +169,28 @@ impl RuntimeManager {
         // Check for deprecated containerd usage
         if runtime == "containerd" {
             return Err(CliError::FeatureDeprecated(
-                "Containerd runtime is deprecated. Use Docker Compose orchestration instead.".to_string()
+                "Containerd runtime is deprecated. Use Docker Compose orchestration instead."
+                    .to_string(),
             ));
         }
-        
+
         if runtime != "docker" {
             return Err(CliError::InvalidInput(
-                "Only 'docker' runtime is supported (containerd deprecated)".to_string()
+                "Only 'docker' runtime is supported (containerd deprecated)".to_string(),
             ));
         }
 
         let action = if enabled { "Enabling" } else { "Disabling" };
         println!("{} runtime: {}", action, runtime.yellow());
-        
+
         self.config_manager.enable_runtime(runtime, enabled)?;
-        
+
         let action_past = if enabled { "enabled" } else { "disabled" };
-        println!("{}", format!("Runtime '{}' {}", runtime, action_past).green());
-        
+        println!(
+            "{}",
+            format!("Runtime '{}' {}", runtime, action_past).green()
+        );
+
         Ok(())
     }
 
@@ -159,20 +199,26 @@ impl RuntimeManager {
         // Check for deprecated containerd usage
         if runtime == "containerd" {
             return Err(CliError::FeatureDeprecated(
-                "Containerd runtime is deprecated. Use Docker Compose orchestration instead.".to_string()
-            ));
-        }
-        
-        if runtime != "docker" {
-            return Err(CliError::InvalidInput(
-                "Only 'docker' runtime is supported (containerd deprecated)".to_string()
+                "Containerd runtime is deprecated. Use Docker Compose orchestration instead."
+                    .to_string(),
             ));
         }
 
-        println!("Updating {} socket path to: {}", runtime.yellow(), socket_path);
-        self.config_manager.update_runtime_socket(runtime, socket_path)?;
+        if runtime != "docker" {
+            return Err(CliError::InvalidInput(
+                "Only 'docker' runtime is supported (containerd deprecated)".to_string(),
+            ));
+        }
+
+        println!(
+            "Updating {} socket path to: {}",
+            runtime.yellow(),
+            socket_path
+        );
+        self.config_manager
+            .update_runtime_socket(runtime, socket_path)?;
         println!("{}", "Socket path updated successfully!".green());
-        
+
         Ok(())
     }
 
@@ -200,8 +246,15 @@ impl RuntimeManager {
         }
 
         if runtime_config.containerd.enabled {
-            println!("  Containerd: {} {}", "Deprecated".yellow(), "[DEPRECATED]".red().bold());
-            println!("    {} Use Docker Compose orchestration instead", "⚠️ ".yellow());
+            println!(
+                "  Containerd: {} {}",
+                "Deprecated".yellow(),
+                "[DEPRECATED]".red().bold()
+            );
+            println!(
+                "    {} Use Docker Compose orchestration instead",
+                "⚠️ ".yellow()
+            );
         }
 
         Ok(())
@@ -217,45 +270,52 @@ impl RuntimeManager {
 
         println!("\n{:<25} {:<10} {:<10}", "Feature", "Docker", "Containerd");
         println!("{}", "-".repeat(45));
-        
-        println!("{:<25} {:<10} {:<10}", 
-            "Native Logging", 
+
+        println!(
+            "{:<25} {:<10} {:<10}",
+            "Native Logging",
             format_bool(docker_caps.native_logging),
             format_bool(containerd_caps.native_logging)
         );
-        
-        println!("{:<25} {:<10} {:<10}", 
-            "Native Statistics", 
+
+        println!(
+            "{:<25} {:<10} {:<10}",
+            "Native Statistics",
             format_bool(docker_caps.native_stats),
             format_bool(containerd_caps.native_stats)
         );
-        
-        println!("{:<25} {:<10} {:<10}", 
-            "Health Checks", 
+
+        println!(
+            "{:<25} {:<10} {:<10}",
+            "Health Checks",
             format_bool(docker_caps.native_health_checks),
             format_bool(containerd_caps.native_health_checks)
         );
-        
-        println!("{:<25} {:<10} {:<10}", 
-            "Volume Management", 
+
+        println!(
+            "{:<25} {:<10} {:<10}",
+            "Volume Management",
             format_bool(docker_caps.native_volumes),
             format_bool(containerd_caps.native_volumes)
         );
-        
-        println!("{:<25} {:<10} {:<10}", 
-            "Event Streaming", 
+
+        println!(
+            "{:<25} {:<10} {:<10}",
+            "Event Streaming",
             format_bool(docker_caps.event_streaming),
             format_bool(containerd_caps.event_streaming)
         );
-        
-        println!("{:<25} {:<10} {:<10}", 
-            "Exec Support", 
+
+        println!(
+            "{:<25} {:<10} {:<10}",
+            "Exec Support",
             format_bool(docker_caps.exec_support),
             format_bool(containerd_caps.exec_support)
         );
-        
-        println!("{:<25} {:<10} {:<10}", 
-            "Network Management", 
+
+        println!(
+            "{:<25} {:<10} {:<10}",
+            "Network Management",
             format_bool(docker_caps.network_management),
             format_bool(containerd_caps.network_management)
         );
@@ -286,7 +346,7 @@ mod tests {
     fn test_runtime_manager_creation() {
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("config.toml");
-        
+
         let manager = RuntimeManager::new(Some(config_path));
         assert!(manager.is_ok());
     }
@@ -296,7 +356,7 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("config.toml");
         let mut manager = RuntimeManager::new(Some(config_path)).unwrap();
-        
+
         let result = manager.switch_runtime("invalid").await;
         assert!(result.is_err());
     }
@@ -306,7 +366,7 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("config.toml");
         let mut manager = RuntimeManager::new(Some(config_path)).unwrap();
-        
+
         let result = manager.enable_runtime("invalid", true);
         assert!(result.is_err());
     }
@@ -316,11 +376,11 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("config.toml");
         let mut manager = RuntimeManager::new(Some(config_path)).unwrap();
-        
+
         // Should be able to disable docker (containerd still enabled)
         let result = manager.enable_runtime("docker", false);
         assert!(result.is_ok());
-        
+
         // Should not be able to disable containerd now (would leave no runtimes)
         let result = manager.enable_runtime("containerd", false);
         assert!(result.is_err());
@@ -331,10 +391,10 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("config.toml");
         let mut manager = RuntimeManager::new(Some(config_path)).unwrap();
-        
+
         let result = manager.update_socket("containerd", "/custom/path.sock");
         assert!(result.is_ok());
-        
+
         let runtime_config = manager.config_manager.get_runtime_config();
         assert_eq!(runtime_config.containerd.socket_path, "/custom/path.sock");
     }

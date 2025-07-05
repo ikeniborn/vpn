@@ -1,7 +1,7 @@
 //! Docker Compose command handlers
 
 use crate::cli::{
-    ComposeCommands, ComposeConfigCommands, EnvironmentCommands, ServiceScale, StatusFormat
+    ComposeCommands, ComposeConfigCommands, EnvironmentCommands, ServiceScale, StatusFormat,
 };
 use anyhow::{Context, Result};
 use colored::Colorize;
@@ -9,7 +9,7 @@ use serde_json::json;
 use std::path::PathBuf;
 use tabled::{Table, Tabled};
 use vpn_compose::{
-    ComposeOrchestrator, ComposeConfig, EnvironmentConfig, ComposeStatus, ComposeServiceStatus
+    ComposeConfig, ComposeOrchestrator, ComposeServiceStatus, ComposeStatus, EnvironmentConfig,
 };
 
 /// Handle Docker Compose commands
@@ -20,36 +20,64 @@ pub async fn handle_compose_command(
     _verbose: bool,
 ) -> Result<()> {
     match command {
-        ComposeCommands::Up { detach, remove_orphans, services } => {
-            handle_compose_up(detach, remove_orphans, services, config_path, install_path).await
-        }
-        ComposeCommands::Down { volumes, remove_orphans, timeout } => {
-            handle_compose_down(volumes, remove_orphans, timeout, config_path, install_path).await
-        }
+        ComposeCommands::Up {
+            detach,
+            remove_orphans,
+            services,
+        } => handle_compose_up(detach, remove_orphans, services, config_path, install_path).await,
+        ComposeCommands::Down {
+            volumes,
+            remove_orphans,
+            timeout,
+        } => handle_compose_down(volumes, remove_orphans, timeout, config_path, install_path).await,
         ComposeCommands::Restart { services, timeout } => {
             handle_compose_restart(services, timeout, config_path, install_path).await
         }
         ComposeCommands::Scale { services } => {
             handle_compose_scale(services, config_path, install_path).await
         }
-        ComposeCommands::Status { running_only, format } => {
-            handle_compose_status(running_only, format, config_path, install_path).await
-        }
-        ComposeCommands::Logs { service, follow, tail, timestamps } => {
+        ComposeCommands::Status {
+            running_only,
+            format,
+        } => handle_compose_status(running_only, format, config_path, install_path).await,
+        ComposeCommands::Logs {
+            service,
+            follow,
+            tail,
+            timestamps,
+        } => {
             handle_compose_logs(service, follow, tail, timestamps, config_path, install_path).await
         }
-        ComposeCommands::Exec { service, command, interactive, tty } => {
-            handle_compose_exec(service, command, interactive, tty, config_path, install_path).await
+        ComposeCommands::Exec {
+            service,
+            command,
+            interactive,
+            tty,
+        } => {
+            handle_compose_exec(
+                service,
+                command,
+                interactive,
+                tty,
+                config_path,
+                install_path,
+            )
+            .await
         }
         ComposeCommands::Pull { services, parallel } => {
             handle_compose_pull(services, parallel, config_path, install_path).await
         }
-        ComposeCommands::Build { services, no_cache, force_rm } => {
-            handle_compose_build(services, no_cache, force_rm, config_path, install_path).await
-        }
-        ComposeCommands::Generate { environment, output, monitoring, dev_tools } => {
-            handle_compose_generate(environment, output, monitoring, dev_tools, config_path).await
-        }
+        ComposeCommands::Build {
+            services,
+            no_cache,
+            force_rm,
+        } => handle_compose_build(services, no_cache, force_rm, config_path, install_path).await,
+        ComposeCommands::Generate {
+            environment,
+            output,
+            monitoring,
+            dev_tools,
+        } => handle_compose_generate(environment, output, monitoring, dev_tools, config_path).await,
         ComposeCommands::Config { command } => {
             handle_compose_config(command, config_path, install_path).await
         }
@@ -78,7 +106,9 @@ async fn handle_compose_up(
     let config = load_compose_config(config_path, install_path).await?;
     let orchestrator = ComposeOrchestrator::new(config).await?;
 
-    orchestrator.deploy().await
+    orchestrator
+        .deploy()
+        .await
         .context("Failed to start VPN services")?;
 
     println!("{}", "✓ VPN services started successfully".green());
@@ -98,7 +128,9 @@ async fn handle_compose_down(
     let config = load_compose_config(config_path, install_path).await?;
     let orchestrator = ComposeOrchestrator::new(config).await?;
 
-    orchestrator.stop().await
+    orchestrator
+        .stop()
+        .await
         .context("Failed to stop VPN services")?;
 
     println!("{}", "✓ VPN services stopped successfully".green());
@@ -123,9 +155,14 @@ async fn handle_compose_restart(
     } else {
         for service in &services {
             println!("{}", format!("Restarting service: {}", service).cyan());
-            orchestrator.restart_service(service).await
+            orchestrator
+                .restart_service(service)
+                .await
                 .context(format!("Failed to restart service: {}", service))?;
-            println!("{}", format!("✓ Service {} restarted successfully", service).green());
+            println!(
+                "{}",
+                format!("✓ Service {} restarted successfully", service).green()
+            );
         }
     }
 
@@ -142,15 +179,30 @@ async fn handle_compose_scale(
     let orchestrator = ComposeOrchestrator::new(config).await?;
 
     for service_scale in services {
-        println!("{}", 
-            format!("Scaling {} to {} replicas...", service_scale.service, service_scale.replicas).cyan()
+        println!(
+            "{}",
+            format!(
+                "Scaling {} to {} replicas...",
+                service_scale.service, service_scale.replicas
+            )
+            .cyan()
         );
-        
-        orchestrator.scale_service(&service_scale.service, service_scale.replicas).await
-            .context(format!("Failed to scale service: {}", service_scale.service))?;
-        
-        println!("{}", 
-            format!("✓ Service {} scaled to {} replicas", service_scale.service, service_scale.replicas).green()
+
+        orchestrator
+            .scale_service(&service_scale.service, service_scale.replicas)
+            .await
+            .context(format!(
+                "Failed to scale service: {}",
+                service_scale.service
+            ))?;
+
+        println!(
+            "{}",
+            format!(
+                "✓ Service {} scaled to {} replicas",
+                service_scale.service, service_scale.replicas
+            )
+            .green()
         );
     }
 
@@ -167,7 +219,9 @@ async fn handle_compose_status(
     let config = load_compose_config(config_path, install_path).await?;
     let orchestrator = ComposeOrchestrator::new(config).await?;
 
-    let status = orchestrator.get_status().await
+    let status = orchestrator
+        .get_status()
+        .await
         .context("Failed to get service status")?;
 
     let mut services = status.services.clone();
@@ -200,13 +254,17 @@ async fn handle_compose_status(
 
 /// Display status in table format
 fn display_status_table(status: &ComposeStatus, services: &[ComposeServiceStatus]) {
-    println!("\n{}", format!("VPN System Status - Project: {}", status.project_name).bold());
-    println!("{}", format!(
-        "Services: {} total, {} running, {} stopped", 
-        status.total_services, 
-        status.running_services, 
-        status.stopped_services
-    ));
+    println!(
+        "\n{}",
+        format!("VPN System Status - Project: {}", status.project_name).bold()
+    );
+    println!(
+        "{}",
+        format!(
+            "Services: {} total, {} running, {} stopped",
+            status.total_services, status.running_services, status.stopped_services
+        )
+    );
 
     if !services.is_empty() {
         #[derive(Tabled)]
@@ -221,20 +279,23 @@ fn display_status_table(status: &ComposeStatus, services: &[ComposeServiceStatus
             ports: String,
         }
 
-        let rows: Vec<ServiceRow> = services.iter().map(|s| {
-            let state_colored = match s.state.as_str() {
-                "running" => s.state.green().to_string(),
-                "exited" => s.state.red().to_string(),
-                _ => s.state.yellow().to_string(),
-            };
+        let rows: Vec<ServiceRow> = services
+            .iter()
+            .map(|s| {
+                let state_colored = match s.state.as_str() {
+                    "running" => s.state.green().to_string(),
+                    "exited" => s.state.red().to_string(),
+                    _ => s.state.yellow().to_string(),
+                };
 
-            ServiceRow {
-                name: s.name.clone(),
-                state: state_colored,
-                health: s.health.clone().unwrap_or_else(|| "-".to_string()),
-                ports: s.ports.join(", "),
-            }
-        }).collect();
+                ServiceRow {
+                    name: s.name.clone(),
+                    state: state_colored,
+                    health: s.health.clone().unwrap_or_else(|| "-".to_string()),
+                    ports: s.ports.join(", "),
+                }
+            })
+            .collect();
 
         let table = Table::new(rows);
         println!("\n{}", table);
@@ -249,20 +310,21 @@ fn display_service_health(service: &ComposeServiceStatus) {
         Some("starting") => "⟳".yellow(),
         _ => "-".white(),
     };
-    
+
     let state_display = match service.state.as_str() {
         "running" => service.state.green(),
         "exited" => service.state.red(),
         _ => service.state.yellow(),
     };
-    
-    println!("{} {} - State: {}, Health: {}", 
+
+    println!(
+        "{} {} - State: {}, Health: {}",
         health_icon,
         service.name.bold(),
         state_display,
         service.health.as_deref().unwrap_or("N/A")
     );
-    
+
     if !service.ports.is_empty() {
         println!("  Ports: {}", service.ports.join(", "));
     }
@@ -280,7 +342,9 @@ async fn handle_compose_logs(
     let config = load_compose_config(config_path, install_path).await?;
     let orchestrator = ComposeOrchestrator::new(config).await?;
 
-    let logs = orchestrator.get_logs(service.as_deref()).await
+    let logs = orchestrator
+        .get_logs(service.as_deref())
+        .await
         .context("Failed to get service logs")?;
 
     println!("{}", logs);
@@ -296,17 +360,22 @@ async fn handle_compose_exec(
     config_path: Option<PathBuf>,
     install_path: PathBuf,
 ) -> Result<()> {
-    println!("{}", format!("Executing command in service: {}", service).cyan());
-    
+    println!(
+        "{}",
+        format!("Executing command in service: {}", service).cyan()
+    );
+
     let config = load_compose_config(config_path, install_path).await?;
     let orchestrator = ComposeOrchestrator::new(config).await?;
-    
+
     // Convert Vec<String> to Vec<&str> for the exec method
     let command_refs: Vec<&str> = command.iter().map(|s| s.as_str()).collect();
-    
-    let output = orchestrator.exec_command(&service, &command_refs).await
+
+    let output = orchestrator
+        .exec_command(&service, &command_refs)
+        .await
         .context(format!("Failed to execute command in service: {}", service))?;
-    
+
     println!("{}", output);
     println!("{}", "✓ Command execution completed".green());
     Ok(())
@@ -320,23 +389,33 @@ async fn handle_compose_pull(
     install_path: PathBuf,
 ) -> Result<()> {
     println!("{}", "Pulling latest images...".cyan());
-    
+
     let config = load_compose_config(config_path, install_path).await?;
     let orchestrator = ComposeOrchestrator::new(config).await?;
-    
+
     if services.is_empty() {
-        orchestrator.pull_images(None).await
+        orchestrator
+            .pull_images(None)
+            .await
             .context("Failed to pull images")?;
         println!("{}", "✓ All images pulled successfully".green());
     } else {
         for service in &services {
-            println!("{}", format!("Pulling image for service: {}", service).cyan());
-            orchestrator.pull_images(Some(service)).await
+            println!(
+                "{}",
+                format!("Pulling image for service: {}", service).cyan()
+            );
+            orchestrator
+                .pull_images(Some(service))
+                .await
                 .context(format!("Failed to pull image for service: {}", service))?;
-            println!("{}", format!("✓ Image for {} pulled successfully", service).green());
+            println!(
+                "{}",
+                format!("✓ Image for {} pulled successfully", service).green()
+            );
         }
     }
-    
+
     Ok(())
 }
 
@@ -349,23 +428,30 @@ async fn handle_compose_build(
     install_path: PathBuf,
 ) -> Result<()> {
     println!("{}", "Building services...".cyan());
-    
+
     let config = load_compose_config(config_path, install_path).await?;
     let orchestrator = ComposeOrchestrator::new(config).await?;
-    
+
     if services.is_empty() {
-        orchestrator.build_services(None).await
+        orchestrator
+            .build_services(None)
+            .await
             .context("Failed to build services")?;
         println!("{}", "✓ All services built successfully".green());
     } else {
         for service in &services {
             println!("{}", format!("Building service: {}", service).cyan());
-            orchestrator.build_services(Some(service)).await
+            orchestrator
+                .build_services(Some(service))
+                .await
                 .context(format!("Failed to build service: {}", service))?;
-            println!("{}", format!("✓ Service {} built successfully", service).green());
+            println!(
+                "{}",
+                format!("✓ Service {} built successfully", service).green()
+            );
         }
     }
-    
+
     Ok(())
 }
 
@@ -377,7 +463,14 @@ async fn handle_compose_generate(
     _dev_tools: bool,
     config_path: Option<PathBuf>,
 ) -> Result<()> {
-    println!("{}", format!("Generating Docker Compose files for {} environment...", environment).cyan());
+    println!(
+        "{}",
+        format!(
+            "Generating Docker Compose files for {} environment...",
+            environment
+        )
+        .cyan()
+    );
 
     let mut config = if let Some(config_path) = config_path {
         ComposeConfig::load_from_file(&config_path).await?
@@ -397,12 +490,17 @@ async fn handle_compose_generate(
     let mut orchestrator = ComposeOrchestrator::new(config).await?;
     orchestrator.initialize().await?;
 
-    println!("{}", format!("✓ Docker Compose files generated in: {}", output.display()).green());
-    println!("{}",
+    println!(
+        "{}",
+        format!("✓ Docker Compose files generated in: {}", output.display()).green()
+    );
+    println!(
+        "{}",
         format!(
             "To start the system: docker-compose -f {}/docker-compose.yml up -d",
             output.display()
-        ).yellow()
+        )
+        .yellow()
     );
 
     Ok(())
@@ -460,14 +558,23 @@ async fn handle_environment_command(
     match command {
         EnvironmentCommands::List => {
             println!("{}", "Available environments:".bold());
-            println!("  {} (optimized for local development)", "development".green());
+            println!(
+                "  {} (optimized for local development)",
+                "development".green()
+            );
             println!("  {} (pre-production testing)", "staging".yellow());
             println!("  {} (production deployment)", "production".red());
         }
         EnvironmentCommands::Switch { environment } => {
-            println!("{}", format!("Switching to {} environment...", environment).cyan());
+            println!(
+                "{}",
+                format!("Switching to {} environment...", environment).cyan()
+            );
             // Implementation would switch the active environment
-            println!("{}", format!("✓ Switched to {} environment", environment).green());
+            println!(
+                "{}",
+                format!("✓ Switched to {} environment", environment).green()
+            );
         }
         EnvironmentCommands::Create { name, from } => {
             println!("{}", format!("Creating new environment: {}", name).cyan());
@@ -501,12 +608,17 @@ async fn handle_compose_health(
     let config = load_compose_config(config_path, install_path).await?;
     let orchestrator = ComposeOrchestrator::new(config).await?;
 
-    let status = orchestrator.get_status().await
+    let status = orchestrator
+        .get_status()
+        .await
         .context("Failed to get service status")?;
 
     if let Some(service_name) = service {
-        println!("{}", format!("Checking health of service: {}", service_name).cyan());
-        
+        println!(
+            "{}",
+            format!("Checking health of service: {}", service_name).cyan()
+        );
+
         if let Some(service_status) = status.services.iter().find(|s| s.name == service_name) {
             display_service_health(&service_status);
         } else {
@@ -516,33 +628,40 @@ async fn handle_compose_health(
     } else {
         println!("{}", "Checking health of all services...".cyan());
         println!();
-        
-        let healthy_count = status.services.iter()
+
+        let healthy_count = status
+            .services
+            .iter()
             .filter(|s| s.state == "running" && s.health.as_deref() == Some("healthy"))
             .count();
-        
-        println!("{}", format!(
-            "Overall Health: {}/{} services healthy", 
-            healthy_count, 
-            status.total_services
-        ).bold());
+
+        println!(
+            "{}",
+            format!(
+                "Overall Health: {}/{} services healthy",
+                healthy_count, status.total_services
+            )
+            .bold()
+        );
         println!();
-        
+
         for service_status in &status.services {
             display_service_health(&service_status);
             println!();
         }
     }
 
-    let all_healthy = status.services.iter()
+    let all_healthy = status
+        .services
+        .iter()
         .all(|s| s.state == "running" && s.health.as_deref() != Some("unhealthy"));
-    
+
     if all_healthy {
         println!("{}", "✓ All services are healthy".green());
     } else {
         println!("{}", "⚠ Some services are unhealthy".yellow());
     }
-    
+
     Ok(())
 }
 
@@ -554,12 +673,15 @@ async fn handle_compose_update(
     install_path: PathBuf,
 ) -> Result<()> {
     println!("{}", "Updating service configurations...".cyan());
-    
+
     let config = load_compose_config(config_path, install_path).await?;
     let mut orchestrator = ComposeOrchestrator::new(config.clone()).await?;
 
     if recreate {
-        println!("{}", "Recreating containers with updated configuration...".yellow());
+        println!(
+            "{}",
+            "Recreating containers with updated configuration...".yellow()
+        );
         orchestrator.update_config(config).await?;
     }
 
@@ -573,7 +695,8 @@ async fn load_compose_config(
     install_path: PathBuf,
 ) -> Result<ComposeConfig> {
     if let Some(path) = config_path {
-        ComposeConfig::load_from_file(&path).await
+        ComposeConfig::load_from_file(&path)
+            .await
             .context("Failed to load compose configuration")
     } else {
         let mut config = ComposeConfig::default();

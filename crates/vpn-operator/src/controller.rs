@@ -1,7 +1,7 @@
 //! Main controller for managing VPN resources
 
 use crate::{
-    crd::{VpnServer, VpnPhase},
+    crd::{VpnPhase, VpnServer},
     error::{OperatorError, Result},
     reconciler::VpnReconciler,
     OperatorConfig,
@@ -14,7 +14,8 @@ use kube::{
         controller::{Action, Controller},
         events::{Recorder, Reporter},
         finalizer::{finalizer, Event as FinalizerEvent},
-    }, ResourceExt,
+    },
+    ResourceExt,
 };
 use std::{sync::Arc, time::Duration};
 
@@ -43,13 +44,17 @@ impl VpnOperatorController {
     /// Create a new controller
     pub async fn new(client: Client, config: OperatorConfig) -> Result<Self> {
         let reconciler = Arc::new(VpnReconciler::new(client.clone(), config.clone()));
-        
+
         // Create event recorder
         let reporter = Reporter {
             controller: "vpn-operator".into(),
             instance: std::env::var("HOSTNAME").ok(),
         };
-        let recorder = Recorder::new(client.clone(), reporter, k8s_openapi::api::core::v1::ObjectReference::default());
+        let recorder = Recorder::new(
+            client.clone(),
+            reporter,
+            k8s_openapi::api::core::v1::ObjectReference::default(),
+        );
 
         Ok(Self {
             client,
@@ -90,11 +95,11 @@ impl VpnOperatorController {
     async fn reconcile(vpn: Arc<VpnServer>, ctx: Arc<Context>) -> Result<Action> {
         let name = vpn.name_any();
         let namespace = vpn.namespace().unwrap_or_default();
-        
+
         tracing::info!("Reconciling VpnServer {}/{}", namespace, name);
 
         let api = Api::<VpnServer>::namespaced(ctx.client.clone(), &namespace);
-        
+
         // Handle finalizer
         let result = finalizer(&api, FINALIZER_NAME, vpn.clone(), |event| async {
             match event {
@@ -105,7 +110,8 @@ impl VpnOperatorController {
                     Self::cleanup_vpn_server(vpn_server, ctx.clone()).await
                 }
             }
-        }).await;
+        })
+        .await;
 
         match result {
             Ok(_) => Ok(Action::requeue(Duration::from_secs(300))), // Requeue after 5 minutes
@@ -120,12 +126,12 @@ impl VpnOperatorController {
     async fn apply_vpn_server(vpn: Arc<VpnServer>, ctx: Arc<Context>) -> Result<Action> {
         let name = vpn.name_any();
         let namespace = vpn.namespace().unwrap_or_default();
-        
+
         tracing::info!("Applying VPN server {}/{}", namespace, name);
 
         // Create reconciler and perform reconciliation
         let reconciler = VpnReconciler::new(ctx.client.clone(), ctx.config.clone());
-        
+
         match reconciler.reconcile(vpn.clone()).await {
             Ok(_) => {
                 // Update status to Running
@@ -136,11 +142,12 @@ impl VpnOperatorController {
                 tracing::error!("Failed to reconcile VPN server: {:?}", e);
                 // Update status to Failed
                 Self::update_status(
-                    vpn.clone(), 
-                    ctx.clone(), 
-                    VpnPhase::Failed, 
-                    Some(format!("Reconciliation failed: {}", e))
-                ).await?;
+                    vpn.clone(),
+                    ctx.clone(),
+                    VpnPhase::Failed,
+                    Some(format!("Reconciliation failed: {}", e)),
+                )
+                .await?;
                 Ok(Action::requeue(Duration::from_secs(60)))
             }
         }
@@ -150,7 +157,7 @@ impl VpnOperatorController {
     async fn cleanup_vpn_server(vpn: Arc<VpnServer>, ctx: Arc<Context>) -> Result<Action> {
         let name = vpn.name_any();
         let namespace = vpn.namespace().unwrap_or_default();
-        
+
         tracing::info!("Cleaning up VPN server {}/{}", namespace, name);
 
         // Update status to Terminating
@@ -158,7 +165,7 @@ impl VpnOperatorController {
 
         // Create reconciler and perform cleanup
         let reconciler = VpnReconciler::new(ctx.client.clone(), ctx.config.clone());
-        
+
         match reconciler.cleanup(vpn.clone()).await {
             Ok(_) => {
                 tracing::info!("Successfully cleaned up VPN server {}/{}", namespace, name);
@@ -180,9 +187,9 @@ impl VpnOperatorController {
     ) -> Result<()> {
         let name = vpn.name_any();
         let namespace = vpn.namespace().unwrap_or_default();
-        
+
         let api = Api::<VpnServer>::namespaced(ctx.client.clone(), &namespace);
-        
+
         let mut status = vpn.status.clone().unwrap_or_default();
         status.phase = phase;
         status.message = message;
@@ -192,11 +199,8 @@ impl VpnOperatorController {
             "status": status
         });
 
-        api.patch_status(
-            &name,
-            &PatchParams::default(),
-            &Patch::Merge(status_patch),
-        ).await?;
+        api.patch_status(&name, &PatchParams::default(), &Patch::Merge(status_patch))
+            .await?;
 
         Ok(())
     }
@@ -217,7 +221,9 @@ mod tests {
         // This test would require a mock Kubernetes client
         // For now, just test that the types compile correctly
         let _ = Context {
-            client: Client::try_default().await.unwrap_or_else(|_| panic!("Test requires kube config")),
+            client: Client::try_default()
+                .await
+                .unwrap_or_else(|_| panic!("Test requires kube config")),
             config: OperatorConfig::default(),
         };
     }

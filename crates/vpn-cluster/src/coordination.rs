@@ -31,7 +31,7 @@ impl ClusterCoordinator {
         consensus: Arc<SimpleConsensus>,
     ) -> Result<Self> {
         let (event_tx, _) = broadcast::channel(1000);
-        
+
         Ok(Self {
             node_id,
             config,
@@ -45,26 +45,29 @@ impl ClusterCoordinator {
     /// Start the coordinator
     pub async fn start(&mut self) -> Result<()> {
         tracing::info!("Starting cluster coordinator for node {}", self.node_id);
-        
+
         // Start background tasks
         self.start_heartbeat_task().await?;
         self.start_failure_detection_task().await?;
         self.start_maintenance_task().await?;
-        
+
         // Broadcast startup event
         let event = CoordinationEvent::NodeStarted {
             node_id: self.node_id.clone(),
             timestamp: current_timestamp(),
         };
         let _ = self.event_tx.send(event);
-        
+
         Ok(())
     }
 
     /// Join an existing cluster
     pub async fn join_cluster(&mut self, bootstrap_nodes: &[SocketAddr]) -> Result<()> {
-        tracing::info!("Attempting to join cluster via bootstrap nodes: {:?}", bootstrap_nodes);
-        
+        tracing::info!(
+            "Attempting to join cluster via bootstrap nodes: {:?}",
+            bootstrap_nodes
+        );
+
         if bootstrap_nodes.is_empty() {
             return Err(ClusterError::configuration("No bootstrap nodes provided"));
         }
@@ -73,7 +76,10 @@ impl ClusterCoordinator {
         for &bootstrap_addr in bootstrap_nodes {
             match self.contact_bootstrap_node(bootstrap_addr).await {
                 Ok(cluster_info) => {
-                    tracing::info!("Successfully contacted bootstrap node at {}", bootstrap_addr);
+                    tracing::info!(
+                        "Successfully contacted bootstrap node at {}",
+                        bootstrap_addr
+                    );
                     return self.integrate_with_cluster(cluster_info).await;
                 }
                 Err(e) => {
@@ -83,7 +89,9 @@ impl ClusterCoordinator {
             }
         }
 
-        Err(ClusterError::membership("Failed to contact any bootstrap nodes"))
+        Err(ClusterError::membership(
+            "Failed to contact any bootstrap nodes",
+        ))
     }
 
     /// Leave the cluster gracefully
@@ -193,7 +201,7 @@ impl ClusterCoordinator {
     /// Shutdown the coordinator
     pub async fn shutdown(&mut self) -> Result<()> {
         tracing::info!("Shutting down cluster coordinator");
-        
+
         // Cancel all active operations
         {
             let mut operations = self.active_operations.write().await;
@@ -221,24 +229,24 @@ impl ClusterCoordinator {
         let node_id = self.node_id.clone();
         let state = self.state.clone();
         let interval = self.config.heartbeat_interval;
-        
+
         tokio::spawn(async move {
             let mut interval_timer = tokio::time::interval(interval);
-            
+
             loop {
                 interval_timer.tick().await;
-                
+
                 // Update our last seen timestamp
                 {
                     let mut cluster_state = state.write().await;
                     cluster_state.update_node_last_seen(&node_id);
                 }
-                
+
                 // In a real implementation, this would send heartbeats to other nodes
                 tracing::trace!("Heartbeat sent from node {}", node_id);
             }
         });
-        
+
         Ok(())
     }
 
@@ -246,35 +254,35 @@ impl ClusterCoordinator {
         let state = self.state.clone();
         let interval = self.config.heartbeat_interval * 3; // Check every 3 heartbeat intervals
         let timeout = self.config.heartbeat_interval * 5; // Consider failed after 5 intervals
-        
+
         tokio::spawn(async move {
             let mut interval_timer = tokio::time::interval(interval);
-            
+
             loop {
                 interval_timer.tick().await;
-                
+
                 {
                     let mut cluster_state = state.write().await;
                     cluster_state.detect_failed_nodes(timeout);
                 }
             }
         });
-        
+
         Ok(())
     }
 
     async fn start_maintenance_task(&self) -> Result<()> {
         let operations = self.active_operations.clone();
-        
+
         tokio::spawn(async move {
             let mut interval_timer = tokio::time::interval(Duration::from_secs(60)); // Run every minute
-            
+
             loop {
                 interval_timer.tick().await;
-                
+
                 // Clean up completed operations older than 1 hour
                 let cutoff_time = current_timestamp().saturating_sub(3600);
-                
+
                 {
                     let mut ops = operations.write().await;
                     ops.retain(|_, status| {
@@ -287,7 +295,7 @@ impl ClusterCoordinator {
                 }
             }
         });
-        
+
         Ok(())
     }
 
@@ -295,7 +303,7 @@ impl ClusterCoordinator {
         // In a real implementation, this would make HTTP/gRPC calls to the bootstrap node
         // For now, simulate the response
         tokio::time::sleep(Duration::from_millis(100)).await;
-        
+
         Ok(ClusterInfo {
             cluster_name: self.config.cluster_name.clone(),
             leader_id: None,
@@ -309,18 +317,17 @@ impl ClusterCoordinator {
         // 1. Sync cluster state from existing nodes
         // 2. Add ourselves to the cluster
         // 3. Start participating in consensus
-        
-        let our_node = Node::new(
-            self.config.node_name.clone(),
-            self.config.bind_address,
-        );
-        
+
+        let our_node = Node::new(self.config.node_name.clone(), self.config.bind_address);
+
         {
             let mut state = self.state.write().await;
             state.add_node(our_node)?;
         }
 
-        self.consensus.add_node(self.node_id.clone(), self.config.bind_address.to_string()).await?;
+        self.consensus
+            .add_node(self.node_id.clone(), self.config.bind_address.to_string())
+            .await?;
 
         tracing::info!("Successfully integrated with cluster");
         Ok(())
@@ -329,7 +336,8 @@ impl ClusterCoordinator {
     async fn transfer_leadership_before_leaving(&self) -> Result<()> {
         let potential_leaders = {
             let state = self.state.read().await;
-            state.get_voting_nodes()
+            state
+                .get_voting_nodes()
                 .into_iter()
                 .filter(|node| node.id != self.node_id && node.is_healthy())
                 .map(|node| node.id.clone())
@@ -339,7 +347,7 @@ impl ClusterCoordinator {
         if let Some(target) = potential_leaders.first() {
             tracing::info!("Transferring leadership to {} before leaving", target);
             self.consensus.transfer_leadership(target.clone()).await?;
-            
+
             // Wait a bit for the transfer to complete
             tokio::time::sleep(Duration::from_secs(2)).await;
         }
@@ -349,14 +357,15 @@ impl ClusterCoordinator {
 
     async fn trigger_leader_election(&self) -> Result<()> {
         tracing::info!("Triggering leader election");
-        
+
         let operation_id = format!("election_{}", uuid::Uuid::new_v4());
-        self.start_operation(operation_id.clone(), "leader_election".to_string()).await?;
-        
+        self.start_operation(operation_id.clone(), "leader_election".to_string())
+            .await?;
+
         match self.consensus.elect_leader().await {
             Ok(new_leader) => {
                 tracing::info!("New leader elected: {}", new_leader);
-                
+
                 {
                     let mut state = self.state.write().await;
                     state.set_leader(Some(new_leader.clone()))?;
@@ -368,12 +377,14 @@ impl ClusterCoordinator {
                     timestamp: current_timestamp(),
                 };
                 let _ = self.event_tx.send(event);
-                
-                self.complete_operation(operation_id, OperationState::Completed).await?;
+
+                self.complete_operation(operation_id, OperationState::Completed)
+                    .await?;
             }
             Err(e) => {
                 tracing::error!("Leader election failed: {}", e);
-                self.complete_operation(operation_id, OperationState::Failed).await?;
+                self.complete_operation(operation_id, OperationState::Failed)
+                    .await?;
                 return Err(e);
             }
         }
@@ -383,31 +394,38 @@ impl ClusterCoordinator {
 
     async fn scale_up(&mut self, count: usize) -> Result<()> {
         let operation_id = format!("scale_up_{}", uuid::Uuid::new_v4());
-        self.start_operation(operation_id.clone(), format!("scale_up_{}", count)).await?;
-        
+        self.start_operation(operation_id.clone(), format!("scale_up_{}", count))
+            .await?;
+
         // In a real implementation, this would:
         // 1. Request new nodes from orchestrator (Kubernetes, Docker Swarm, etc.)
         // 2. Wait for nodes to come online
         // 3. Add them to the cluster
-        
+
         tracing::info!("Scale up operation {} not fully implemented", operation_id);
-        self.complete_operation(operation_id, OperationState::Completed).await?;
-        
+        self.complete_operation(operation_id, OperationState::Completed)
+            .await?;
+
         Ok(())
     }
 
     async fn scale_down(&mut self, count: usize) -> Result<()> {
         let operation_id = format!("scale_down_{}", uuid::Uuid::new_v4());
-        self.start_operation(operation_id.clone(), format!("scale_down_{}", count)).await?;
-        
+        self.start_operation(operation_id.clone(), format!("scale_down_{}", count))
+            .await?;
+
         // In a real implementation, this would:
         // 1. Select nodes to remove (prefer non-voting or unhealthy nodes)
         // 2. Gracefully remove them from consensus
         // 3. Signal orchestrator to terminate the nodes
-        
-        tracing::info!("Scale down operation {} not fully implemented", operation_id);
-        self.complete_operation(operation_id, OperationState::Completed).await?;
-        
+
+        tracing::info!(
+            "Scale down operation {} not fully implemented",
+            operation_id
+        );
+        self.complete_operation(operation_id, OperationState::Completed)
+            .await?;
+
         Ok(())
     }
 
@@ -535,7 +553,7 @@ mod tests {
         let config = ClusterConfig::default();
         let state = Arc::new(RwLock::new(ClusterState::new(node_id.clone())));
         let consensus = Arc::new(SimpleConsensus::new(node_id.clone()));
-        
+
         ClusterCoordinator::new(node_id, config, state, consensus)
             .await
             .unwrap()
@@ -550,10 +568,10 @@ mod tests {
     #[tokio::test]
     async fn test_coordinator_start_shutdown() {
         let mut coordinator = create_test_coordinator().await;
-        
+
         // Start coordinator
         assert!(coordinator.start().await.is_ok());
-        
+
         // Shutdown coordinator
         assert!(coordinator.shutdown().await.is_ok());
     }
@@ -562,15 +580,15 @@ mod tests {
     async fn test_event_subscription() {
         let coordinator = create_test_coordinator().await;
         let mut event_rx = coordinator.subscribe_to_events();
-        
+
         // Send an event
         let test_event = CoordinationEvent::NodeStarted {
             node_id: coordinator.node_id.clone(),
             timestamp: current_timestamp(),
         };
-        
+
         coordinator.event_tx.send(test_event.clone()).unwrap();
-        
+
         // Receive the event
         let received_event = event_rx.recv().await.unwrap();
         match (&test_event, &received_event) {
@@ -587,19 +605,25 @@ mod tests {
     #[tokio::test]
     async fn test_operation_tracking() {
         let coordinator = create_test_coordinator().await;
-        
+
         // Start an operation
         let op_id = "test_operation".to_string();
-        coordinator.start_operation(op_id.clone(), "Test operation".to_string()).await.unwrap();
-        
+        coordinator
+            .start_operation(op_id.clone(), "Test operation".to_string())
+            .await
+            .unwrap();
+
         // Check operation status
         let status = coordinator.get_operation_status(&op_id).await.unwrap();
         assert_eq!(status.state, OperationState::Running);
         assert_eq!(status.description, "Test operation");
-        
+
         // Complete the operation
-        coordinator.complete_operation(op_id.clone(), OperationState::Completed).await.unwrap();
-        
+        coordinator
+            .complete_operation(op_id.clone(), OperationState::Completed)
+            .await
+            .unwrap();
+
         // Check updated status
         let status = coordinator.get_operation_status(&op_id).await.unwrap();
         assert_eq!(status.state, OperationState::Completed);
@@ -609,13 +633,13 @@ mod tests {
     #[tokio::test]
     async fn test_cluster_scaling() {
         let mut coordinator = create_test_coordinator().await;
-        
+
         // Test scale up
         assert!(coordinator.scale_cluster(5).await.is_ok());
-        
+
         // Test scale down
         assert!(coordinator.scale_cluster(2).await.is_ok());
-        
+
         // Test no scaling needed
         assert!(coordinator.scale_cluster(2).await.is_ok());
     }

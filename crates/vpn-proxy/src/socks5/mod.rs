@@ -5,7 +5,6 @@ mod protocol;
 
 pub use handler::Socks5Server;
 
-
 /// SOCKS5 authentication methods
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]

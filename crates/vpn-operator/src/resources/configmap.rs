@@ -1,15 +1,12 @@
 //! ConfigMap resource generation
 
 use crate::{
-    crd::{VpnServer, VpnProtocol},
+    crd::{VpnProtocol, VpnServer},
     error::Result,
-    resources::{common_labels, common_annotations, owner_reference},
+    resources::{common_annotations, common_labels, owner_reference},
     OperatorConfig,
 };
-use k8s_openapi::{
-    api::core::v1::ConfigMap,
-    apimachinery::pkg::apis::meta::v1::ObjectMeta,
-};
+use k8s_openapi::{api::core::v1::ConfigMap, apimachinery::pkg::apis::meta::v1::ObjectMeta};
 use kube::ResourceExt;
 use std::collections::BTreeMap;
 
@@ -17,9 +14,9 @@ use std::collections::BTreeMap;
 pub fn create_vpn_configmap(vpn: &VpnServer, config: &OperatorConfig) -> Result<ConfigMap> {
     let name = format!("{}-config", vpn.name_any());
     let namespace = vpn.namespace().unwrap_or_default();
-    
+
     let mut data = BTreeMap::new();
-    
+
     // Generate VPN configuration based on protocol
     match &vpn.spec.protocol {
         VpnProtocol::Vless => {
@@ -35,10 +32,10 @@ pub fn create_vpn_configmap(vpn: &VpnServer, config: &OperatorConfig) -> Result<
             data.insert("server.conf".to_string(), generate_openvpn_config(vpn)?);
         }
     }
-    
+
     // Add common configuration
     data.insert("server.env".to_string(), generate_env_config(vpn, config)?);
-    
+
     Ok(ConfigMap {
         metadata: ObjectMeta {
             name: Some(name),
@@ -96,7 +93,7 @@ fn generate_vless_config(vpn: &VpnServer) -> Result<String> {
             }
         }
     });
-    
+
     Ok(serde_json::to_string_pretty(&config)?)
 }
 
@@ -112,7 +109,7 @@ fn generate_outline_config(vpn: &VpnServer) -> Result<String> {
             "port": vpn.spec.monitoring.metrics_port
         }
     });
-    
+
     serde_yaml::to_string(&config).map_err(|e| e.into())
 }
 
@@ -167,14 +164,14 @@ fn generate_env_config(vpn: &VpnServer, config: &OperatorConfig) -> Result<Strin
         format!("ENABLE_METRICS={}", vpn.spec.monitoring.enable_metrics),
         format!("METRICS_PORT={}", vpn.spec.monitoring.metrics_port),
     ];
-    
+
     if vpn.spec.users.quota_gb > 0 {
         env.push(format!("USER_QUOTA_GB={}", vpn.spec.users.quota_gb));
     }
-    
+
     if vpn.spec.network.enable_ipv6 {
         env.push("ENABLE_IPV6=true".to_string());
     }
-    
+
     Ok(env.join("\n"))
 }

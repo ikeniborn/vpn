@@ -41,25 +41,25 @@ pub fn section(title: &str) {
 pub fn format_bytes(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
     const THRESHOLD: f64 = 1024.0;
-    
+
     if bytes == 0 {
         return "0 B".to_string();
     }
-    
+
     let mut size = bytes as f64;
     let mut unit_index = 0;
-    
+
     while size >= THRESHOLD && unit_index < UNITS.len() - 1 {
         size /= THRESHOLD;
         unit_index += 1;
     }
-    
+
     format!("{:.1} {}", size, UNITS[unit_index])
 }
 
 pub fn format_duration(duration: Duration) -> String {
     let total_seconds = duration.as_secs();
-    
+
     if total_seconds < 60 {
         format!("{}s", total_seconds)
     } else if total_seconds < 3600 {
@@ -93,12 +93,13 @@ pub fn progress_bar(current: u64, total: u64, width: usize) -> String {
     if total == 0 {
         return "█".repeat(width);
     }
-    
+
     let progress = (current as f64 / total as f64).min(1.0);
     let filled = (progress * width as f64) as usize;
     let empty = width - filled;
-    
-    format!("{}{}",
+
+    format!(
+        "{}{}",
         "█".repeat(filled).green(),
         "░".repeat(empty).dimmed()
     )
@@ -106,19 +107,11 @@ pub fn progress_bar(current: u64, total: u64, width: usize) -> String {
 
 pub fn status_indicator(status: &str) -> ColoredString {
     match status.to_lowercase().as_str() {
-        "running" | "active" | "healthy" | "online" | "enabled" => {
-            "●".green()
-        }
-        "stopped" | "inactive" | "offline" | "disabled" => {
-            "●".red()
-        }
-        "warning" | "degraded" | "partial" => {
-            "●".yellow()
-        }
-        "unknown" | "pending" => {
-            "●".blue()
-        }
-        _ => "●".white()
+        "running" | "active" | "healthy" | "online" | "enabled" => "●".green(),
+        "stopped" | "inactive" | "offline" | "disabled" => "●".red(),
+        "warning" | "degraded" | "partial" => "●".yellow(),
+        "unknown" | "pending" => "●".blue(),
+        _ => "●".white(),
     }
 }
 
@@ -134,11 +127,7 @@ pub fn aligned_text(text: &str, width: usize, align: TextAlign) -> String {
             let padding = width.saturating_sub(text.len());
             let left_pad = padding / 2;
             let right_pad = padding - left_pad;
-            format!("{}{}{}", 
-                " ".repeat(left_pad), 
-                text, 
-                " ".repeat(right_pad)
-            )
+            format!("{}{}{}", " ".repeat(left_pad), text, " ".repeat(right_pad))
         }
     }
 }
@@ -225,10 +214,10 @@ mod tests {
     fn test_progress_bar() {
         let bar = progress_bar(50, 100, 10);
         assert_eq!(bar.len(), 10); // Should always be the specified width
-        
+
         let empty_bar = progress_bar(0, 100, 10);
         assert_eq!(empty_bar.len(), 10);
-        
+
         let full_bar = progress_bar(100, 100, 10);
         assert_eq!(full_bar.len(), 10);
     }

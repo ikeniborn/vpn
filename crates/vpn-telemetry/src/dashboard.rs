@@ -3,9 +3,9 @@
 use crate::{config::TelemetryConfig, error::Result, TelemetryError};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tracing::{info, warn};
 
 /// Dashboard configuration
@@ -178,7 +178,7 @@ impl DashboardManager {
     /// Create a new dashboard manager
     pub async fn new(config: &TelemetryConfig) -> Result<Self> {
         let dashboard_data = Arc::new(RwLock::new(DashboardData::default()));
-        
+
         Ok(Self {
             config: config.clone(),
             dashboard_data,
@@ -186,90 +186,92 @@ impl DashboardManager {
             server_handle: Arc::new(RwLock::new(None)),
         })
     }
-    
+
     /// Start the dashboard server
     pub async fn start(&mut self) -> Result<()> {
         let mut running = self.running.write().await;
         if *running {
             return Ok(());
         }
-        
+
         if !self.config.dashboard_enabled {
             info!("Dashboard is disabled");
             return Ok(());
         }
-        
-        let bind_addr = format!("{}:{}", 
-            self.config.dashboard.bind_address, 
-            self.config.dashboard.port
+
+        let bind_addr = format!(
+            "{}:{}",
+            self.config.dashboard.bind_address, self.config.dashboard.port
         );
-        
+
         info!("Starting dashboard server on {}", bind_addr);
-        
-        let listener = TcpListener::bind(&bind_addr).await
-            .map_err(|e| TelemetryError::DashboardError {
-                message: format!("Failed to bind to {}: {}", bind_addr, e),
-            })?;
-        
+
+        let listener =
+            TcpListener::bind(&bind_addr)
+                .await
+                .map_err(|e| TelemetryError::DashboardError {
+                    message: format!("Failed to bind to {}: {}", bind_addr, e),
+                })?;
+
         let dashboard_data = self.dashboard_data.clone();
         let config = self.config.clone();
         let running_flag = self.running.clone();
-        
+
         let server_task = tokio::spawn(async move {
             if let Err(e) = Self::run_server(listener, dashboard_data, config, running_flag).await {
                 warn!("Dashboard server error: {}", e);
             }
         });
-        
+
         *self.server_handle.write().await = Some(server_task);
         *running = true;
-        
+
         info!("Dashboard server started successfully");
         Ok(())
     }
-    
+
     /// Stop the dashboard server
     pub async fn stop(&mut self) -> Result<()> {
         let mut running = self.running.write().await;
         if !*running {
             return Ok(());
         }
-        
+
         *running = false;
-        
+
         // Cancel the server task
         if let Some(handle) = self.server_handle.write().await.take() {
             handle.abort();
         }
-        
+
         info!("Dashboard server stopped");
         Ok(())
     }
-    
+
     /// Get the dashboard URL
     pub fn get_url(&self) -> Option<String> {
         if !self.config.dashboard_enabled {
             return None;
         }
-        
-        Some(format!("http://{}:{}", 
-            self.config.dashboard.bind_address, 
-            self.config.dashboard.port
+
+        Some(format!(
+            "http://{}:{}",
+            self.config.dashboard.bind_address, self.config.dashboard.port
         ))
     }
-    
+
     /// Update dashboard data
     pub async fn update_data(&self, data: DashboardData) -> Result<()> {
         let mut dashboard_data = self.dashboard_data.write().await;
         *dashboard_data = data;
         Ok(())
     }
-    
+
     /// Get current dashboard data
     pub async fn get_data(&self) -> DashboardData {
         self.dashboard_data.read().await.clone()
     }
-    
+
     /// Run the HTTP server
     async fn run_server(
         listener: TcpListener,
@@ -278,20 +280,21 @@ impl DashboardManager {
         running: Arc<RwLock<bool>>,
     ) -> Result<()> {
         // use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-        
+
         while *running.read().await {
-            match tokio::time::timeout(
-                std::time::Duration::from_millis(100),
-                listener.accept()
-            ).await {
+            match tokio::time::timeout(std::time::Duration::from_millis(100), listener.accept())
+                .await
+            {
                 Ok(Ok((mut stream, addr))) => {
                     info!("Dashboard connection from {}", addr);
-                    
+
                     let dashboard_data = dashboard_data.clone();
                     let config = config.clone();
-                    
+
                     tokio::spawn(async move {
-                        if let Err(e) = Self::handle_connection(&mut stream, dashboard_data, config).await {
+                        if let Err(e) =
+                            Self::handle_connection(&mut stream, dashboard_data, config).await
+                        {
                             warn!("Error handling dashboard connection: {}", e);
                         }
                     });
@@ -305,10 +308,10 @@ impl DashboardManager {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Handle a single HTTP connection
     async fn handle_connection(
         stream: &mut tokio::net::TcpStream,
@@ -318,12 +321,9 @@ impl DashboardManager {
         let mut reader = BufReader::new(&mut *stream);
         let mut request_line = String::new();
         reader.read_line(&mut request_line).await?;
-        
-        let path = request_line
-            .split_whitespace()
-            .nth(1)
-            .unwrap_or("/");
-        
+
+        let path = request_line.split_whitespace().nth(1).unwrap_or("/");
+
         // Read and discard the rest of the HTTP headers
         let mut line = String::new();
         while reader.read_line(&mut line).await? > 0 {
@@ -332,23 +332,24 @@ impl DashboardManager {
             }
             line.clear();
         }
-        
+
         let response = match path {
             "/" => Self::serve_dashboard_html(&config).await?,
             "/api/data" => Self::serve_dashboard_data(dashboard_data).await?,
             "/api/health" => Self::serve_health_check().await?,
             _ => Self::serve_404().await?,
         };
-        
+
         stream.write_all(response.as_bytes()).await?;
         stream.flush().await?;
-        
+
         Ok(())
     }
-    
+
     /// Serve the main dashboard HTML page
     async fn serve_dashboard_html(config: &TelemetryConfig) -> Result<String> {
-        let html = format!(r#"<!DOCTYPE html>
+        let html = format!(
+            r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -592,53 +593,53 @@ impl DashboardManager {
         setInterval(updateDashboard, {} * 1000);
     </script>
 </body>
-</html>"#, 
+</html>"#,
             config.dashboard.title,
             config.dashboard.title,
             config.dashboard.refresh_interval.as_secs(),
             config.dashboard.refresh_interval.as_secs()
         );
-        
+
         let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
             html.len(),
             html
         );
-        
+
         Ok(response)
     }
-    
+
     /// Serve dashboard data as JSON
     async fn serve_dashboard_data(dashboard_data: Arc<RwLock<DashboardData>>) -> Result<String> {
         let data = dashboard_data.read().await;
         let json = serde_json::to_string(&*data)?;
-        
+
         let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
             json.len(),
             json
         );
-        
+
         Ok(response)
     }
-    
+
     /// Serve health check endpoint
     async fn serve_health_check() -> Result<String> {
         let health = serde_json::json!({
             "status": "healthy",
             "timestamp": chrono::Utc::now()
         });
-        
+
         let json = health.to_string();
         let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
             json.len(),
             json
         );
-        
+
         Ok(response)
     }
-    
+
     /// Serve 404 response
     async fn serve_404() -> Result<String> {
         let response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
@@ -716,13 +717,13 @@ mod tests {
     async fn test_dashboard_data_update() {
         let config = TelemetryConfig::default();
         let manager = DashboardManager::new(&config).await.unwrap();
-        
+
         let mut data = DashboardData::default();
         data.system_health.cpu_usage = 50.0;
-        
+
         let result = manager.update_data(data.clone()).await;
         assert!(result.is_ok());
-        
+
         let retrieved_data = manager.get_data().await;
         assert_eq!(retrieved_data.system_health.cpu_usage, 50.0);
     }

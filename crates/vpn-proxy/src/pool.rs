@@ -31,23 +31,23 @@ impl PooledConnection {
             uses: 0,
         }
     }
-    
+
     fn is_expired(&self, config: &PoolConfig) -> bool {
         let now = Instant::now();
-        
+
         // Check lifetime
         if now.duration_since(self.created_at) > config.max_lifetime {
             return true;
         }
-        
+
         // Check idle time
         if now.duration_since(self.last_used) > config.idle_timeout {
             return true;
         }
-        
+
         false
     }
-    
+
     fn use_connection(&mut self) -> &mut TcpStream {
         self.last_used = Instant::now();
         self.uses += 1;
@@ -75,7 +75,7 @@ impl ConnectionPool {
             metrics,
         }
     }
-    
+
     /// Get or create a connection to the specified address
     pub async fn get_or_create(&self, addr: SocketAddr) -> Result<TcpStream> {
         // Try to get an existing connection first
@@ -83,12 +83,12 @@ impl ConnectionPool {
             debug!("Reusing pooled connection to {}", addr);
             return Ok(stream);
         }
-        
+
         // Create a new connection
         debug!("Creating new connection to {}", addr);
         self.create_connection(addr).await
     }
-    
+
     /// Get a pooled connection if available
     async fn get_pooled_connection(&self, _addr: &SocketAddr) -> Result<Option<TcpStream>> {
         // TODO: Connection pooling is disabled for now due to TcpStream ownership issues
@@ -96,41 +96,44 @@ impl ConnectionPool {
         self.metrics.record_pool_miss();
         Ok(None)
     }
-    
+
     /// Create a new connection
     async fn create_connection(&self, addr: SocketAddr) -> Result<TcpStream> {
         // Get or create host semaphore
-        let host_semaphore = self.host_semaphores
+        let host_semaphore = self
+            .host_semaphores
             .entry(addr)
             .or_insert_with(|| {
-                Arc::new(Semaphore::new(self.config.max_connections_per_host as usize))
+                Arc::new(Semaphore::new(
+                    self.config.max_connections_per_host as usize,
+                ))
             })
             .clone();
-        
+
         // Acquire permits
-        let _total_permit = self.total_connections.acquire().await
+        let _total_permit = self
+            .total_connections
+            .acquire()
+            .await
             .map_err(|_| ProxyError::ConnectionPoolExhausted)?;
-        
-        let _host_permit = host_semaphore.acquire().await
+
+        let _host_permit = host_semaphore
+            .acquire()
+            .await
             .map_err(|_| ProxyError::ConnectionPoolExhausted)?;
-        
+
         // Create connection with timeout
-        let stream = tokio::time::timeout(
-            self.config.idle_timeout,
-            TcpStream::connect(addr)
-        )
-        .await
-        .map_err(|_| ProxyError::Timeout)?
-        .map_err(|e| ProxyError::upstream(
-            format!("Failed to connect to {}: {}", addr, e)
-        ))?;
-        
+        let stream = tokio::time::timeout(self.config.idle_timeout, TcpStream::connect(addr))
+            .await
+            .map_err(|_| ProxyError::Timeout)?
+            .map_err(|e| ProxyError::upstream(format!("Failed to connect to {}: {}", addr, e)))?;
+
         // Configure socket options
         stream.set_nodelay(true)?;
-        
+
         Ok(stream)
     }
-    
+
     /// Return a connection to the pool
     pub async fn return_connection(&self, addr: SocketAddr, stream: TcpStream) {
         // Check if connection is still valid
@@ -138,37 +141,34 @@ impl ConnectionPool {
             debug!("Not returning dead connection to pool");
             return;
         }
-        
+
         let pooled = Arc::new(Mutex::new(PooledConnection::new(stream)));
-        
-        self.pools
-            .entry(addr)
-            .or_insert_with(Vec::new)
-            .push(pooled);
-        
+
+        self.pools.entry(addr).or_insert_with(Vec::new).push(pooled);
+
         debug!("Returned connection to pool for {}", addr);
     }
-    
+
     /// Close all connections in the pool
     pub async fn close_all(&self) {
         info!("Closing all pooled connections");
-        
+
         for mut pool in self.pools.iter_mut() {
             pool.clear();
         }
-        
+
         self.pools.clear();
     }
-    
+
     /// Get pool statistics
     pub async fn stats(&self) -> PoolStats {
         let mut total_connections = 0;
         let mut active_connections = 0;
-        
+
         for pool in self.pools.iter() {
             let pool_size = pool.len();
             total_connections += pool_size;
-            
+
             // Count active connections (those currently locked)
             for conn in pool.iter() {
                 if conn.try_lock().is_err() {
@@ -176,7 +176,7 @@ impl ConnectionPool {
                 }
             }
         }
-        
+
         PoolStats {
             total_connections,
             active_connections,
@@ -184,14 +184,14 @@ impl ConnectionPool {
             total_hosts: self.pools.len(),
         }
     }
-    
+
     /// Clean up expired connections
     pub async fn cleanup(&self) {
         debug!("Cleaning up connection pool");
-        
+
         for mut pool in self.pools.iter_mut() {
             let initial_size = pool.len();
-            
+
             pool.retain(|conn| {
                 if let Ok(conn_guard) = conn.try_lock() {
                     !conn_guard.is_expired(&self.config)
@@ -199,13 +199,17 @@ impl ConnectionPool {
                     true // Keep if locked
                 }
             });
-            
+
             let removed = initial_size - pool.len();
             if removed > 0 {
-                debug!("Removed {} expired connections from pool for {}", removed, pool.key());
+                debug!(
+                    "Removed {} expired connections from pool for {}",
+                    removed,
+                    pool.key()
+                );
             }
         }
-        
+
         // Remove empty pools
         self.pools.retain(|_, pool| !pool.is_empty());
     }
@@ -224,7 +228,7 @@ pub struct PoolStats {
 mod tests {
     use super::*;
     use std::time::Duration;
-    
+
     #[test]
     fn test_pooled_connection_expiry() {
         let config = PoolConfig {
@@ -233,7 +237,7 @@ mod tests {
             idle_timeout: Duration::from_millis(100),
             max_lifetime: Duration::from_secs(1),
         };
-        
+
         // This would need a real TcpStream for proper testing
         // For now, just test the logic structure
         assert!(true); // Placeholder

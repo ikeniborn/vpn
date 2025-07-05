@@ -3,7 +3,7 @@
 //! This module provides caching for frequently accessed container information
 //! to reduce Docker API calls and improve overall performance.
 
-use crate::{ContainerStatus, ContainerStats};
+use crate::{ContainerStats, ContainerStatus};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -93,12 +93,12 @@ impl ContainerCache {
     /// Cache container status
     pub async fn cache_status(&self, container_name: &str, status: ContainerStatus) {
         let mut cache = self.status_cache.write().await;
-        
+
         // Clean up expired entries if cache is getting large
         if cache.len() >= self.config.max_entries {
             cache.retain(|_, entry| !entry.is_expired());
         }
-        
+
         cache.insert(
             container_name.to_owned(),
             CacheEntry::new(status, self.config.status_ttl),
@@ -120,12 +120,12 @@ impl ContainerCache {
     /// Cache container statistics
     pub async fn cache_stats(&self, container_name: &str, stats: ContainerStats) {
         let mut cache = self.stats_cache.write().await;
-        
+
         // Clean up expired entries if cache is getting large
         if cache.len() >= self.config.max_entries {
             cache.retain(|_, entry| !entry.is_expired());
         }
-        
+
         cache.insert(
             container_name.to_owned(),
             CacheEntry::new(stats, self.config.stats_ttl),
@@ -154,10 +154,10 @@ impl ContainerCache {
     pub async fn invalidate_container(&self, container_name: &str) {
         let mut status_cache = self.status_cache.write().await;
         let mut stats_cache = self.stats_cache.write().await;
-        
+
         status_cache.remove(container_name);
         stats_cache.remove(container_name);
-        
+
         // Also invalidate the container list since it might have changed
         let mut list_cache = self.list_cache.write().await;
         *list_cache = None;
@@ -168,7 +168,7 @@ impl ContainerCache {
         let mut status_cache = self.status_cache.write().await;
         let mut stats_cache = self.stats_cache.write().await;
         let mut list_cache = self.list_cache.write().await;
-        
+
         status_cache.clear();
         stats_cache.clear();
         *list_cache = None;
@@ -179,7 +179,7 @@ impl ContainerCache {
         let status_cache = self.status_cache.read().await;
         let stats_cache = self.stats_cache.read().await;
         let list_cache = self.list_cache.read().await;
-        
+
         CacheStats {
             status_entries: status_cache.len(),
             stats_entries: stats_cache.len(),
@@ -194,12 +194,12 @@ impl ContainerCache {
             let mut status_cache = self.status_cache.write().await;
             status_cache.retain(|_, entry| !entry.is_expired());
         }
-        
+
         {
             let mut stats_cache = self.stats_cache.write().await;
             stats_cache.retain(|_, entry| !entry.is_expired());
         }
-        
+
         {
             let mut list_cache = self.list_cache.write().await;
             if let Some(entry) = list_cache.as_ref() {
@@ -221,9 +221,8 @@ pub struct CacheStats {
 }
 
 /// Global container cache instance
-static CONTAINER_CACHE: once_cell::sync::Lazy<ContainerCache> = once_cell::sync::Lazy::new(|| {
-    ContainerCache::new(CacheConfig::default())
-});
+static CONTAINER_CACHE: once_cell::sync::Lazy<ContainerCache> =
+    once_cell::sync::Lazy::new(|| ContainerCache::new(CacheConfig::default()));
 
 /// Get the global container cache
 pub fn get_container_cache() -> &'static ContainerCache {
@@ -234,7 +233,7 @@ pub fn get_container_cache() -> &'static ContainerCache {
 pub fn start_cache_cleanup_task() {
     tokio::spawn(async {
         let mut interval = tokio::time::interval(Duration::from_secs(300)); // 5 minutes
-        
+
         loop {
             interval.tick().await;
             CONTAINER_CACHE.cleanup_expired().await;
