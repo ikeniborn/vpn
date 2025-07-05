@@ -45,27 +45,27 @@ pub enum Commands {
         /// VPN protocol to install
         #[arg(short, long, default_value = "vless")]
         protocol: Protocol,
-        
+
         /// Server port
         #[arg(short = 'P', long)]
         port: Option<u16>,
-        
+
         /// SNI domain for Reality protocol
         #[arg(short, long)]
         sni: Option<String>,
-        
+
         /// Enable firewall rules
         #[arg(long, default_value = "true")]
         firewall: bool,
-        
+
         /// Auto-start service
         #[arg(long, default_value = "true")]
         auto_start: bool,
-        
+
         /// Docker subnet for VPN network (CIDR format, e.g., 172.30.0.0/16)
         #[arg(long)]
         subnet: Option<String>,
-        
+
         /// Interactive subnet selection
         #[arg(long)]
         interactive_subnet: bool,
@@ -95,7 +95,7 @@ pub enum Commands {
         /// Show detailed status
         #[arg(short, long)]
         detailed: bool,
-        
+
         /// Continuous monitoring
         #[arg(short, long)]
         watch: bool,
@@ -154,7 +154,7 @@ pub enum Commands {
 
     /// Show privilege status
     Privileges,
-    
+
     /// Check Docker network status and available subnets
     NetworkCheck,
 
@@ -163,12 +163,12 @@ pub enum Commands {
         /// Shell to generate completions for
         #[arg(value_enum)]
         shell: Shell,
-        
+
         /// Output file (defaults to stdout)
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
-    
+
     /// Proxy server management commands
     #[command(subcommand)]
     Proxy(ProxyCommands),
@@ -181,72 +181,72 @@ pub enum ProxyCommands {
         /// Show detailed metrics
         #[arg(short, long)]
         detailed: bool,
-        
+
         /// Output format (json, table)
         #[arg(short, long, default_value = "table")]
         format: StatusFormat,
     },
-    
+
     /// Monitor proxy connections in real-time
     Monitor {
         /// Filter by user
         #[arg(short, long)]
         user: Option<String>,
-        
+
         /// Refresh interval in seconds
         #[arg(short, long, default_value = "1")]
         interval: u64,
-        
+
         /// Show only active connections
         #[arg(long)]
         active_only: bool,
     },
-    
+
     /// Show proxy statistics
     Stats {
         /// Time period in hours
         #[arg(short = 't', long, default_value = "24")]
         hours: u32,
-        
+
         /// Group by user
         #[arg(long)]
         by_user: bool,
-        
+
         /// Output format (json, table)
         #[arg(short, long, default_value = "table")]
         format: StatusFormat,
     },
-    
+
     /// Test proxy connectivity
     Test {
         /// Target URL to test
         #[arg(default_value = "https://example.com")]
         url: String,
-        
+
         /// Proxy protocol to test (http, socks5, both)
         #[arg(short, long, default_value = "both")]
         protocol: String,
-        
+
         /// Test authentication
         #[arg(long)]
         auth: bool,
-        
+
         /// Username for authentication test
         #[arg(short, long)]
         username: Option<String>,
-        
+
         /// Password for authentication test
         #[arg(short = 'P', long)]
         password: Option<String>,
     },
-    
+
     /// Manage proxy configuration
     Config {
         /// Configuration subcommands
         #[command(subcommand)]
         command: ProxyConfigCommands,
     },
-    
+
     /// Manage proxy access control
     Access {
         /// Access control subcommands
@@ -259,30 +259,30 @@ pub enum ProxyCommands {
 pub enum ProxyConfigCommands {
     /// Show current proxy configuration
     Show,
-    
+
     /// Update proxy configuration
     Update {
         /// Maximum connections per user
         #[arg(long)]
         max_connections: Option<u32>,
-        
+
         /// Rate limit (requests per second)
         #[arg(long)]
         rate_limit: Option<u32>,
-        
+
         /// Enable/disable authentication
         #[arg(long)]
         auth_enabled: Option<bool>,
-        
+
         /// Proxy bind address
         #[arg(long)]
         bind_address: Option<String>,
-        
+
         /// SOCKS5 bind address
         #[arg(long)]
         socks5_address: Option<String>,
     },
-    
+
     /// Reload proxy configuration
     Reload,
 }
@@ -291,37 +291,37 @@ pub enum ProxyConfigCommands {
 pub enum ProxyAccessCommands {
     /// List access rules
     List,
-    
+
     /// Add IP to whitelist
     AddIp {
         /// IP address or CIDR
         ip: String,
-        
+
         /// Description
         #[arg(short, long)]
         description: Option<String>,
     },
-    
+
     /// Remove IP from whitelist
     RemoveIp {
         /// IP address or CIDR
         ip: String,
     },
-    
+
     /// Set user bandwidth limit
     SetBandwidth {
         /// User name or ID
         user: String,
-        
+
         /// Bandwidth limit in MB/s (0 for unlimited)
         limit: u32,
     },
-    
+
     /// Set user connection limit
     SetConnections {
         /// User name or ID
         user: String,
-        
+
         /// Maximum concurrent connections (0 for unlimited)
         limit: u32,
     },
@@ -334,7 +334,7 @@ pub enum UserCommands {
         /// Filter by status
         #[arg(short, long)]
         status: Option<UserStatus>,
-        
+
         /// Show detailed information
         #[arg(short, long)]
         detailed: bool,
@@ -344,11 +344,11 @@ pub enum UserCommands {
     Create {
         /// User name
         name: String,
-        
+
         /// User email (optional)
         #[arg(short, long)]
         email: Option<String>,
-        
+
         /// VPN protocol
         #[arg(short, long, default_value = "vless")]
         protocol: Protocol,
@@ -364,7 +364,7 @@ pub enum UserCommands {
     Show {
         /// User name or ID
         user: String,
-        
+
         /// Show QR code
         #[arg(short, long)]
         qr: bool,
@@ -374,9 +374,13 @@ pub enum UserCommands {
     Link {
         /// User name or ID
         user: String,
-        
-        /// Generate QR code file
+
+        /// Display QR code in terminal
         #[arg(short, long)]
+        qr: bool,
+
+        /// Save QR code to file
+        #[arg(long)]
         qr_file: Option<PathBuf>,
     },
 
@@ -384,11 +388,11 @@ pub enum UserCommands {
     Update {
         /// User name or ID
         user: String,
-        
+
         /// New status
         #[arg(short, long)]
         status: Option<UserStatus>,
-        
+
         /// New email
         #[arg(short, long)]
         email: Option<String>,
@@ -426,7 +430,7 @@ pub enum BatchCommands {
     Update {
         /// User names/IDs (comma-separated)
         users: String,
-        
+
         /// New status
         #[arg(short, long)]
         status: UserStatus,
@@ -442,7 +446,7 @@ pub enum BatchCommands {
     Import {
         /// Input file
         file: PathBuf,
-        
+
         /// Overwrite existing users
         #[arg(long)]
         overwrite: bool,
@@ -484,7 +488,7 @@ pub enum MonitorCommands {
         /// Time period in hours
         #[arg(short = 't', long, default_value = "24")]
         hours: u32,
-        
+
         /// User filter
         #[arg(short, long)]
         user: Option<String>,
@@ -502,11 +506,11 @@ pub enum MonitorCommands {
         /// Number of lines to show
         #[arg(short, long, default_value = "100")]
         lines: usize,
-        
+
         /// Follow logs
         #[arg(short, long)]
         follow: bool,
-        
+
         /// Filter pattern
         #[arg(short, long)]
         pattern: Option<String>,
@@ -555,7 +559,7 @@ pub enum SecurityCommands {
         /// Rotate user keys too
         #[arg(long)]
         users: bool,
-        
+
         /// Create backup before rotation
         #[arg(long, default_value = "true")]
         backup: bool,
@@ -578,7 +582,7 @@ pub enum MigrationCommands {
         /// Bash installation path
         #[arg(short, long, default_value = "/opt/v2ray")]
         source: PathBuf,
-        
+
         /// Keep original installation
         #[arg(long)]
         keep_original: bool,
@@ -589,7 +593,7 @@ pub enum MigrationCommands {
         /// Export format
         #[arg(short, long)]
         format: ExportFormat,
-        
+
         /// Output file
         #[arg(short, long)]
         output: PathBuf,
@@ -600,7 +604,7 @@ pub enum MigrationCommands {
         /// Import format
         #[arg(short, long)]
         format: ImportFormat,
-        
+
         /// Input file
         #[arg(short, long)]
         input: PathBuf,
@@ -635,7 +639,6 @@ pub enum RuntimeCommands {
         path: String,
     },
 
-
     /// Show runtime capabilities comparison
     Capabilities,
 }
@@ -647,11 +650,11 @@ pub enum ComposeCommands {
         /// Start in detached mode
         #[arg(short, long, default_value = "true")]
         detach: bool,
-        
+
         /// Remove orphaned containers
         #[arg(long, default_value = "true")]
         remove_orphans: bool,
-        
+
         /// Specific services to start
         #[arg(long)]
         services: Vec<String>,
@@ -662,11 +665,11 @@ pub enum ComposeCommands {
         /// Remove volumes
         #[arg(short, long)]
         volumes: bool,
-        
+
         /// Remove orphaned containers
         #[arg(long, default_value = "true")]
         remove_orphans: bool,
-        
+
         /// Timeout for stopping containers (seconds)
         #[arg(short, long, default_value = "10")]
         timeout: u32,
@@ -676,7 +679,7 @@ pub enum ComposeCommands {
     Restart {
         /// Specific services to restart
         services: Vec<String>,
-        
+
         /// Timeout for stopping containers (seconds)
         #[arg(short, long, default_value = "10")]
         timeout: u32,
@@ -694,7 +697,7 @@ pub enum ComposeCommands {
         /// Show only running services
         #[arg(long)]
         running_only: bool,
-        
+
         /// Output format (table, json)
         #[arg(short, long, default_value = "table")]
         format: StatusFormat,
@@ -704,15 +707,15 @@ pub enum ComposeCommands {
     Logs {
         /// Specific service to show logs for
         service: Option<String>,
-        
+
         /// Follow log output
         #[arg(short, long)]
         follow: bool,
-        
+
         /// Number of lines to show
         #[arg(short = 'n', long, default_value = "100")]
         tail: usize,
-        
+
         /// Show timestamps
         #[arg(short = 'T', long)]
         timestamps: bool,
@@ -722,14 +725,14 @@ pub enum ComposeCommands {
     Exec {
         /// Service name
         service: String,
-        
+
         /// Command to execute
         command: Vec<String>,
-        
+
         /// Run in interactive mode
         #[arg(short, long)]
         interactive: bool,
-        
+
         /// Allocate a TTY
         #[arg(short, long)]
         tty: bool,
@@ -739,7 +742,7 @@ pub enum ComposeCommands {
     Pull {
         /// Specific services to pull
         services: Vec<String>,
-        
+
         /// Pull images in parallel
         #[arg(long, default_value = "true")]
         parallel: bool,
@@ -749,11 +752,11 @@ pub enum ComposeCommands {
     Build {
         /// Specific services to build
         services: Vec<String>,
-        
+
         /// Don't use cache when building
         #[arg(long)]
         no_cache: bool,
-        
+
         /// Always remove intermediate containers
         #[arg(long)]
         force_rm: bool,
@@ -764,15 +767,15 @@ pub enum ComposeCommands {
         /// Environment (development, staging, production)
         #[arg(short, long, default_value = "development")]
         environment: String,
-        
+
         /// Output directory
         #[arg(short, long, default_value = "./docker-compose")]
         output: PathBuf,
-        
+
         /// Include monitoring stack
         #[arg(long, default_value = "true")]
         monitoring: bool,
-        
+
         /// Include development tools
         #[arg(long)]
         dev_tools: bool,
@@ -796,7 +799,7 @@ pub enum ComposeCommands {
     Health {
         /// Service to check (default: all)
         service: Option<String>,
-        
+
         /// Timeout for health checks (seconds)
         #[arg(short, long, default_value = "30")]
         timeout: u32,
@@ -807,7 +810,7 @@ pub enum ComposeCommands {
         /// Recreate containers with updated config
         #[arg(long, default_value = "true")]
         recreate: bool,
-        
+
         /// Specific services to update
         services: Vec<String>,
     },
@@ -817,13 +820,13 @@ pub enum ComposeCommands {
 pub enum ComposeConfigCommands {
     /// Show current compose configuration
     Show,
-    
+
     /// Edit compose configuration
     Edit,
-    
+
     /// Validate compose configuration
     Validate,
-    
+
     /// Set environment variable
     Set {
         /// Variable name
@@ -831,13 +834,13 @@ pub enum ComposeConfigCommands {
         /// Variable value
         value: String,
     },
-    
+
     /// Get environment variable
     Get {
         /// Variable name
         key: String,
     },
-    
+
     /// List all environment variables
     List,
 }
@@ -846,13 +849,13 @@ pub enum ComposeConfigCommands {
 pub enum EnvironmentCommands {
     /// List available environments
     List,
-    
+
     /// Switch to an environment
     Switch {
         /// Environment name (development, staging, production)
         environment: String,
     },
-    
+
     /// Create a new environment
     Create {
         /// Environment name
@@ -861,13 +864,13 @@ pub enum EnvironmentCommands {
         #[arg(short, long)]
         from: Option<String>,
     },
-    
+
     /// Delete an environment
     Delete {
         /// Environment name
         name: String,
     },
-    
+
     /// Show environment details
     Show {
         /// Environment name (defaults to current)
@@ -888,11 +891,12 @@ fn parse_service_scale(s: &str) -> Result<ServiceScale, String> {
     if parts.len() != 2 {
         return Err("Invalid format. Use: service=replicas".to_string());
     }
-    
+
     let service = parts[0].to_string();
-    let replicas = parts[1].parse::<u32>()
+    let replicas = parts[1]
+        .parse::<u32>()
         .map_err(|_| "Invalid replica count")?;
-    
+
     Ok(ServiceScale { service, replicas })
 }
 
@@ -930,7 +934,7 @@ pub enum UserStatus {
     Suspended,
 }
 
-#[derive(clap::ValueEnum, Clone, Debug)]
+#[derive(clap::ValueEnum, Clone, Debug, PartialEq)]
 pub enum OutputFormat {
     Json,
     Table,
@@ -959,7 +963,7 @@ impl From<Protocol> for vpn_types::protocol::VpnProtocol {
             Protocol::Vless => vpn_types::protocol::VpnProtocol::Vless,
             Protocol::Shadowsocks => vpn_types::protocol::VpnProtocol::Outline,
             Protocol::Trojan => vpn_types::protocol::VpnProtocol::Vless, // Map to VLESS for now
-            Protocol::Vmess => vpn_types::protocol::VpnProtocol::Vless, // Map to VLESS for now
+            Protocol::Vmess => vpn_types::protocol::VpnProtocol::Vless,  // Map to VLESS for now
             Protocol::HttpProxy => vpn_types::protocol::VpnProtocol::HttpProxy,
             Protocol::Socks5Proxy => vpn_types::protocol::VpnProtocol::Socks5Proxy,
             Protocol::ProxyServer => vpn_types::protocol::VpnProtocol::ProxyServer,

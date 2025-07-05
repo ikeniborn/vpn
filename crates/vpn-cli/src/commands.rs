@@ -1,14 +1,16 @@
+use indicatif::{ProgressBar, ProgressStyle};
 use std::path::PathBuf;
 use std::sync::Arc;
-use indicatif::{ProgressBar, ProgressStyle};
-use vpn_server::{ServerInstaller, ServerLifecycle, InstallationOptions};
 use vpn_server::installer::LogLevel as ServerLogLevel;
-use vpn_users::{UserManager, BatchOperations};
-use vpn_users::user::UserStatus;
+use vpn_server::{InstallationOptions, ServerInstaller, ServerLifecycle};
 use vpn_users::manager::UserListOptions;
+use vpn_users::user::UserStatus;
+use vpn_users::{BatchOperations, UserManager};
 // use vpn_monitor::{TrafficMonitor, HealthMonitor, LogAnalyzer, MetricsCollector, AlertManager};
 // use vpn_monitor::traffic::MonitoringConfig;
-use crate::{cli::*, config::ConfigManager, runtime::RuntimeManager, utils::display, CliError, Result};
+use crate::{
+    cli::*, config::ConfigManager, runtime::RuntimeManager, utils::display, CliError, Result,
+};
 use serde_json;
 
 pub struct CommandHandler {
@@ -49,36 +51,46 @@ impl CommandHandler {
         interactive_subnet: bool,
     ) -> Result<()> {
         // Check if this is a proxy server installation
-        if matches!(protocol, Protocol::HttpProxy | Protocol::Socks5Proxy | Protocol::ProxyServer) {
+        if matches!(
+            protocol,
+            Protocol::HttpProxy | Protocol::Socks5Proxy | Protocol::ProxyServer
+        ) {
             // Install proxy server using ProxyInstaller
             use vpn_server::ProxyInstaller;
-            
+
             let proxy_type = match protocol {
                 Protocol::HttpProxy => "http",
                 Protocol::Socks5Proxy => "socks5",
                 Protocol::ProxyServer => "all",
                 _ => unreachable!(),
             };
-            
+
             let pb = ProgressBar::new_spinner();
-            pb.set_style(ProgressStyle::default_spinner()
-                .template("{spinner:.green} {msg}")
-                .unwrap());
+            pb.set_style(
+                ProgressStyle::default_spinner()
+                    .template("{spinner:.green} {msg}")
+                    .unwrap(),
+            );
             pb.set_message("Installing proxy server...");
-            
+
             let installer = ProxyInstaller::new(self.install_path.clone(), port.unwrap_or(8080))?;
-            installer.install(proxy_type).await
+            installer
+                .install(proxy_type)
+                .await
                 .map_err(|e| CliError::ServerError(e))?;
-            
+
             pb.finish_and_clear();
-            display::success(&format!("{} proxy server installed successfully!", proxy_type));
-            
+            display::success(&format!(
+                "{} proxy server installed successfully!",
+                proxy_type
+            ));
+
             return Ok(());
         }
-        
+
         // Regular VPN server installation
         let installer = ServerInstaller::new()?;
-        
+
         let options = InstallationOptions {
             protocol: protocol.into(),
             port,
@@ -93,9 +105,11 @@ impl CommandHandler {
         };
 
         let pb = ProgressBar::new_spinner();
-        pb.set_style(ProgressStyle::default_spinner()
-            .template("{spinner:.green} {msg}")
-            .unwrap());
+        pb.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.green} {msg}")
+                .unwrap(),
+        );
         pb.set_message("Installing VPN server...");
 
         let result = installer.install(options).await;
@@ -104,7 +118,7 @@ impl CommandHandler {
         match result {
             Ok(installation_result) => {
                 display::success("VPN server installed successfully!");
-                
+
                 match self.output_format {
                     OutputFormat::Json => {
                         let json = serde_json::json!({
@@ -129,7 +143,7 @@ impl CommandHandler {
                         println!("Initial User: {}", installation_result.initial_user.name);
                     }
                 }
-                
+
                 Ok(())
             }
             Err(e) => Err(CliError::ServerError(e)),
@@ -142,16 +156,18 @@ impl CommandHandler {
             if purge {
                 display::warning("All user data will be permanently deleted!");
             }
-            
+
             // In a real implementation, you'd prompt for confirmation here
         }
 
         let installer = ServerInstaller::new()?;
-        
+
         let pb = ProgressBar::new_spinner();
-        pb.set_style(ProgressStyle::default_spinner()
-            .template("{spinner:.red} {msg}")
-            .unwrap());
+        pb.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.red} {msg}")
+                .unwrap(),
+        );
         pb.set_message("Uninstalling VPN server...");
 
         let result = installer.uninstall(&self.install_path, purge).await;
@@ -168,10 +184,10 @@ impl CommandHandler {
 
     pub async fn start_server(&mut self) -> Result<()> {
         let lifecycle = ServerLifecycle::new()?;
-        
+
         let pb = ProgressBar::new_spinner();
         pb.set_message("Starting VPN server...");
-        
+
         let result = lifecycle.start(&self.install_path).await;
         pb.finish_and_clear();
 
@@ -186,10 +202,10 @@ impl CommandHandler {
 
     pub async fn stop_server(&mut self) -> Result<()> {
         let lifecycle = ServerLifecycle::new()?;
-        
+
         let pb = ProgressBar::new_spinner();
         pb.set_message("Stopping VPN server...");
-        
+
         let result = lifecycle.stop(&self.install_path).await;
         pb.finish_and_clear();
 
@@ -204,10 +220,10 @@ impl CommandHandler {
 
     pub async fn restart_server(&mut self) -> Result<()> {
         let lifecycle = ServerLifecycle::new()?;
-        
+
         let pb = ProgressBar::new_spinner();
         pb.set_message("Restarting VPN server...");
-        
+
         let result = lifecycle.restart(&self.install_path).await;
         pb.finish_and_clear();
 
@@ -222,10 +238,10 @@ impl CommandHandler {
 
     pub async fn reload_server(&mut self) -> Result<()> {
         let lifecycle = ServerLifecycle::new()?;
-        
+
         let pb = ProgressBar::new_spinner();
         pb.set_message("Reloading server configuration...");
-        
+
         let result = lifecycle.reload_config(&self.install_path).await;
         pb.finish_and_clear();
 
@@ -240,14 +256,14 @@ impl CommandHandler {
 
     pub async fn show_status(&mut self, detailed: bool, watch: bool) -> Result<()> {
         let lifecycle = ServerLifecycle::new()?;
-        
+
         loop {
             let status = lifecycle.get_status().await?;
-            
+
             if watch {
                 print!("\x1B[2J\x1B[1;1H"); // Clear screen
             }
-            
+
             match self.output_format {
                 OutputFormat::Json => {
                     let json = serde_json::json!({
@@ -261,19 +277,27 @@ impl CommandHandler {
                 _ => {
                     println!("VPN Server Status");
                     println!("================");
-                    println!("Status: {}", if status.is_running { "🟢 Running" } else { "🔴 Stopped" });
+                    println!(
+                        "Status: {}",
+                        if status.is_running {
+                            "🟢 Running"
+                        } else {
+                            "🔴 Stopped"
+                        }
+                    );
                     println!("Health Score: {:.1}%", status.health_score * 100.0);
-                    
+
                     if let Some(uptime) = status.uptime {
                         println!("Uptime: {}", display::format_duration(uptime));
                     }
-                    
+
                     if detailed {
                         println!("\nContainers:");
                         for container in &status.containers {
                             let status_icon = if container.is_running { "🟢" } else { "🔴" };
-                            println!("  {} {} - CPU: {:.1}%, Memory: {}", 
-                                status_icon, 
+                            println!(
+                                "  {} {} - CPU: {:.1}%, Memory: {}",
+                                status_icon,
                                 container.name,
                                 container.cpu_usage,
                                 display::format_bytes(container.memory_usage)
@@ -282,21 +306,21 @@ impl CommandHandler {
                     }
                 }
             }
-            
+
             if !watch {
                 break;
             }
-            
+
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         }
-        
+
         Ok(())
     }
 
     pub async fn get_server_status(&self) -> Result<ServerStatus> {
         let lifecycle = ServerLifecycle::new()?;
         let status = lifecycle.get_status().await?;
-        
+
         Ok(ServerStatus {
             is_running: status.is_running,
             active_users: 0, // Would need to be calculated from user manager
@@ -316,46 +340,49 @@ impl CommandHandler {
             UserCommands::List { status, detailed } => {
                 self.list_users(status.map(|s| s.into()), detailed).await
             }
-            UserCommands::Create { name, email, protocol } => {
-                self.create_user(name, email, protocol).await
+            UserCommands::Create {
+                name,
+                email,
+                protocol,
+            } => self.create_user(name, email, protocol).await,
+            UserCommands::Delete { user } => self.delete_user(user).await,
+            UserCommands::Show { user, qr } => self.show_user_details(user, qr).await,
+            UserCommands::Link { user, qr, qr_file } => {
+                self.generate_user_link(user, qr, qr_file).await
             }
-            UserCommands::Delete { user } => {
-                self.delete_user(user).await
+            UserCommands::Update {
+                user,
+                status,
+                email,
+            } => {
+                self.update_user(user, status.map(|s| s.into()), email)
+                    .await
             }
-            UserCommands::Show { user, qr } => {
-                self.show_user_details(user, qr).await
-            }
-            UserCommands::Link { user, qr_file } => {
-                self.generate_user_link(user, qr_file).await
-            }
-            UserCommands::Update { user, status, email } => {
-                self.update_user(user, status.map(|s| s.into()), email).await
-            }
-            UserCommands::Batch { command } => {
-                self.handle_batch_command(command).await
-            }
-            UserCommands::Reset { user } => {
-                self.reset_user_traffic(user).await
-            }
+            UserCommands::Batch { command } => self.handle_batch_command(command).await,
+            UserCommands::Reset { user } => self.reset_user_traffic(user).await,
         }
     }
 
-    pub async fn list_users(&mut self, status_filter: Option<UserStatus>, detailed: bool) -> Result<()> {
+    pub async fn list_users(
+        &mut self,
+        status_filter: Option<UserStatus>,
+        detailed: bool,
+    ) -> Result<()> {
         let server_config = self.load_server_config()?;
         let user_manager = UserManager::new(&self.install_path, server_config)?;
-        
+
         let mut options = UserListOptions::default();
         if let Some(status) = status_filter {
             options.status_filter = Some(status.into());
         }
-        
+
         let users = user_manager.list_users(Some(options)).await?;
-        
+
         if users.is_empty() {
             display::info("No users found.");
             return Ok(());
         }
-        
+
         match self.output_format {
             OutputFormat::Json => {
                 println!("{}", serde_json::to_string_pretty(&users)?);
@@ -369,21 +396,28 @@ impl CommandHandler {
                 }
             }
         }
-        
+
         Ok(())
     }
 
-    pub async fn create_user(&mut self, name: String, email: Option<String>, protocol: Protocol) -> Result<()> {
+    pub async fn create_user(
+        &mut self,
+        name: String,
+        email: Option<String>,
+        protocol: Protocol,
+    ) -> Result<()> {
         let server_config = self.load_server_config()?;
         let user_manager = UserManager::new(&self.install_path, server_config)?;
-        
-        let mut user = user_manager.create_user(name.clone(), protocol.into()).await?;
-        
+
+        let mut user = user_manager
+            .create_user(name.clone(), protocol.into())
+            .await?;
+
         if let Some(email) = email {
             user.email = Some(email);
             user_manager.update_user(user.clone()).await?;
         }
-        
+
         match self.output_format {
             OutputFormat::Json => {
                 println!("{}", serde_json::to_string_pretty(&user)?);
@@ -397,22 +431,22 @@ impl CommandHandler {
                 }
             }
         }
-        
+
         Ok(())
     }
 
     pub async fn delete_user(&mut self, user: String) -> Result<()> {
         let server_config = self.load_server_config()?;
         let user_manager = UserManager::new(&self.install_path, server_config)?;
-        
+
         // Try to find user by name first, then by ID
         let user_obj = match user_manager.get_user_by_name(&user).await {
             Ok(u) => u,
             Err(_) => user_manager.get_user(&user).await?,
         };
-        
+
         user_manager.delete_user(&user_obj.id).await?;
-        
+
         display::success(&format!("User '{}' deleted successfully!", user_obj.name));
         Ok(())
     }
@@ -420,12 +454,12 @@ impl CommandHandler {
     pub async fn show_user_details(&mut self, user: String, show_qr: bool) -> Result<()> {
         let server_config = self.load_server_config()?;
         let user_manager = UserManager::new(&self.install_path, server_config)?;
-        
+
         let user_obj = match user_manager.get_user_by_name(&user).await {
             Ok(u) => u,
             Err(_) => user_manager.get_user(&user).await?,
         };
-        
+
         match self.output_format {
             OutputFormat::Json => {
                 println!("{}", serde_json::to_string_pretty(&user_obj)?);
@@ -438,50 +472,73 @@ impl CommandHandler {
                 println!("Short ID: {}", user_obj.short_id);
                 println!("Protocol: {}", user_obj.protocol.as_str());
                 println!("Status: {}", user_obj.status.as_str());
-                println!("Created: {}", user_obj.created_at.format("%Y-%m-%d %H:%M:%S"));
-                
+                println!(
+                    "Created: {}",
+                    user_obj.created_at.format("%Y-%m-%d %H:%M:%S")
+                );
+
                 if let Some(email) = &user_obj.email {
                     println!("Email: {}", email);
                 }
-                
+
                 if let Some(last_active) = user_obj.last_active {
                     println!("Last Active: {}", last_active.format("%Y-%m-%d %H:%M:%S"));
                 }
-                
+
                 println!("\nTraffic Statistics:");
-                println!("  Sent: {}", display::format_bytes(user_obj.stats.bytes_sent));
-                println!("  Received: {}", display::format_bytes(user_obj.stats.bytes_received));
+                println!(
+                    "  Sent: {}",
+                    display::format_bytes(user_obj.stats.bytes_sent)
+                );
+                println!(
+                    "  Received: {}",
+                    display::format_bytes(user_obj.stats.bytes_received)
+                );
                 println!("  Connections: {}", user_obj.stats.connection_count);
-                
+
                 if show_qr {
                     let link = user_manager.generate_connection_link(&user_obj.id).await?;
                     println!("\nConnection Link:");
                     println!("{}", link);
-                    
-                    // Generate QR code
+
+                    // Generate and display QR code in terminal
                     let qr_gen = vpn_crypto::QrCodeGenerator::new();
-                    if let Ok(qr_data) = qr_gen.generate_qr_code(&link) {
-                        println!("\nQR Code generated successfully ({} bytes)", qr_data.len());
-                        println!("Use '--save-qr <path>' to save QR code to file");
+                    match qr_gen.generate_terminal_qr(&link) {
+                        Ok(qr_string) => {
+                            println!("\nQR Code:");
+                            println!("{}", qr_string);
+                        }
+                        Err(e) => {
+                            println!("\nFailed to generate terminal QR code: {}", e);
+                            if let Ok(qr_data) = qr_gen.generate_qr_code(&link) {
+                                println!("QR Code generated as SVG ({} bytes)", qr_data.len());
+                                println!("Use '--save-qr <path>' to save QR code to file");
+                            }
+                        }
                     }
                 }
             }
         }
-        
+
         Ok(())
     }
 
-    pub async fn generate_user_link(&mut self, user: String, qr_file: Option<PathBuf>) -> Result<()> {
+    pub async fn generate_user_link(
+        &mut self,
+        user: String,
+        show_qr: bool,
+        qr_file: Option<PathBuf>,
+    ) -> Result<()> {
         let server_config = self.load_server_config()?;
         let user_manager = UserManager::new(&self.install_path, server_config)?;
-        
+
         let user_obj = match user_manager.get_user_by_name(&user).await {
             Ok(u) => u,
             Err(_) => user_manager.get_user(&user).await?,
         };
-        
+
         let link = user_manager.generate_connection_link(&user_obj.id).await?;
-        
+
         match self.output_format {
             OutputFormat::Json => {
                 let json = serde_json::json!({
@@ -495,34 +552,55 @@ impl CommandHandler {
                 println!("{}", link);
             }
         }
-        
+
+        if show_qr && self.output_format != OutputFormat::Json {
+            // Generate and display QR code in terminal
+            let qr_gen = vpn_crypto::QrCodeGenerator::new();
+            match qr_gen.generate_terminal_qr(&link) {
+                Ok(qr_string) => {
+                    println!("\nQR Code:");
+                    println!("{}", qr_string);
+                }
+                Err(e) => {
+                    println!("\nFailed to generate terminal QR code: {}", e);
+                }
+            }
+        }
+
         if let Some(qr_path) = qr_file {
-            user_manager.generate_qr_code(&user_obj.id, &qr_path).await?;
+            user_manager
+                .generate_qr_code(&user_obj.id, &qr_path)
+                .await?;
             display::success(&format!("QR code saved to: {}", qr_path.display()));
         }
-        
+
         Ok(())
     }
 
-    pub async fn update_user(&mut self, user: String, status: Option<UserStatus>, email: Option<String>) -> Result<()> {
+    pub async fn update_user(
+        &mut self,
+        user: String,
+        status: Option<UserStatus>,
+        email: Option<String>,
+    ) -> Result<()> {
         let server_config = self.load_server_config()?;
         let user_manager = UserManager::new(&self.install_path, server_config)?;
-        
+
         let mut user_obj = match user_manager.get_user_by_name(&user).await {
             Ok(u) => u,
             Err(_) => user_manager.get_user(&user).await?,
         };
-        
+
         if let Some(status) = status {
             user_obj.status = status.into();
         }
-        
+
         if let Some(email) = email {
             user_obj.email = Some(email);
         }
-        
+
         user_manager.update_user(user_obj.clone()).await?;
-        
+
         display::success(&format!("User '{}' updated successfully!", user_obj.name));
         Ok(())
     }
@@ -530,20 +608,23 @@ impl CommandHandler {
     pub async fn reset_user_traffic(&mut self, user: String) -> Result<()> {
         let server_config = self.load_server_config()?;
         let user_manager = UserManager::new(&self.install_path, server_config)?;
-        
+
         let mut user_obj = match user_manager.get_user_by_name(&user).await {
             Ok(u) => u,
             Err(_) => user_manager.get_user(&user).await?,
         };
-        
+
         user_obj.stats.bytes_sent = 0;
         user_obj.stats.bytes_received = 0;
         user_obj.stats.connection_count = 0;
         user_obj.stats.last_connection = None;
-        
+
         user_manager.update_user(user_obj.clone()).await?;
-        
-        display::success(&format!("Traffic statistics reset for user '{}'!", user_obj.name));
+
+        display::success(&format!(
+            "Traffic statistics reset for user '{}'!",
+            user_obj.name
+        ));
         Ok(())
     }
 
@@ -555,12 +636,8 @@ impl CommandHandler {
 
     async fn handle_batch_command(&mut self, command: BatchCommands) -> Result<()> {
         match command {
-            BatchCommands::Export { file } => {
-                self.export_users(file).await
-            }
-            BatchCommands::Import { file, overwrite } => {
-                self.import_users(file, overwrite).await
-            }
+            BatchCommands::Export { file } => self.export_users(file).await,
+            BatchCommands::Import { file, overwrite } => self.import_users(file, overwrite).await,
             _ => {
                 display::info("Batch command not yet implemented");
                 Ok(())
@@ -572,9 +649,9 @@ impl CommandHandler {
         let server_config = self.load_server_config()?;
         let user_manager = Arc::new(UserManager::new(&self.install_path, server_config)?);
         let batch_ops = BatchOperations::new(user_manager);
-        
+
         batch_ops.export_users_to_json(&file).await?;
-        
+
         display::success(&format!("Users exported to: {}", file.display()));
         Ok(())
     }
@@ -583,24 +660,27 @@ impl CommandHandler {
         let server_config = self.load_server_config()?;
         let user_manager = Arc::new(UserManager::new(&self.install_path, server_config)?);
         let batch_ops = BatchOperations::new(user_manager);
-        
+
         let options = vpn_users::batch::ImportOptions {
             overwrite_existing: overwrite,
             validate_configs: true,
             generate_new_keys: false,
         };
-        
+
         let result = batch_ops.import_users_from_json(&file, options).await?;
-        
-        display::success(&format!("Successfully imported {} users", result.successful.len()));
-        
+
+        display::success(&format!(
+            "Successfully imported {} users",
+            result.successful.len()
+        ));
+
         if !result.failed.is_empty() {
             display::warning(&format!("Failed to import {} users", result.failed.len()));
             for (user, error) in result.failed {
                 println!("  {}: {}", user, error);
             }
         }
-        
+
         Ok(())
     }
 
@@ -629,7 +709,7 @@ impl CommandHandler {
 
     pub async fn handle_runtime_command(&mut self, command: RuntimeCommands) -> Result<()> {
         let mut runtime_manager = RuntimeManager::new(None)?;
-        
+
         match command {
             RuntimeCommands::Status => {
                 runtime_manager.show_status().await?;
@@ -672,7 +752,7 @@ impl CommandHandler {
                 runtime_manager.show_capabilities()?;
             }
         }
-        
+
         Ok(())
     }
 
@@ -681,49 +761,68 @@ impl CommandHandler {
             ProxyCommands::Status { detailed, format } => {
                 self.show_proxy_status(detailed, format).await
             }
-            ProxyCommands::Monitor { user, interval, active_only } => {
-                self.monitor_proxy_connections(user, interval, active_only).await
+            ProxyCommands::Monitor {
+                user,
+                interval,
+                active_only,
+            } => {
+                self.monitor_proxy_connections(user, interval, active_only)
+                    .await
             }
-            ProxyCommands::Stats { hours, by_user, format } => {
-                self.show_proxy_stats(hours, by_user, format).await
+            ProxyCommands::Stats {
+                hours,
+                by_user,
+                format,
+            } => self.show_proxy_stats(hours, by_user, format).await,
+            ProxyCommands::Test {
+                url,
+                protocol,
+                auth,
+                username,
+                password,
+            } => {
+                self.test_proxy_connectivity(url, protocol, auth, username, password)
+                    .await
             }
-            ProxyCommands::Test { url, protocol, auth, username, password } => {
-                self.test_proxy_connectivity(url, protocol, auth, username, password).await
-            }
-            ProxyCommands::Config { command } => {
-                self.handle_proxy_config_command(command).await
-            }
-            ProxyCommands::Access { command } => {
-                self.handle_proxy_access_command(command).await
-            }
+            ProxyCommands::Config { command } => self.handle_proxy_config_command(command).await,
+            ProxyCommands::Access { command } => self.handle_proxy_access_command(command).await,
         }
     }
 
     async fn show_proxy_status(&self, detailed: bool, format: StatusFormat) -> Result<()> {
         display::info("🔍 Checking proxy server status...");
-        
+
         // Check if proxy services are running
         let mut config = vpn_compose::config::ComposeConfig::default();
         config.compose_dir = self.install_path.join("docker-compose");
-        let compose_manager = vpn_compose::manager::ComposeManager::new(&config).await
-            .map_err(|e| CliError::ComposeError(format!("Failed to create compose manager: {}", e)))?;
-        let compose_status = compose_manager.get_status().await
+        let compose_manager = vpn_compose::manager::ComposeManager::new(&config)
+            .await
+            .map_err(|e| {
+                CliError::ComposeError(format!("Failed to create compose manager: {}", e))
+            })?;
+        let compose_status = compose_manager
+            .get_status()
+            .await
             .map_err(|e| CliError::ComposeError(format!("Failed to get compose status: {}", e)))?;
-        
+
         let proxy_services = ["traefik", "vpn-proxy-auth"];
         let mut proxy_status = vec![];
-        
+
         for service_name in &proxy_services {
-            if let Some(service) = compose_status.services.iter().find(|s| s.name == *service_name) {
+            if let Some(service) = compose_status
+                .services
+                .iter()
+                .find(|s| s.name == *service_name)
+            {
                 proxy_status.push(service.clone());
             }
         }
-        
+
         if proxy_status.is_empty() {
             display::error("Proxy server is not installed");
             return Ok(());
         }
-        
+
         match format {
             StatusFormat::Json => {
                 println!("{}", serde_json::to_string_pretty(&proxy_status)?);
@@ -732,7 +831,7 @@ impl CommandHandler {
                 for service in proxy_status {
                     display::section(&format!("Service: {}", service.name));
                     println!("  State: {}", service.state);
-                    
+
                     if detailed {
                         if let Some(health) = &service.health {
                             println!("  Health: {}", health);
@@ -744,11 +843,16 @@ impl CommandHandler {
                 }
             }
         }
-        
+
         Ok(())
     }
 
-    async fn monitor_proxy_connections(&self, user: Option<String>, interval: u64, active_only: bool) -> Result<()> {
+    async fn monitor_proxy_connections(
+        &self,
+        user: Option<String>,
+        interval: u64,
+        active_only: bool,
+    ) -> Result<()> {
         display::info("📊 Monitoring proxy connections...");
         display::info(&format!("Refresh interval: {}s", interval));
         if let Some(u) = &user {
@@ -757,40 +861,54 @@ impl CommandHandler {
         if active_only {
             display::info("Showing only active connections");
         }
-        
+
         // TODO: Implement real-time monitoring by querying Prometheus metrics
-        display::warning("Real-time monitoring not yet implemented. Use `docker logs -f traefik` for now.");
-        
+        display::warning(
+            "Real-time monitoring not yet implemented. Use `docker logs -f traefik` for now.",
+        );
+
         Ok(())
     }
 
-    async fn show_proxy_stats(&self, hours: u32, _by_user: bool, _format: StatusFormat) -> Result<()> {
+    async fn show_proxy_stats(
+        &self,
+        hours: u32,
+        _by_user: bool,
+        _format: StatusFormat,
+    ) -> Result<()> {
         display::info(&format!("📈 Proxy statistics for the last {} hours", hours));
-        
+
         // TODO: Query Prometheus for proxy metrics
         display::warning("Proxy statistics not yet implemented. Use Grafana dashboards for now.");
-        
+
         Ok(())
     }
 
-    async fn test_proxy_connectivity(&self, url: String, protocol: String, auth: bool, username: Option<String>, password: Option<String>) -> Result<()> {
+    async fn test_proxy_connectivity(
+        &self,
+        url: String,
+        protocol: String,
+        auth: bool,
+        username: Option<String>,
+        password: Option<String>,
+    ) -> Result<()> {
         display::info(&format!("🧪 Testing proxy connectivity to {}", url));
-        
+
         // Get proxy addresses from configuration
         let config_path = self.install_path.join("proxy-config.yaml");
         if !config_path.exists() {
             display::error("Proxy configuration not found. Is the proxy server installed?");
             return Ok(());
         }
-        
+
         let protocols_to_test: Vec<&str> = match protocol.as_str() {
             "both" => vec!["http", "socks5"],
             p => vec![p],
         };
-        
+
         for proto in protocols_to_test {
             display::section(&format!("Testing {} proxy", proto.to_uppercase()));
-            
+
             let proxy_addr = match proto {
                 "http" => "http://localhost:8888",
                 "socks5" => "socks5://localhost:1080",
@@ -799,10 +917,10 @@ impl CommandHandler {
                     continue;
                 }
             };
-            
+
             // TODO: Implement actual proxy testing with curl or custom HTTP client
             display::info(&format!("Proxy address: {}", proxy_addr));
-            
+
             if auth {
                 if username.is_none() || password.is_none() {
                     display::error("Authentication test requires both username and password");
@@ -810,10 +928,10 @@ impl CommandHandler {
                 }
                 display::info("Testing with authentication...");
             }
-            
+
             display::warning("Proxy connectivity test not yet fully implemented");
         }
-        
+
         Ok(())
     }
 
@@ -821,19 +939,25 @@ impl CommandHandler {
         match command {
             ProxyConfigCommands::Show => {
                 display::info("📋 Current proxy configuration:");
-                
+
                 let config_path = self.install_path.join("proxy-config.yaml");
                 if !config_path.exists() {
                     display::error("Proxy configuration not found");
                     return Ok(());
                 }
-                
+
                 let config = std::fs::read_to_string(&config_path)?;
                 println!("{}", config);
             }
-            ProxyConfigCommands::Update { max_connections, rate_limit, auth_enabled, bind_address, socks5_address } => {
+            ProxyConfigCommands::Update {
+                max_connections,
+                rate_limit,
+                auth_enabled,
+                bind_address,
+                socks5_address,
+            } => {
                 display::info("🔧 Updating proxy configuration...");
-                
+
                 // TODO: Implement configuration update
                 if let Some(max) = max_connections {
                     display::info(&format!("Setting max connections per user: {}", max));
@@ -842,7 +966,10 @@ impl CommandHandler {
                     display::info(&format!("Setting rate limit: {} RPS", rate));
                 }
                 if let Some(auth) = auth_enabled {
-                    display::info(&format!("Authentication: {}", if auth { "enabled" } else { "disabled" }));
+                    display::info(&format!(
+                        "Authentication: {}",
+                        if auth { "enabled" } else { "disabled" }
+                    ));
                 }
                 if let Some(addr) = bind_address {
                     display::info(&format!("HTTP proxy bind address: {}", addr));
@@ -850,28 +977,35 @@ impl CommandHandler {
                 if let Some(addr) = socks5_address {
                     display::info(&format!("SOCKS5 bind address: {}", addr));
                 }
-                
+
                 display::warning("Configuration update not yet implemented");
             }
             ProxyConfigCommands::Reload => {
                 display::info("🔄 Reloading proxy configuration...");
-                
+
                 // Restart proxy services to apply new configuration
                 let mut config = vpn_compose::config::ComposeConfig::default();
                 config.compose_dir = self.install_path.join("docker-compose");
-                let compose_manager = vpn_compose::manager::ComposeManager::new(&config).await
-                    .map_err(|e| CliError::ComposeError(format!("Failed to create compose manager: {}", e)))?;
-                
+                let compose_manager = vpn_compose::manager::ComposeManager::new(&config)
+                    .await
+                    .map_err(|e| {
+                        CliError::ComposeError(format!("Failed to create compose manager: {}", e))
+                    })?;
+
                 // Restart each proxy service
                 for service in &["traefik", "vpn-proxy-auth"] {
-                    compose_manager.restart_service(service).await
-                        .map_err(|e| CliError::ComposeError(format!("Failed to restart {}: {}", service, e)))?;
+                    compose_manager
+                        .restart_service(service)
+                        .await
+                        .map_err(|e| {
+                            CliError::ComposeError(format!("Failed to restart {}: {}", service, e))
+                        })?;
                 }
-                
+
                 display::success("Proxy configuration reloaded");
             }
         }
-        
+
         Ok(())
     }
 
@@ -893,15 +1027,21 @@ impl CommandHandler {
                 display::warning("IP whitelist management not yet implemented");
             }
             ProxyAccessCommands::SetBandwidth { user, limit } => {
-                display::info(&format!("🔧 Setting bandwidth limit for user {}: {} MB/s", user, limit));
+                display::info(&format!(
+                    "🔧 Setting bandwidth limit for user {}: {} MB/s",
+                    user, limit
+                ));
                 display::warning("Bandwidth limit management not yet implemented");
             }
             ProxyAccessCommands::SetConnections { user, limit } => {
-                display::info(&format!("🔧 Setting connection limit for user {}: {}", user, limit));
+                display::info(&format!(
+                    "🔧 Setting connection limit for user {}: {}",
+                    user, limit
+                ));
                 display::warning("Connection limit management not yet implemented");
             }
         }
-        
+
         Ok(())
     }
 
@@ -914,7 +1054,7 @@ impl CommandHandler {
 
         // Check system requirements
         display::section("System Requirements");
-        
+
         // Check Docker
         if self.check_docker_availability().await {
             display::success("✓ Docker is installed and running");
@@ -922,7 +1062,9 @@ impl CommandHandler {
             display::error("✗ Docker is not available");
             issues_found += 1;
             if fix {
-                display::warning("  → Cannot auto-fix Docker installation. Please install Docker manually.");
+                display::warning(
+                    "  → Cannot auto-fix Docker installation. Please install Docker manually.",
+                );
             }
         }
 
@@ -933,13 +1075,15 @@ impl CommandHandler {
             display::error("✗ Docker Compose is not available");
             issues_found += 1;
             if fix {
-                display::warning("  → Cannot auto-fix Docker Compose installation. Please install it manually.");
+                display::warning(
+                    "  → Cannot auto-fix Docker Compose installation. Please install it manually.",
+                );
             }
         }
 
         // Check network tools
         display::section("Network Tools");
-        
+
         if vpn_network::FirewallManager::is_ufw_installed().await {
             display::success("✓ UFW firewall is installed");
         } else if vpn_network::FirewallManager::is_iptables_installed().await {
@@ -964,8 +1108,11 @@ impl CommandHandler {
         display::section("Installation Path");
         if self.install_path.exists() {
             if self.install_path.is_dir() {
-                display::success(&format!("✓ Installation directory exists: {}", self.install_path.display()));
-                
+                display::success(&format!(
+                    "✓ Installation directory exists: {}",
+                    self.install_path.display()
+                ));
+
                 // Check permissions
                 match std::fs::File::create(self.install_path.join(".permission_test")) {
                     Ok(_) => {
@@ -981,11 +1128,17 @@ impl CommandHandler {
                     }
                 }
             } else {
-                display::error(&format!("✗ Installation path is not a directory: {}", self.install_path.display()));
+                display::error(&format!(
+                    "✗ Installation path is not a directory: {}",
+                    self.install_path.display()
+                ));
                 issues_found += 1;
             }
         } else {
-            display::warning(&format!("⚠ Installation directory does not exist: {}", self.install_path.display()));
+            display::warning(&format!(
+                "⚠ Installation directory does not exist: {}",
+                self.install_path.display()
+            ));
             if fix {
                 if let Err(e) = std::fs::create_dir_all(&self.install_path) {
                     display::error(&format!("✗ Failed to create installation directory: {}", e));
@@ -1002,7 +1155,7 @@ impl CommandHandler {
         let docker_compose_path = self.install_path.join("docker-compose.yml");
         if docker_compose_path.exists() {
             display::success("✓ VPN server appears to be installed");
-            
+
             // Check if containers are running
             if self.check_containers_running().await {
                 display::success("✓ VPN containers are running");
@@ -1018,7 +1171,7 @@ impl CommandHandler {
         // Summary
         println!();
         display::section("Diagnostic Summary");
-        
+
         if issues_found == 0 {
             display::success("✓ No issues found. System is ready for VPN operations!");
         } else {
@@ -1027,7 +1180,10 @@ impl CommandHandler {
                 display::info(&format!("✓ Fixed {} issue(s)", issues_fixed));
             }
             if fix && issues_found > issues_fixed {
-                display::warning(&format!("⚠ {} issue(s) require manual attention", issues_found - issues_fixed));
+                display::warning(&format!(
+                    "⚠ {} issue(s) require manual attention",
+                    issues_found - issues_fixed
+                ));
             } else if !fix {
                 display::info("  → Run with --fix to attempt automatic fixes");
             }
@@ -1094,7 +1250,7 @@ impl CommandHandler {
 
     fn display_users_table(&self, users: &[vpn_users::User], detailed: bool) {
         use tabled::{Table, Tabled};
-        
+
         #[derive(Tabled)]
         struct UserRow {
             name: String,
@@ -1104,25 +1260,37 @@ impl CommandHandler {
             created: String,
             traffic: String,
         }
-        
-        let rows: Vec<UserRow> = users.iter().map(|user| {
-            UserRow {
+
+        let rows: Vec<UserRow> = users
+            .iter()
+            .map(|user| UserRow {
                 name: user.name.clone(),
-                id: if detailed { user.id.clone() } else { user.short_id.clone() },
+                id: if detailed {
+                    user.id.clone()
+                } else {
+                    user.short_id.clone()
+                },
                 protocol: user.protocol.as_str().to_string(),
                 status: user.status.as_str().to_string(),
                 created: user.created_at.format("%Y-%m-%d").to_string(),
                 traffic: display::format_bytes(user.total_traffic()),
-            }
-        }).collect();
-        
+            })
+            .collect();
+
         let table = Table::new(rows).to_string();
         println!("{}", table);
     }
 
-    pub async fn migrate_from_bash(&mut self, source_path: PathBuf, keep_original: bool) -> Result<()> {
-        display::info(&format!("Migration from bash VPN (source: {}, keep_original: {}) not yet implemented", 
-                              source_path.display(), keep_original));
+    pub async fn migrate_from_bash(
+        &mut self,
+        source_path: PathBuf,
+        keep_original: bool,
+    ) -> Result<()> {
+        display::info(&format!(
+            "Migration from bash VPN (source: {}, keep_original: {}) not yet implemented",
+            source_path.display(),
+            keep_original
+        ));
         Ok(())
     }
 
@@ -1188,24 +1356,36 @@ impl CommandHandler {
     }
 
     pub async fn rotate_keys(&mut self, generate_new: bool, backup: bool) -> Result<()> {
-        display::info(&format!("Rotate keys (generate_new: {}, backup: {}) not yet implemented", generate_new, backup));
+        display::info(&format!(
+            "Rotate keys (generate_new: {}, backup: {}) not yet implemented",
+            generate_new, backup
+        ));
         Ok(())
     }
 
-    pub async fn show_logs(&mut self, lines: usize, follow: bool, pattern: Option<String>) -> Result<()> {
-        display::info(&format!("Show logs (lines: {}, follow: {}, pattern: {:?}) not yet implemented", lines, follow, pattern));
+    pub async fn show_logs(
+        &mut self,
+        lines: usize,
+        follow: bool,
+        pattern: Option<String>,
+    ) -> Result<()> {
+        display::info(&format!(
+            "Show logs (lines: {}, follow: {}, pattern: {:?}) not yet implemented",
+            lines, follow, pattern
+        ));
         Ok(())
     }
-    
+
     pub async fn check_network_status(&mut self) -> Result<()> {
         display::info("🔍 Checking Docker network status and available subnets...");
-        
-        let installer = vpn_server::ServerInstaller::new()
+
+        let installer = vpn_server::ServerInstaller::new().map_err(|e| CliError::ServerError(e))?;
+
+        installer
+            .check_network_status()
+            .await
             .map_err(|e| CliError::ServerError(e))?;
-        
-        installer.check_network_status().await
-            .map_err(|e| CliError::ServerError(e))?;
-            
+
         Ok(())
     }
 }

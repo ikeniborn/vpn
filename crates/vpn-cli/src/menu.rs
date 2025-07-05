@@ -1,10 +1,13 @@
-use dialoguer::{theme::ColorfulTheme, Select, Input, Confirm, FuzzySelect};
 use console::{style, Term};
-use crossterm::{execute, terminal::{Clear, ClearType}};
+use crossterm::{
+    execute,
+    terminal::{Clear, ClearType},
+};
+use dialoguer::{theme::ColorfulTheme, Confirm, FuzzySelect, Input, Select};
 use std::io;
 
-use crate::{CommandHandler, Result};
 use crate::utils::display;
+use crate::{CommandHandler, Result};
 
 pub struct InteractiveMenu {
     handler: CommandHandler,
@@ -44,9 +47,9 @@ impl InteractiveMenu {
         loop {
             self.clear_screen()?;
             self.show_header().await?;
-            
+
             let choice = self.show_main_menu().await?;
-            
+
             match choice {
                 MenuAction::Exit => {
                     println!("{}", style("Goodbye!").green());
@@ -60,7 +63,7 @@ impl InteractiveMenu {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -72,7 +75,7 @@ impl InteractiveMenu {
     async fn show_header(&mut self) -> Result<()> {
         println!("{}", style("VPN SERVER MANAGEMENT").cyan().bold());
         println!("{}", style("===================").cyan());
-        
+
         // Show server status
         match self.handler.get_server_status().await {
             Ok(status) => {
@@ -82,18 +85,20 @@ impl InteractiveMenu {
                     style("STOPPED").red()
                 };
                 println!("Server Status: {}", status_text);
-                
+
                 if status.is_running {
                     println!("Active Users: {}", status.active_users);
-                    println!("Containers: {}/{} healthy", 
-                        status.healthy_containers, status.total_containers);
+                    println!(
+                        "Containers: {}/{} healthy",
+                        status.healthy_containers, status.total_containers
+                    );
                 }
             }
             Err(_) => {
                 println!("Server Status: {}", style("UNKNOWN").yellow());
             }
         }
-        
+
         println!();
         Ok(())
     }
@@ -152,7 +157,8 @@ impl InteractiveMenu {
             },
         ];
 
-        let items: Vec<String> = options.iter()
+        let items: Vec<String> = options
+            .iter()
             .map(|opt| format!("{} - {}", opt.title, opt.description))
             .collect();
 
@@ -187,12 +193,12 @@ impl InteractiveMenu {
         // Check if server is already installed
         if self.handler.is_server_installed().await? {
             display::warning("Server is already installed!");
-            
+
             let reinstall = Confirm::with_theme(&ColorfulTheme::default())
                 .with_prompt("Do you want to reinstall?")
                 .default(false)
                 .interact()?;
-            
+
             if !reinstall {
                 return Ok(());
             }
@@ -283,8 +289,14 @@ impl InteractiveMenu {
         if let Some(ref sni) = sni {
             println!("  SNI Domain: {}", sni);
         }
-        println!("  Firewall: {}", if firewall { "Enabled" } else { "Disabled" });
-        println!("  Auto-start: {}", if auto_start { "Enabled" } else { "Disabled" });
+        println!(
+            "  Firewall: {}",
+            if firewall { "Enabled" } else { "Disabled" }
+        );
+        println!(
+            "  Auto-start: {}",
+            if auto_start { "Enabled" } else { "Disabled" }
+        );
         println!();
 
         let confirm = Confirm::with_theme(&ColorfulTheme::default())
@@ -295,9 +307,11 @@ impl InteractiveMenu {
         if confirm {
             self.check_admin_privileges("VPN server installation")?;
             display::info("Starting installation...");
-            self.handler.install_server(protocol, port, sni, firewall, auto_start, None, false).await?;
+            self.handler
+                .install_server(protocol, port, sni, firewall, auto_start, None, false)
+                .await?;
             display::success("Server installed successfully!");
-            
+
             // Show next steps
             println!();
             display::info("Next steps:");
@@ -316,7 +330,7 @@ impl InteractiveMenu {
 
         let actions = vec![
             "Start Server",
-            "Stop Server", 
+            "Stop Server",
             "Restart Server",
             "Reload Configuration",
             "Show Status",
@@ -343,7 +357,7 @@ impl InteractiveMenu {
                     .with_prompt("Are you sure you want to stop the server?")
                     .default(false)
                     .interact()?;
-                
+
                 if confirm {
                     display::info("Stopping server...");
                     self.handler.stop_server().await?;
@@ -493,14 +507,14 @@ impl InteractiveMenu {
 
     async fn show_user_interactive(&mut self) -> Result<()> {
         let users = self.handler.get_user_list().await?;
-        
+
         if users.is_empty() {
             display::warning("No users found!");
             return Ok(());
         }
 
         let user_names: Vec<String> = users.iter().map(|u| u.name.clone()).collect();
-        
+
         let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
             .with_prompt("Select user")
             .items(&user_names)
@@ -508,26 +522,28 @@ impl InteractiveMenu {
             .interact()?;
 
         let user_name = &user_names[selection];
-        
+
         let show_qr = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt("Show QR code?")
             .default(false)
             .interact()?;
 
-        self.handler.show_user_details(user_name.clone(), show_qr).await?;
+        self.handler
+            .show_user_details(user_name.clone(), show_qr)
+            .await?;
         Ok(())
     }
 
     async fn delete_user_interactive(&mut self) -> Result<()> {
         let users = self.handler.get_user_list().await?;
-        
+
         if users.is_empty() {
             display::warning("No users found!");
             return Ok(());
         }
 
         let user_names: Vec<String> = users.iter().map(|u| u.name.clone()).collect();
-        
+
         let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
             .with_prompt("Select user to delete")
             .items(&user_names)
@@ -535,9 +551,12 @@ impl InteractiveMenu {
             .interact()?;
 
         let user_name = &user_names[selection];
-        
+
         let confirm = Confirm::with_theme(&ColorfulTheme::default())
-            .with_prompt(&format!("Are you sure you want to delete user '{}'?", user_name))
+            .with_prompt(&format!(
+                "Are you sure you want to delete user '{}'?",
+                user_name
+            ))
             .default(false)
             .interact()?;
 
@@ -551,14 +570,14 @@ impl InteractiveMenu {
 
     async fn generate_link_interactive(&mut self) -> Result<()> {
         let users = self.handler.get_user_list().await?;
-        
+
         if users.is_empty() {
             display::warning("No users found!");
             return Ok(());
         }
 
         let user_names: Vec<String> = users.iter().map(|u| u.name.clone()).collect();
-        
+
         let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
             .with_prompt("Select user")
             .items(&user_names)
@@ -566,13 +585,18 @@ impl InteractiveMenu {
             .interact()?;
 
         let user_name = &user_names[selection];
-        
-        let generate_qr = Confirm::with_theme(&ColorfulTheme::default())
-            .with_prompt("Generate QR code file?")
+
+        let show_qr = Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt("Display QR code in terminal?")
+            .default(true)
+            .interact()?;
+
+        let generate_qr_file = Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt("Save QR code to file?")
             .default(false)
             .interact()?;
 
-        let qr_file = if generate_qr {
+        let qr_file = if generate_qr_file {
             let qr_path: String = Input::with_theme(&ColorfulTheme::default())
                 .with_prompt("Enter QR code file path")
                 .default(format!("{}_qr.png", user_name))
@@ -582,20 +606,22 @@ impl InteractiveMenu {
             None
         };
 
-        self.handler.generate_user_link(user_name.clone(), qr_file).await?;
+        self.handler
+            .generate_user_link(user_name.clone(), show_qr, qr_file)
+            .await?;
         Ok(())
     }
 
     async fn reset_user_traffic_interactive(&mut self) -> Result<()> {
         let users = self.handler.get_user_list().await?;
-        
+
         if users.is_empty() {
             display::warning("No users found!");
             return Ok(());
         }
 
         let user_names: Vec<String> = users.iter().map(|u| u.name.clone()).collect();
-        
+
         let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
             .with_prompt("Select user")
             .items(&user_names)
@@ -603,9 +629,12 @@ impl InteractiveMenu {
             .interact()?;
 
         let user_name = &user_names[selection];
-        
+
         let confirm = Confirm::with_theme(&ColorfulTheme::default())
-            .with_prompt(&format!("Reset traffic statistics for user '{}'?", user_name))
+            .with_prompt(&format!(
+                "Reset traffic statistics for user '{}'?",
+                user_name
+            ))
             .default(false)
             .interact()?;
 
@@ -641,21 +670,25 @@ impl InteractiveMenu {
                     .with_prompt("Enter export file path")
                     .default("users_export.json".to_string())
                     .interact_text()?;
-                
-                self.handler.export_users(std::path::PathBuf::from(file_path)).await?;
+
+                self.handler
+                    .export_users(std::path::PathBuf::from(file_path))
+                    .await?;
                 display::success("Users exported successfully!");
             }
             1 => {
                 let file_path: String = Input::with_theme(&ColorfulTheme::default())
                     .with_prompt("Enter import file path")
                     .interact_text()?;
-                
+
                 let overwrite = Confirm::with_theme(&ColorfulTheme::default())
                     .with_prompt("Overwrite existing users?")
                     .default(false)
                     .interact()?;
-                
-                self.handler.import_users(std::path::PathBuf::from(file_path), overwrite).await?;
+
+                self.handler
+                    .import_users(std::path::PathBuf::from(file_path), overwrite)
+                    .await?;
                 display::success("Users imported successfully!");
             }
             _ => {
@@ -701,7 +734,7 @@ impl InteractiveMenu {
                         }
                     })
                     .interact_text()?;
-                
+
                 self.handler.show_traffic_stats().await?;
             }
             1 => {
@@ -709,7 +742,7 @@ impl InteractiveMenu {
                     .with_prompt("Continuous monitoring?")
                     .default(false)
                     .interact()?;
-                
+
                 self.handler.show_system_health().await?;
             }
             2 => {
@@ -752,8 +785,10 @@ impl InteractiveMenu {
                     .with_prompt("Number of lines to show")
                     .default("100".to_string())
                     .interact_text()?;
-                
-                self.handler.show_logs(lines.parse().unwrap_or(100), false, None).await?;
+
+                self.handler
+                    .show_logs(lines.parse().unwrap_or(100), false, None)
+                    .await?;
             }
             1 => {
                 display::info("Following logs (Press Ctrl+C to stop)...");
@@ -763,11 +798,13 @@ impl InteractiveMenu {
                 let pattern: String = Input::with_theme(&ColorfulTheme::default())
                     .with_prompt("Enter search pattern")
                     .interact_text()?;
-                
+
                 self.handler.show_logs(100, false, Some(pattern)).await?;
             }
             3 => {
-                self.handler.show_logs(100, false, Some("error".to_string())).await?;
+                self.handler
+                    .show_logs(100, false, Some("error".to_string()))
+                    .await?;
             }
             4 => return Ok(()),
             _ => {}
@@ -804,12 +841,14 @@ impl InteractiveMenu {
                     .with_prompt("Create backup before rotation?")
                     .default(true)
                     .interact()?;
-                
+
                 let confirm = Confirm::with_theme(&ColorfulTheme::default())
-                    .with_prompt("Rotate server keys? This will require reconnection of all clients.")
+                    .with_prompt(
+                        "Rotate server keys? This will require reconnection of all clients.",
+                    )
                     .default(false)
                     .interact()?;
-                
+
                 if confirm {
                     self.handler.rotate_keys(false, backup).await?;
                     display::success("Server keys rotated successfully!");
@@ -820,12 +859,12 @@ impl InteractiveMenu {
                     .with_prompt("Create backup before rotation?")
                     .default(true)
                     .interact()?;
-                
+
                 let confirm = Confirm::with_theme(&ColorfulTheme::default())
                     .with_prompt("Rotate ALL keys? This will require ALL clients to reconnect.")
                     .default(false)
                     .interact()?;
-                
+
                 if confirm {
                     self.handler.rotate_keys(true, backup).await?;
                     display::success("All keys rotated successfully!");
@@ -878,25 +917,33 @@ impl InteractiveMenu {
             2 => {
                 let backup_path: String = Input::with_theme(&ColorfulTheme::default())
                     .with_prompt("Enter backup file path")
-                    .default(format!("config_backup_{}.tar.gz", 
-                        chrono::Utc::now().format("%Y%m%d_%H%M%S")))
+                    .default(format!(
+                        "config_backup_{}.tar.gz",
+                        chrono::Utc::now().format("%Y%m%d_%H%M%S")
+                    ))
                     .interact_text()?;
-                
-                self.handler.backup_configuration(Some(std::path::PathBuf::from(backup_path))).await?;
+
+                self.handler
+                    .backup_configuration(Some(std::path::PathBuf::from(backup_path)))
+                    .await?;
                 display::success("Configuration backed up successfully!");
             }
             3 => {
                 let backup_path: String = Input::with_theme(&ColorfulTheme::default())
                     .with_prompt("Enter backup file path")
                     .interact_text()?;
-                
+
                 let confirm = Confirm::with_theme(&ColorfulTheme::default())
-                    .with_prompt("Restore configuration from backup? This will overwrite current settings.")
+                    .with_prompt(
+                        "Restore configuration from backup? This will overwrite current settings.",
+                    )
                     .default(false)
                     .interact()?;
-                
+
                 if confirm {
-                    self.handler.restore_configuration(std::path::PathBuf::from(backup_path)).await?;
+                    self.handler
+                        .restore_configuration(std::path::PathBuf::from(backup_path))
+                        .await?;
                     display::success("Configuration restored successfully!");
                 }
             }
@@ -908,7 +955,7 @@ impl InteractiveMenu {
                     .with_prompt("Reset configuration to defaults? This cannot be undone.")
                     .default(false)
                     .interact()?;
-                
+
                 if confirm {
                     self.handler.reset_configuration().await?;
                     display::success("Configuration reset to defaults!");
@@ -983,7 +1030,9 @@ impl InteractiveMenu {
 
         if confirm {
             display::info("Starting migration from Bash implementation...");
-            self.handler.migrate_from_bash(std::path::PathBuf::from(source_path), keep_original).await?;
+            self.handler
+                .migrate_from_bash(std::path::PathBuf::from(source_path), keep_original)
+                .await?;
             display::success("Migration completed successfully!");
         }
 
@@ -1018,9 +1067,9 @@ impl InteractiveMenu {
     fn check_admin_privileges(&self, operation: &str) -> Result<()> {
         if !crate::PrivilegeManager::is_root() {
             display::warning(&format!("{} requires administrator privileges.", operation));
-            return Err(crate::CliError::PermissionError(
-                format!("Please run with administrator privileges: sudo vpn menu")
-            ));
+            return Err(crate::CliError::PermissionError(format!(
+                "Please run with administrator privileges: sudo vpn menu"
+            )));
         }
         Ok(())
     }
@@ -1028,42 +1077,42 @@ impl InteractiveMenu {
     async fn uninstall_server_interactive(&mut self) -> Result<()> {
         println!("{}", style("Server Uninstallation").red().bold());
         println!();
-        
+
         // Check if server is installed
         if !self.handler.is_server_installed().await? {
             display::warning("No VPN server installation found!");
             return Ok(());
         }
-        
+
         display::warning("⚠️  This will completely remove the VPN server!");
         display::warning("   • All containers will be stopped and removed");
         display::warning("   • Firewall rules will be cleaned up");
         display::warning("   • Configuration files will be deleted");
         println!();
-        
+
         // Ask for purge option
         let purge = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt("Also remove Docker images and log files? (Complete cleanup)")
             .default(false)
             .interact()?;
-        
+
         if purge {
             display::warning("   • Docker images will be removed");
             display::warning("   • All log files will be deleted");
             display::warning("   • This cannot be undone!");
             println!();
         }
-        
+
         // Final confirmation
         let confirm = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt("Are you sure you want to proceed with uninstallation?")
             .default(false)
             .interact()?;
-        
+
         if confirm {
             self.check_admin_privileges("Server uninstallation")?;
             display::info("Starting server uninstallation...");
-            
+
             match self.handler.uninstall_server(purge).await {
                 Ok(_) => {
                     display::success("Server uninstalled successfully!");
@@ -1081,7 +1130,7 @@ impl InteractiveMenu {
         } else {
             display::info("Uninstallation cancelled.");
         }
-        
+
         Ok(())
     }
 
