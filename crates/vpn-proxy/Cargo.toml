@@ -44,7 +44,7 @@ url = "2.5"
 # TLS
 rustls = "0.21"
 tokio-rustls = "0.24"
-rustls-pemfile = "1.0"
+rustls-pemfile = "2.2"
 
 # Authentication
 base64 = { workspace = true }
