@@ -29,11 +29,11 @@ serde_yaml = "0.9"
 clap = { version = "4.4", features = ["derive", "color", "suggestions"] }
 clap_complete = "4.4"
 dialoguer = { version = "0.11", features = ["fuzzy-select"] }
-console = "0.15"
-indicatif = "0.17"
+console = "0.16"
+indicatif = "0.18"
 colored = "2.1"
-tabled = "0.15"
-crossterm = "0.27"
+tabled = "0.20"
+crossterm = "0.29"
 dirs = "5.0"
 toml = { workspace = true }
 base64 = { workspace = true }
@@ -47,4 +47,4 @@ rand = { workspace = true }
 [dev-dependencies]
 tempfile = "3.8"
 tokio-test = "0.4"
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.6", features = ["html_reports"] }
