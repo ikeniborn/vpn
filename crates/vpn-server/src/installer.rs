@@ -329,6 +329,11 @@ impl ServerInstaller {
                     .generate_outline_compose(&options.install_path, server_config, options, subnet)
                     .await?;
             }
+            VpnProtocol::Wireguard => {
+                template
+                    .generate_wireguard_compose(&options.install_path, server_config, options, subnet)
+                    .await?;
+            }
             VpnProtocol::HttpProxy | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer => {
                 // TODO: Implement proxy server installation
                 return Err(ServerError::InstallationError(format!(

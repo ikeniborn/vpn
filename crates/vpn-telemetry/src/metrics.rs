@@ -422,7 +422,7 @@ impl MetricsCollector {
         &mut self,
         name: &str,
         value: f64,
-        labels: Vec<(&str, &str)>,
+        _labels: Vec<(&str, &str)>,
     ) -> Result<()> {
         debug!("Recording custom metric: {} = {}", name, value);
 

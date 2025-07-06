@@ -92,7 +92,7 @@ pub fn create_service_patch(vpn: &VpnServer, existing: &Service) -> Result<serde
             &new_service.spec.as_ref().unwrap().ports,
         ) {
             let mut preserved_ports = new_ports.clone();
-            for (i, new_port) in preserved_ports.iter_mut().enumerate() {
+            for (_i, new_port) in preserved_ports.iter_mut().enumerate() {
                 if let Some(existing_port) = existing_ports.iter().find(|p| p.name == new_port.name)
                 {
                     if let Some(node_port) = existing_port.node_port {

@@ -196,6 +196,91 @@ networks:
         Ok(())
     }
 
+    pub async fn generate_wireguard_compose(
+        &self,
+        install_path: &Path,
+        server_config: &ServerConfig,
+        options: &InstallationOptions,
+        subnet: Option<&str>,
+    ) -> Result<()> {
+        let compose_content =
+            self.create_wireguard_compose_content(server_config, options, subnet)?;
+
+        let compose_file = install_path.join("docker-compose.yml");
+        fs::write(&compose_file, compose_content)?;
+
+        // Create directory structure
+        self.create_wireguard_directories(install_path)?;
+
+        Ok(())
+    }
+
+    fn create_wireguard_compose_content(
+        &self,
+        server_config: &ServerConfig,
+        options: &InstallationOptions,
+        subnet: Option<&str>,
+    ) -> Result<String> {
+        let restart_policy = if options.auto_start {
+            "unless-stopped"
+        } else {
+            "no"
+        };
+
+        let compose = format!(
+            r#"services:
+  wireguard:
+    image: linuxserver/wireguard:latest
+    container_name: wireguard
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - SERVERPORT={}
+      - PEERS=50
+      - PEERDNS=auto
+      - INTERNAL_SUBNET=10.13.13.0
+      - ALLOWEDIPS=0.0.0.0/0
+      - LOG_CONFS=true
+    volumes:
+      - ./config:/config
+      - /lib/modules:/lib/modules:ro
+    ports:
+      - "{}:{}/udp"
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    restart: {}
+    networks:
+      - vpn-network
+
+networks:
+  vpn-network:
+    driver: bridge{subnet_config}
+"#,
+            server_config.port,
+            server_config.port,
+            server_config.port,
+            restart_policy,
+            subnet_config = Self::format_subnet_config(subnet)
+        );
+
+        Ok(compose)
+    }
+
+    fn create_wireguard_directories(&self, install_path: &Path) -> Result<()> {
+        let directories = ["config"];
+
+        for dir in &directories {
+            let dir_path = install_path.join(dir);
+            fs::create_dir_all(&dir_path)?;
+        }
+
+        Ok(())
+    }
+
     fn create_outline_directories(&self, install_path: &Path) -> Result<()> {
         let directories = ["persisted-state", "management"];
 

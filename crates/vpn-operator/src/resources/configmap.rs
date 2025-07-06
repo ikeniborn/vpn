@@ -156,7 +156,7 @@ verb 3
 }
 
 /// Generate environment configuration
-fn generate_env_config(vpn: &VpnServer, config: &OperatorConfig) -> Result<String> {
+fn generate_env_config(vpn: &VpnServer, _config: &OperatorConfig) -> Result<String> {
     let mut env = vec![
         format!("VPN_PROTOCOL={:?}", vpn.spec.protocol).to_lowercase(),
         format!("VPN_PORT={}", vpn.spec.port),

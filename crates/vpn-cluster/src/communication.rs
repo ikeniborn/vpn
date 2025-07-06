@@ -44,12 +44,12 @@ impl ClusterGrpcServer {
     /// Start the gRPC server
     pub async fn start(&self) -> Result<()> {
         let cluster_service = ClusterServiceImpl {
-            node_id: self.node_id.clone(),
+            _node_id: self.node_id.clone(),
             state: self.state.clone(),
         };
 
         let consensus_service = ConsensusServiceImpl {
-            node_id: self.node_id.clone(),
+            _node_id: self.node_id.clone(),
             state: self.state.clone(),
         };
 
@@ -69,7 +69,7 @@ impl ClusterGrpcServer {
 /// Implementation of ClusterService
 #[derive(Clone)]
 struct ClusterServiceImpl {
-    node_id: NodeId,
+    _node_id: NodeId,
     state: Arc<RwLock<ClusterState>>,
 }
 
@@ -240,7 +240,7 @@ impl ClusterService for ClusterServiceImpl {
 /// Implementation of ConsensusService
 #[derive(Clone)]
 struct ConsensusServiceImpl {
-    node_id: NodeId,
+    _node_id: NodeId,
     state: Arc<RwLock<ClusterState>>,
 }
 

@@ -205,7 +205,7 @@ impl InteractiveMenu {
         }
 
         // Select protocol
-        let protocols = vec!["VLESS+Reality", "Shadowsocks", "Trojan", "VMess"];
+        let protocols = vec!["VLESS+Reality", "Shadowsocks", "WireGuard", "HTTP/SOCKS5 Proxy"];
         let protocol_selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("Select VPN protocol")
             .items(&protocols)
@@ -215,8 +215,8 @@ impl InteractiveMenu {
         let protocol = match protocol_selection {
             0 => crate::cli::Protocol::Vless,
             1 => crate::cli::Protocol::Shadowsocks,
-            2 => crate::cli::Protocol::Trojan,
-            3 => crate::cli::Protocol::Vmess,
+            2 => crate::cli::Protocol::Wireguard,
+            3 => crate::cli::Protocol::ProxyServer,
             _ => crate::cli::Protocol::Vless,
         };
 
@@ -482,7 +482,7 @@ impl InteractiveMenu {
             }
         };
 
-        let protocols = vec!["VLESS+Reality", "Shadowsocks", "Trojan", "VMess"];
+        let protocols = vec!["VLESS+Reality", "Shadowsocks", "WireGuard"];
         let protocol_selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("Select protocol")
             .items(&protocols)
@@ -492,8 +492,7 @@ impl InteractiveMenu {
         let protocol = match protocol_selection {
             0 => crate::cli::Protocol::Vless,
             1 => crate::cli::Protocol::Shadowsocks,
-            2 => crate::cli::Protocol::Trojan,
-            3 => crate::cli::Protocol::Vmess,
+            2 => crate::cli::Protocol::Wireguard,
             _ => crate::cli::Protocol::Vless,
         };
 

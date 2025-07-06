@@ -89,7 +89,7 @@ impl VpnReconciler {
         let cm = configmap::create_vpn_configmap(vpn, &self.config)?;
 
         match api.get(&cm_name).await {
-            Ok(existing) => {
+            Ok(_existing) => {
                 // Update existing ConfigMap
                 let patch = Patch::Apply(&cm);
                 api.patch(&cm_name, &PatchParams::apply("vpn-operator"), &patch)
@@ -144,7 +144,7 @@ impl VpnReconciler {
         let deployment = deployment::create_vpn_deployment(vpn, &self.config)?;
 
         match api.get(&deployment_name).await {
-            Ok(existing) => {
+            Ok(_existing) => {
                 // Update existing Deployment
                 let patch = Patch::Apply(&deployment);
                 api.patch(

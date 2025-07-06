@@ -26,9 +26,9 @@ pub struct VpnOperatorController {
     /// Operator configuration
     config: OperatorConfig,
     /// Reconciler for VPN resources
-    reconciler: Arc<VpnReconciler>,
+    _reconciler: Arc<VpnReconciler>,
     /// Event recorder
-    recorder: Recorder,
+    _recorder: Recorder,
 }
 
 /// Controller context passed to reconciliation
@@ -59,8 +59,8 @@ impl VpnOperatorController {
         Ok(Self {
             client,
             config,
-            reconciler,
-            recorder,
+            _reconciler: reconciler,
+            _recorder: recorder,
         })
     }
 

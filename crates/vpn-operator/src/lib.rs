@@ -21,7 +21,7 @@ use std::sync::Arc;
 /// Main operator that orchestrates VPN deployments in Kubernetes
 pub struct VpnOperator {
     /// Kubernetes client
-    client: Client,
+    _client: Client,
     /// Operator configuration
     config: OperatorConfig,
     /// Controller for managing resources
@@ -90,7 +90,7 @@ impl VpnOperator {
             Arc::new(VpnOperatorController::new(client.clone(), config.clone()).await?);
 
         Ok(Self {
-            client,
+            _client: client,
             config,
             controller,
         })

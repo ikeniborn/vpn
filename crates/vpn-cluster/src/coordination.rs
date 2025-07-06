@@ -305,10 +305,10 @@ impl ClusterCoordinator {
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         Ok(ClusterInfo {
-            cluster_name: self.config.cluster_name.clone(),
-            leader_id: None,
-            node_count: 1,
-            bootstrap_address: address,
+            _cluster_name: self.config.cluster_name.clone(),
+            _leader_id: None,
+            _node_count: 1,
+            _bootstrap_address: address,
         })
     }
 
@@ -508,10 +508,10 @@ pub enum CoordinationEvent {
 /// Information about a cluster obtained from bootstrap nodes
 #[derive(Debug, Clone)]
 struct ClusterInfo {
-    cluster_name: String,
-    leader_id: Option<NodeId>,
-    node_count: usize,
-    bootstrap_address: SocketAddr,
+    _cluster_name: String,
+    _leader_id: Option<NodeId>,
+    _node_count: usize,
+    _bootstrap_address: SocketAddr,
 }
 
 /// Status of a coordination operation

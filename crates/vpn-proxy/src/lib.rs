@@ -104,8 +104,13 @@ impl ProxyServer {
         };
 
         // Wait for both servers
-        tokio::try_join!(http_handle, socks_handle)
+        let (http_result, socks_result) = tokio::try_join!(http_handle, socks_handle)
             .map_err(|e| ProxyError::internal(format!("Task join error: {}", e)))?;
+        
+        // Propagate any errors from the servers
+        http_result?;
+        socks_result?;
+        
         Ok(())
     }
 

@@ -15,20 +15,20 @@ use tracing::{debug, info};
 
 /// A pooled connection with metadata
 struct PooledConnection {
-    stream: TcpStream,
+    _stream: TcpStream,
     created_at: Instant,
     last_used: Instant,
-    uses: u32,
+    _uses: u32,
 }
 
 impl PooledConnection {
     fn new(stream: TcpStream) -> Self {
         let now = Instant::now();
         Self {
-            stream,
+            _stream: stream,
             created_at: now,
             last_used: now,
-            uses: 0,
+            _uses: 0,
         }
     }
 
@@ -48,10 +48,12 @@ impl PooledConnection {
         false
     }
 
+    // Method currently unused - keeping for future connection pooling implementation
+    #[allow(dead_code)]
     fn use_connection(&mut self) -> &mut TcpStream {
         self.last_used = Instant::now();
-        self.uses += 1;
-        &mut self.stream
+        self._uses += 1;
+        &mut self._stream
     }
 }
 

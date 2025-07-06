@@ -181,7 +181,7 @@ pub fn validate_base64(base64: &str) -> Result<()> {
 }
 
 pub fn validate_protocol_name(protocol: &str) -> Result<()> {
-    let valid_protocols = ["vless", "vmess", "trojan", "shadowsocks", "socks", "http"];
+    let valid_protocols = ["vless", "shadowsocks", "wireguard", "socks", "http"];
 
     if !valid_protocols.contains(&protocol.to_lowercase().as_str()) {
         return Err(CliError::ValidationError(format!(

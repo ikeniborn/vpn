@@ -14,7 +14,7 @@ pub struct TraceContext {
     pub span_id: String,
     pub operation: String,
     pub start_time: std::time::Instant,
-    span: Arc<Span>,
+    _span: Arc<Span>,
 }
 
 impl TraceContext {
@@ -28,7 +28,7 @@ impl TraceContext {
             span_id,
             operation: operation.to_string(),
             start_time: std::time::Instant::now(),
-            span: Arc::new(span),
+            _span: Arc::new(span),
         }
     }
 

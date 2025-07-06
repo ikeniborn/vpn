@@ -38,9 +38,9 @@ pub fn mutate_vpn_server(req: AdmissionRequest<VpnServer>) -> AdmissionResponse 
 /// Validate VPN server specification
 fn validate_spec(spec: &VpnServerSpec) -> Result<()> {
     // Validate port range
-    if spec.port < 1024 || spec.port > 65535 {
+    if spec.port < 1024 {
         return Err(OperatorError::validation(
-            "Port must be between 1024 and 65535",
+            "Port must be 1024 or higher",
         ));
     }
 

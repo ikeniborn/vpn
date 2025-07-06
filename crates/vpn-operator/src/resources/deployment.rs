@@ -182,7 +182,7 @@ fn create_env_vars(vpn: &VpnServer) -> Vec<EnvVar> {
 }
 
 /// Create volume mounts
-fn create_volume_mounts(vpn: &VpnServer) -> Vec<VolumeMount> {
+fn create_volume_mounts(_vpn: &VpnServer) -> Vec<VolumeMount> {
     vec![
         VolumeMount {
             name: "config".to_string(),

@@ -6,14 +6,14 @@ use std::collections::HashMap;
 
 /// Manages cluster membership (placeholder)
 pub struct MembershipManager {
-    node_id: NodeId,
+    _node_id: NodeId,
     members: HashMap<NodeId, Node>,
 }
 
 impl MembershipManager {
     pub fn new(node_id: NodeId) -> Self {
         Self {
-            node_id,
+            _node_id: node_id,
             members: HashMap::new(),
         }
     }

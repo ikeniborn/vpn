@@ -88,7 +88,7 @@ struct RaftState {
     voted_for: Option<NodeId>,
     log: Vec<LogEntry>,
     commit_index: u64,
-    last_applied: u64,
+    _last_applied: u64,
     next_index: std::collections::HashMap<NodeId, u64>,
     match_index: std::collections::HashMap<NodeId, u64>,
     role: RaftRole,
@@ -107,10 +107,10 @@ enum RaftRole {
 
 #[derive(Debug, Clone)]
 struct LogEntry {
-    term: u64,
+    _term: u64,
     index: u64,
-    data: Vec<u8>,
-    timestamp: u64,
+    _data: Vec<u8>,
+    _timestamp: u64,
 }
 
 impl RaftConsensus {
@@ -120,7 +120,7 @@ impl RaftConsensus {
             voted_for: None,
             log: vec![],
             commit_index: 0,
-            last_applied: 0,
+            _last_applied: 0,
             next_index: std::collections::HashMap::new(),
             match_index: std::collections::HashMap::new(),
             role: RaftRole::Follower,
@@ -201,10 +201,10 @@ impl RaftConsensus {
         }
 
         let entry = LogEntry {
-            term: state.current_term,
+            _term: state.current_term,
             index: state.log.len() as u64 + 1,
-            data,
-            timestamp: current_timestamp(),
+            _data: data,
+            _timestamp: current_timestamp(),
         };
 
         let index = entry.index;
@@ -431,12 +431,12 @@ impl ConsensusEngine for RaftConsensus {
 
 /// PBFT consensus implementation (placeholder)
 pub struct PbftConsensus {
-    node_id: NodeId,
+    _node_id: NodeId,
 }
 
 impl PbftConsensus {
     pub async fn new(node_id: NodeId) -> Result<Self> {
-        Ok(Self { node_id })
+        Ok(Self { _node_id: node_id })
     }
 }
 

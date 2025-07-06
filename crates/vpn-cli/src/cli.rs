@@ -920,8 +920,7 @@ pub enum StatusFormat {
 pub enum Protocol {
     Vless,
     Shadowsocks,
-    Trojan,
-    Vmess,
+    Wireguard,
     HttpProxy,
     Socks5Proxy,
     ProxyServer,
@@ -962,8 +961,7 @@ impl From<Protocol> for vpn_types::protocol::VpnProtocol {
         match protocol {
             Protocol::Vless => vpn_types::protocol::VpnProtocol::Vless,
             Protocol::Shadowsocks => vpn_types::protocol::VpnProtocol::Outline,
-            Protocol::Trojan => vpn_types::protocol::VpnProtocol::Vless, // Map to VLESS for now
-            Protocol::Vmess => vpn_types::protocol::VpnProtocol::Vless,  // Map to VLESS for now
+            Protocol::Wireguard => vpn_types::protocol::VpnProtocol::Wireguard,
             Protocol::HttpProxy => vpn_types::protocol::VpnProtocol::HttpProxy,
             Protocol::Socks5Proxy => vpn_types::protocol::VpnProtocol::Socks5Proxy,
             Protocol::ProxyServer => vpn_types::protocol::VpnProtocol::ProxyServer,
