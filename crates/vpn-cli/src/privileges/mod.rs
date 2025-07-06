@@ -225,6 +225,28 @@ impl PrivilegeManager {
 
     /// Check installation directory permissions
     pub fn check_install_path_permissions(path: &std::path::Path) -> Result<()> {
+        // First check if the directory exists
+        if !path.exists() {
+            // Try to create the directory
+            match std::fs::create_dir_all(path) {
+                Ok(_) => {
+                    println!("Created installation directory: {}", path.display());
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                    return Err(CliError::PermissionError(format!(
+                        "Cannot create installation directory {}. Run with administrator privileges or use --install-path to specify a different location.",
+                        path.display()
+                    )));
+                }
+                Err(e) => {
+                    return Err(CliError::PermissionError(format!(
+                        "Failed to create installation directory {}: {}",
+                        path.display(), e
+                    )));
+                }
+            }
+        }
+
         // Try to create a test file in the directory
         let test_file = path.join(".vpn_permission_test");
 
