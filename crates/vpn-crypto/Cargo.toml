@@ -8,7 +8,7 @@ license.workspace = true
 [dependencies]
 x25519-dalek = { workspace = true }
 rand = { workspace = true }
-rand_core = "0.5"
+rand_core = "0.9"
 base64 = { workspace = true }
 uuid = { workspace = true }
 qrcode = { workspace = true }
