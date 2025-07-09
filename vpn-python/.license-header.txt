@@ -1,0 +1,3 @@
+Copyright (c) 2024 VPN Manager Project
+
+Licensed under the MIT License. See LICENSE file for details.

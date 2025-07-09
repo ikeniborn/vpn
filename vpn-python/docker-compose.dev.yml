@@ -1,0 +1,174 @@
+version: '3.8'
+
+services:
+  vpn-manager-dev:
+    build:
+      context: .
+      target: development
+    container_name: vpn-manager-dev
+    hostname: vpn-manager-dev
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/app
+      - vpn-config-dev:/home/app/.config/vpn-manager
+      - vpn-data-dev:/home/app/.local/share/vpn-manager
+      - vpn-logs-dev:/var/log/vpn-manager
+    environment:
+      - VPN_LOG_LEVEL=debug
+      - VPN_DATABASE_URL=postgresql://vpn_manager:vpn_manager_password@localhost:5432/vpn_manager
+      - VPN_REDIS_URL=redis://localhost:6379/0
+      - VPN_DOCKER_HOST=unix:///var/run/docker.sock
+      - PYTHONPATH=/app
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8443:8443"    # VLESS
+      - "8444:8444"    # Shadowsocks
+      - "1080:1080"    # SOCKS5 proxy
+      - "8888:8888"    # HTTP proxy
+      - "51820:51820/udp"  # WireGuard
+      - "8000:8000"    # Dev server
+    depends_on:
+      - redis-dev
+      - postgres-dev
+    command: bash -c "poetry install && bash"
+    stdin_open: true
+    tty: true
+
+  redis-dev:
+    image: redis:7-alpine
+    container_name: vpn-redis-dev
+    restart: unless-stopped
+    volumes:
+      - redis-data-dev:/data
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+
+  postgres-dev:
+    image: postgres:15-alpine
+    container_name: vpn-postgres-dev
+    restart: unless-stopped
+    volumes:
+      - postgres-data-dev:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    environment:
+      - POSTGRES_DB=vpn_manager
+      - POSTGRES_USER=vpn_manager
+      - POSTGRES_PASSWORD=vpn_manager_password
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    ports:
+      - "5432:5432"
+
+  test-runner:
+    build:
+      context: .
+      target: development
+    container_name: vpn-test-runner
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - VPN_DATABASE_URL=postgresql://vpn_manager:vpn_manager_password@postgres-dev:5432/vpn_manager_test
+      - VPN_REDIS_URL=redis://redis-dev:6379/1
+      - PYTHONPATH=/app
+    depends_on:
+      - redis-dev
+      - postgres-dev
+    command: |
+      bash -c "
+        poetry install &&
+        poetry run pytest tests/ -v --cov=vpn --cov-report=html --cov-report=term
+      "
+    profiles:
+      - test
+
+  docs:
+    build:
+      context: .
+      target: development
+    container_name: vpn-docs
+    volumes:
+      - .:/app
+    ports:
+      - "8001:8000"
+    command: |
+      bash -c "
+        poetry install &&
+        poetry run pip install mkdocs-material mkdocstrings[python] &&
+        poetry run mkdocs serve --dev-addr 0.0.0.0:8000
+      "
+    profiles:
+      - docs
+
+  monitoring-dev:
+    image: prom/prometheus:latest
+    container_name: vpn-prometheus-dev
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.dev.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data-dev:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+      - --storage.tsdb.retention.time=24h
+      - --web.enable-lifecycle
+      - --web.enable-admin-api
+
+  grafana-dev:
+    image: grafana/grafana:latest
+    container_name: vpn-grafana-dev
+    restart: unless-stopped
+    volumes:
+      - grafana-data-dev:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    ports:
+      - "3000:3000"
+    depends_on:
+      - monitoring-dev
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: vpn-jaeger-dev
+    restart: unless-stopped
+    ports:
+      - "14268:14268"  # Jaeger collector
+      - "16686:16686"  # Jaeger UI
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
+volumes:
+  vpn-config-dev:
+    driver: local
+  vpn-data-dev:
+    driver: local
+  vpn-logs-dev:
+    driver: local
+  redis-data-dev:
+    driver: local
+  postgres-data-dev:
+    driver: local
+  prometheus-data-dev:
+    driver: local
+  grafana-data-dev:
+    driver: local
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.21.0.0/16
