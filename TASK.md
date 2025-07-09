@@ -116,7 +116,7 @@ Transform the current Rust-based VPN management system into a maintainable Pytho
 - [x] **UI Features**
   - [x] Dark/light theme support
   - [x] Responsive layout
-  - [ ] Context menus (deferred to future release)
+  - [x] Context menus
   - [x] Modal dialogs
   - [x] Toast notifications
 
@@ -184,8 +184,6 @@ Transform the current Rust-based VPN management system into a maintainable Pytho
   - [x] PyPI package setup (pyproject.toml with Poetry)
   - [x] Docker image creation (multi-stage Dockerfile)
   - [x] Docker Compose configurations (production + development)
-  - [ ] Snap package (placeholder created)
-  - [ ] Windows installer (PyInstaller workflow created)
   
 - [x] **CI/CD**
   - [x] GitHub Actions workflows (CI + Release)

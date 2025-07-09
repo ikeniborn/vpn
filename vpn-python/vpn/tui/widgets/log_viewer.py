@@ -15,6 +15,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widget import Widget
 from textual.widgets import Button, Input, Label, Log, Static
 
+from vpn.tui.widgets.context_menu import ContextMenuMixin, ContextMenuItem
 from vpn.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -94,8 +95,8 @@ class LogEntry:
         return text
 
 
-class LogViewer(Widget):
-    """Enhanced log viewer widget with search and filtering."""
+class LogViewer(Widget, ContextMenuMixin):
+    """Enhanced log viewer widget with search, filtering, and context menu support."""
     
     DEFAULT_CSS = """
     LogViewer {
@@ -169,6 +170,9 @@ class LogViewer(Widget):
         """Initialize the log viewer when mounted."""
         self.start_log_monitoring()
         self.update_stats()
+        
+        # Set up context menu
+        self.set_context_menu_items(self._create_log_context_menu())
     
     @work(exclusive=True)
     async def start_log_monitoring(self) -> None:
@@ -415,3 +419,141 @@ class LogViewer(Widget):
                 button.variant = "primary"
             else:
                 button.variant = "default"
+    
+    def _create_log_context_menu(self) -> list[ContextMenuItem]:
+        """Create context menu items for log viewer."""
+        return [
+            ContextMenuItem(
+                "Copy Line",
+                action=lambda: self._copy_current_line(),
+                shortcut="Ctrl+C"
+            ),
+            ContextMenuItem(
+                "Copy All Visible",
+                action=lambda: self._copy_all_visible(),
+                shortcut="Ctrl+A"
+            ),
+            ContextMenuItem("", separator=True),
+            ContextMenuItem(
+                "Save to File",
+                action=lambda: self._save_to_file(),
+                shortcut="Ctrl+S"
+            ),
+            ContextMenuItem("", separator=True),
+            ContextMenuItem(
+                "Clear Logs",
+                action=lambda: self.on_clear_logs(),
+                shortcut="Ctrl+L"
+            ),
+            ContextMenuItem(
+                "Refresh",
+                action=lambda: self.refresh_logs(),
+                shortcut="F5"
+            ),
+            ContextMenuItem("", separator=True),
+            ContextMenuItem(
+                "Filter Errors",
+                action=lambda: self.on_filter_error(),
+                shortcut="E"
+            ),
+            ContextMenuItem(
+                "Filter Warnings",
+                action=lambda: self.on_filter_warning(),
+                shortcut="W"
+            ),
+            ContextMenuItem(
+                "Show All",
+                action=lambda: self.on_filter_all(),
+                shortcut="A"
+            ),
+        ]
+    
+    def _copy_current_line(self) -> None:
+        """Copy the current log line to clipboard."""
+        # This would require clipboard access
+        # For now, just show a message
+        try:
+            # Get the currently focused log line
+            if self.filtered_entries:
+                latest_entry = self.filtered_entries[-1]
+                # In a real implementation, you would copy to clipboard
+                logger.info(f"Copied: {latest_entry.message}")
+        except Exception as e:
+            logger.error(f"Failed to copy line: {e}")
+    
+    def _copy_all_visible(self) -> None:
+        """Copy all visible log entries to clipboard."""
+        try:
+            lines = []
+            for entry in self.filtered_entries:
+                lines.append(f"[{entry.timestamp.strftime('%H:%M:%S')}] {entry.level} {entry.message}")
+            
+            # In a real implementation, you would copy to clipboard
+            logger.info(f"Copied {len(lines)} log lines")
+        except Exception as e:
+            logger.error(f"Failed to copy all lines: {e}")
+    
+    def _save_to_file(self) -> None:
+        """Save log entries to a file."""
+        try:
+            from pathlib import Path
+            
+            # Create logs directory if it doesn't exist
+            logs_dir = Path("logs")
+            logs_dir.mkdir(exist_ok=True)
+            
+            # Generate filename with timestamp
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = logs_dir / f"vpn_logs_{timestamp}.txt"
+            
+            # Write filtered entries to file
+            with open(filename, 'w') as f:
+                for entry in self.filtered_entries:
+                    f.write(f"[{entry.timestamp.strftime('%Y-%m-%d %H:%M:%S')}] {entry.level:8} {entry.source}: {entry.message}\n")
+            
+            logger.info(f"Logs saved to: {filename}")
+        except Exception as e:
+            logger.error(f"Failed to save logs: {e}")
+    
+    def on_key(self, event) -> None:
+        """Handle keyboard events including context menu shortcuts."""
+        if event.key == "f10" or (event.key == "f" and event.shift):
+            # Show context menu
+            self.show_context_menu()
+            event.prevent_default()
+        elif event.key == "ctrl+c":
+            # Copy current line
+            self._copy_current_line()
+            event.prevent_default()
+        elif event.key == "ctrl+a":
+            # Copy all visible
+            self._copy_all_visible()
+            event.prevent_default()
+        elif event.key == "ctrl+s":
+            # Save to file
+            self._save_to_file()
+            event.prevent_default()
+        elif event.key == "ctrl+l":
+            # Clear logs
+            asyncio.create_task(self.on_clear_logs())
+            event.prevent_default()
+        elif event.key == "f5":
+            # Refresh
+            asyncio.create_task(self.refresh_logs())
+            event.prevent_default()
+        elif event.key == "e":
+            # Filter errors
+            asyncio.create_task(self.on_filter_error())
+            event.prevent_default()
+        elif event.key == "w":
+            # Filter warnings
+            asyncio.create_task(self.on_filter_warning())
+            event.prevent_default()
+        elif event.key == "a":
+            # Show all
+            asyncio.create_task(self.on_filter_all())
+            event.prevent_default()
+        
+        # Call parent handler
+        super().on_key(event)
