@@ -22,9 +22,18 @@ NC='\033[0m' # No Color
 # Default values
 LAUNCH_MENU=true
 SKIP_DOCKER=false
+SKIP_DOCKER_BUILD=false
 VERBOSE=false
+QUICK_INSTALL=false
 REPO_URL="https://github.com/ikeniborn/vpn.git"
-REPO_DIR="$HOME/vpn"
+# Use current directory if already in vpn project, otherwise clone to home
+if [[ "$(basename "$(pwd)")" == "vpn" ]] && [ -f "Cargo.toml" ]; then
+    REPO_DIR="$(pwd)"
+    SKIP_CLONE=true
+else
+    REPO_DIR="$HOME/vpn"
+    SKIP_CLONE=false
+fi
 
 # Function to print colored output
 print_status() {
@@ -218,16 +227,24 @@ install_docker() {
 
 # Function to clone repository
 clone_repository() {
-    print_status "Cloning VPN repository..."
-    
-    if [ -d "$REPO_DIR" ]; then
-        print_status "Repository exists, updating..."
+    if [ "$SKIP_CLONE" = true ]; then
+        print_status "Using existing repository at $REPO_DIR"
         cd "$REPO_DIR"
-        git pull origin master || git pull origin main
     else
-        print_status "Cloning repository..."
-        git clone "$REPO_URL" "$REPO_DIR"
-        cd "$REPO_DIR"
+        print_status "Cloning VPN repository..."
+        
+        if [ -d "$REPO_DIR" ]; then
+            print_status "Repository exists, updating..."
+            cd "$REPO_DIR"
+            git pull origin master || git pull origin main || print_warning "Failed to update repository"
+        else
+            print_status "Cloning repository..."
+            git clone "$REPO_URL" "$REPO_DIR" || {
+                print_error "Failed to clone repository"
+                exit 1
+            }
+            cd "$REPO_DIR"
+        fi
     fi
     
     print_success "Repository ready at $REPO_DIR"
@@ -240,22 +257,50 @@ build_project() {
     # Ensure we're in the repo directory
     cd "$REPO_DIR"
     
-    # Clean previous builds
+    # Check if already built
+    if [ -f "target/release/vpn" ] && [ "$VERBOSE" != true ]; then
+        print_status "Found existing build, checking if up to date..."
+        # Check if source files are newer than the binary
+        if [ "$(find crates -name '*.rs' -newer target/release/vpn 2>/dev/null | wc -l)" -eq 0 ]; then
+            print_success "Build is up to date, skipping rebuild"
+            return
+        fi
+    fi
+    
+    # Clean previous builds only if verbose
     if [ "$VERBOSE" = true ]; then
         cargo clean
     fi
     
-    # Build in release mode
+    # Build in release mode with timeout handling
     if [ "$VERBOSE" = true ]; then
-        cargo build --release --workspace
+        timeout 30m cargo build --release --workspace || {
+            print_error "Build timed out or failed after 30 minutes"
+            print_warning "You can try running 'cargo build --release' manually"
+            exit 1
+        }
     else
         print_status "Building project... (this may take 5-10 minutes)"
-        cargo build --release --workspace 2>&1 | while read -r line; do
-            if [[ "$line" =~ "Compiling" ]]; then
-                echo -ne "\r${BLUE}[*]${NC} Building... $(echo "$line" | awk '{print $2}')"
+        # Use a simpler progress indicator to avoid pipe issues
+        (
+            cargo build --release --workspace 2>&1 &
+            BUILD_PID=$!
+            
+            # Show progress dots while building
+            while kill -0 $BUILD_PID 2>/dev/null; do
+                echo -n "."
+                sleep 2
+            done
+            
+            wait $BUILD_PID
+            BUILD_RESULT=$?
+            echo  # New line after dots
+            
+            if [ $BUILD_RESULT -ne 0 ]; then
+                print_error "Build failed"
+                exit 1
             fi
-        done
-        echo -e "\r${BLUE}[*]${NC} Building... Completed!                    "
+        )
     fi
     
     print_success "Project built successfully"
@@ -263,7 +308,7 @@ build_project() {
 
 # Function to build Docker images
 build_docker_images() {
-    if [ "$SKIP_DOCKER" = true ]; then
+    if [ "$SKIP_DOCKER" = true ] || [ "$SKIP_DOCKER_BUILD" = true ]; then
         print_warning "Skipping Docker image building"
         return
     fi
@@ -329,17 +374,32 @@ install_cli() {
     
     # Install using cargo
     if [ "$VERBOSE" = true ]; then
-        cargo install --path crates/vpn-cli --force
+        cargo install --path crates/vpn-cli --force || {
+            print_error "Failed to install vpn-cli"
+            exit 1
+        }
     else
-        cargo install --path crates/vpn-cli --force --quiet
+        cargo install --path crates/vpn-cli --force --quiet || {
+            print_error "Failed to install vpn-cli"
+            exit 1
+        }
     fi
     
+    # Ensure cargo bin is in PATH
+    export PATH="$HOME/.cargo/bin:$PATH"
+    
     # Verify installation
-    if command -v vpn &> /dev/null; then
+    # First check in cargo bin directory
+    if [ -f "$HOME/.cargo/bin/vpn" ]; then
+        VPN_VERSION=$("$HOME/.cargo/bin/vpn" --version 2>/dev/null | cut -d' ' -f2 || echo "unknown")
+        print_success "VPN CLI installed successfully (version $VPN_VERSION)"
+        print_warning "You may need to add $HOME/.cargo/bin to your PATH"
+    elif command -v vpn &> /dev/null; then
         VPN_VERSION=$(vpn --version 2>/dev/null | cut -d' ' -f2 || echo "unknown")
         print_success "VPN CLI installed successfully (version $VPN_VERSION)"
     else
         print_error "VPN CLI installation failed"
+        print_warning "Try adding this to your shell profile: export PATH=\"$HOME/.cargo/bin:\$PATH\""
         exit 1
     fi
 }
@@ -428,6 +488,17 @@ EOF
 setup_completion() {
     print_status "Setting up shell completion..."
     
+    # Find vpn command
+    VPN_CMD=""
+    if command -v vpn &> /dev/null; then
+        VPN_CMD="vpn"
+    elif [ -f "$HOME/.cargo/bin/vpn" ]; then
+        VPN_CMD="$HOME/.cargo/bin/vpn"
+    else
+        print_warning "Cannot setup completions - vpn command not found"
+        return
+    fi
+    
     # Detect shell
     SHELL_NAME=$(basename "$SHELL")
     
@@ -435,21 +506,21 @@ setup_completion() {
         bash)
             if [ -d "$HOME/.local/share" ]; then
                 mkdir -p "$HOME/.local/share/bash-completion/completions"
-                vpn completions bash > "$HOME/.local/share/bash-completion/completions/vpn" 2>/dev/null || true
+                $VPN_CMD completions bash > "$HOME/.local/share/bash-completion/completions/vpn" 2>/dev/null || true
                 print_success "Bash completion installed"
             fi
             ;;
         zsh)
             if [ -d "$HOME/.zsh" ]; then
                 mkdir -p "$HOME/.zsh/completions"
-                vpn completions zsh > "$HOME/.zsh/completions/_vpn" 2>/dev/null || true
+                $VPN_CMD completions zsh > "$HOME/.zsh/completions/_vpn" 2>/dev/null || true
                 print_success "Zsh completion installed"
             fi
             ;;
         fish)
             if [ -d "$HOME/.config/fish" ]; then
                 mkdir -p "$HOME/.config/fish/completions"
-                vpn completions fish > "$HOME/.config/fish/completions/vpn.fish" 2>/dev/null || true
+                $VPN_CMD completions fish > "$HOME/.config/fish/completions/vpn.fish" 2>/dev/null || true
                 print_success "Fish completion installed"
             fi
             ;;
@@ -464,10 +535,20 @@ run_doctor() {
     print_status "Running VPN system diagnostics..."
     
     echo
-    vpn doctor || {
-        print_warning "Some diagnostic checks failed. This is normal for a fresh installation."
-        print_warning "You can install VPN server components using the interactive menu."
-    }
+    # Use full path if vpn is not in PATH yet
+    if command -v vpn &> /dev/null; then
+        vpn doctor || {
+            print_warning "Some diagnostic checks failed. This is normal for a fresh installation."
+            print_warning "You can install VPN server components using the interactive menu."
+        }
+    elif [ -f "$HOME/.cargo/bin/vpn" ]; then
+        "$HOME/.cargo/bin/vpn" doctor || {
+            print_warning "Some diagnostic checks failed. This is normal for a fresh installation."
+            print_warning "You can install VPN server components using the interactive menu."
+        }
+    else
+        print_warning "Cannot run diagnostics - vpn command not found"
+    fi
     echo
 }
 
@@ -505,21 +586,26 @@ show_help() {
     echo "Usage: $0 [options]"
     echo
     echo "Options:"
-    echo "  --no-menu          Don't launch the menu after installation"
-    echo "  --skip-docker      Skip Docker installation"
-    echo "  --verbose          Enable verbose output"
-    echo "  --help             Show this help message"
+    echo "  --no-menu              Don't launch the menu after installation"
+    echo "  --skip-docker          Skip Docker installation"
+    echo "  --skip-docker-build    Skip Docker image building (faster install)"
+    echo "  --quick                Quick install (skip Docker images, no menu)"
+    echo "  --verbose              Enable verbose output"
+    echo "  --help                 Show this help message"
     echo
     echo "This script will:"
     echo "  1. Install system dependencies"
     echo "  2. Install Rust toolchain"
     echo "  3. Install Docker (optional)"
-    echo "  4. Clone VPN repository"
+    echo "  4. Clone VPN repository (or use current directory)"
     echo "  5. Build the project"
-    echo "  6. Build Docker images"
+    echo "  6. Build Docker images (optional)"
     echo "  7. Install VPN CLI"
     echo "  8. Run system diagnostics"
     echo "  9. Launch interactive menu (optional)"
+    echo
+    echo "Quick install example:"
+    echo "  ./install.sh --quick"
 }
 
 # Parse command line arguments
@@ -531,6 +617,16 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-docker)
             SKIP_DOCKER=true
+            shift
+            ;;
+        --skip-docker-build)
+            SKIP_DOCKER_BUILD=true
+            shift
+            ;;
+        --quick)
+            QUICK_INSTALL=true
+            SKIP_DOCKER_BUILD=true
+            LAUNCH_MENU=false
             shift
             ;;
         --verbose)
@@ -606,7 +702,14 @@ main() {
     
     # Launch menu if requested
     if [ "$LAUNCH_MENU" = true ]; then
-        vpn menu
+        if command -v vpn &> /dev/null; then
+            vpn menu
+        elif [ -f "$HOME/.cargo/bin/vpn" ]; then
+            "$HOME/.cargo/bin/vpn" menu
+        else
+            print_warning "Cannot launch menu - vpn command not found"
+            print_warning "Try running: $HOME/.cargo/bin/vpn menu"
+        fi
     fi
 }
 
