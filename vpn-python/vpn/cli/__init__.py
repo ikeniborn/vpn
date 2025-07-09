@@ -1,0 +1,1 @@
+"""CLI interface for VPN Manager."""
