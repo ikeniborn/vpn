@@ -253,3 +253,337 @@ class TestFirewallRule:
         assert rule.source == "192.168.1.0/24"
         assert rule.action == "deny"
         assert rule.comment == "Block local network"
+
+
+class TestProtocolTypeEnum:
+    """Test ProtocolType enum."""
+    
+    def test_valid_protocols(self):
+        """Test all valid protocol types."""
+        assert ProtocolType.VLESS.value == "vless"
+        assert ProtocolType.SHADOWSOCKS.value == "shadowsocks"
+        assert ProtocolType.WIREGUARD.value == "wireguard"
+        assert ProtocolType.HTTP.value == "http"
+        assert ProtocolType.SOCKS5.value == "socks5"
+    
+    def test_protocol_from_string(self):
+        """Test creating protocol from string."""
+        assert ProtocolType("vless") == ProtocolType.VLESS
+        assert ProtocolType("shadowsocks") == ProtocolType.SHADOWSOCKS
+        assert ProtocolType("wireguard") == ProtocolType.WIREGUARD
+
+
+class TestUserStatusEnum:
+    """Test UserStatus enum."""
+    
+    def test_valid_statuses(self):
+        """Test all valid user statuses."""
+        assert UserStatus.ACTIVE.value == "active"
+        assert UserStatus.INACTIVE.value == "inactive"
+        assert UserStatus.SUSPENDED.value == "suspended"
+
+
+class TestServerStatusEnum:
+    """Test ServerStatus enum."""
+    
+    def test_valid_statuses(self):
+        """Test all valid server statuses."""
+        assert ServerStatus.RUNNING.value == "running"
+        assert ServerStatus.STOPPED.value == "stopped"
+        assert ServerStatus.STARTING.value == "starting"
+        assert ServerStatus.STOPPING.value == "stopping"
+        assert ServerStatus.ERROR.value == "error"
+
+
+class TestModelEdgeCases:
+    """Test edge cases and error conditions."""
+    
+    def test_user_with_all_fields(self):
+        """Test user with all possible fields."""
+        protocol = ProtocolConfig(type=ProtocolType.VLESS)
+        keys = CryptoKeys(
+            private_key="test_private",
+            public_key="test_public",
+            short_id="test_short"
+        )
+        traffic = TrafficStats(
+            upload_bytes=1024,
+            download_bytes=2048,
+            total_bytes=3072
+        )
+        
+        user = User(
+            username="full_user",
+            email="test@example.com",
+            status=UserStatus.ACTIVE,
+            protocol=protocol,
+            keys=keys,
+            traffic=traffic,
+            expires_at=datetime.utcnow() + timedelta(days=30),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        
+        assert user.username == "full_user"
+        assert user.email == "test@example.com"
+        assert user.is_active is True
+        assert user.keys.private_key == "test_private"
+        assert user.traffic.total_bytes == 3072
+    
+    def test_traffic_stats_calculations(self):
+        """Test traffic statistics calculations."""
+        stats = TrafficStats(
+            upload_bytes=1_000_000,  # 1 MB
+            download_bytes=2_000_000  # 2 MB
+        )
+        
+        # Auto-calculated total
+        assert stats.total_bytes == 3_000_000
+        assert abs(stats.upload_mb - 0.95) < 0.1  # ~0.95 MB
+        assert abs(stats.download_mb - 1.91) < 0.1  # ~1.91 MB
+        assert abs(stats.total_mb - 2.86) < 0.1  # ~2.86 MB
+    
+    def test_protocol_config_extra_fields(self):
+        """Test protocol config with extra fields."""
+        config = ProtocolConfig(
+            type=ProtocolType.VLESS,
+            transport="tcp",
+            security="reality",
+            extra_config={
+                "reality": {
+                    "dest": "www.google.com:443",
+                    "server_names": ["www.google.com"],
+                    "fingerprint": "chrome"
+                }
+            }
+        )
+        
+        assert config.type == ProtocolType.VLESS
+        assert config.transport == "tcp"
+        assert config.security == "reality"
+        assert "reality" in config.extra_config
+    
+    def test_server_config_with_custom_paths(self):
+        """Test server config with custom paths."""
+        from pathlib import Path
+        
+        docker_config = DockerConfig(image="test/image")
+        protocol = ProtocolConfig(type=ProtocolType.VLESS)
+        
+        server = ServerConfig(
+            name="custom-server",
+            protocol=protocol,
+            port=9443,
+            docker_config=docker_config,
+            config_path=Path("/custom/config"),
+            data_path=Path("/custom/data"),
+            log_path=Path("/custom/logs")
+        )
+        
+        assert server.config_path == Path("/custom/config")
+        assert server.data_path == Path("/custom/data")
+        assert server.log_path == Path("/custom/logs")
+    
+    def test_user_expiration_edge_cases(self):
+        """Test user expiration edge cases."""
+        protocol = ProtocolConfig(type=ProtocolType.VLESS)
+        
+        # User expires in 1 second
+        user = User(
+            username="expiring",
+            protocol=protocol,
+            expires_at=datetime.utcnow() + timedelta(seconds=1)
+        )
+        assert user.is_active is True
+        
+        # User expired 1 second ago
+        user.expires_at = datetime.utcnow() - timedelta(seconds=1)
+        assert user.is_active is False
+    
+    def test_invalid_email_formats(self):
+        """Test various invalid email formats."""
+        protocol = ProtocolConfig(type=ProtocolType.VLESS)
+        
+        invalid_emails = [
+            "plainaddress",
+            "@missingtoplevel.org",
+            "missing@.org",
+            "missing@domain",
+            "spaces in@email.com",
+            "email@",
+            "",
+            "email@domain.",
+            "email..double.dot@domain.com",
+        ]
+        
+        for invalid_email in invalid_emails:
+            with pytest.raises(ValidationError):
+                User(username="test", email=invalid_email, protocol=protocol)
+    
+    def test_invalid_usernames(self):
+        """Test various invalid username formats."""
+        protocol = ProtocolConfig(type=ProtocolType.VLESS)
+        
+        invalid_usernames = [
+            "",  # Empty
+            "ab",  # Too short
+            "a" * 51,  # Too long
+            "user@name",  # Invalid character
+            "user name",  # Space
+            "user.name.",  # Ends with dot
+            ".username",  # Starts with dot
+            "user..name",  # Double dots
+            "123",  # Only numbers
+            "-username",  # Starts with dash
+            "username-",  # Ends with dash
+        ]
+        
+        for invalid_username in invalid_usernames:
+            with pytest.raises(ValidationError):
+                User(username=invalid_username, protocol=protocol)
+    
+    def test_port_boundary_values(self):
+        """Test port validation boundary values."""
+        docker_config = DockerConfig(image="test/image")
+        protocol = ProtocolConfig(type=ProtocolType.VLESS)
+        
+        # Valid boundary ports
+        valid_ports = [1024, 8080, 65535]
+        for port in valid_ports:
+            server = ServerConfig(
+                name=f"test-{port}",
+                protocol=protocol,
+                port=port,
+                docker_config=docker_config
+            )
+            assert server.port == port
+        
+        # Invalid boundary ports
+        invalid_ports = [0, 1, 22, 80, 443, 65536, 70000]
+        for port in invalid_ports:
+            with pytest.raises(ValidationError):
+                ServerConfig(
+                    name=f"test-{port}",
+                    protocol=protocol,
+                    port=port,
+                    docker_config=docker_config
+                )
+
+
+class TestModelSerialization:
+    """Test model serialization and deserialization."""
+    
+    def test_user_json_serialization(self):
+        """Test user model JSON serialization."""
+        protocol = ProtocolConfig(type=ProtocolType.VLESS)
+        user = User(username="testuser", protocol=protocol)
+        
+        # Serialize to JSON
+        json_data = user.model_dump()
+        assert "id" in json_data
+        assert json_data["username"] == "testuser"
+        assert json_data["status"] == "active"
+        
+        # Deserialize from JSON
+        new_user = User.model_validate(json_data)
+        assert new_user.username == user.username
+        assert new_user.id == user.id
+        assert new_user.status == user.status
+    
+    def test_server_config_json_serialization(self):
+        """Test server config JSON serialization."""
+        docker_config = DockerConfig(image="test/image")
+        protocol = ProtocolConfig(type=ProtocolType.VLESS)
+        server = ServerConfig(
+            name="test-server",
+            protocol=protocol,
+            port=8443,
+            docker_config=docker_config
+        )
+        
+        # Serialize to JSON
+        json_data = server.model_dump()
+        assert json_data["name"] == "test-server"
+        assert json_data["port"] == 8443
+        
+        # Deserialize from JSON
+        new_server = ServerConfig.model_validate(json_data)
+        assert new_server.name == server.name
+        assert new_server.port == server.port
+    
+    def test_protocol_config_with_nested_data(self):
+        """Test protocol config with nested extra_config."""
+        config = ProtocolConfig(
+            type=ProtocolType.VLESS,
+            extra_config={
+                "reality": {
+                    "dest": "www.google.com:443",
+                    "server_names": ["www.google.com", "www.youtube.com"],
+                    "private_key": "test_private_key",
+                    "short_ids": ["", "0123456789abcdef"]
+                },
+                "transport": {
+                    "type": "tcp",
+                    "header": {"type": "none"}
+                }
+            }
+        )
+        
+        # Serialize and deserialize
+        json_data = config.model_dump()
+        new_config = ProtocolConfig.model_validate(json_data)
+        
+        assert new_config.type == ProtocolType.VLESS
+        assert new_config.extra_config["reality"]["dest"] == "www.google.com:443"
+        assert len(new_config.extra_config["reality"]["server_names"]) == 2
+
+
+class TestModelValidation:
+    """Test advanced model validation scenarios."""
+    
+    def test_conditional_validation(self):
+        """Test validation that depends on other fields."""
+        # VLESS with Reality should have specific fields
+        vless_config = ProtocolConfig(
+            type=ProtocolType.VLESS,
+            reality_enabled=True,
+            reality_public_key="test_key",
+            reality_short_id="test_id"
+        )
+        assert vless_config.reality_enabled is True
+        
+        # Shadowsocks should have method
+        ss_config = ProtocolConfig(
+            type=ProtocolType.SHADOWSOCKS,
+            method="aes-256-gcm"
+        )
+        assert ss_config.method == "aes-256-gcm"
+    
+    def test_traffic_stats_consistency(self):
+        """Test traffic stats internal consistency."""
+        # Total should be sum of upload and download
+        stats = TrafficStats(upload_bytes=1000, download_bytes=2000)
+        assert stats.total_bytes == 3000
+        
+        # Manual total should be overridden
+        stats = TrafficStats(
+            upload_bytes=1000,
+            download_bytes=2000,
+            total_bytes=5000  # This should be ignored
+        )
+        assert stats.total_bytes == 3000  # Auto-calculated
+    
+    def test_datetime_field_validation(self):
+        """Test datetime field validation."""
+        protocol = ProtocolConfig(type=ProtocolType.VLESS)
+        now = datetime.utcnow()
+        
+        # Valid datetime
+        user = User(
+            username="test",
+            protocol=protocol,
+            created_at=now,
+            expires_at=now + timedelta(days=30)
+        )
+        assert user.created_at == now
+        assert user.expires_at > user.created_at
