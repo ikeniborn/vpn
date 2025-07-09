@@ -1,102 +1,116 @@
-# Multi-stage Dockerfile for VPN Server with cargo-chef optimization
-# Supports multi-arch builds (amd64, arm64)
+# Multi-stage build for VPN Manager Python
+FROM python:3.11-slim as builder
 
-# Chef stage - prepares dependencies
-FROM --platform=$BUILDPLATFORM rust:1.75-alpine AS chef
-RUN apk add --no-cache musl-dev openssl-dev perl make
-RUN cargo install cargo-chef --version 0.1.66
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+ENV POETRY_VERSION=1.6.1
+RUN pip install poetry==$POETRY_VERSION
+
+# Configure Poetry
+ENV POETRY_NO_INTERACTION=1 \
+    POETRY_VENV_IN_PROJECT=1 \
+    POETRY_CACHE_DIR=/tmp/poetry_cache
+
+# Copy dependency files
 WORKDIR /app
+COPY pyproject.toml poetry.lock ./
 
-# Planner stage - creates recipe.json
-FROM chef AS planner
-COPY Cargo.toml Cargo.lock ./
-COPY crates/ ./crates/
-RUN cargo chef prepare --recipe-path recipe.json
+# Install dependencies
+RUN poetry install --only=main --no-root && rm -rf $POETRY_CACHE_DIR
 
-# Builder stage - builds dependencies and binary
-FROM chef AS builder
+# Copy source code
+COPY . .
 
-# Set up cross compilation
-ARG TARGETARCH
-ARG BUILDPLATFORM
-RUN case "$TARGETARCH" in \
-    "amd64") echo "x86_64-unknown-linux-musl" > /target.txt ;; \
-    "arm64") echo "aarch64-unknown-linux-musl" > /target.txt ;; \
-    *) echo "Unsupported architecture: $TARGETARCH" && exit 1 ;; \
-    esac
+# Install the application
+RUN poetry install --only=main
 
-# Install cross compilation tools if needed
-RUN if [ "$BUILDPLATFORM" != "linux/$TARGETARCH" ]; then \
-        rustup target add $(cat /target.txt); \
-    fi
-
-# Copy recipe and build dependencies (cached unless dependencies change)
-COPY --from=planner /app/recipe.json recipe.json
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/app/target \
-    cargo chef cook --release --target $(cat /target.txt) --recipe-path recipe.json
-
-# Copy source code and build binary
-COPY Cargo.toml Cargo.lock ./
-COPY crates/ ./crates/
-
-# Build release binary with optimizations
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/app/target \
-    cargo build --profile=release-fast --target $(cat /target.txt) --bin vpn && \
-    cp target/$(cat /target.txt)/release-fast/vpn /vpn-binary
-
-# Runtime stage
-FROM alpine:3.19
+# Production stage
+FROM python:3.11-slim as production
 
 # Install runtime dependencies
-RUN apk add --no-cache \
-    ca-certificates \
-    libgcc \
-    docker-cli \
-    docker-compose \
+RUN apt-get update && apt-get install -y \
     curl \
-    bash \
-    sudo \
-    shadow
+    iptables \
+    iproute2 \
+    net-tools \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create vpn user and group
-RUN addgroup -g 1000 vpn && \
-    adduser -D -u 1000 -G vpn -s /bin/bash vpn && \
-    echo "vpn ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+# Install Docker CLI
+RUN curl -fsSL https://get.docker.com | sh
 
-# Create necessary directories
-RUN mkdir -p /opt/vpn /etc/vpn /var/log/vpn && \
-    chown -R vpn:vpn /opt/vpn /etc/vpn /var/log/vpn
+# Create app user
+RUN useradd --create-home --shell /bin/bash app
 
-# Copy binary from builder
-COPY --from=builder /vpn-binary /usr/local/bin/vpn
-RUN chmod +x /usr/local/bin/vpn
+# Copy virtual environment from builder
+COPY --from=builder /app/.venv /app/.venv
 
-# Copy templates and scripts
-COPY --chown=vpn:vpn templates/ /opt/vpn/templates/
-COPY --chown=vpn:vpn scripts/ /opt/vpn/scripts/
+# Copy application
+COPY --from=builder /app /app
 
-# Set environment variables
-ENV VPN_INSTALL_PATH=/opt/vpn \
-    VPN_CONFIG_PATH=/etc/vpn/config.toml \
-    VPN_LOG_PATH=/var/log/vpn
+# Set permissions
+RUN chown -R app:app /app
 
-# Switch to vpn user
-USER vpn
-WORKDIR /opt/vpn
+# Switch to app user
+USER app
+WORKDIR /app
+
+# Ensure virtual environment is in PATH
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Create directories
+RUN mkdir -p /home/app/.config/vpn-manager \
+             /home/app/.local/share/vpn-manager \
+             /home/app/.cache/vpn-manager
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD vpn status || exit 1
+    CMD vpn doctor --check basic || exit 1
 
 # Default command
-CMD ["vpn", "--help"]
+CMD ["vpn", "server", "start", "--all"]
+
+# Expose common ports
+EXPOSE 8443 8444 1080 8888 51820
 
 # Labels
-LABEL org.opencontainers.image.title="VPN Server" \
-      org.opencontainers.image.description="Advanced VPN Server Management Tool" \
-      org.opencontainers.image.vendor="VPN Project Team" \
-      org.opencontainers.image.version="0.1.0" \
-      org.opencontainers.image.source="https://github.com/yourusername/vpn" \
-      org.opencontainers.image.documentation="https://github.com/yourusername/vpn/blob/master/README.md"
+LABEL maintainer="VPN Manager Team <team@vpn-manager.io>"
+LABEL org.opencontainers.image.title="VPN Manager Python"
+LABEL org.opencontainers.image.description="Comprehensive VPN management system with Python/Pydantic/TUI stack"
+LABEL org.opencontainers.image.url="https://github.com/vpn-manager/vpn-python"
+LABEL org.opencontainers.image.source="https://github.com/vpn-manager/vpn-python"
+LABEL org.opencontainers.image.documentation="https://docs.vpn-manager.io"
+LABEL org.opencontainers.image.licenses="MIT"
+
+# Development stage
+FROM builder as development
+
+# Install development dependencies
+RUN poetry install
+
+# Install additional development tools
+RUN apt-get update && apt-get install -y \
+    vim \
+    less \
+    tree \
+    htop \
+    && rm -rf /var/lib/apt/lists/*
+
+# Switch to app user
+USER app
+WORKDIR /app
+
+# Set development environment variables
+ENV PYTHONPATH=/app \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    VPN_LOG_LEVEL=debug
+
+# Default command for development
+CMD ["bash"]
