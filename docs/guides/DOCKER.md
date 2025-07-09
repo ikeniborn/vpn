@@ -1,273 +1,322 @@
 # Docker Deployment Guide
 
-This guide explains how to deploy the VPN server using Docker and Docker Compose.
+This guide explains how to deploy VPN servers using Docker with the Python-based VPN Manager.
+
+## Prerequisites
+
+- Docker 20.10 or later
+- Docker Compose v2 (optional)
+- Python 3.10+ with VPN Manager installed
 
 ## Quick Start
 
-### Using Docker Hub Images
+### 1. Install VPN Manager
 
 ```bash
-# Download docker-compose file
-curl -L https://raw.githubusercontent.com/yourusername/vpn/master/docker-compose.hub.yml -o docker-compose.yml
+# Install from PyPI
+pip install vpn-manager
 
-# Set environment variables
-export VPN_PROTOCOL=vless
-export VPN_PORT=443
-export VPN_SNI=www.google.com
-
-# Deploy
-docker-compose up -d
+# Or install from source
+git clone https://github.com/ikeniborn/vpn-manager.git
+cd vpn-manager
+pip install -e .
 ```
 
-### Building from Source
+### 2. Deploy VPN Server
 
 ```bash
-# Clone repository
-git clone https://github.com/yourusername/vpn.git
-cd vpn
+# Install VLESS server
+vpn server install --protocol vless --port 8443 --name vless-server
 
-# Build multi-arch images
-./scripts/docker-build.sh
+# Install Shadowsocks server
+vpn server install --protocol shadowsocks --port 8388 --name ss-server
 
-# Deploy
-docker-compose -f docker-compose.hub.yml up -d
+# Install WireGuard server
+vpn server install --protocol wireguard --port 51820 --name wg-server
 ```
 
-## Available Images
-
-| Image | Description | Size |
-|-------|-------------|------|
-| `vpn:latest` | Main VPN server with CLI | ~50MB |
-| `vpn-proxy-auth:latest` | Proxy authentication service | ~20MB |
-| `vpn-identity:latest` | Identity management service | ~25MB |
-
-## Architecture Support
-
-All images support multiple architectures:
-- `linux/amd64` (x86_64)
-- `linux/arm64` (ARM 64-bit)
-
-## Environment Variables
-
-### VPN Server Configuration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VPN_PROTOCOL` | `vless` | VPN protocol (vless, shadowsocks, proxy-server) |
-| `VPN_PORT` | `443` | VPN server port |
-| `VPN_SNI` | `www.google.com` | SNI domain for Reality protocol |
-| `VPN_INSTALL_PATH` | `/opt/vpn` | Installation directory |
-| `VPN_CONFIG_PATH` | `/etc/vpn/config.toml` | Configuration file path |
-
-### Proxy Configuration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `AUTH_PORT` | `3000` | Proxy auth service port |
-| `DATABASE_PATH` | `/opt/vpn/users` | User database path |
-| `LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
-
-### Monitoring Configuration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `GRAFANA_USER` | `admin` | Grafana admin username |
-| `GRAFANA_PASSWORD` | `admin` | Grafana admin password |
-
-## Service Ports
-
-| Service | Port | Protocol | Description |
-|---------|------|----------|-------------|
-| VPN Server | 443 | UDP/TCP | Main VPN connection |
-| HTTP Proxy | 8888 | TCP | HTTP/HTTPS proxy |
-| HTTPS Proxy | 8443 | TCP | HTTPS proxy with auth |
-| SOCKS5 Proxy | 1080 | TCP | SOCKS5 proxy |
-| Traefik Dashboard | 8080 | HTTP | Proxy management UI |
-| Prometheus | 9090 | HTTP | Metrics collection |
-| Grafana | 3001 | HTTP | Monitoring dashboard |
-
-## Data Persistence
-
-The following volumes are created for data persistence:
-
-- `vpn-data`: User configurations and keys
-- `vpn-config`: Server configuration files
-- `vpn-logs`: Application logs
-- `traefik-certs`: SSL certificates
-- `prometheus-data`: Metrics data
-- `grafana-data`: Dashboard configurations
-
-## Commands
-
-### User Management
+### 3. Manage Servers
 
 ```bash
-# Create a new user
-docker exec vpn-server vpn users create alice
+# List all servers
+vpn server list
 
-# List users
-docker exec vpn-server vpn users list
-
-# Generate connection link
-docker exec vpn-server vpn users link alice --qr
-
-# Show user details
-docker exec vpn-server vpn users show alice
-```
-
-### Server Management
-
-```bash
-# Check server status
-docker exec vpn-server vpn status
-
-# Restart server
-docker exec vpn-server vpn restart
+# Start/stop servers
+vpn server start vless-server
+vpn server stop vless-server
 
 # View logs
-docker logs vpn-server
+vpn server logs vless-server --follow
 
-# Monitor real-time logs
-docker logs -f vpn-server
+# Check status
+vpn server status vless-server --detailed
 ```
 
-### Proxy Management
+## Docker Compose Deployment
+
+### Using Built-in Compose
 
 ```bash
-# Check proxy status
-docker exec vpn-server vpn proxy status
+# Deploy full stack with monitoring
+vpn compose up --with-monitoring
 
-# Monitor connections
-docker exec vpn-server vpn proxy monitor
+# Deploy only VPN services
+vpn compose up
 
-# Test connectivity
-docker exec vpn-server vpn proxy test
+# Scale services
+vpn compose scale vless=3
+
+# View compose status
+vpn compose status
 ```
 
-## Health Checks
+### Manual Docker Compose
 
-All services include health checks:
+Create `docker-compose.yml`:
+
+```yaml
+version: '3.8'
+
+services:
+  vless-server:
+    image: teddysun/xray:latest
+    container_name: vless-server
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./config/vless:/etc/xray
+      - ./logs/vless:/var/log/xray
+    environment:
+      - TZ=UTC
+    networks:
+      - vpn-network
+
+  shadowsocks-server:
+    image: shadowsocks/shadowsocks-libev:latest
+    container_name: shadowsocks-server
+    restart: unless-stopped
+    ports:
+      - "8388:8388"
+      - "8388:8388/udp"
+    volumes:
+      - ./config/shadowsocks:/etc/shadowsocks
+    environment:
+      - METHOD=chacha20-ietf-poly1305
+      - PASSWORD=${SS_PASSWORD}
+    networks:
+      - vpn-network
+
+  proxy-server:
+    image: vpn-manager/proxy:latest
+    container_name: proxy-server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "1080:1080"
+    volumes:
+      - ./config/proxy:/etc/proxy
+      - ./data/proxy:/var/lib/proxy
+    environment:
+      - PROXY_AUTH=true
+      - PROXY_TYPE=both
+    networks:
+      - vpn-network
+
+networks:
+  vpn-network:
+    driver: bridge
+```
+
+## Container Management
+
+### Health Monitoring
+
+VPN Manager automatically monitors container health:
 
 ```bash
-# Check all service health
-docker-compose ps
+# View health status
+vpn monitor health
 
-# Individual service health
-docker exec vpn-server vpn status
-curl http://localhost:3000/health  # Proxy auth
-curl http://localhost:8080/ping    # Traefik
-curl http://localhost:9090/-/healthy  # Prometheus
+# Set up health alerts
+vpn monitor alerts add --container vless-server --cpu 80 --memory 90
+
+# View container metrics
+vpn monitor stats --container vless-server
+```
+
+### Resource Limits
+
+Set resource constraints for containers:
+
+```bash
+# During installation
+vpn server install --protocol vless \
+  --memory-limit 512m \
+  --cpu-limit 1.0
+
+# Update existing server
+vpn server update vless-server \
+  --memory-limit 1g \
+  --cpu-limit 2.0
+```
+
+### Networking
+
+Configure network settings:
+
+```bash
+# Use custom network
+vpn server install --protocol vless \
+  --network vpn-bridge \
+  --ip 172.20.0.10
+
+# Configure port mapping
+vpn server install --protocol shadowsocks \
+  --port 8388:8388 \
+  --port 8388:8388/udp
+```
+
+## Multi-Architecture Support
+
+VPN Manager supports multiple architectures:
+
+- `linux/amd64` - Standard x86_64
+- `linux/arm64` - ARM 64-bit (Raspberry Pi 4, Apple Silicon)
+- `linux/arm/v7` - ARM 32-bit (Raspberry Pi 3)
+
+The appropriate image is automatically selected based on your platform.
+
+## Production Deployment
+
+### Security Considerations
+
+1. **Use Secrets Management**:
+   ```bash
+   # Create secrets
+   vpn secrets create vless-uuid
+   vpn secrets create ss-password
+   
+   # Use in deployment
+   vpn server install --protocol vless \
+     --secret vless-uuid:uuid
+   ```
+
+2. **Enable TLS**:
+   ```bash
+   vpn server install --protocol vless \
+     --tls-cert /path/to/cert.pem \
+     --tls-key /path/to/key.pem
+   ```
+
+3. **Firewall Rules**:
+   ```bash
+   # Automatically configured, but can be customized
+   vpn network firewall add --port 8443 --protocol tcp
+   ```
+
+### Backup and Restore
+
+```bash
+# Backup server configuration
+vpn server backup vless-server --output backup.tar.gz
+
+# Restore from backup
+vpn server restore vless-server --input backup.tar.gz
+
+# Backup all servers
+vpn backup create --all --output vpn-backup.tar.gz
+```
+
+### Monitoring Stack
+
+Deploy with Prometheus and Grafana:
+
+```bash
+# Deploy monitoring stack
+vpn compose up --monitoring-stack
+
+# Access dashboards
+# Grafana: http://localhost:3000
+# Prometheus: http://localhost:9090
 ```
 
 ## Troubleshooting
 
 ### Common Issues
 
-**Container fails to start:**
-```bash
-# Check logs
-docker logs vpn-server
+1. **Port Already in Use**:
+   ```bash
+   # Check port usage
+   vpn network check-port 8443
+   
+   # Use alternative port
+   vpn server install --protocol vless --port 8444
+   ```
 
-# Check permissions
-docker exec vpn-server id
-```
+2. **Container Won't Start**:
+   ```bash
+   # Check logs
+   vpn server logs vless-server --tail 100
+   
+   # Inspect container
+   docker inspect vless-server
+   
+   # Reset server
+   vpn server reset vless-server
+   ```
 
-**VPN connection fails:**
-```bash
-# Check server status
-docker exec vpn-server vpn status --detailed
-
-# Check firewall
-docker exec vpn-server vpn network-check
-
-# Check configuration
-docker exec vpn-server vpn config show
-```
-
-**Proxy authentication fails:**
-```bash
-# Check auth service
-curl http://localhost:3000/health
-
-# Check user database
-docker exec vpn-server vpn users list
-
-# Check auth logs
-docker logs vpn-proxy-auth
-```
+3. **Performance Issues**:
+   ```bash
+   # Check resource usage
+   vpn monitor stats --all
+   
+   # Optimize containers
+   vpn optimize --aggressive
+   ```
 
 ### Debug Mode
 
 Enable debug logging:
 
 ```bash
-# Set environment variable
-export LOG_LEVEL=debug
+# Run with debug output
+vpn --debug server install --protocol vless
 
-# Recreate containers
-docker-compose up -d
+# Enable debug for specific server
+vpn server update vless-server --debug-logs
 ```
 
-### Performance Tuning
+## Advanced Topics
 
-For production deployments:
+### Custom Images
 
-```yaml
-# Add to docker-compose.yml
-services:
-  vpn-server:
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "1.0"
-        reservations:
-          memory: 256M
-          cpus: "0.5"
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
+Use custom Docker images:
+
+```bash
+vpn server install --protocol custom \
+  --image myregistry/myvpn:latest \
+  --port 8443 \
+  --config /path/to/config.json
 ```
 
-## Security Considerations
+### Cluster Deployment
 
-1. **Change default passwords:**
-   ```bash
-   export GRAFANA_PASSWORD=your-secure-password
-   ```
+Deploy across multiple hosts:
 
-2. **Use custom networks:**
-   ```yaml
-   networks:
-     vpn-network:
-       driver: bridge
-       ipam:
-         config:
-           - subnet: 172.30.0.0/16
-   ```
+```bash
+# Initialize swarm mode
+vpn cluster init
 
-3. **Enable SSL/TLS:**
-   ```bash
-   # Generate certificates
-   docker exec vpn-server vpn security generate
-   ```
+# Join nodes
+vpn cluster join --token <token> --manager <manager-ip>
 
-4. **Regular updates:**
-   ```bash
-   # Update images
-   docker-compose pull
-   docker-compose up -d
-   ```
+# Deploy services
+vpn cluster deploy --replicas 3
+```
 
-## Production Deployment
+## Next Steps
 
-For production use, consider:
-
-1. Use external databases
-2. Set up log aggregation
-3. Configure backup strategies
-4. Implement monitoring alerts
-5. Use container orchestration (Kubernetes)
-
-See [PRODUCTION.md](PRODUCTION.md) for detailed production deployment guide.
+- Review [Security Guide](SECURITY.md) for hardening
+- Set up [Monitoring](OPERATIONS.md#monitoring) for production
+- Configure [Automated Backups](OPERATIONS.md#backup)
