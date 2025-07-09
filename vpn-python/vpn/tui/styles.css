@@ -1,0 +1,243 @@
+/* VPN Manager TUI Styles */
+
+/* Global styles */
+Screen {
+    background: $surface;
+}
+
+/* Navigation sidebar */
+NavigationSidebar {
+    width: 25;
+    background: $panel;
+    border-right: solid $primary;
+    padding: 1 2;
+}
+
+NavigationSidebar .nav-item {
+    width: 100%;
+    height: 3;
+    padding: 1 2;
+    margin: 0 0 1 0;
+    background: $boost;
+    border: solid transparent;
+}
+
+NavigationSidebar .nav-item:hover {
+    background: $primary 20%;
+    border: solid $primary;
+}
+
+NavigationSidebar .nav-item.active {
+    background: $primary 30%;
+    border: solid $primary;
+}
+
+/* Dashboard widgets */
+.stats-card {
+    height: 7;
+    padding: 1 2;
+    background: $boost;
+    border: solid $primary-background;
+}
+
+.stats-card:hover {
+    border: solid $primary;
+}
+
+.stats-card .title {
+    text-style: bold;
+    color: $text-muted;
+}
+
+.stats-card .value {
+    text-style: bold;
+    color: $primary;
+    text-align: center;
+    content-align: center middle;
+}
+
+/* User list */
+.user-list {
+    background: $panel;
+    border: solid $primary-background;
+    padding: 1;
+}
+
+.user-item {
+    height: 3;
+    padding: 0 2;
+    background: $boost;
+    margin-bottom: 1;
+}
+
+.user-item:hover {
+    background: $primary 20%;
+}
+
+.user-item.selected {
+    background: $primary 30%;
+}
+
+/* Charts and graphs */
+.chart-container {
+    background: $panel;
+    border: solid $primary-background;
+    padding: 1;
+}
+
+/* Modal dialogs */
+.modal-dialog {
+    background: $surface;
+    border: double $primary;
+    padding: 2;
+}
+
+.modal-dialog .title {
+    text-style: bold;
+    color: $primary;
+    text-align: center;
+    margin-bottom: 2;
+}
+
+/* Buttons */
+Button {
+    background: $primary 20%;
+    color: $text;
+    border: none;
+    height: 3;
+    padding: 0 2;
+    margin: 0 1;
+}
+
+Button:hover {
+    background: $primary 40%;
+}
+
+Button:focus {
+    background: $primary;
+}
+
+Button.primary {
+    background: $primary;
+}
+
+Button.danger {
+    background: $error;
+}
+
+Button.danger:hover {
+    background: $error 80%;
+}
+
+/* Input fields */
+Input {
+    background: $boost;
+    border: solid $primary-background;
+    padding: 0 1;
+}
+
+Input:focus {
+    border: solid $primary;
+}
+
+/* Tables */
+DataTable {
+    background: $panel;
+    border: solid $primary-background;
+}
+
+DataTable > .datatable--header {
+    background: $primary 20%;
+    text-style: bold;
+}
+
+DataTable > .datatable--cursor {
+    background: $primary 30%;
+}
+
+/* Progress bars */
+ProgressBar {
+    background: $primary-background;
+}
+
+ProgressBar > .progress-bar--bar {
+    background: $primary;
+}
+
+/* Notifications */
+.notification {
+    background: $boost;
+    border: solid $primary;
+    padding: 1 2;
+    margin: 1;
+}
+
+.notification.success {
+    border-color: $success;
+}
+
+.notification.error {
+    border-color: $error;
+}
+
+.notification.warning {
+    border-color: $warning;
+}
+
+/* Status indicators */
+.status-indicator {
+    width: 3;
+    height: 1;
+    content-align: center middle;
+}
+
+.status-indicator.active {
+    background: $success;
+    color: $text;
+}
+
+.status-indicator.inactive {
+    background: $warning;
+    color: $text;
+}
+
+.status-indicator.error {
+    background: $error;
+    color: $text;
+}
+
+/* Log viewer */
+.log-viewer {
+    background: $boost;
+    border: solid $primary-background;
+    padding: 1;
+}
+
+.log-line {
+    font-family: monospace;
+}
+
+.log-line.error {
+    color: $error;
+}
+
+.log-line.warning {
+    color: $warning;
+}
+
+.log-line.info {
+    color: $primary;
+}
+
+/* Responsive adjustments */
+@media (max-width: 80) {
+    NavigationSidebar {
+        width: 20;
+    }
+}
+
+@media (max-width: 60) {
+    NavigationSidebar {
+        display: none;
+    }
+}

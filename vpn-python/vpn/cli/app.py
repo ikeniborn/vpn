@@ -120,18 +120,18 @@ def main(
 
 
 @app.command()
-def menu():
-    """Launch interactive TUI menu."""
+def tui():
+    """Launch the Terminal User Interface."""
     try:
-        from vpn.tui.app import VpnTuiApp
+        from vpn.tui.app import VPNManagerApp
         
         console.print("[bold]Launching VPN Manager TUI...[/bold]")
-        app = VpnTuiApp()
-        asyncio.run(app.run_async())
+        app = VPNManagerApp()
+        app.run()
     except ImportError:
         console.print(
             "[red]TUI dependencies not installed. "
-            "Install with: pip install vpn-manager[tui][/red]"
+            "Install with: pip install textual[/red]"
         )
         raise typer.Exit(1)
     except KeyboardInterrupt:
@@ -140,6 +140,13 @@ def menu():
     except Exception as e:
         console.print(f"[red]Error launching TUI: {e}[/red]")
         raise typer.Exit(1)
+
+
+@app.command()
+def menu():
+    """Launch interactive menu (legacy)."""
+    console.print("[yellow]The menu command is deprecated. Use 'vpn tui' instead.[/yellow]")
+    tui()
 
 
 @app.command()

@@ -1,0 +1,24 @@
+[Interface]
+Address = {{ address }}/24
+ListenPort = {{ port }}
+PrivateKey = {{ private_key }}
+SaveConfig = false
+
+# Post-up rules for NAT
+{% for rule in post_up %}
+PostUp = {{ rule }}
+{% endfor %}
+
+# Post-down rules for cleanup
+{% for rule in post_down %}
+PostDown = {{ rule }}
+{% endfor %}
+
+# Peers
+{% for peer in peers %}
+[Peer]
+# {{ peer.name }}
+PublicKey = {{ peer.public_key }}
+PresharedKey = {{ peer.preshared_key }}
+AllowedIPs = {{ peer.allowed_ips | join(', ') }}
+{% endfor %}

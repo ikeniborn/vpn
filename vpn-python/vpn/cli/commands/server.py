@@ -12,6 +12,7 @@ from vpn.cli.formatters.base import get_formatter
 from vpn.core.config import runtime_config
 from vpn.core.exceptions import PortAlreadyInUseError, ServerError, VPNError
 from vpn.core.models import DockerConfig, ProtocolConfig, ProtocolType, ServerConfig
+from vpn.services.server_manager import ServerManager
 from vpn.services.docker_manager import DockerManager
 from vpn.services.network_manager import NetworkManager
 from vpn.utils.logger import get_logger
@@ -69,15 +70,8 @@ def install_server(
             raise typer.Exit(1)
         
         async def _install():
+            server_manager = ServerManager()
             network_manager = NetworkManager()
-            docker_manager = DockerManager()
-            
-            # Check Docker availability
-            if not await docker_manager.is_available():
-                console.print(formatter.format_error(
-                    "Docker is not available. Please install Docker first."
-                ))
-                raise typer.Exit(1)
             
             # Auto-detect port if not specified
             if not port:
@@ -94,64 +88,52 @@ def install_server(
                     ))
                     server_port = available_port
             else:
-                # Check if port is available
-                if not await network_manager.check_port_available(port):
-                    console.print(formatter.format_error(
-                        f"Port {port} is already in use"
-                    ))
-                    raise typer.Exit(1)
                 server_port = port
             
             # Generate server name
-            if not name:
-                name = f"{protocol}-server-{server_port}"
+            server_name = name or f"{protocol}-server-{server_port}"
             
             # Confirm installation
             if not force:
                 console.print("\n[bold]Server Configuration:[/bold]")
                 console.print(f"  Protocol: {protocol}")
                 console.print(f"  Port: {server_port}")
-                console.print(f"  Name: {name}")
+                console.print(f"  Name: {server_name}")
                 
                 if not Confirm.ask("\nProceed with installation?", default=True):
                     console.print("Installation cancelled")
                     raise typer.Exit(0)
             
-            # Create server configuration
-            protocol_config = ProtocolConfig(type=protocol_type)
-            
-            # Docker configuration based on protocol
-            docker_images = {
-                ProtocolType.VLESS: "teddysun/xray:latest",
-                ProtocolType.SHADOWSOCKS: "shadowsocks/shadowsocks-libev:latest",
-                ProtocolType.WIREGUARD: "linuxserver/wireguard:latest",
-            }
-            
-            docker_config = DockerConfig(
-                image=docker_images.get(protocol_type, "vpn/server"),
-                container_name=name,
-                ports={f"{server_port}/tcp": server_port},
-                restart_policy="unless-stopped",
-                environment={
-                    "VPN_PROTOCOL": protocol,
-                    "VPN_PORT": str(server_port),
-                }
-            )
-            
-            server_config = ServerConfig(
-                name=name,
-                protocol=protocol_config,
-                port=server_port,
-                docker_config=docker_config,
-            )
-            
-            # TODO: Actually create and start the server
-            console.print(formatter.format_success(
-                f"Server '{name}' would be installed on port {server_port}"
-            ))
-            console.print(formatter.format_info(
-                "Note: Server installation logic not yet implemented"
-            ))
+            # Install server
+            with console.status(f"Installing {protocol} server..."):
+                try:
+                    server = await server_manager.install(
+                        protocol=protocol_type,
+                        port=server_port,
+                        name=server_name
+                    )
+                    
+                    console.print(formatter.format_success(
+                        f"Server '{server_name}' installed successfully!"
+                    ))
+                    
+                    # Show connection info
+                    console.print("\n[bold]Server Details:[/bold]")
+                    console.print(f"  Name: {server.name}")
+                    console.print(f"  Protocol: {server.protocol.value}")
+                    console.print(f"  Port: {server.port}")
+                    console.print(f"  Status: {server.status.value}")
+                    
+                    if server.public_ip:
+                        console.print(f"  Public IP: {server.public_ip}")
+                    if server.domain:
+                        console.print(f"  Domain: {server.domain}")
+                        
+                except Exception as e:
+                    console.print(formatter.format_error(
+                        f"Failed to install server: {str(e)}"
+                    ))
+                    raise typer.Exit(1)
         
         run_async(_install())
         
@@ -180,47 +162,42 @@ def list_servers(
         formatter = get_formatter(format)
         
         async def _list():
-            docker_manager = DockerManager()
+            server_manager = ServerManager()
             
-            # Get containers with VPN label
-            containers = await docker_manager.list_containers(
-                filters={"label": "vpn.managed=true"}
-            )
+            # Get all servers
+            servers = await server_manager.list()
             
-            if not containers:
+            if not servers:
                 console.print(formatter.format_warning("No VPN servers found"))
+                return
+            
+            # Filter by status if specified
+            if status:
+                servers = [s for s in servers if s.status.value == status]
+            
+            if not servers:
+                console.print(formatter.format_warning(f"No servers with status '{status}'"))
                 return
             
             # Prepare server data
             server_data = []
-            for container in containers:
-                # Get status
-                status_val = await docker_manager.get_container_status(container.id)
-                
-                # Skip if filtering by status
-                if status and status_val.value != status:
-                    continue
-                
-                # Get container info
-                info = await docker_manager.get_container_info(container.id)
+            for server in servers:
+                # Get current status
+                current_status = await server_manager.get_status(server.name)
                 
                 server_data.append({
-                    "name": container.name,
-                    "status": status_val.value,
-                    "protocol": container.labels.get("vpn.protocol", "unknown"),
-                    "port": list(info.get("ports", {}).values())[0] if info.get("ports") else "-",
-                    "image": info.get("image", "unknown"),
-                    "created": container.attrs["Created"][:10],
+                    "name": server.name,
+                    "status": current_status.value,
+                    "protocol": server.protocol.value,
+                    "port": server.port,
+                    "domain": server.domain or "-",
+                    "created": server.created_at.strftime("%Y-%m-%d") if server.created_at else "-",
                 })
-            
-            if not server_data:
-                console.print(formatter.format_warning("No servers match the criteria"))
-                return
             
             # Format output
             output = formatter.format_list(
                 server_data,
-                columns=["name", "status", "protocol", "port", "image", "created"],
+                columns=["name", "status", "protocol", "port", "domain", "created"],
                 title="VPN Servers"
             )
             console.print(output)
@@ -241,34 +218,15 @@ def start_server(
         formatter = get_formatter()
         
         async def _start():
-            docker_manager = DockerManager()
+            server_manager = ServerManager()
             
-            # Find container
-            containers = await docker_manager.list_containers(
-                all=True,
-                filters={"name": name}
-            )
-            
-            if not containers:
-                console.print(formatter.format_error(f"Server '{name}' not found"))
-                raise typer.Exit(1)
-            
-            container = containers[0]
-            
-            # Check if already running
-            status = await docker_manager.get_container_status(container.id)
-            if status.value == "running":
-                console.print(formatter.format_warning(f"Server '{name}' is already running"))
-                return
-            
-            # Start container
+            # Start server
             with console.status(f"Starting server '{name}'..."):
-                success = await docker_manager.start_container(container.id)
-                
-                if success:
+                try:
+                    await server_manager.start(name)
                     console.print(formatter.format_success(f"Server '{name}' started successfully"))
-                else:
-                    console.print(formatter.format_error(f"Failed to start server '{name}'"))
+                except Exception as e:
+                    console.print(formatter.format_error(f"Failed to start server '{name}': {e}"))
                     raise typer.Exit(1)
         
         run_async(_start())
@@ -299,27 +257,15 @@ def stop_server(
                 raise typer.Exit(0)
         
         async def _stop():
-            docker_manager = DockerManager()
+            server_manager = ServerManager()
             
-            # Find container
-            containers = await docker_manager.list_containers(
-                filters={"name": name}
-            )
-            
-            if not containers:
-                console.print(formatter.format_error(f"Server '{name}' not found or not running"))
-                raise typer.Exit(1)
-            
-            container = containers[0]
-            
-            # Stop container
+            # Stop server
             with console.status(f"Stopping server '{name}'..."):
-                success = await docker_manager.stop_container(container.id)
-                
-                if success:
+                try:
+                    await server_manager.stop(name)
                     console.print(formatter.format_success(f"Server '{name}' stopped successfully"))
-                else:
-                    console.print(formatter.format_error(f"Failed to stop server '{name}'"))
+                except Exception as e:
+                    console.print(formatter.format_error(f"Failed to stop server '{name}': {e}"))
                     raise typer.Exit(1)
         
         run_async(_stop())
