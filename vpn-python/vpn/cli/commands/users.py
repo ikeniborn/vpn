@@ -16,6 +16,7 @@ from vpn.core.exceptions import UserAlreadyExistsError, UserNotFoundError, VPNEr
 from vpn.core.models import ProtocolType, UserStatus
 from vpn.services.user_manager import UserManager
 from vpn.utils.logger import get_logger
+from vpn.utils.qr_display import display_connection_qr
 
 app = typer.Typer(help="User management commands")
 console = Console()
@@ -616,4 +617,82 @@ def show_connection(
         
     except Exception as e:
         console.print(formatter.format_error(str(e)))
+        raise typer.Exit(1)
+
+
+@app.command("qr")
+def show_qr_code(
+    username: str = typer.Argument(..., help="Username to generate QR code for"),
+    server: str = typer.Option(
+        "localhost",
+        "--server",
+        "-s",
+        help="Server address or domain",
+    ),
+    port: int = typer.Option(
+        8443,
+        "--port",
+        "-p",
+        help="Server port",
+    ),
+    style: str = typer.Option(
+        "unicode",
+        "--style",
+        help="QR code style: unicode, ascii",
+    ),
+    save: Optional[Path] = typer.Option(
+        None,
+        "--save",
+        help="Save QR code as image file",
+    ),
+):
+    """Display QR code for user's VPN connection in terminal."""
+    try:
+        async def _show_qr():
+            manager = UserManager()
+            
+            # Get user
+            user = await manager.get_by_username(username)
+            if not user:
+                console.print(f"[red]User '{username}' not found[/red]")
+                raise typer.Exit(1)
+            
+            # Generate connection info
+            with console.status("Generating connection QR code..."):
+                conn_info = await manager.generate_connection_info(
+                    user_id=str(user.id),
+                    server_address=server,
+                    server_port=port
+                )
+                
+                if not conn_info.connection_link:
+                    console.print("[red]Failed to generate connection link[/red]")
+                    raise typer.Exit(1)
+                
+                # Display QR code in terminal
+                display_connection_qr(
+                    connection_url=conn_info.connection_link,
+                    username=username,
+                    protocol=conn_info.protocol.value,
+                    style=style,
+                    console=console
+                )
+                
+                # Save image if requested
+                if save:
+                    from vpn.utils.qr_display import TerminalQRCode
+                    qr_display = TerminalQRCode(console)
+                    success = qr_display.save_qr_image(
+                        conn_info.connection_link,
+                        str(save)
+                    )
+                    if success:
+                        console.print(f"\n[green]✓ QR code image saved to: {save}[/green]")
+                    else:
+                        console.print(f"\n[red]✗ Failed to save QR code image[/red]")
+        
+        run_async(_show_qr())
+        
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)

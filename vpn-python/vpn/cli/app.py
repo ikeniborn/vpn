@@ -151,33 +151,49 @@ def menu():
 
 @app.command()
 def doctor():
-    """Run system diagnostics."""
-    console.print("[bold]Running system diagnostics...[/bold]\n")
+    """Run comprehensive system diagnostics."""
+    async def _run_doctor():
+        from vpn.utils.diagnostics import run_diagnostics
+        from rich.table import Table
+        
+        console.print("[bold]Running comprehensive system diagnostics...[/bold]\n")
+        
+        with console.status("Performing diagnostic checks..."):
+            checks, summary = await run_diagnostics()
+        
+        # Display results
+        table = Table(title="System Diagnostics Report", show_header=True)
+        table.add_column("Component", style="cyan", width=20)
+        table.add_column("Status", justify="center", width=8)
+        table.add_column("Details", style="dim")
+        
+        for check in checks:
+            status_style = "green" if check.status == "✓" else "yellow" if check.status == "⚠" else "red"
+            table.add_row(
+                check.name,
+                f"[{status_style}]{check.status}[/{status_style}]",
+                check.details
+            )
+        
+        console.print(table)
+        
+        # Display summary
+        console.print("\n[bold]Summary:[/bold]")
+        console.print(f"  Total checks: {summary['total']}")
+        console.print(f"  [green]✓ Passed: {summary['passed']}[/green]")
+        console.print(f"  [yellow]⚠ Warnings: {summary['warnings']}[/yellow]")
+        console.print(f"  [red]✗ Errors: {summary['errors']}[/red]")
+        
+        # Overall status
+        if summary['errors'] == 0 and summary['warnings'] == 0:
+            console.print("\n[green]✅ System is ready for VPN operations![/green]")
+        elif summary['errors'] == 0:
+            console.print("\n[yellow]⚠️ System is mostly ready with some warnings.[/yellow]")
+        else:
+            console.print("\n[red]❌ System has issues that need to be resolved.[/red]")
+            console.print("[dim]Run 'vpn doctor --help' for troubleshooting tips.[/dim]")
     
-    with console.status("Checking system requirements..."):
-        # TODO: Implement actual diagnostics
-        checks = [
-            ("Python version", "✓", f"Python {sys.version.split()[0]}"),
-            ("Docker", "✓", "Docker 24.0.0"),
-            ("Database", "✓", "SQLite ready"),
-            ("Network tools", "✓", "iptables available"),
-            ("Permissions", "⚠", "Running without root"),
-        ]
-    
-    # Display results
-    from rich.table import Table
-    
-    table = Table(title="System Diagnostics", show_header=True)
-    table.add_column("Component", style="cyan")
-    table.add_column("Status", justify="center")
-    table.add_column("Details")
-    
-    for component, status, details in checks:
-        status_style = "green" if status == "✓" else "yellow" if status == "⚠" else "red"
-        table.add_row(component, f"[{status_style}]{status}[/{status_style}]", details)
-    
-    console.print(table)
-    console.print("\n[green]System check complete![/green]")
+    run_async(_run_doctor())
 
 
 @app.command()
@@ -211,6 +227,152 @@ def init():
         raise typer.Exit(1)
 
 
+@app.command()
+def migrate(
+    rust_path: Optional[Path] = typer.Option(
+        None,
+        "--rust-path",
+        help="Path to Rust VPN Manager installation"
+    ),
+    no_backup: bool = typer.Option(
+        False,
+        "--no-backup",
+        help="Skip creating backup"
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Only analyze what would be migrated"
+    ),
+):
+    """Migrate from Rust VPN Manager to Python version."""
+    async def _run_migration():
+        from vpn.utils.migration import migrate_from_rust
+        
+        if dry_run:
+            console.print("[blue]🔍 Analyzing Rust installation (dry run)...[/blue]\n")
+        else:
+            console.print("[bold]🚀 Migrating from Rust VPN Manager...[/bold]\n")
+            
+            if not no_backup:
+                console.print("[yellow]Creating backup before migration...[/yellow]")
+        
+        try:
+            migrated_count, errors = await migrate_from_rust(
+                rust_path=rust_path,
+                backup=not no_backup,
+                dry_run=dry_run
+            )
+            
+            if dry_run:
+                console.print(f"\n[blue]Dry run complete: {migrated_count} users found[/blue]")
+            else:
+                if migrated_count > 0:
+                    console.print(f"\n[green]✅ Migration successful: {migrated_count} users migrated[/green]")
+                else:
+                    console.print("\n[yellow]⚠️ No users migrated[/yellow]")
+            
+            if errors:
+                console.print(f"\n[red]❌ {len(errors)} errors occurred:[/red]")
+                for error in errors:
+                    console.print(f"  • {error}")
+                    
+                if not dry_run:
+                    raise typer.Exit(1)
+            
+        except Exception as e:
+            console.print(f"\n[red]Migration failed: {e}[/red]")
+            raise typer.Exit(1)
+    
+    run_async(_run_migration())
+
+
+@app.command()
+def completions(
+    shell: str = typer.Argument(
+        help="Shell type: bash, zsh, fish, powershell"
+    ),
+    install: bool = typer.Option(
+        False,
+        "--install",
+        help="Install completions to shell configuration"
+    )
+):
+    """Generate shell completions for VPN Manager."""
+    from typer.completion import get_completion
+    
+    valid_shells = ["bash", "zsh", "fish", "powershell"]
+    if shell not in valid_shells:
+        console.print(f"[red]Invalid shell: {shell}[/red]")
+        console.print(f"Valid shells: {', '.join(valid_shells)}")
+        raise typer.Exit(1)
+    
+    try:
+        # Generate completion script
+        completion_script = get_completion(shell)
+        
+        if install:
+            # Install to shell configuration
+            home = Path.home()
+            
+            if shell == "bash":
+                config_files = [home / ".bashrc", home / ".bash_profile"]
+                completion_line = 'eval "$(_VPN_COMPLETE=bash_source vpn)"'
+            elif shell == "zsh":
+                config_files = [home / ".zshrc"]
+                completion_line = 'eval "$(_VPN_COMPLETE=zsh_source vpn)"'
+            elif shell == "fish":
+                config_dir = home / ".config" / "fish" / "completions"
+                config_dir.mkdir(parents=True, exist_ok=True)
+                completion_file = config_dir / "vpn.fish"
+                
+                with open(completion_file, 'w') as f:
+                    f.write(completion_script)
+                
+                console.print(f"[green]✓ Fish completions installed to: {completion_file}[/green]")
+                console.print("[blue]Restart your shell or run: source ~/.config/fish/config.fish[/blue]")
+                return
+            elif shell == "powershell":
+                console.print("[yellow]PowerShell completion installation not yet supported[/yellow]")
+                console.print("Add this to your PowerShell profile:")
+                console.print(completion_script)
+                return
+            
+            # For bash/zsh, add to config files
+            installed = False
+            for config_file in config_files:
+                if config_file.exists():
+                    # Check if already installed
+                    with open(config_file, 'r') as f:
+                        content = f.read()
+                    
+                    if completion_line not in content:
+                        with open(config_file, 'a') as f:
+                            f.write(f"\n# VPN Manager completions\n{completion_line}\n")
+                        
+                        console.print(f"[green]✓ Completions added to: {config_file}[/green]")
+                        installed = True
+                        break
+                    else:
+                        console.print(f"[yellow]Completions already installed in: {config_file}[/yellow]")
+                        installed = True
+                        break
+            
+            if installed:
+                console.print("[blue]Restart your shell or run: source ~/.bashrc (or ~/.zshrc)[/blue]")
+            else:
+                console.print("[red]Could not find shell configuration file[/red]")
+                console.print(f"Add this line to your shell config:\n{completion_line}")
+        
+        else:
+            # Just output the completion script
+            console.print(completion_script)
+    
+    except Exception as e:
+        console.print(f"[red]Failed to generate completions: {e}[/red]")
+        raise typer.Exit(1)
+
+
 def run_async(coro):
     """Run async coroutine in sync context."""
     try:
@@ -234,6 +396,7 @@ from vpn.cli.commands.server import app as server_app
 from vpn.cli.commands.proxy import app as proxy_app
 from vpn.cli.commands.monitor import app as monitor_app
 from vpn.cli.commands.config import app as config_app
+from vpn.cli.commands.compose import app as compose_app
 
 # Add command groups
 app.add_typer(users_app, name="users", help="User management commands")
@@ -241,6 +404,7 @@ app.add_typer(server_app, name="server", help="Server management commands")
 app.add_typer(proxy_app, name="proxy", help="Proxy management commands")
 app.add_typer(monitor_app, name="monitor", help="Monitoring and statistics")
 app.add_typer(config_app, name="config", help="Configuration management")
+app.add_typer(compose_app, name="compose", help="Docker Compose orchestration")
 
 
 def main():
