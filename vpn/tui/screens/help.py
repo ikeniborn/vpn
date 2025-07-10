@@ -40,7 +40,7 @@ class HelpScreen(BaseScreen):
     
     def compose(self) -> ComposeResult:
         """Create help screen layout."""
-        yield self.compose_header("Help", "Keyboard shortcuts and usage")
+        yield from self.compose_header("Help", "Keyboard shortcuts and usage")
         
         with Container():
             # Global shortcuts

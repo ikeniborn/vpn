@@ -52,13 +52,16 @@ class BaseScreen(Screen):
             self._network_manager = NetworkManager()
         return self._network_manager
     
-    def compose_header(self, title: str, subtitle: Optional[str] = None) -> Container:
+    def compose_header(self, title: str, subtitle: Optional[str] = None):
         """Create a standard header for screens."""
-        with Horizontal(classes="screen-header"):
-            yield Static(title, classes="screen-title")
-            if subtitle:
-                yield Static(subtitle, classes="screen-subtitle")
-        return Container()
+        from textual.widgets import Static
+        from textual.containers import Horizontal
+        
+        widgets = [Static(title, classes="screen-title")]
+        if subtitle:
+            widgets.append(Static(subtitle, classes="screen-subtitle"))
+        
+        yield Horizontal(*widgets, classes="screen-header")
     
     def show_error(self, message: str) -> None:
         """Show error notification."""

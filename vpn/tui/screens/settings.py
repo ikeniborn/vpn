@@ -20,7 +20,7 @@ class SettingsScreen(BaseScreen):
     
     def compose(self) -> ComposeResult:
         """Create settings screen layout."""
-        yield self.compose_header("Settings", "Configure VPN Manager")
+        yield from self.compose_header("Settings", "Configure VPN Manager")
         
         # Placeholder content
         with Container():

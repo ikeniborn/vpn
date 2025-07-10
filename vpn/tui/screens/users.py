@@ -75,7 +75,7 @@ class UsersScreen(BaseScreen):
     
     def compose(self) -> ComposeResult:
         """Create users screen layout."""
-        yield self.compose_header("Users Management", "Manage VPN users")
+        yield from self.compose_header("Users Management", "Manage VPN users")
         
         # Search and filter bar
         with Horizontal(classes="users-header"):

@@ -20,7 +20,7 @@ class ServersScreen(BaseScreen):
     
     def compose(self) -> ComposeResult:
         """Create servers screen layout."""
-        yield self.compose_header("Server Management", "Manage VPN servers")
+        yield from self.compose_header("Server Management", "Manage VPN servers")
         
         # Placeholder content
         with Container():

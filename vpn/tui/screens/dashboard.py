@@ -8,6 +8,7 @@ from datetime import datetime
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Container, Grid, Horizontal, ScrollableContainer
+from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.timer import Timer
 from textual.widgets import Button, DataTable, Static
@@ -51,7 +52,7 @@ class DashboardScreen(BaseScreen):
     
     def compose(self) -> ComposeResult:
         """Create dashboard layout."""
-        yield self.compose_header("Dashboard", f"Updated: {datetime.now().strftime('%H:%M:%S')}")
+        yield from self.compose_header("Dashboard", f"Updated: {datetime.now().strftime('%H:%M:%S')}")
         
         # Stats cards grid
         with Grid(classes="dashboard-grid"):
@@ -130,24 +131,32 @@ class DashboardScreen(BaseScreen):
     
     def watch_total_users(self, value: int) -> None:
         """Watch total users changes."""
-        card = self.query_one("#users-card", StatsCard)
-        if card:
+        try:
+            card = self.query_one("#users-card", StatsCard)
             card.value = str(value)
+        except NoMatches:
+            pass  # Widget not mounted yet
     
     def watch_active_users(self, value: int) -> None:
         """Watch active users changes."""
-        card = self.query_one("#active-card", StatsCard)
-        if card:
+        try:
+            card = self.query_one("#active-card", StatsCard)
             card.value = str(value)
+        except NoMatches:
+            pass  # Widget not mounted yet
     
     def watch_total_servers(self, value: int) -> None:
         """Watch total servers changes."""
-        card = self.query_one("#servers-card", StatsCard)
-        if card:
+        try:
+            card = self.query_one("#servers-card", StatsCard)
             card.value = str(value)
+        except NoMatches:
+            pass  # Widget not mounted yet
     
     def watch_total_traffic(self, value: str) -> None:
         """Watch total traffic changes."""
-        card = self.query_one("#traffic-card", StatsCard)
-        if card:
+        try:
+            card = self.query_one("#traffic-card", StatsCard)
             card.value = value
+        except NoMatches:
+            pass  # Widget not mounted yet

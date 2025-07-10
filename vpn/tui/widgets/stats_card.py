@@ -4,6 +4,7 @@ Stats card widget for displaying metrics.
 
 from textual.app import ComposeResult
 from textual.containers import Vertical
+from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import Static
@@ -60,6 +61,8 @@ class StatsCard(Widget):
     
     def watch_value(self, new_value: str) -> None:
         """Update displayed value."""
-        value_widget = self.query_one(".stats-value", Static)
-        if value_widget:
+        try:
+            value_widget = self.query_one(".stats-value", Static)
             value_widget.update(new_value)
+        except NoMatches:
+            pass  # Widget not mounted yet

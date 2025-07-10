@@ -20,7 +20,7 @@ class MonitoringScreen(BaseScreen):
     
     def compose(self) -> ComposeResult:
         """Create monitoring screen layout."""
-        yield self.compose_header("System Monitoring", "Real-time metrics")
+        yield from self.compose_header("System Monitoring", "Real-time metrics")
         
         # Placeholder content
         with Container():
