@@ -6,11 +6,11 @@
 set -e
 
 # Configuration
-REPO_URL="https://github.com/ikeniborn/vpn-manager"
-INSTALL_DIR="/opt/vpn-manager"
-CONFIG_DIR="/etc/vpn-manager"
-LOG_DIR="/var/log/vpn-manager"
-SERVICE_USER="vpn-manager"
+REPO_URL="https://github.com/ikeniborn/vpn"
+INSTALL_DIR="$HOME/.vpn"
+VENV_DIR="$HOME/.vpn-venv"
+CONFIG_DIR="$HOME/.config/vpn-manager"
+DATA_DIR="$HOME/.local/share/vpn-manager"
 PYTHON_MIN_VERSION="3.10"
 
 # Colors for output
@@ -62,6 +62,92 @@ check_python() {
     success "Python $PYTHON_VERSION found"
 }
 
+# Detect OS
+detect_os() {
+    if [[ -f /etc/os-release ]]; then
+        . /etc/os-release
+        OS=$ID
+        VER=$VERSION_ID
+    else
+        error "Cannot detect OS. This script supports Ubuntu and Debian."
+        exit 1
+    fi
+}
+
+# Install system dependencies
+install_system_deps() {
+    log "Installing system dependencies..."
+    
+    # Detect OS
+    detect_os
+    
+    # Check if running as root or with sudo
+    if [[ $EUID -ne 0 ]] && ! command -v sudo &> /dev/null; then
+        error "This script requires sudo privileges to install system dependencies"
+        exit 1
+    fi
+    
+    # Set sudo command
+    local SUDO=""
+    if [[ $EUID -ne 0 ]]; then
+        SUDO="sudo"
+    fi
+    
+    case $OS in
+        ubuntu|debian)
+            log "Detected $OS $VER"
+            
+            # Update package list
+            $SUDO apt-get update -qq
+            
+            # Essential packages
+            local packages=(
+                "python3-pip"
+                "python3-venv"
+                "python3-dev"
+                "python3-setuptools"
+                "build-essential"
+                "git"
+                "curl"
+                "wget"
+                "tar"
+                "gcc"
+                "make"
+                # For cryptography
+                "libssl-dev"
+                "libffi-dev"
+                # For python-ldap
+                "libldap2-dev"
+                "libsasl2-dev"
+                # For psycopg2
+                "libpq-dev"
+                # For lxml
+                "libxml2-dev"
+                "libxslt1-dev"
+                # Network tools
+                "net-tools"
+                "iptables"
+            )
+            
+            log "Installing required packages..."
+            $SUDO apt-get install -y "${packages[@]}"
+            
+            # Install pipx if not present
+            if ! command -v pipx &> /dev/null; then
+                log "Installing pipx..."
+                $SUDO apt-get install -y pipx
+            fi
+            
+            success "System dependencies installed"
+            ;;
+        *)
+            error "Unsupported OS: $OS"
+            error "This script supports Ubuntu and Debian"
+            exit 1
+            ;;
+    esac
+}
+
 # Check system dependencies
 check_dependencies() {
     log "Checking system dependencies..."
@@ -69,52 +155,143 @@ check_dependencies() {
     local missing_deps=()
     
     # Check for required commands
-    local required_cmds=("git" "curl" "tar")
+    local required_cmds=("git" "curl" "tar" "make" "gcc")
     for cmd in "${required_cmds[@]}"; do
         if ! command -v "$cmd" &> /dev/null; then
             missing_deps+=("$cmd")
         fi
     done
     
+    # Check for required libraries
+    local required_libs=(
+        "/usr/include/openssl/ssl.h"
+        "/usr/include/ldap.h"
+    )
+    
+    for lib in "${required_libs[@]}"; do
+        if [[ ! -f "$lib" ]]; then
+            missing_deps+=("$(basename $lib)")
+        fi
+    done
+    
     # Check for Docker (optional but recommended)
     if ! command -v docker &> /dev/null; then
         warn "Docker not found. Docker is required for VPN server functionality"
+        warn "Install Docker with: curl -fsSL https://get.docker.com | bash"
     else
         success "Docker found"
     fi
     
     if [ ${#missing_deps[@]} -ne 0 ]; then
-        error "Missing dependencies: ${missing_deps[*]}"
-        error "Please install them using your package manager"
-        exit 1
+        warn "Missing dependencies detected: ${missing_deps[*]}"
+        
+        # Ask to install dependencies
+        read -p "Would you like to install missing dependencies? (y/N) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            install_system_deps
+        else
+            error "Please install missing dependencies manually"
+            exit 1
+        fi
+    else
+        success "All required dependencies found"
     fi
-    
-    success "All required dependencies found"
 }
 
 # Install Python package
 install_python_package() {
     log "Installing VPN Manager..."
     
-    # Install using pip
+    # Always create and use virtual environment
+    log "Creating virtual environment at $VENV_DIR..."
+    
+    # Remove old virtual environment if exists
+    if [[ -d "$VENV_DIR" ]]; then
+        log "Removing old virtual environment..."
+        rm -rf "$VENV_DIR"
+    fi
+    
+    # Create new virtual environment
+    $PYTHON_CMD -m venv "$VENV_DIR"
+    
+    # Activate virtual environment
+    source "$VENV_DIR/bin/activate"
+    
+    # Upgrade pip
+    log "Upgrading pip..."
+    python -m pip install --upgrade pip setuptools wheel
+    
+    # Install package
     if [[ "$1" == "dev" ]]; then
         log "Installing in development mode..."
         cd "$INSTALL_DIR"
-        $PYTHON_CMD -m pip install -e ".[dev]" --user
+        python -m pip install -e ".[dev,test,docs]"
+    elif [[ "$1" == "local" ]]; then
+        log "Installing from local repository..."
+        python -m pip install .
     else
         log "Installing from PyPI..."
-        $PYTHON_CMD -m pip install vpn-manager --user
+        python -m pip install vpn-manager
     fi
     
-    # Add user's pip bin to PATH if needed
-    local pip_bin="$HOME/.local/bin"
-    if [[ ":$PATH:" != *":$pip_bin:"* ]]; then
-        log "Adding $pip_bin to PATH..."
-        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-        export PATH="$pip_bin:$PATH"
-    fi
+    # Setup PATH and shell integration
+    setup_shell_integration
     
     success "VPN Manager installed successfully"
+}
+
+# Setup shell integration
+setup_shell_integration() {
+    log "Setting up shell integration..."
+    
+    local shell_config=""
+    
+    # Detect shell
+    if [[ -n "$BASH_VERSION" ]]; then
+        shell_config="$HOME/.bashrc"
+    elif [[ -n "$ZSH_VERSION" ]]; then
+        shell_config="$HOME/.zshrc"
+    else
+        shell_config="$HOME/.profile"
+    fi
+    
+    # Create shell integration script
+    local vpn_init_script="$HOME/.vpn-init.sh"
+    cat > "$vpn_init_script" << 'EOF'
+# VPN Manager Shell Integration
+export VPN_HOME="$HOME/.vpn"
+export VPN_VENV="$HOME/.vpn-venv"
+
+# Auto-activate VPN virtual environment if it exists
+if [ -d "$VPN_VENV" ]; then
+    export PATH="$VPN_VENV/bin:$PATH"
+    export VIRTUAL_ENV="$VPN_VENV"
+fi
+
+# VPN Manager aliases
+alias vpn-activate='source $VPN_VENV/bin/activate'
+alias vpn-update='cd $VPN_HOME && git pull && source $VPN_VENV/bin/activate && pip install -U .'
+EOF
+    
+    # Add to shell config if not already present
+    if ! grep -q "vpn-init.sh" "$shell_config" 2>/dev/null; then
+        echo "" >> "$shell_config"
+        echo "# VPN Manager" >> "$shell_config"
+        echo "[ -f ~/.vpn-init.sh ] && source ~/.vpn-init.sh" >> "$shell_config"
+    fi
+    
+    # Also add to .profile for login shells
+    if [[ "$shell_config" != "$HOME/.profile" ]] && ! grep -q "vpn-init.sh" "$HOME/.profile" 2>/dev/null; then
+        echo "" >> "$HOME/.profile"
+        echo "# VPN Manager" >> "$HOME/.profile"
+        echo "[ -f ~/.vpn-init.sh ] && source ~/.vpn-init.sh" >> "$HOME/.profile"
+    fi
+    
+    # Source the init script now
+    source "$vpn_init_script"
+    
+    success "Shell integration configured"
 }
 
 # Setup configuration
@@ -125,9 +302,12 @@ setup_config() {
     mkdir -p "$HOME/.config/vpn-manager"
     
     # Initialize configuration
-    vpn config init
-    
-    success "Configuration initialized"
+    if command -v vpn &> /dev/null; then
+        vpn config init
+        success "Configuration initialized"
+    else
+        warn "vpn command not found in PATH. Configuration will be initialized on first run."
+    fi
 }
 
 # Run post-installation checks
@@ -135,9 +315,12 @@ post_install_checks() {
     log "Running post-installation checks..."
     
     # Run doctor command
-    vpn doctor
-    
-    success "Post-installation checks complete"
+    if command -v vpn &> /dev/null; then
+        vpn doctor
+        success "Post-installation checks complete"
+    else
+        warn "vpn command not found in PATH. Run 'vpn doctor' after sourcing ~/.bashrc"
+    fi
 }
 
 # Show completion message
@@ -149,20 +332,44 @@ show_completion() {
     echo
     echo "Installation summary:"
     echo "  ✓ Python package installed"
-    echo "  ✓ Configuration initialized"
-    echo "  ✓ System checks passed"
+    echo "  ✓ Virtual environment created at $VENV_DIR"
+    echo "  ✓ Shell integration configured"
+    
+    if command -v vpn &> /dev/null; then
+        echo "  ✓ VPN command available in current shell"
+        
+        # Try to get version
+        if vpn --version &> /dev/null; then
+            local version=$(vpn --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+            echo "  ✓ Version: $version"
+        fi
+    fi
+    
     echo
-    echo "Quick start commands:"
-    echo "  • vpn --help        - Show available commands"
-    echo "  • vpn doctor        - Run system diagnostics"
-    echo "  • vpn tui           - Launch terminal UI"
-    echo "  • vpn users create  - Create a new user"
+    echo "${GREEN}IMPORTANT: Reload your shell to activate VPN Manager${NC}"
     echo
-    echo "Configuration file: ~/.config/vpn-manager/config.toml"
+    echo "Run one of these commands:"
+    echo "  ${BLUE}exec \$SHELL${NC}              # Restart current shell"
+    echo "  ${BLUE}source ~/.bashrc${NC}         # Or reload configuration"
     echo
-    echo "For more information, visit:"
-    echo "https://github.com/ikeniborn/vpn-manager"
+    echo "After reloading, you can use:"
+    echo "  ${BLUE}vpn --help${NC}               # Show available commands"
+    echo "  ${BLUE}vpn doctor${NC}               # Run system diagnostics"
+    echo "  ${BLUE}vpn tui${NC}                  # Launch terminal interface"
     echo
+    echo "Useful aliases:"
+    echo "  ${BLUE}vpn-activate${NC}             # Manually activate virtual environment"
+    echo "  ${BLUE}vpn-update${NC}               # Update VPN Manager from git"
+    echo
+    echo "Repository: https://github.com/ikeniborn/vpn"
+    echo
+    
+    # Ask to reload shell
+    read -p "Reload shell now? (Y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        exec $SHELL
+    fi
 }
 
 # Main installation process
@@ -183,10 +390,22 @@ main() {
     check_python
     check_dependencies
     
-    # Install package
-    if [[ "$install_mode" == "dev" ]]; then
-        # Clone repository for development
-        log "Cloning repository..."
+    # Determine installation source
+    if [[ -f "pyproject.toml" ]] && grep -q "name = \"vpn-manager\"" pyproject.toml 2>/dev/null; then
+        # Installing from cloned repository
+        log "Installing from current directory"
+        INSTALL_DIR="$(pwd)"
+        
+        if [[ "$install_mode" == "dev" ]]; then
+            install_python_package "dev"
+        else
+            install_python_package "local"
+        fi
+    else
+        # Clone repository first
+        log "Cloning repository to $INSTALL_DIR..."
+        
+        # Ensure install directory is clean
         if [[ -d "$INSTALL_DIR" ]]; then
             warn "Directory $INSTALL_DIR already exists"
             read -p "Remove and continue? (y/N) " -n 1 -r
@@ -199,10 +418,15 @@ main() {
             fi
         fi
         
+        # Clone repository
         git clone "$REPO_URL" "$INSTALL_DIR"
-        install_python_package "dev"
-    else
-        install_python_package
+        cd "$INSTALL_DIR"
+        
+        if [[ "$install_mode" == "dev" ]]; then
+            install_python_package "dev"
+        else
+            install_python_package "local"
+        fi
     fi
     
     # Setup and verify

@@ -101,4 +101,4 @@ VPN Manager is open-source software licensed under the MIT License.
 
 ---
 
-Ready to get started? Check out our [Installation Guide](getting-started/installation.md) or dive into the [Quick Start](getting-started/quickstart.md) tutorial.
+Ready to get started? Check out our [Installation Guide](getting-started/installation.md), [Server Deployment Guide](deployment/server-deployment.md), or dive into the [Quick Start](getting-started/quickstart.md) tutorial.

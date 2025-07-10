@@ -39,6 +39,14 @@ class ServerStatus(str, Enum):
     ERROR = "error"
 
 
+class ProxyType(str, Enum):
+    """Proxy server types."""
+    
+    HTTP = "http"
+    HTTPS = "https"
+    SOCKS5 = "socks5"
+
+
 class TrafficStats(BaseModel):
     """Traffic statistics model."""
     
@@ -171,6 +179,23 @@ class FirewallRule(BaseModel):
     source: Optional[str] = None  # IP or CIDR
     action: Literal["allow", "deny"] = "allow"
     comment: Optional[str] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProxyConfig(BaseModel):
+    """Proxy server configuration."""
+    
+    type: ProxyType
+    port: int = Field(..., ge=1024, le=65535)
+    host: str = "0.0.0.0"
+    auth_required: bool = True
+    max_connections: int = 100
+    buffer_size: int = 8192
+    timeout: int = 300  # seconds
+    rate_limit: Optional[int] = None  # requests per minute
+    allowed_hosts: List[str] = Field(default_factory=list)
+    blocked_hosts: List[str] = Field(default_factory=list)
     
     model_config = ConfigDict(from_attributes=True)
 

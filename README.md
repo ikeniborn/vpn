@@ -197,7 +197,7 @@ vpn config import config-backup.toml
 ### Project Structure
 
 ```
-vpn-manager/
+vpn/
 ├── vpn/                    # Main package
 │   ├── cli/               # CLI commands and interface
 │   │   ├── commands/      # Command implementations
@@ -443,7 +443,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Documentation**: Check the [docs](docs/) directory
 - **Issues**: [GitHub Issues](https://github.com/ikeniborn/vpn/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/ikeniborn/vpn/discussions)
-- **Discord**: Join our [Discord Community](https://discord.gg/vpn-manager)
+- **Discord**: Join our [Discord Community](https://discord.gg/vpn)
 
 ### Reporting Issues
 

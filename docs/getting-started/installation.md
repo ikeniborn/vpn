@@ -19,76 +19,47 @@ This guide covers different methods to install VPN Manager on your system.
 - **Storage**: 1GB free disk space
 - **Docker**: Latest stable version
 
-## Installation Methods
+## Installation Method
 
-### 1. Using pipx (Strongly Recommended)
+### Recommended Installation
 
-The easiest and safest way to install VPN Manager is using `pipx`, which automatically handles virtual environments:
-
-```bash
-# Install pipx if not already installed
-python3 -m pip install --user pipx
-python3 -m pipx ensurepath
-
-# Install VPN Manager
-pipx install vpn-manager
-
-# Upgrade to latest version
-pipx upgrade vpn-manager
-
-# Install with additional plugins
-pipx install "vpn-manager[plugins]"
-```
-
-### 2. Using pip with Virtual Environment
-
-For manual virtual environment management:
+The easiest way to install VPN Manager is using the installation script:
 
 ```bash
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install VPN Manager
-pip install vpn-manager
-
-# Install with development dependencies
-pip install "vpn-manager[dev]"
+# Clone and install
+git clone https://github.com/ikeniborn/vpn.git
+cd vpn
+bash scripts/install.sh
 ```
 
-### 3. System-wide Installation
+The installation script will:
+- Install all system dependencies (Ubuntu/Debian)
+- Create an isolated Python environment
+- Install VPN Manager and all dependencies
+- Configure shell integration
+- Prompt to reload your shell
 
-⚠️ **Warning**: Modern Python installations (PEP 668) restrict system-wide installations to prevent conflicts.
+### Manual Installation
 
-```bash
-# Only use if your system allows it
-pip install --user vpn-manager
-
-# On newer systems, you may need to override (NOT RECOMMENDED)
-pip install --user --break-system-packages vpn-manager
-```
-
-### 4. From Source
-
-Clone and install from the GitHub repository:
+If you prefer manual installation or the script doesn't work for your system:
 
 ```bash
 # Clone repository
-git clone https://github.com/vpn-manager/vpn-python.git
-cd vpn-python
+git clone https://github.com/ikeniborn/vpn.git
+cd vpn
 
 # Create virtual environment
 python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate
 
-# Install in development mode
+# Install dependencies
 pip install -e .
 
-# For development with all dependencies
+# For development
 pip install -e ".[dev,test,docs]"
 ```
 
-### 5. Docker Installation
+### Docker Installation
 
 Run VPN Manager in a Docker container:
 

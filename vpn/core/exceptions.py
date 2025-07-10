@@ -80,6 +80,11 @@ class ServerAlreadyRunningError(ServerError):
         )
 
 
+# Generic aliases for compatibility
+NotFoundError = UserNotFoundError
+AlreadyExistsError = UserAlreadyExistsError
+
+
 class DockerError(VPNError):
     """Docker related errors."""
     pass

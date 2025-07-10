@@ -10,6 +10,15 @@ Before starting, ensure you have:
 - Docker running on your system
 - Administrative privileges (for server installation)
 
+> **Note**: If you installed VPN Manager in a virtual environment, make sure it's activated:
+> ```bash
+> # If using manual virtual environment
+> source ~/.vpn-manager-venv/bin/activate
+> 
+> # If using pipx, commands are available globally
+> # No activation needed
+> ```
+
 ## Step 1: Verify Installation
 
 First, verify that VPN Manager is working:

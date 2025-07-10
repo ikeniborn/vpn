@@ -158,3 +158,12 @@ class RuntimeConfig(BaseSettings):
         if v not in valid_formats:
             raise ValueError(f"Invalid output format. Must be one of: {', '.join(valid_formats)}")
         return v
+
+
+# Global runtime configuration instance
+runtime_config = RuntimeConfig()
+
+
+def get_config() -> Settings:
+    """Get the global configuration instance."""
+    return settings
