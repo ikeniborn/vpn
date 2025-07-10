@@ -186,9 +186,21 @@ check_dependencies() {
         warn "Missing dependencies detected: ${missing_deps[*]}"
         
         # Ask to install dependencies
-        read -p "Would you like to install missing dependencies? (y/N) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
+        while true; do
+            read -p "Would you like to install missing dependencies? (y/N): " -r REPLY
+            # Convert to lowercase for case-insensitive comparison
+            REPLY=$(echo "$REPLY" | tr '[:upper:]' '[:lower:]')
+            
+            # Validate input
+            if [[ "$REPLY" =~ ^(y|yes|n|no)$ ]] || [[ -z "$REPLY" ]]; then
+                break
+            else
+                echo "Invalid input. Please enter Y/yes or N/no (or press Enter for default N)"
+            fi
+        done
+        
+        # Check for yes (default is no for this prompt)
+        if [[ "$REPLY" =~ ^(y|yes)$ ]]; then
             install_system_deps
         else
             error "Please install missing dependencies manually"
@@ -400,9 +412,21 @@ show_completion() {
     echo
     
     # Ask to reload shell
-    read -p "Reload shell now? (Y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+    while true; do
+        read -p "Reload shell now? (Y/n): " -r REPLY
+        # Convert to lowercase for case-insensitive comparison
+        REPLY=$(echo "$REPLY" | tr '[:upper:]' '[:lower:]')
+        
+        # Validate input
+        if [[ "$REPLY" =~ ^(y|yes|n|no)$ ]] || [[ -z "$REPLY" ]]; then
+            break
+        else
+            echo "Invalid input. Please enter Y/yes or N/no (or press Enter for default Y)"
+        fi
+    done
+    
+    # Default to yes if empty, otherwise check for no
+    if [[ -z "$REPLY" ]] || [[ "$REPLY" =~ ^(y|yes)$ ]]; then
         exec $SHELL
     fi
 }
@@ -443,9 +467,21 @@ main() {
         # Ensure install directory is clean
         if [[ -d "$INSTALL_DIR" ]]; then
             warn "Directory $INSTALL_DIR already exists"
-            read -p "Remove and continue? (y/N) " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
+            while true; do
+                read -p "Remove and continue? (y/N): " -r REPLY
+                # Convert to lowercase for case-insensitive comparison
+                REPLY=$(echo "$REPLY" | tr '[:upper:]' '[:lower:]')
+                
+                # Validate input
+                if [[ "$REPLY" =~ ^(y|yes|n|no)$ ]] || [[ -z "$REPLY" ]]; then
+                    break
+                else
+                    echo "Invalid input. Please enter Y/yes or N/no (or press Enter for default N)"
+                fi
+            done
+            
+            # Check for yes (default is no for this prompt)
+            if [[ "$REPLY" =~ ^(y|yes)$ ]]; then
                 rm -rf "$INSTALL_DIR"
             else
                 error "Installation cancelled"
