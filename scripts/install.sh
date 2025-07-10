@@ -298,28 +298,63 @@ EOF
 setup_config() {
     log "Setting up configuration..."
     
-    # Create config directory
-    mkdir -p "$HOME/.config/vpn-manager"
+    # Create config directories
+    mkdir -p "$CONFIG_DIR"
+    mkdir -p "$DATA_DIR"
+    mkdir -p "$DATA_DIR/logs"
     
-    # Initialize configuration
-    if command -v vpn &> /dev/null; then
-        vpn config init
-        success "Configuration initialized"
+    # Create default config file if not exists
+    if [[ ! -f "$CONFIG_DIR/config.toml" ]]; then
+        log "Creating default configuration file..."
+        cat > "$CONFIG_DIR/config.toml" << 'EOF'
+# VPN Manager Configuration
+[app]
+debug = false
+log_level = "INFO"
+
+[server]
+default_protocol = "vless"
+enable_firewall = true
+auto_start_servers = true
+
+[tui]
+theme = "dark"
+refresh_rate = 1
+EOF
+        success "Configuration file created"
     else
-        warn "vpn command not found in PATH. Configuration will be initialized on first run."
+        log "Configuration file already exists"
     fi
+    
+    success "Configuration directories initialized"
 }
 
 # Run post-installation checks
 post_install_checks() {
     log "Running post-installation checks..."
     
-    # Run doctor command
+    # Check if vpn command is available
     if command -v vpn &> /dev/null; then
-        vpn doctor
-        success "Post-installation checks complete"
+        # Try to get version
+        if vpn --version &> /dev/null; then
+            local version=$(vpn --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+            success "VPN Manager $version installed successfully"
+        else
+            warn "VPN command found but version check failed"
+        fi
+        
+        # Check directories
+        if [[ -d "$CONFIG_DIR" ]] && [[ -d "$DATA_DIR" ]]; then
+            success "Configuration directories created"
+        fi
+        
+        # Check Python environment
+        if [[ -n "$VIRTUAL_ENV" ]]; then
+            success "Virtual environment activated"
+        fi
     else
-        warn "vpn command not found in PATH. Run 'vpn doctor' after sourcing ~/.bashrc"
+        warn "vpn command not found in PATH"
+        warn "Run 'source ~/.bashrc' to reload shell configuration"
     fi
 }
 
@@ -346,20 +381,20 @@ show_completion() {
     fi
     
     echo
-    echo "${GREEN}IMPORTANT: Reload your shell to activate VPN Manager${NC}"
+    echo -e "${GREEN}IMPORTANT: Reload your shell to activate VPN Manager${NC}"
     echo
     echo "Run one of these commands:"
-    echo "  ${BLUE}exec \$SHELL${NC}              # Restart current shell"
-    echo "  ${BLUE}source ~/.bashrc${NC}         # Or reload configuration"
+    echo -e "  ${BLUE}exec \$SHELL${NC}              # Restart current shell"
+    echo -e "  ${BLUE}source ~/.bashrc${NC}         # Or reload configuration"
     echo
     echo "After reloading, you can use:"
-    echo "  ${BLUE}vpn --help${NC}               # Show available commands"
-    echo "  ${BLUE}vpn doctor${NC}               # Run system diagnostics"
-    echo "  ${BLUE}vpn tui${NC}                  # Launch terminal interface"
+    echo -e "  ${BLUE}vpn --help${NC}               # Show available commands"
+    echo -e "  ${BLUE}vpn doctor${NC}               # Run system diagnostics"
+    echo -e "  ${BLUE}vpn tui${NC}                  # Launch terminal interface"
     echo
     echo "Useful aliases:"
-    echo "  ${BLUE}vpn-activate${NC}             # Manually activate virtual environment"
-    echo "  ${BLUE}vpn-update${NC}               # Update VPN Manager from git"
+    echo -e "  ${BLUE}vpn-activate${NC}             # Manually activate virtual environment"
+    echo -e "  ${BLUE}vpn-update${NC}               # Update VPN Manager from git"
     echo
     echo "Repository: https://github.com/ikeniborn/vpn"
     echo
