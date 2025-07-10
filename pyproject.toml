@@ -31,7 +31,7 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.10"
 # CLI and UI frameworks
-click = "^8.1.7"
+click = "~8.1.7"
 typer = {extras = ["all"], version = "^0.12.0"}
 rich = "^13.7.0"
 textual = "^0.47.0"
