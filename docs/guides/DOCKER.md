@@ -17,8 +17,8 @@ This guide explains how to deploy VPN servers using Docker with the Python-based
 pip install vpn-manager
 
 # Or install from source
-git clone https://github.com/ikeniborn/vpn-manager.git
-cd vpn-manager
+git clone https://github.com/ikeniborn/vpn.git
+cd vpn
 pip install -e .
 ```
 

@@ -21,39 +21,74 @@ This guide covers different methods to install VPN Manager on your system.
 
 ## Installation Methods
 
-### 1. PyPI Installation (Recommended)
+### 1. Using pipx (Strongly Recommended)
 
-Install the latest stable version from PyPI:
+The easiest and safest way to install VPN Manager is using `pipx`, which automatically handles virtual environments:
 
 ```bash
-pip install vpn-manager
+# Install pipx if not already installed
+python3 -m pip install --user pipx
+python3 -m pipx ensurepath
+
+# Install VPN Manager
+pipx install vpn-manager
+
+# Upgrade to latest version
+pipx upgrade vpn-manager
+
+# Install with additional plugins
+pipx install "vpn-manager[plugins]"
 ```
 
-For development dependencies:
+### 2. Using pip with Virtual Environment
+
+For manual virtual environment management:
 
 ```bash
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install VPN Manager
+pip install vpn-manager
+
+# Install with development dependencies
 pip install "vpn-manager[dev]"
 ```
 
-### 2. From Source
+### 3. System-wide Installation
+
+⚠️ **Warning**: Modern Python installations (PEP 668) restrict system-wide installations to prevent conflicts.
+
+```bash
+# Only use if your system allows it
+pip install --user vpn-manager
+
+# On newer systems, you may need to override (NOT RECOMMENDED)
+pip install --user --break-system-packages vpn-manager
+```
+
+### 4. From Source
 
 Clone and install from the GitHub repository:
 
 ```bash
+# Clone repository
 git clone https://github.com/vpn-manager/vpn-python.git
 cd vpn-python
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install in development mode
 pip install -e .
+
+# For development with all dependencies
+pip install -e ".[dev,test,docs]"
 ```
 
-For development:
-
-```bash
-git clone https://github.com/vpn-manager/vpn-python.git
-cd vpn-python
-pip install -e ".[dev]"
-```
-
-### 3. Docker Installation
+### 5. Docker Installation
 
 Run VPN Manager in a Docker container:
 
@@ -67,18 +102,79 @@ docker run -d \
   vpnmanager/vpn-manager:latest
 ```
 
-### 4. One-Line Installation Script
+### 6. Installation from Repository (Recommended for Server Deployment)
 
-For quick installation on Linux/macOS:
+For production deployment on new servers:
 
 ```bash
-curl -fsSL https://get.vpn-manager.io | bash
+# Clone the repository
+git clone https://github.com/ikeniborn/vpn.git
+cd vpn
+
+# Run installation script
+bash scripts/install.sh
 ```
 
-Or with wget:
+#### What the script does:
+
+1. **System Dependencies** (Ubuntu/Debian):
+   - python3-dev, python3-pip, python3-venv
+   - build-essential, gcc, make
+   - libssl-dev, libffi-dev (for cryptography)
+   - libldap2-dev, libsasl2-dev (for LDAP support)
+   - libpq-dev (for PostgreSQL)
+   - libxml2-dev, libxslt1-dev (for XML processing)
+   - Docker (optional, with installation instructions)
+
+2. **Python Environment**:
+   - Detects PEP 668 restrictions
+   - Creates virtual environment automatically
+   - Installs all Python dependencies
+   - Configures PATH in ~/.bashrc
+
+3. **Post-Installation**:
+   - Creates configuration directories
+   - Runs system diagnostics
+   - Provides usage instructions
+
+#### Installation Options:
 
 ```bash
-wget -qO- https://get.vpn-manager.io | bash
+# Standard installation (production)
+bash scripts/install.sh
+
+# Development installation (editable mode)
+bash scripts/install.sh --dev
+
+# One-line installation
+git clone https://github.com/ikeniborn/vpn.git && cd vpn && bash scripts/install.sh
+```
+
+### 7. Manual Installation Steps
+
+If you prefer to install manually or the script doesn't work for your system:
+
+```bash
+# 1. Install system dependencies (Ubuntu/Debian)
+sudo apt-get update
+sudo apt-get install -y python3-dev python3-pip python3-venv \
+    build-essential libssl-dev libffi-dev libldap2-dev \
+    libsasl2-dev libpq-dev git curl wget
+
+# 2. Clone repository
+git clone https://github.com/ikeniborn/vpn.git
+cd vpn
+
+# 3. Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# 4. Install Python dependencies
+pip install -e .
+
+# 5. Install Docker (if not installed)
+curl -fsSL https://get.docker.com | bash
+sudo usermod -aG docker $USER
 ```
 
 ## Package Manager Installation
@@ -223,29 +319,84 @@ pre-commit install
 pytest
 ```
 
-## Virtual Environment (Recommended)
+## Understanding Python Environments
 
-Using a virtual environment is recommended to avoid conflicts:
+### PEP 668 and Externally Managed Environments
+
+Modern Linux distributions (Ubuntu 23.04+, Debian 12+, Fedora 38+) implement PEP 668, which prevents pip from installing packages system-wide to avoid conflicts with the system package manager.
+
+If you see this error:
+```
+error: externally-managed-environment
+```
+
+You have three options:
+1. **Use pipx** (recommended) - Automatically manages virtual environments
+2. **Create a virtual environment** - Manual but flexible
+3. **Use --break-system-packages** - Not recommended, can break your system
+
+### Virtual Environment Best Practices
+
+Using a virtual environment isolates VPN Manager from system packages:
 
 ```bash
 # Create virtual environment
-python -m venv vpn-manager-env
+python3 -m venv ~/.vpn-manager-venv
 
 # Activate virtual environment
-source vpn-manager-env/bin/activate  # Linux/macOS
+source ~/.vpn-manager-venv/bin/activate  # Linux/macOS
 # or
-vpn-manager-env\Scripts\activate  # Windows
+~/.vpn-manager-venv\Scripts\activate  # Windows
 
 # Install VPN Manager
 pip install vpn-manager
+
+# Add to shell profile for persistence
+echo 'alias vpn-activate="source ~/.vpn-manager-venv/bin/activate"' >> ~/.bashrc
 
 # When done, deactivate
 deactivate
 ```
 
+### Using pipx
+
+pipx is a tool that automatically installs Python applications in isolated environments:
+
+```bash
+# Install pipx
+python3 -m pip install --user pipx
+python3 -m pipx ensurepath
+
+# Restart your shell or run
+source ~/.bashrc
+
+# Install VPN Manager
+pipx install vpn-manager
+
+# The 'vpn' command is now available globally
+vpn --version
+```
+
 ## Troubleshooting
 
 ### Common Issues
+
+#### Externally Managed Environment Error
+
+If you encounter the PEP 668 error:
+
+```bash
+# Option 1: Use pipx
+pipx install vpn-manager
+
+# Option 2: Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+pip install vpn-manager
+
+# Option 3: Use the installation script (handles this automatically)
+curl -fsSL https://get.vpn-manager.io | bash
+```
 
 #### Permission Denied Errors
 

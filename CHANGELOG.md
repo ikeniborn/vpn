@@ -51,5 +51,5 @@ For migration instructions, see [Migration Guide](docs/migration/from-rust.md).
 ---
 
 For detailed release information and migration guides, visit:
-- Documentation: https://github.com/ikeniborn/vpn-manager
-- Issues: https://github.com/ikeniborn/vpn-manager/issues
+- Documentation: https://github.com/ikeniborn/vpn
+- Issues: https://github.com/ikeniborn/vpn/issues

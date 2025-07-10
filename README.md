@@ -52,50 +52,38 @@ Modern VPN Management System with rich Terminal User Interface (TUI) and compreh
 
 ## 🛠️ Installation
 
-### Quick Installation (PyPI)
+### Quick Installation
 
 ```bash
-# Install latest stable version
-pip install vpn-manager
-
-# Install with development dependencies
-pip install "vpn-manager[dev]"
+# Clone and install
+git clone https://github.com/ikeniborn/vpn.git
+cd vpn
+bash scripts/install.sh
 ```
 
-### From Source
+The script will:
+- ✅ Install all system dependencies (Ubuntu/Debian)
+- ✅ Create isolated Python environment
+- ✅ Install VPN Manager
+- ✅ Configure shell integration
+- ✅ Prompt to reload your shell
+
+### System Requirements
+
+- **OS**: Ubuntu 20.04+ or Debian 11+ (other Linux distributions may work)
+- **Python**: 3.10 or higher
+- **Memory**: 2GB RAM minimum
+- **Docker**: Required for running VPN servers
+- **Permissions**: sudo access for installing system packages
+
+### After Installation
+
+The installer will prompt you to reload your shell. After that:
 
 ```bash
-# Clone repository
-git clone https://github.com/ikeniborn/vpn-manager.git
-cd vpn-manager
-
-# Install in development mode
-pip install -e ".[dev]"
-
-# Setup pre-commit hooks
-pre-commit install
-```
-
-### Docker Installation
-
-```bash
-docker run -d \
-  --name vpn-manager \
-  --privileged \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -v vpn-data:/app/data \
-  -p 8443:8443 \
-  vpnmanager/vpn-manager:latest
-```
-
-### One-Line Installation
-
-```bash
-# Linux/macOS
-curl -fsSL https://get.vpn-manager.io | bash
-
-# Or with wget
-wget -qO- https://get.vpn-manager.io | bash
+vpn --version     # Check installation
+vpn doctor        # Run diagnostics
+vpn tui           # Launch terminal interface
 ```
 
 ## 🚀 Quick Start
@@ -453,8 +441,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ### Getting Help
 
 - **Documentation**: Check the [docs](docs/) directory
-- **Issues**: [GitHub Issues](https://github.com/ikeniborn/vpn-manager/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/ikeniborn/vpn-manager/discussions)
+- **Issues**: [GitHub Issues](https://github.com/ikeniborn/vpn/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/ikeniborn/vpn/discussions)
 - **Discord**: Join our [Discord Community](https://discord.gg/vpn-manager)
 
 ### Reporting Issues
