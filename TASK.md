@@ -2,229 +2,221 @@
 
 **Created**: 2025-07-12  
 **Status**: Active  
-**Goal**: Optimize project structure, improve code stability, simplify codebase, and enhance documentation
+**Goal**: Optimize project with modern stack (Textual 0.45+, Typer, Pydantic 2.11+), improve stability and documentation
 
-## Phase 1: Project Structure Cleanup (Priority: High) ✅
+## Phase 1: Stack Modernization (Priority: High)
 
-### 1.1 Root Directory Organization ✅
-- [x] Remove `vpn/Screenshot from 2025-07-12 08-02-44.png` or move to docs/images/
-- [x] Ensure `vpn.db` is in .gitignore and not tracked
-- [x] Consider moving CHANGELOG.md to docs/ directory (decided to keep in root)
-- [ ] Create `.github/` directory for GitHub-specific files (if using GitHub)
+### 1.1 Update Core Dependencies
+- [ ] Update Pydantic from 2.5.0 to 2.11+ in pyproject.toml
+- [ ] Test and fix any breaking changes from Pydantic upgrade
+- [ ] Verify Typer is actually using 0.12.0 (not 0.9.4)
+- [ ] Update all type hints to use latest Pydantic features
 
-### 1.2 Configuration Consolidation
-- [ ] Review and consolidate configuration files:
-  - [ ] Merge pytest.ini settings into pyproject.toml (already partially done)
-  - [ ] Create single source of truth for tool configurations
-  - [ ] Document all environment variables in one place
+### 1.2 Leverage New Pydantic 2.11 Features
+- [ ] Migrate to new model_validator decorators
+- [ ] Use computed_field for calculated properties
+- [ ] Implement model_serializer for custom serialization
+- [ ] Use JsonSchemaValue for better JSON schema generation
+- [ ] Optimize model performance with new Pydantic core
 
-### 1.3 Scripts Organization ✅
-- [x] Create subcategories in scripts/ directory:
-  - [x] `scripts/install/` - Installation related scripts
-  - [x] `scripts/maintenance/` - Database init, diagnostics, fixes
-  - [x] `scripts/dev/` - Development helper scripts
+### 1.3 Optimize Textual Usage
+- [ ] Implement lazy loading for heavy TUI screens
+- [ ] Add keyboard shortcuts system using Textual 0.47 features
+- [ ] Create reusable TUI components library
+- [ ] Implement proper focus management
+- [ ] Add TUI theme customization support
 
-## Phase 2: Code Simplification (Priority: High)
-
-### 2.1 Dependency Optimization ✅
-- [x] Audit current dependencies for unused packages
-- [x] Remove duplicate functionality (e.g., both toml and pyyaml for config)
-- [x] Update deprecated dependencies
-- [x] Create dependency groups in pyproject.toml:
-  - [x] Core dependencies
-  - [x] TUI-specific dependencies
-  - [x] CLI-specific dependencies
-- Removed 14 unused dependencies and 5 type stubs (~40% reduction)
-
-### 2.2 Service Layer Simplification
-- [ ] Review service classes for duplicate code
-- [ ] Create base service class with common functionality
-- [ ] Implement proper error handling patterns
-- [ ] Add retry logic for Docker operations
-- [ ] Simplify async context managers
-
-### 2.3 TUI Stability Improvements ✅
-- [x] Add proper error boundaries in TUI screens
-- [x] Implement graceful degradation when services unavailable
-- [x] Add loading states for all async operations
-- [x] Create unified error display widget
-- [ ] Add automatic reconnection for Docker/Database
-
-### 2.4 Configuration Management
-- [ ] Centralize all configuration in Pydantic models
-- [ ] Remove direct file parsing from services
-- [ ] Implement configuration validation on startup
-- [ ] Add configuration migration system
-
-## Phase 3: Code Quality & Stability (Priority: Medium)
-
-### 3.1 Error Handling Standardization (Partially Complete)
-- [x] Create custom exception hierarchy
-- [x] Implement consistent error logging
-- [ ] Add error recovery mechanisms
-- [x] Create error reporting for TUI
-
-### 3.2 Logging Enhancement
-- [ ] Implement structured logging with context
-- [ ] Add log rotation configuration
-- [ ] Create separate log files for different components
-- [ ] Add debug mode with verbose logging
-
-### 3.3 Testing Infrastructure
-- [ ] Add integration tests for TUI components
-- [ ] Create test fixtures for common scenarios
-- [ ] Add performance benchmarks
-- [ ] Implement continuous testing in CI/CD
-
-### 3.4 Type Safety
-- [ ] Add missing type hints
-- [ ] Enable stricter mypy configuration
-- [ ] Create type stubs for external libraries
-- [ ] Add runtime type validation for critical paths
-
-## Phase 4: Documentation Overhaul (Priority: High)
-
-### 4.1 User Documentation
-- [ ] Create comprehensive user guide with screenshots
-- [ ] Add troubleshooting section with common issues
-- [ ] Create video tutorials for complex operations
-- [ ] Add FAQ section
-
-### 4.2 Developer Documentation
-- [ ] Document architecture decisions (ADRs)
-- [ ] Create contributing guidelines
-- [ ] Add code style guide
-- [ ] Document testing strategies
-
-### 4.3 API Documentation
-- [ ] Generate API docs from docstrings
-- [ ] Create service interface documentation
-- [ ] Add protocol implementation guides
-- [ ] Document plugin system (if applicable)
-
-### 4.4 Deployment Documentation
-- [ ] Create production deployment guide
-- [ ] Add security best practices
-- [ ] Document backup and recovery procedures
-- [ ] Add monitoring setup guide
-
-## Phase 5: Performance & Monitoring (Priority: Medium)
-
-### 5.1 Performance Optimization
-- [ ] Profile TUI rendering performance
-- [ ] Optimize database queries
-- [ ] Add caching for expensive operations
-- [ ] Implement lazy loading for large datasets
-
-### 5.2 Monitoring Integration
-- [ ] Add health check endpoints
-- [ ] Implement metrics collection
-- [ ] Create performance dashboards
-- [ ] Add alerting for critical issues
-
-### 5.3 Resource Management
-- [ ] Implement connection pooling
-- [ ] Add resource cleanup on exit
-- [ ] Optimize memory usage in TUI
-- [ ] Add resource usage monitoring
-
-## Phase 6: Feature Enhancements (Priority: Low)
-
-### 6.1 TUI Improvements
-- [ ] Add keyboard shortcuts guide
-- [ ] Implement theme customization
-- [ ] Add data export functionality
-- [ ] Create dashboard customization
-
-### 6.2 CLI Enhancements
-- [ ] Add interactive mode for complex operations
-- [ ] Implement command aliases
+### 1.4 Enhance Typer CLI
 - [ ] Add shell completion for all commands
-- [ ] Create command chaining support
+- [ ] Implement command aliases
+- [ ] Create interactive mode for complex operations
+- [ ] Add progress bars for long-running operations
+- [ ] Implement proper exit codes
 
-### 6.3 Security Enhancements
-- [ ] Add audit logging
-- [ ] Implement role-based access control
-- [ ] Add encryption for sensitive data
-- [ ] Create security scanning integration
+## Phase 2: Service Layer Architecture (Priority: High)
+
+### 2.1 Create Base Service Pattern
+- [ ] Design abstract BaseService class
+- [ ] Implement common methods (health_check, cleanup, reconnect)
+- [ ] Add dependency injection pattern
+- [ ] Create service registry
+- [ ] Implement circuit breaker pattern
+
+### 2.2 Refactor Services
+- [ ] Migrate UserManager to new base pattern
+- [ ] Migrate DockerManager with retry logic
+- [ ] Migrate NetworkManager with proper error handling
+- [ ] Add service health monitoring
+- [ ] Implement graceful shutdown
+
+### 2.3 Add Connection Pooling
+- [ ] Implement Docker client connection pool
+- [ ] Add database connection pooling
+- [ ] Create resource cleanup manager
+- [ ] Add connection health checks
+- [ ] Implement auto-reconnection logic
+
+## Phase 3: Configuration Management (Priority: Medium)
+
+### 3.1 Centralize Configuration
+- [ ] Create comprehensive Settings model with Pydantic
+- [ ] Remove all hardcoded values
+- [ ] Implement configuration validation on startup
+- [ ] Add configuration schema documentation
+- [ ] Create configuration migration system
+
+### 3.2 Environment Management
+- [ ] Document all environment variables
+- [ ] Create .env.example file
+- [ ] Add environment validation
+- [ ] Implement configuration overlays
+- [ ] Add configuration hot-reload support
+
+## Phase 4: Performance Optimization (Priority: Medium)
+
+### 4.1 TUI Performance
+- [ ] Profile TUI rendering performance
+- [ ] Implement virtual scrolling for large lists
+- [ ] Add data pagination
+- [ ] Optimize reactive updates
+- [ ] Implement render caching
+
+### 4.2 Backend Performance
+- [ ] Add async batch operations
+- [ ] Implement query optimization
+- [ ] Add result caching layer
+- [ ] Optimize Docker operations
+- [ ] Profile memory usage
+
+### 4.3 Monitoring Integration
+- [ ] Add OpenTelemetry support
+- [ ] Implement performance metrics
+- [ ] Create performance dashboard
+- [ ] Add slow query logging
+- [ ] Implement alerting system
+
+## Phase 5: Documentation Overhaul (Priority: High)
+
+### 5.1 User Documentation
+- [ ] Create getting started guide with screenshots
+- [ ] Write comprehensive CLI reference
+- [ ] Document TUI navigation and shortcuts
+- [ ] Add troubleshooting guide
+- [ ] Create video tutorials
+
+### 5.2 API Documentation
+- [ ] Generate API docs from docstrings
+- [ ] Document all Pydantic models
+- [ ] Create service interface docs
+- [ ] Add protocol implementation guide
+- [ ] Document REST API endpoints
+
+### 5.3 Developer Documentation
+- [ ] Document architecture decisions (ADRs)
+- [ ] Create contributing guide
+- [ ] Add development setup guide
+- [ ] Document testing strategy
+- [ ] Create plugin development guide
+
+## Phase 6: Testing Infrastructure (Priority: Medium)
+
+### 6.1 Unit Testing
+- [ ] Achieve 90% code coverage
+- [ ] Add property-based tests with Hypothesis
+- [ ] Create comprehensive fixtures
+- [ ] Add parameterized tests
+- [ ] Implement snapshot testing
+
+### 6.2 Integration Testing
+- [ ] Add TUI integration tests
+- [ ] Create Docker integration tests
+- [ ] Add end-to-end scenarios
+- [ ] Implement performance benchmarks
+- [ ] Add security testing
+
+### 6.3 CI/CD Pipeline
+- [ ] Set up GitHub Actions workflow
+- [ ] Add automated testing
+- [ ] Implement code quality checks
+- [ ] Add security scanning
+- [ ] Create release automation
+
+## Phase 7: Security Enhancements (Priority: Low)
+
+### 7.1 Access Control
+- [ ] Implement RBAC system
+- [ ] Add API authentication
+- [ ] Create audit logging
+- [ ] Add session management
+- [ ] Implement 2FA support
+
+### 7.2 Data Security
+- [ ] Encrypt sensitive configuration
+- [ ] Add secrets management
+- [ ] Implement secure key storage
+- [ ] Add data sanitization
+- [ ] Create security policies
 
 ## Implementation Timeline
 
-### Week 1-2: Foundation
-- Project structure cleanup
-- Dependency optimization
-- Basic documentation updates
+### Week 1-2: Stack Modernization
+- Update dependencies to latest versions
+- Implement new Pydantic features
+- Optimize Textual usage
 
-### Week 3-4: Stability
-- Error handling implementation
-- TUI stability improvements
-- Testing infrastructure
+### Week 3-4: Service Architecture
+- Create base service pattern
+- Refactor existing services
+- Add connection pooling
 
-### Week 5-6: Documentation
-- User documentation
-- Developer guides
-- API documentation
+### Week 5-6: Configuration & Performance
+- Centralize configuration
+- Profile and optimize performance
+- Add monitoring
 
-### Week 7-8: Performance
-- Performance profiling
-- Optimization implementation
-- Monitoring setup
+### Week 7-8: Documentation
+- Complete user documentation
+- Generate API documentation
+- Create developer guides
 
-### Week 9-10: Polish
-- Feature enhancements
-- Final testing
-- Release preparation
+### Week 9-10: Testing & Security
+- Expand test coverage
+- Set up CI/CD
+- Implement security features
 
 ## Success Metrics
 
-1. **Code Quality**
-   - Test coverage > 80%
-   - No critical security vulnerabilities
-   - All code passes linting and type checking
+1. **Performance**
+   - TUI startup < 1 second
+   - Command response < 500ms
+   - Memory usage < 50MB idle
+   - 99.9% uptime for services
 
-2. **Performance**
-   - TUI startup time < 2 seconds
-   - Command execution < 1 second
-   - Memory usage < 100MB for TUI
+2. **Code Quality**
+   - 90%+ test coverage
+   - Zero security vulnerabilities
+   - All code type-checked
+   - <5% code duplication
 
-3. **Documentation**
-   - All public APIs documented
-   - User guide covers all features
-   - Zero undocumented configuration options
+3. **Stack Modernization**
+   - Pydantic 2.11+ features utilized
+   - Textual 0.47+ advanced features
+   - Typer 0.12+ with full completions
 
-4. **Stability**
-   - Zero crashes in normal operation
-   - Graceful handling of all error conditions
-   - Automatic recovery from transient failures
+4. **Documentation**
+   - 100% API documentation
+   - User guide for all features
+   - Video tutorials available
+   - <24h response to issues
 
 ## Notes
 
-- Prioritize backward compatibility
-- Maintain current feature set
-- Focus on user experience improvements
-- Keep modern tooling (Typer, Textual, Pydantic)
+- Maintain backward compatibility
+- Focus on performance improvements
+- Leverage latest features of modern stack
+- Prioritize user experience
 
 ---
 
-## Progress Summary
-
-### Completed in this session:
-- ✅ **Phase 1.1**: Root directory cleanup (removed screenshot, verified .gitignore)
-- ✅ **Phase 1.3**: Scripts reorganization (created subdirectories with README)
-- ✅ **Phase 2.1**: Dependency optimization (removed 14 unused packages, ~40% reduction)
-- ✅ **Phase 2.3**: TUI stability improvements (error boundaries, unified error display)
-- ✅ **Phase 3.1**: Custom exception hierarchy with user-friendly suggestions
-
-### Key Achievements:
-1. **Cleaner project structure** - Scripts organized into logical directories
-2. **Reduced dependencies** - Removed unused packages for easier maintenance
-3. **Improved TUI stability** - Error boundaries prevent crashes, graceful degradation
-4. **Better error messages** - Exceptions now include helpful suggestions for users
-
-### Next Priority Tasks:
-1. **Service Layer Simplification** (Phase 2.2) - Create base service class
-2. **Configuration Management** (Phase 2.4) - Centralize in Pydantic models
-3. **Documentation Overhaul** (Phase 4) - User guide, troubleshooting, API docs
-
 **Last Updated**: 2025-07-12  
-**Next Review**: 2025-07-19
+**Next Review**: 2025-07-15
