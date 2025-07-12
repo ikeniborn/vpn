@@ -59,8 +59,10 @@ Modern VPN Management System with rich Terminal User Interface (TUI) and compreh
 git clone https://github.com/ikeniborn/vpn.git
 cd vpn
 
-# Run the installation script
+# Run the installation script (either command works)
 bash scripts/install.sh
+# or
+bash scripts/install/install.sh
 ```
 
 The installation script will:
