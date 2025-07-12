@@ -7,7 +7,9 @@ from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict, field_serializer, computed_field
+from pydantic import BaseModel, Field, field_validator, ConfigDict, field_serializer, computed_field, model_serializer
+from pydantic.json_schema import JsonSchemaValue
+from typing import Annotated
 
 
 class ProtocolType(str, Enum):
@@ -179,6 +181,70 @@ class User(BaseModel):
         """Generate connection link based on protocol."""
         # This will be implemented based on protocol type
         return f"{self.protocol.type}://{self.username}@example.com"
+    
+    @model_serializer(mode='wrap')
+    def serialize_model(self, serializer, info):
+        """Custom model serialization with sensitive data handling."""
+        data = serializer(self)
+        
+        # Check if we're in a secure context (based on serialization context)
+        if info.mode == 'json' and not info.context.get('include_sensitive', False):
+            # Hide sensitive protocol configuration details
+            if 'protocol' in data and 'settings' in data['protocol']:
+                # Keep only non-sensitive protocol info
+                data['protocol'] = {
+                    'type': data['protocol']['type'],
+                    'version': data['protocol'].get('version')
+                }
+            
+            # Mask email if requested
+            if info.context.get('mask_email', False) and data.get('email'):
+                email = data['email']
+                parts = email.split('@')
+                if len(parts) == 2:
+                    masked = parts[0][:2] + '***' + '@' + parts[1]
+                    data['email'] = masked
+        
+        return data
+    
+    @classmethod
+    def model_json_schema(cls, **kwargs) -> JsonSchemaValue:
+        """Generate enhanced JSON schema for User model."""
+        schema = super().model_json_schema(**kwargs)
+        
+        # Add schema metadata
+        schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+        schema["title"] = "VPN User Account"
+        schema["description"] = "User account configuration for VPN/Proxy services"
+        
+        # Enhance field descriptions
+        if "properties" in schema:
+            schema["properties"]["username"]["pattern"] = "^[a-zA-Z0-9_-]+$"
+            schema["properties"]["username"]["examples"] = ["john_doe", "user123", "vpn_client"]
+            
+            if "email" in schema["properties"]:
+                schema["properties"]["email"]["format"] = "email"
+            
+            if "expires_at" in schema["properties"]:
+                schema["properties"]["expires_at"]["format"] = "date-time"
+        
+        # Add schema examples
+        schema["examples"] = [
+            {
+                "username": "john_doe",
+                "email": "john@example.com",
+                "protocol": {"type": "vless", "version": "2"},
+                "status": "active"
+            },
+            {
+                "username": "corporate_user",
+                "protocol": {"type": "wireguard"},
+                "status": "active",
+                "expires_at": "2024-12-31T23:59:59Z"
+            }
+        ]
+        
+        return schema
 
 
 class FirewallRule(BaseModel):
@@ -255,6 +321,86 @@ class ServerConfig(BaseModel):
         if v < 1024:
             raise ValueError("Port must be >= 1024 for non-root operation")
         return v
+    
+    @computed_field
+    @property
+    def is_running(self) -> bool:
+        """Check if server is running."""
+        return self.status == ServerStatus.RUNNING
+    
+    @computed_field
+    @property
+    def container_name(self) -> str:
+        """Generate container name if not specified."""
+        if self.docker_config.container_name:
+            return self.docker_config.container_name
+        return f"vpn-{self.protocol.type}-{self.name}"
+    
+    @model_serializer(mode='wrap')
+    def serialize_model(self, serializer, info):
+        """Custom serialization for server configuration."""
+        data = serializer(self)
+        
+        # Add computed fields to JSON output when requested
+        if info.mode == 'json' and info.context.get('include_computed', True):
+            data['_computed'] = {
+                'is_running': self.is_running,
+                'container_name': self.container_name,
+                'uptime_hours': self._calculate_uptime() if self.is_running else 0
+            }
+        
+        # Simplify docker config for listing views
+        if info.context.get('simplified', False) and 'docker_config' in data:
+            data['docker_config'] = {
+                'image': data['docker_config']['image'],
+                'tag': data['docker_config']['tag']
+            }
+        
+        return data
+    
+    def _calculate_uptime(self) -> float:
+        """Calculate server uptime in hours."""
+        if self.updated_at and self.status == ServerStatus.RUNNING:
+            uptime = datetime.utcnow() - self.updated_at
+            return round(uptime.total_seconds() / 3600, 2)
+        return 0.0
+    
+    @classmethod
+    def model_json_schema(cls, **kwargs) -> JsonSchemaValue:
+        """Generate enhanced JSON schema for ServerConfig."""
+        schema = super().model_json_schema(**kwargs)
+        
+        schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+        schema["title"] = "VPN Server Configuration"
+        schema["description"] = "Complete configuration for a VPN/Proxy server instance"
+        
+        # Add examples
+        schema["examples"] = [
+            {
+                "name": "primary-vless",
+                "protocol": {"type": "vless", "version": "2"},
+                "port": 8443,
+                "docker_config": {
+                    "image": "vpn/vless-reality",
+                    "tag": "latest"
+                },
+                "auto_start": True
+            },
+            {
+                "name": "backup-shadowsocks",
+                "protocol": {"type": "shadowsocks"},
+                "port": 8388,
+                "docker_config": {
+                    "image": "shadowsocks/shadowsocks-libev",
+                    "tag": "v3.3.5"
+                },
+                "firewall_rules": [
+                    {"protocol": "tcp", "port": 8388, "action": "allow"}
+                ]
+            }
+        ]
+        
+        return schema
 
 
 class ConnectionInfo(BaseModel):
@@ -283,6 +429,28 @@ class SystemStatus(BaseModel):
     last_check: datetime = Field(default_factory=datetime.utcnow)
     
     model_config = ConfigDict(from_attributes=True)
+    
+    @computed_field
+    @property
+    def running_servers(self) -> int:
+        """Count of running servers."""
+        return sum(1 for server in self.servers if server.is_running)
+    
+    @computed_field
+    @property
+    def inactive_users(self) -> int:
+        """Count of inactive users."""
+        return self.total_users - self.active_users
+    
+    @computed_field
+    @property
+    def server_status_summary(self) -> Dict[str, int]:
+        """Summary of server statuses."""
+        summary = {}
+        for server in self.servers:
+            status = server.status.value
+            summary[status] = summary.get(status, 0) + 1
+        return summary
 
 
 class Alert(BaseModel):
@@ -300,3 +468,28 @@ class Alert(BaseModel):
     resolved_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
+    
+    @computed_field
+    @property
+    def is_active(self) -> bool:
+        """Check if alert is still active (not resolved)."""
+        return not self.resolved
+    
+    @computed_field
+    @property
+    def age_minutes(self) -> int:
+        """Calculate alert age in minutes."""
+        age = datetime.utcnow() - self.created_at
+        return int(age.total_seconds() / 60)
+    
+    @computed_field
+    @property
+    def severity_order(self) -> int:
+        """Get numeric severity for sorting."""
+        severity_map = {
+            "info": 1,
+            "warning": 2,
+            "error": 3,
+            "critical": 4
+        }
+        return severity_map.get(self.level, 0)

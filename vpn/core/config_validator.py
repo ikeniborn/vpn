@@ -397,6 +397,375 @@ class ConfigValidator:
         
         return issues
     
+    def validate_environment_variables(self) -> Tuple[bool, List[ValidationIssue]]:
+        """Validate environment variables.
+        
+        Returns:
+            Tuple of (is_valid, issues_list)
+        """
+        issues = []
+        
+        # Get all VPN_* environment variables
+        vpn_env_vars = {k: v for k, v in os.environ.items() if k.startswith("VPN_")}
+        
+        if not vpn_env_vars:
+            issues.append(ValidationIssue(
+                severity="info",
+                path="environment",
+                message="No VPN environment variables found",
+                suggestion="This is normal if using configuration files only"
+            ))
+            return True, issues
+        
+        # Check for deprecated variables
+        deprecated_vars = {
+            "VPN_INSTALL_PATH": "VPN_PATHS__INSTALL_PATH",
+            "VPN_CONFIG_PATH": "VPN_PATHS__CONFIG_PATH", 
+            "VPN_DATA_PATH": "VPN_PATHS__DATA_PATH",
+            "VPN_DATABASE_URL": "VPN_DATABASE__URL",
+            "VPN_DOCKER_HOST": "VPN_DOCKER__SOCKET",
+            "VPN_DOCKER_SOCKET": "VPN_DOCKER__SOCKET",
+            "VPN_NO_COLOR": "Use --no-color CLI flag"
+        }
+        
+        for old_var, new_var in deprecated_vars.items():
+            if old_var in vpn_env_vars:
+                issues.append(ValidationIssue(
+                    severity="warning",
+                    path=f"environment.{old_var}",
+                    message=f"Deprecated environment variable: {old_var}",
+                    suggestion=f"Use {new_var} instead",
+                    value=vpn_env_vars[old_var]
+                ))
+        
+        # Validate specific environment variable formats
+        issues.extend(self._validate_env_var_formats(vpn_env_vars))
+        
+        # Check for environment variable conflicts
+        issues.extend(self._check_env_var_conflicts(vpn_env_vars))
+        
+        # Validate environment variable values
+        issues.extend(self._validate_env_var_values(vpn_env_vars))
+        
+        # Check if environment can create valid settings
+        try:
+            # Test loading settings with environment variables
+            test_settings = EnhancedSettings()
+            issues.append(ValidationIssue(
+                severity="info",
+                path="environment",
+                message=f"Environment variables successfully loaded ({len(vpn_env_vars)} variables)",
+                suggestion="Configuration is valid"
+            ))
+        except ValidationError as e:
+            for error in e.errors():
+                env_path = ".".join(str(loc) for loc in error["loc"])
+                issues.append(ValidationIssue(
+                    severity="error",
+                    path=f"environment.{env_path}",
+                    message=f"Environment variable validation error: {error['msg']}",
+                    suggestion="Check environment variable format and value",
+                    value=error.get("input")
+                ))
+        
+        # Determine overall validity
+        has_errors = any(issue.severity == "error" for issue in issues)
+        return not has_errors, issues
+    
+    def _validate_env_var_formats(self, env_vars: Dict[str, str]) -> List[ValidationIssue]:
+        """Validate environment variable formats."""
+        issues = []
+        
+        # Check for proper nested delimiter format
+        for var_name, value in env_vars.items():
+            if "__" in var_name:
+                # Check for triple or more underscores (likely mistake)
+                if "___" in var_name:
+                    issues.append(ValidationIssue(
+                        severity="warning",
+                        path=f"environment.{var_name}",
+                        message="Environment variable contains triple underscores",
+                        suggestion="Use double underscores (__) for nesting",
+                        value=value
+                    ))
+                
+                # Check for invalid nested formats
+                parts = var_name.split("__")
+                if len(parts) > 3:  # VPN_SECTION__SUBSECTION__KEY is max depth
+                    issues.append(ValidationIssue(
+                        severity="warning",
+                        path=f"environment.{var_name}",
+                        message="Environment variable has too many nesting levels",
+                        suggestion="Maximum nesting is VPN_SECTION__KEY format",
+                        value=value
+                    ))
+        
+        # Check for specific format requirements
+        format_checks = {
+            "VPN_NETWORK__DEFAULT_PORT_RANGE": self._validate_port_range_format,
+            "VPN_DATABASE__URL": self._validate_database_url_format,
+            "VPN_MONITORING__OTLP_ENDPOINT": self._validate_url_format,
+            "VPN_DOCKER__REGISTRY_URL": self._validate_url_format,
+        }
+        
+        for var_name, validator in format_checks.items():
+            if var_name in env_vars:
+                validation_issues = validator(var_name, env_vars[var_name])
+                issues.extend(validation_issues)
+        
+        return issues
+    
+    def _validate_port_range_format(self, var_name: str, value: str) -> List[ValidationIssue]:
+        """Validate port range format."""
+        issues = []
+        
+        try:
+            # Should be "min,max" format
+            if "," not in value:
+                issues.append(ValidationIssue(
+                    severity="error",
+                    path=f"environment.{var_name}",
+                    message="Port range should be in 'min,max' format",
+                    suggestion="Example: '10000,65000'",
+                    value=value
+                ))
+                return issues
+            
+            parts = value.split(",")
+            if len(parts) != 2:
+                issues.append(ValidationIssue(
+                    severity="error",
+                    path=f"environment.{var_name}",
+                    message="Port range should contain exactly two numbers",
+                    suggestion="Example: '10000,65000'",
+                    value=value
+                ))
+                return issues
+            
+            min_port, max_port = int(parts[0].strip()), int(parts[1].strip())
+            
+            if min_port >= max_port:
+                issues.append(ValidationIssue(
+                    severity="error",
+                    path=f"environment.{var_name}",
+                    message="Minimum port must be less than maximum port",
+                    suggestion="Ensure first number is smaller than second",
+                    value=value
+                ))
+            
+            if not (1 <= min_port <= 65535) or not (1 <= max_port <= 65535):
+                issues.append(ValidationIssue(
+                    severity="error",
+                    path=f"environment.{var_name}",
+                    message="Port numbers must be between 1 and 65535",
+                    suggestion="Use valid port range",
+                    value=value
+                ))
+                
+        except ValueError:
+            issues.append(ValidationIssue(
+                severity="error",
+                path=f"environment.{var_name}",
+                message="Port range contains non-numeric values",
+                suggestion="Use numeric values: '10000,65000'",
+                value=value
+            ))
+        
+        return issues
+    
+    def _validate_database_url_format(self, var_name: str, value: str) -> List[ValidationIssue]:
+        """Validate database URL format."""
+        issues = []
+        
+        supported_schemes = ["sqlite", "sqlite+aiosqlite", "postgresql", "mysql"]
+        
+        if "://" not in value:
+            issues.append(ValidationIssue(
+                severity="error",
+                path=f"environment.{var_name}",
+                message="Database URL missing scheme",
+                suggestion=f"Use one of: {', '.join(supported_schemes)}://",
+                value=value
+            ))
+            return issues
+        
+        scheme = value.split("://")[0]
+        if scheme not in supported_schemes:
+            issues.append(ValidationIssue(
+                severity="warning",
+                path=f"environment.{var_name}",
+                message=f"Unsupported database scheme: {scheme}",
+                suggestion=f"Supported schemes: {', '.join(supported_schemes)}",
+                value=value
+            ))
+        
+        return issues
+    
+    def _validate_url_format(self, var_name: str, value: str) -> List[ValidationIssue]:
+        """Validate general URL format."""
+        issues = []
+        
+        if not value.startswith(("http://", "https://")):
+            issues.append(ValidationIssue(
+                severity="error",
+                path=f"environment.{var_name}",
+                message="URL must start with http:// or https://",
+                suggestion="Add proper URL scheme",
+                value=value
+            ))
+        
+        return issues
+    
+    def _check_env_var_conflicts(self, env_vars: Dict[str, str]) -> List[ValidationIssue]:
+        """Check for conflicting environment variables."""
+        issues = []
+        
+        # Check for old/new variable conflicts
+        conflicts = [
+            ("VPN_INSTALL_PATH", "VPN_PATHS__INSTALL_PATH"),
+            ("VPN_CONFIG_PATH", "VPN_PATHS__CONFIG_PATH"),
+            ("VPN_DATA_PATH", "VPN_PATHS__DATA_PATH"),
+            ("VPN_DATABASE_URL", "VPN_DATABASE__URL"),
+            ("VPN_DOCKER_SOCKET", "VPN_DOCKER__SOCKET"),
+        ]
+        
+        for old_var, new_var in conflicts:
+            if old_var in env_vars and new_var in env_vars:
+                issues.append(ValidationIssue(
+                    severity="warning",
+                    path=f"environment.conflict",
+                    message=f"Both {old_var} and {new_var} are set",
+                    suggestion=f"Remove {old_var} and use only {new_var}",
+                    value=f"{old_var}={env_vars[old_var]}, {new_var}={env_vars[new_var]}"
+                ))
+        
+        # Check for conflicting authentication settings
+        if env_vars.get("VPN_SECURITY__ENABLE_AUTH") == "false" and "VPN_SECURITY__SECRET_KEY" in env_vars:
+            issues.append(ValidationIssue(
+                severity="warning",
+                path="environment.security",
+                message="Secret key set but authentication is disabled",
+                suggestion="Enable authentication or remove secret key",
+                value="AUTH=false but SECRET_KEY is set"
+            ))
+        
+        return issues
+    
+    def _validate_env_var_values(self, env_vars: Dict[str, str]) -> List[ValidationIssue]:
+        """Validate environment variable values."""
+        issues = []
+        
+        # Boolean value checks
+        boolean_vars = [
+            "VPN_DEBUG", "VPN_AUTO_START_SERVERS", "VPN_RELOAD", "VPN_PROFILE",
+            "VPN_DATABASE__ECHO", "VPN_NETWORK__ENABLE_FIREWALL", 
+            "VPN_NETWORK__FIREWALL_BACKUP", "VPN_SECURITY__ENABLE_AUTH",
+            "VPN_SECURITY__REQUIRE_PASSWORD_COMPLEXITY", "VPN_MONITORING__ENABLE_METRICS",
+            "VPN_MONITORING__ENABLE_OPENTELEMETRY", "VPN_TUI__SHOW_STATS",
+            "VPN_TUI__SHOW_HELP", "VPN_TUI__ENABLE_MOUSE"
+        ]
+        
+        for var in boolean_vars:
+            if var in env_vars:
+                value = env_vars[var].lower()
+                if value not in ["true", "false", "1", "0", "yes", "no", "on", "off"]:
+                    issues.append(ValidationIssue(
+                        severity="error",
+                        path=f"environment.{var}",
+                        message="Boolean environment variable has invalid value",
+                        suggestion="Use: true/false, 1/0, yes/no, or on/off",
+                        value=env_vars[var]
+                    ))
+        
+        # Numeric value checks
+        numeric_vars = {
+            "VPN_DATABASE__POOL_SIZE": (1, 50),
+            "VPN_DATABASE__MAX_OVERFLOW": (0, 100),
+            "VPN_DATABASE__POOL_TIMEOUT": (1, 300),
+            "VPN_DOCKER__TIMEOUT": (5, 600),
+            "VPN_DOCKER__MAX_CONNECTIONS": (1, 50),
+            "VPN_SECURITY__TOKEN_EXPIRE_MINUTES": (1, 43200),  # 1 min to 30 days
+            "VPN_SECURITY__MAX_LOGIN_ATTEMPTS": (1, 10),
+            "VPN_SECURITY__LOCKOUT_DURATION": (1, 1440),  # 1 min to 24 hours
+            "VPN_SECURITY__PASSWORD_MIN_LENGTH": (4, 128),
+            "VPN_MONITORING__METRICS_PORT": (1024, 65535),
+            "VPN_MONITORING__METRICS_RETENTION_DAYS": (1, 365),
+            "VPN_MONITORING__HEALTH_CHECK_INTERVAL": (5, 3600),
+            "VPN_TUI__REFRESH_RATE": (1, 60),
+            "VPN_TUI__PAGE_SIZE": (5, 1000),
+        }
+        
+        for var, (min_val, max_val) in numeric_vars.items():
+            if var in env_vars:
+                try:
+                    value = int(env_vars[var])
+                    if not (min_val <= value <= max_val):
+                        issues.append(ValidationIssue(
+                            severity="warning",
+                            path=f"environment.{var}",
+                            message=f"Value {value} outside recommended range ({min_val}-{max_val})",
+                            suggestion=f"Use value between {min_val} and {max_val}",
+                            value=env_vars[var]
+                        ))
+                except ValueError:
+                    issues.append(ValidationIssue(
+                        severity="error",
+                        path=f"environment.{var}",
+                        message="Numeric environment variable has non-numeric value",
+                        suggestion="Use a numeric value",
+                        value=env_vars[var]
+                    ))
+        
+        # Float value checks
+        float_vars = {
+            "VPN_MONITORING__ALERT_CPU_THRESHOLD": (0.0, 100.0),
+            "VPN_MONITORING__ALERT_MEMORY_THRESHOLD": (0.0, 100.0),
+            "VPN_MONITORING__ALERT_DISK_THRESHOLD": (0.0, 100.0),
+            "VPN_TUI__ANIMATION_DURATION": (0.0, 5.0),
+        }
+        
+        for var, (min_val, max_val) in float_vars.items():
+            if var in env_vars:
+                try:
+                    value = float(env_vars[var])
+                    if not (min_val <= value <= max_val):
+                        issues.append(ValidationIssue(
+                            severity="warning",
+                            path=f"environment.{var}",
+                            message=f"Value {value} outside valid range ({min_val}-{max_val})",
+                            suggestion=f"Use value between {min_val} and {max_val}",
+                            value=env_vars[var]
+                        ))
+                except ValueError:
+                    issues.append(ValidationIssue(
+                        severity="error",
+                        path=f"environment.{var}",
+                        message="Numeric environment variable has non-numeric value",
+                        suggestion="Use a numeric value",
+                        value=env_vars[var]
+                    ))
+        
+        # Choice value checks
+        choice_vars = {
+            "VPN_LOG_LEVEL": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+            "VPN_DEFAULT_PROTOCOL": ["vless", "shadowsocks", "wireguard", "openvpn"],
+            "VPN_TUI__THEME": ["dark", "light"],
+        }
+        
+        for var, valid_choices in choice_vars.items():
+            if var in env_vars:
+                value = env_vars[var]
+                if value not in valid_choices:
+                    issues.append(ValidationIssue(
+                        severity="error",
+                        path=f"environment.{var}",
+                        message=f"Invalid choice: {value}",
+                        suggestion=f"Valid choices: {', '.join(valid_choices)}",
+                        value=value
+                    ))
+        
+        return issues
+    
     def _check_unknown_keys(
         self,
         config_data: Dict[str, Any],

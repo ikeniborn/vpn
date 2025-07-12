@@ -15,6 +15,10 @@ from vpn import __version__
 from vpn.core.config import RuntimeConfig, settings
 from vpn.core.exceptions import VPNError
 from vpn.utils.logger import LogContext, get_logger, setup_logging
+from vpn.cli.exit_codes import (
+    ExitCode, exit_manager, handle_cli_errors, setup_exit_codes_for_cli,
+    show_exit_codes_help
+)
 
 # Initialize CLI app
 app = typer.Typer(
@@ -90,6 +94,9 @@ def main(
     
     Manage VPN servers, users, and configurations with ease.
     """
+    # Set up exit code handling
+    setup_exit_codes_for_cli()
+    
     # Update runtime configuration
     runtime_config.quiet = quiet
     runtime_config.verbose = verbose
@@ -114,32 +121,34 @@ def main(
     )
     
     # Load custom config file if provided
-    if config_file and config_file.exists():
-        logger.info(f"Loading configuration from: {config_file}")
-        # TODO: Implement config file loading
+    if config_file:
+        if config_file.exists():
+            logger.info(f"Loading configuration from: {config_file}")
+            # TODO: Implement config file loading
+        else:
+            exit_manager.exit_with_code(
+                ExitCode.CONFIG_FILE_NOT_FOUND,
+                f"Configuration file not found: {config_file}"
+            )
 
 
 @app.command()
 def tui():
     """Launch the Terminal User Interface."""
-    try:
-        from vpn.tui.app import VPNManagerApp
-        
-        console.print("[bold]Launching VPN Manager TUI...[/bold]")
-        app = VPNManagerApp()
-        app.run()
-    except ImportError:
-        console.print(
-            "[red]TUI dependencies not installed. "
-            "Install with: pip install textual[/red]"
-        )
-        raise typer.Exit(1)
-    except KeyboardInterrupt:
-        console.print("\n[yellow]TUI closed by user[/yellow]")
-        raise typer.Exit(0)
-    except Exception as e:
-        console.print(f"[red]Error launching TUI: {e}[/red]")
-        raise typer.Exit(1)
+    with handle_cli_errors("TUI launch"):
+        try:
+            from vpn.tui.app import VPNManagerApp
+            
+            console.print("[bold]Launching VPN Manager TUI...[/bold]")
+            app = VPNManagerApp()
+            app.run()
+            exit_manager.exit_with_code(ExitCode.SUCCESS, "TUI session completed")
+        except ImportError:
+            exit_manager.exit_with_code(
+                ExitCode.GENERAL_ERROR,
+                "TUI dependencies not installed",
+                suggestion="Install with: pip install textual"
+            )
 
 
 @app.command()
@@ -184,16 +193,21 @@ def doctor():
         console.print(f"  [yellow]⚠ Warnings: {summary['warnings']}[/yellow]")
         console.print(f"  [red]✗ Errors: {summary['errors']}[/red]")
         
-        # Overall status
+        # Determine exit code based on results
         if summary['errors'] == 0 and summary['warnings'] == 0:
             console.print("\n[green]✅ System is ready for VPN operations![/green]")
+            return ExitCode.SUCCESS
         elif summary['errors'] == 0:
             console.print("\n[yellow]⚠️ System is mostly ready with some warnings.[/yellow]")
+            return ExitCode.SUCCESS  # Warnings don't fail the check
         else:
             console.print("\n[red]❌ System has issues that need to be resolved.[/red]")
             console.print("[dim]Run 'vpn doctor --help' for troubleshooting tips.[/dim]")
+            return ExitCode.SYSTEM_ERROR
     
-    run_async(_run_doctor())
+    with handle_cli_errors("System diagnostics"):
+        exit_code = run_async(_run_doctor())
+        exit_manager.exit_with_code(exit_code)
 
 
 @app.command()
@@ -201,7 +215,7 @@ def init():
     """Initialize VPN Manager configuration."""
     console.print("[bold]Initializing VPN Manager...[/bold]\n")
     
-    try:
+    with handle_cli_errors("VPN Manager initialization"):
         # Create directories
         for path_name, path in [
             ("Configuration", settings.config_path),
@@ -221,10 +235,7 @@ def init():
         console.print(f"[green]✓[/green] Database initialized")
         
         console.print("\n[green]Initialization complete![/green]")
-        
-    except Exception as e:
-        console.print(f"[red]Initialization failed: {e}[/red]")
-        raise typer.Exit(1)
+        exit_manager.exit_with_code(ExitCode.SUCCESS, "VPN Manager initialized successfully")
 
 
 @app.command()
@@ -284,7 +295,15 @@ def migrate(
             console.print(f"\n[red]Migration failed: {e}[/red]")
             raise typer.Exit(1)
     
-    run_async(_run_migration())
+    with handle_cli_errors("Migration"):
+        run_async(_run_migration())
+
+
+@app.command()
+def exit_codes():
+    """Show exit code reference and documentation."""
+    show_exit_codes_help()
+    exit_manager.exit_with_code(ExitCode.SUCCESS)
 
 
 @app.command()
@@ -379,15 +398,19 @@ def run_async(coro):
         return asyncio.run(coro)
     except KeyboardInterrupt:
         logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
+        exit_manager.exit_with_code(ExitCode.KEYBOARD_INTERRUPT, "Operation cancelled by user")
     except VPNError as e:
         logger.error(f"{e.error_code}: {e.message}")
         if e.details:
             logger.debug(f"Details: {e.details}")
-        raise typer.Exit(1)
+        
+        # Map VPN error to appropriate exit code
+        code = exit_manager.handle_exception(e)
+        exit_manager.exit_with_code(code, f"{e.error_code}: {e.message}")
     except Exception as e:
         logger.exception("Unexpected error occurred")
-        raise typer.Exit(1)
+        code = exit_manager.handle_exception(e)
+        exit_manager.exit_with_code(code, f"Unexpected error: {e}")
 
 
 # Import command groups

@@ -58,6 +58,8 @@ qrcode = {extras = ["pil"], version = "^7.4.0"}
 psutil = "^5.9.0"
 # Environment and configuration
 python-dotenv = "^1.0.0"
+# File system monitoring for hot-reload
+watchdog = "^3.0.0"
 
 [tool.poetry.group.dev.dependencies]
 # Testing framework
