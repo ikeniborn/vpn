@@ -304,7 +304,7 @@ class TrafficCollector:
                 user.traffic.total_sessions += 1
             
             # Save updated user
-            await self.user_manager.update(str(user_id), user.dict())
+            await self.user_manager.update(str(user_id), user.model_dump())
             
         except Exception as e:
             logger.error(f"Failed to update user traffic stats: {e}")

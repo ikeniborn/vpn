@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, ConfigDict, field_serializer, computed_field
 
 
 class ProtocolType(str, Enum):
@@ -57,16 +57,19 @@ class TrafficStats(BaseModel):
     
     model_config = ConfigDict(from_attributes=True)
     
+    @computed_field
     @property
     def upload_mb(self) -> float:
         """Upload in megabytes."""
         return self.upload_bytes / (1024 * 1024)
     
+    @computed_field
     @property
     def download_mb(self) -> float:
         """Download in megabytes."""
         return self.download_bytes / (1024 * 1024)
     
+    @computed_field
     @property
     def total_mb(self) -> float:
         """Total traffic in megabytes."""
@@ -132,11 +135,17 @@ class User(BaseModel):
     
     model_config = ConfigDict(
         from_attributes=True,
-        json_encoders={
-            datetime: lambda v: v.isoformat(),
-            UUID: lambda v: str(v),
-        }
     )
+    
+    @field_serializer('id')
+    def serialize_uuid(self, value: UUID) -> str:
+        """Serialize UUID to string."""
+        return str(value)
+    
+    @field_serializer('created_at', 'updated_at', 'expires_at')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime to ISO format."""
+        return value.isoformat() if value else None
     
     @field_validator("username")
     @classmethod
@@ -156,6 +165,7 @@ class User(BaseModel):
             raise ValueError("Invalid email format")
         return v.lower()
     
+    @computed_field
     @property
     def is_active(self) -> bool:
         """Check if user is active and not expired."""
@@ -231,10 +241,12 @@ class ServerConfig(BaseModel):
     
     model_config = ConfigDict(
         from_attributes=True,
-        json_encoders={
-            datetime: lambda v: v.isoformat(),
-        }
     )
+    
+    @field_serializer('created_at', 'updated_at')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime to ISO format."""
+        return value.isoformat() if value else None
     
     @field_validator("port")
     @classmethod

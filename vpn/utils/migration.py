@@ -257,7 +257,7 @@ class RustMigrator:
                 user.traffic.total_sessions = traffic_data.get("total_sessions", 0)
             
             # Save migrated user
-            await self.user_manager.update(user.id, user.dict())
+            await self.user_manager.update(user.id, user.model_dump())
             
             return user
             

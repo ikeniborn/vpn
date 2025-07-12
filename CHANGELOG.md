@@ -7,8 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- PyYAML support for configuration files (alongside TOML)
+- Unified config loader supporting both YAML and TOML formats
+- CLI commands for config management (show, generate, validate, convert)
+- Pydantic 2.11+ features:
+  - `@computed_field` for calculated properties
+  - `@field_serializer` instead of deprecated `json_encoders`
+  - Advanced `@model_validator` examples
+  - Enhanced JSON schema generation
+
+### Changed
+- Updated Pydantic from 2.5.0 to 2.11.7
+- Updated Typer from 0.12.0 to 0.16.0
+- Replaced `.dict()` with `.model_dump()` for Pydantic v2 compatibility
+- Migrated from `json_encoders` to `@field_serializer`
+
 ### Fixed
 - Fixed color output in installation script - escape sequences now properly rendered
+- Fixed Pydantic deprecation warnings
 
 ## [2.0.0] - 2025-07-09
 
