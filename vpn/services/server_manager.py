@@ -18,7 +18,8 @@ from vpn.protocols import (
     BaseProtocol,
     VLESSProtocol,
     ShadowsocksProtocol,
-    WireGuardProtocol
+    WireGuardProtocol,
+    ProxyProtocol
 )
 from vpn.services.base import BaseService
 from vpn.services.docker_manager import DockerManager
@@ -36,6 +37,7 @@ class ServerManager(BaseService):
         "vless": VLESSProtocol,
         "shadowsocks": ShadowsocksProtocol,
         "wireguard": WireGuardProtocol,
+        "proxy": ProxyProtocol,
     }
     
     def __init__(self):

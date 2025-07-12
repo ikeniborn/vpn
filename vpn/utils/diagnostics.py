@@ -205,11 +205,13 @@ class SystemDiagnostics:
     async def _check_database(self):
         """Check database connectivity."""
         try:
-            from vpn.core.database import get_async_session
+            from vpn.core.database import get_session
+            from sqlalchemy import text
             
-            async with get_async_session() as session:
+            async for session in get_session():
                 # Simple query to test connection
-                await session.execute("SELECT 1")
+                await session.execute(text("SELECT 1"))
+                break  # Exit after successful test
             
             self.checks.append(DiagnosticCheck(
                 "Database",

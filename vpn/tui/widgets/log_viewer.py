@@ -137,6 +137,9 @@ class LogViewer(Widget, ContextMenuMixin):
         self.level_filter: Optional[str] = None
         self.auto_scroll = True
         self.max_entries = 1000
+        # Initialize context menu attributes from mixin
+        self._context_menu = None
+        self._context_menu_items = []
     
     def compose(self) -> ComposeResult:
         """Compose the log viewer widget."""

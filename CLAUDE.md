@@ -229,3 +229,31 @@ The project uses Poetry for dependency management but provides pip-compatible in
 - Async exceptions properly propagated
 - Docker errors wrapped with helpful context
 - Network errors include retry suggestions
+
+## MCP (Model Context Protocol) Integration
+
+### Using context7 for Programming Documentation
+
+The project integrates with MCP's context7 server to access programming language documentation and reference materials. This provides:
+
+- **Real-time documentation access**: Get up-to-date documentation for Python, frameworks, and libraries
+- **Contextual code examples**: Access relevant code snippets and best practices
+- **API reference lookup**: Quick access to method signatures and parameter details
+
+### Setup and Usage
+
+1. Configure MCP context7 in your Claude Code environment
+2. When working on code, context7 automatically provides relevant documentation
+3. Use for:
+   - Framework-specific patterns (Textual, Typer, Pydantic)
+   - Python standard library references
+   - Docker API documentation
+   - Async/await best practices
+
+### Benefits for This Project
+
+- **Textual TUI Development**: Access Textual widget documentation and examples
+- **Typer CLI Patterns**: Get CLI decorator syntax and option configurations
+- **Pydantic Validation**: Reference model validation patterns
+- **Docker SDK**: Lookup container management APIs
+- **Async Patterns**: Best practices for asyncio usage

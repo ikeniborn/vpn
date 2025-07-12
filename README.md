@@ -154,10 +154,14 @@ vpn server status main-server --detailed
 vpn server logs main-server --follow
 vpn server restart main-server
 
-# Proxy services
+# Proxy services (Alternative method)
 vpn proxy start --type http --port 8888 --auth
 vpn proxy list
 vpn proxy test --url https://google.com
+
+# Proxy via server install (Docker-based)
+vpn server install --protocol proxy --port 8080
+# Creates HTTP proxy on port 8080 and SOCKS5 on port 1080
 
 # System monitoring
 vpn monitor stats
@@ -248,6 +252,19 @@ vpn/
 - **SQLAlchemy ORM**: Async database operations
 - **Pydantic Models**: Type-safe data validation
 - **Configuration**: TOML-based configuration with validation
+
+## 📚 Documentation
+
+### Proxy Server Guides
+
+- [Proxy Setup Guide](docs/proxy-setup.md) - How to connect to proxy servers after installation
+- [Proxy Troubleshooting](docs/proxy-troubleshooting.md) - Common issues and solutions
+
+### General Guides
+
+- [User Management](docs/user-management.md) - Managing VPN users
+- [Server Configuration](docs/server-config.md) - Advanced server settings
+- [Security Best Practices](docs/security.md) - Security recommendations
 
 ## 🔧 Development
 

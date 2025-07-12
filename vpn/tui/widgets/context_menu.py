@@ -86,7 +86,7 @@ class ContextMenu(Widget):
     
     ContextMenu Button:hover {
         background: $primary;
-        color: $text-on-primary;
+        color: $text;
     }
     
     ContextMenu Button:disabled {
@@ -362,19 +362,33 @@ def create_user_context_menu(user_id: str) -> List[ContextMenuItem]:
     ]
 
 
-def create_server_context_menu() -> List[ContextMenuItem]:
+def create_server_context_menu(server_protocol: str = None) -> List[ContextMenuItem]:
     """Create context menu items for server management."""
-    return [
+    items = [
         ContextMenuItem("Start Server", shortcut="F5"),
         ContextMenuItem("Stop Server", shortcut="F6"),
         ContextMenuItem("Restart Server", shortcut="F7"),
         ContextMenuItem("", separator=True),
         ContextMenuItem("View Logs", shortcut="L"),
         ContextMenuItem("Edit Config", shortcut="F4"),
+    ]
+    
+    # Add proxy-specific items
+    if server_protocol in ["proxy", "unified_proxy"]:
+        items.extend([
+            ContextMenuItem("", separator=True),
+            ContextMenuItem("Configure Authentication", shortcut="A"),
+            ContextMenuItem("Add User Credentials", shortcut="U"),
+            ContextMenuItem("View Active Connections", shortcut="C"),
+        ])
+    
+    items.extend([
         ContextMenuItem("", separator=True),
         ContextMenuItem("Export Config", shortcut="E"),
         ContextMenuItem("Backup Data", shortcut="B"),
-    ]
+    ])
+    
+    return items
 
 
 def create_log_context_menu() -> List[ContextMenuItem]:

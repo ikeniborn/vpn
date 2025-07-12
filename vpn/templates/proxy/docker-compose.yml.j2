@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  # Squid HTTP/HTTPS proxy server
+  squid-proxy:
+    image: ubuntu/squid:latest
+    container_name: vpn-squid-proxy-{{ port }}
+    restart: unless-stopped
+    ports:
+      - "{{ port }}:3128"
+    volumes:
+      - ./squid.conf:/etc/squid/squid.conf:ro
+      - squid-cache:/var/spool/squid
+      - squid-logs:/var/log/squid
+    networks:
+      - proxy-network
+    environment:
+      - TZ=UTC
+      
+  # Dante SOCKS5 proxy server  
+  socks5-proxy:
+    image: vimagick/dante:latest
+    container_name: vpn-socks5-proxy-{{ port }}
+    restart: unless-stopped
+    ports:
+      - "1080:1080"
+    networks:
+      - proxy-network
+    environment:
+      - WORKERS=10
+      
+networks:
+  proxy-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+          
+volumes:
+  squid-cache:
+    driver: local
+  squid-logs:
+    driver: local

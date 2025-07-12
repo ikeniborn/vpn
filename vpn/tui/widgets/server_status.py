@@ -13,7 +13,7 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import DataTable, Static
 
-from vpn.tui.widgets.context_menu import ContextMenuItem, ContextMenuMixin
+from vpn.tui.widgets.context_menu import ContextMenuItem, ContextMenuMixin, create_server_context_menu
 from vpn.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -32,7 +32,7 @@ class ServerStatus(Widget, ContextMenuMixin):
     ServerStatus .header {
         height: 3;
         background: $primary;
-        color: $text-on-primary;
+        color: $text;
         padding: 1;
         dock: top;
     }
@@ -63,6 +63,9 @@ class ServerStatus(Widget, ContextMenuMixin):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.servers_data = []
+        # Initialize context menu attributes from mixin
+        self._context_menu = None
+        self._context_menu_items = []
     
     def compose(self) -> ComposeResult:
         """Create widget layout."""
@@ -233,61 +236,77 @@ class ServerStatus(Widget, ContextMenuMixin):
         if not server_info:
             return []
         
+        # Determine protocol type
+        protocol = server_info.get("protocol", "").lower()
+        is_proxy = protocol in ["http/socks5", "proxy", "unified_proxy"]
+        
+        # Get base menu items from helper function
+        base_items = create_server_context_menu(protocol if is_proxy else None)
+        
+        # Update actions to use local handler
         is_running = server_info["status"] == "running"
         
-        return [
-            ContextMenuItem(
-                "Stop Server" if is_running else "Start Server",
-                action=lambda: self._handle_server_action("stop" if is_running else "start", self.selected_server),
-                shortcut="S"
-            ),
-            ContextMenuItem(
-                "Restart Server",
-                action=lambda: self._handle_server_action("restart", self.selected_server),
-                shortcut="R",
-                enabled=is_running
-            ),
-            ContextMenuItem("", separator=True),
-            ContextMenuItem(
-                "View Logs",
-                action=lambda: self._handle_server_action("logs", self.selected_server),
-                shortcut="L"
-            ),
-            ContextMenuItem(
-                "Edit Configuration",
-                action=lambda: self._handle_server_action("config", self.selected_server),
-                shortcut="F4"
-            ),
-            ContextMenuItem("", separator=True),
-            ContextMenuItem(
-                "Server Statistics",
-                action=lambda: self._handle_server_action("stats", self.selected_server),
-                shortcut="T"
-            ),
-            ContextMenuItem(
-                "Connection Info",
-                action=lambda: self._handle_server_action("info", self.selected_server),
-                shortcut="I"
-            ),
-            ContextMenuItem("", separator=True),
-            ContextMenuItem(
-                "Export Configuration",
-                action=lambda: self._handle_server_action("export", self.selected_server),
-                shortcut="E"
-            ),
-            ContextMenuItem(
-                "Backup Server Data",
-                action=lambda: self._handle_server_action("backup", self.selected_server),
-                shortcut="B"
-            ),
-            ContextMenuItem("", separator=True),
-            ContextMenuItem(
-                "Remove Server",
-                action=lambda: self._handle_server_action("remove", self.selected_server),
-                shortcut="Del",
-                enabled=not is_running
-            ),
-        ]
+        items = []
+        for item in base_items:
+            if item.label == "Start Server" or item.label == "Stop Server":
+                items.append(ContextMenuItem(
+                    "Stop Server" if is_running else "Start Server",
+                    action=lambda: self._handle_server_action("stop" if is_running else "start", self.selected_server),
+                    shortcut=item.shortcut
+                ))
+            elif item.label == "Restart Server":
+                items.append(ContextMenuItem(
+                    item.label,
+                    action=lambda: self._handle_server_action("restart", self.selected_server),
+                    shortcut=item.shortcut,
+                    enabled=is_running
+                ))
+            elif item.label == "View Logs":
+                items.append(ContextMenuItem(
+                    item.label,
+                    action=lambda: self._handle_server_action("logs", self.selected_server),
+                    shortcut=item.shortcut
+                ))
+            elif item.label == "Edit Config":
+                items.append(ContextMenuItem(
+                    item.label,
+                    action=lambda: self._handle_server_action("config", self.selected_server),
+                    shortcut=item.shortcut
+                ))
+            elif item.label == "Configure Authentication":
+                items.append(ContextMenuItem(
+                    item.label,
+                    action=lambda: self._handle_server_action("auth_config", self.selected_server),
+                    shortcut=item.shortcut
+                ))
+            elif item.label == "Add User Credentials":
+                items.append(ContextMenuItem(
+                    item.label,
+                    action=lambda: self._handle_server_action("add_user", self.selected_server),
+                    shortcut=item.shortcut
+                ))
+            elif item.label == "View Active Connections":
+                items.append(ContextMenuItem(
+                    item.label,
+                    action=lambda: self._handle_server_action("connections", self.selected_server),
+                    shortcut=item.shortcut
+                ))
+            elif item.label == "Export Config":
+                items.append(ContextMenuItem(
+                    item.label,
+                    action=lambda: self._handle_server_action("export", self.selected_server),
+                    shortcut=item.shortcut
+                ))
+            elif item.label == "Backup Data":
+                items.append(ContextMenuItem(
+                    item.label,
+                    action=lambda: self._handle_server_action("backup", self.selected_server),
+                    shortcut=item.shortcut
+                ))
+            elif item.separator:
+                items.append(item)
+        
+        return items
     
     def _handle_server_action(self, action: str, server_name: str) -> None:
         """Handle server action from context menu."""

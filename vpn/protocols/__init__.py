@@ -6,6 +6,7 @@ from .base import BaseProtocol, ProtocolConfig
 from .vless import VLESSProtocol
 from .shadowsocks import ShadowsocksProtocol
 from .wireguard import WireGuardProtocol
+from .proxy import ProxyProtocol
 
 __all__ = [
     "BaseProtocol",
@@ -13,4 +14,5 @@ __all__ = [
     "VLESSProtocol",
     "ShadowsocksProtocol",
     "WireGuardProtocol",
+    "ProxyProtocol",
 ]

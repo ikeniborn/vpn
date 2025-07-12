@@ -36,7 +36,7 @@ class UserList(Widget, ContextMenuMixin):
     UserList .header {
         height: 3;
         background: $primary;
-        color: $text-on-primary;
+        color: $text;
         padding: 1;
         dock: top;
     }
@@ -84,6 +84,9 @@ class UserList(Widget, ContextMenuMixin):
         self.user_manager = UserManager()
         self._filtered_users: List[User] = []
         self._loading = False
+        # Initialize context menu attributes from mixin
+        self._context_menu = None
+        self._context_menu_items = []
     
     def compose(self) -> ComposeResult:
         """Compose the user list widget."""
