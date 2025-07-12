@@ -92,34 +92,52 @@ class DashboardScreen(BaseScreen):
             self.update_timer.stop()
     
     async def update_dashboard(self) -> None:
-        """Update dashboard data."""
+        """Update dashboard data with improved error handling."""
         # Update user stats
-        try:
-            users = await self.user_manager.list()
-            self.total_users = len(users)
-            self.active_users = sum(1 for u in users if u.status == "active")
-        except Exception as e:
-            self.log.error(f"Failed to update user stats: {e}")
+        await self.safe_update(
+            self._update_user_stats,
+            "Failed to update user stats"
+        )
         
         # Update server stats
-        try:
-            containers = await self.docker_manager.list_containers()
-            vpn_servers = [c for c in containers if "vpn" in c.get("labels", {})]
-            self.total_servers = len(vpn_servers)
-        except Exception as e:
-            self.log.error(f"Failed to update server stats: {e}")
+        await self.safe_update(
+            self._update_server_stats,
+            "Failed to update server stats"
+        )
         
         # Update traffic stats
-        try:
-            total_bytes = sum(u.traffic.total_bytes for u in await self.user_manager.list())
-            self.total_traffic = self._format_bytes(total_bytes)
-        except Exception as e:
-            self.log.error(f"Failed to update traffic stats: {e}")
+        await self.safe_update(
+            self._update_traffic_stats,
+            "Failed to update traffic stats"
+        )
         
         # Update header time
         header = self.query_one(".screen-subtitle", Static)
         if header:
             header.update(f"Updated: {datetime.now().strftime('%H:%M:%S')}")
+    
+    async def _update_user_stats(self) -> None:
+        """Update user statistics."""
+        users = await self.user_manager.list()
+        self.total_users = len(users)
+        self.active_users = sum(1 for u in users if u.status == "active")
+    
+    async def _update_server_stats(self) -> None:
+        """Update server statistics."""
+        containers = await self.docker_manager.list_containers()
+        vpn_servers = [c for c in containers if any(
+            label.startswith("vpn.") for label in c.get("labels", {})
+        )]
+        self.total_servers = len(vpn_servers)
+    
+    async def _update_traffic_stats(self) -> None:
+        """Update traffic statistics."""
+        users = await self.user_manager.list()
+        total_bytes = sum(
+            u.traffic.total_bytes for u in users 
+            if hasattr(u, 'traffic') and u.traffic
+        )
+        self.total_traffic = self._format_bytes(total_bytes)
     
     def _format_bytes(self, bytes: int) -> str:
         """Format bytes to human readable."""

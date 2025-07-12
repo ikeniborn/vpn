@@ -13,11 +13,27 @@ class VPNError(Exception):
         message: str,
         error_code: Optional[str] = None,
         details: Optional[Dict[str, Any]] = None,
+        suggestions: Optional[list[str]] = None,
     ):
         super().__init__(message)
         self.message = message
         self.error_code = error_code or self.__class__.__name__
         self.details = details or {}
+        self.suggestions = suggestions or []
+    
+    def __str__(self) -> str:
+        """String representation with suggestions."""
+        parts = [self.message]
+        
+        if self.details:
+            parts.append(f"Details: {self.details}")
+        
+        if self.suggestions:
+            parts.append("Suggestions:")
+            for i, suggestion in enumerate(self.suggestions, 1):
+                parts.append(f"  {i}. {suggestion}")
+        
+        return "\n".join(parts)
 
 
 class ConfigurationError(VPNError):
@@ -95,7 +111,13 @@ class DockerNotAvailableError(DockerError):
     
     def __init__(self):
         super().__init__(
-            "Docker is not available. Please ensure Docker is installed and running."
+            "Docker is not available. Please ensure Docker is installed and running.",
+            suggestions=[
+                "Check if Docker is installed: docker --version",
+                "Start Docker service: sudo systemctl start docker",
+                "Add user to docker group: sudo usermod -aG docker $USER",
+                "Verify Docker is running: docker ps"
+            ]
         )
 
 
@@ -142,6 +164,20 @@ class TemplateError(VPNError):
 class DatabaseError(VPNError):
     """Database operation errors."""
     pass
+
+
+class DatabaseNotInitializedError(DatabaseError):
+    """Database not initialized."""
+    
+    def __init__(self):
+        super().__init__(
+            "Database is not initialized",
+            suggestions=[
+                "Run database initialization: python scripts/maintenance/init-database.py",
+                "Check database path in configuration",
+                "Verify permissions for database directory"
+            ]
+        )
 
 
 class MonitoringError(VPNError):

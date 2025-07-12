@@ -82,4 +82,21 @@ class BaseScreen(Screen):
             return result
         except Exception as e:
             self.show_error(f"{error_message}: {str(e)}")
+            self.log.exception(f"Error in async operation: {error_message}")
             return None
+    
+    def mount_with_error_boundary(self, *widgets, **kwargs):
+        """Mount widgets within an error boundary."""
+        from vpn.tui.widgets.error_display import ErrorBoundary
+        
+        boundary = ErrorBoundary(*widgets, **kwargs)
+        return self.mount(boundary)
+    
+    async def safe_update(self, update_func, error_message: str = "Update failed"):
+        """Safely run an update function with error handling."""
+        try:
+            await update_func()
+        except Exception as e:
+            self.log.error(f"{error_message}: {e}")
+            # Continue running - don't crash the TUI
+            pass
