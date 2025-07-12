@@ -18,7 +18,7 @@ Modern VPN Management System with rich Terminal User Interface (TUI) and compreh
 
 ### User Interface
 - **🎨 Rich TUI**: Interactive terminal interface built with Textual
-- **🔧 CLI Interface**: Comprehensive command-line tools with Click/Typer
+- **🔧 CLI Interface**: Comprehensive command-line tools with Typer
 - **📊 Real-time Monitoring**: Live traffic statistics and system metrics
 - **🎯 Multi-format Output**: JSON, YAML, table, and plain text formats
 
@@ -32,8 +32,8 @@ Modern VPN Management System with rich Terminal User Interface (TUI) and compreh
 - **Batch Operations**: Mass user creation and management
 - **Configuration Templates**: Jinja2-based templating system
 - **Health Monitoring**: Automatic server health checks
-- **Firewall Integration**: Automatic port and rule management
-- **Database Support**: SQLite and PostgreSQL with async operations
+- **Performance Optimization**: Caching, batch operations, and memory profiling
+- **Comprehensive Testing**: 13 test markers, quality gates, and benchmarks
 
 ## 📋 System Requirements
 
@@ -55,86 +55,136 @@ Modern VPN Management System with rich Terminal User Interface (TUI) and compreh
 ### Quick Installation
 
 ```bash
-# Clone and install
+# Clone the repository
 git clone https://github.com/ikeniborn/vpn.git
 cd vpn
+
+# Run the installation script
 bash scripts/install.sh
 ```
 
-The script will:
-- ✅ Install all system dependencies (Ubuntu/Debian)
+The installation script will:
+- ✅ Install system dependencies (Ubuntu/Debian/RHEL/macOS)
 - ✅ Create isolated Python environment
-- ✅ Install VPN Manager
+- ✅ Install VPN Manager with all dependencies
 - ✅ Configure shell integration
-- ✅ Prompt to reload your shell
+- ✅ Run initial system checks
 
-### System Requirements
-
-- **OS**: Ubuntu 20.04+ or Debian 11+ (other Linux distributions may work)
-- **Python**: 3.10 or higher
-- **Memory**: 2GB RAM minimum
-- **Docker**: Required for running VPN servers
-- **Permissions**: sudo access for installing system packages
-
-### After Installation
-
-The installer will prompt you to reload your shell. After that:
+### Manual Installation
 
 ```bash
-vpn --version     # Check installation
-vpn doctor        # Run diagnostics
-vpn tui           # Launch terminal interface
+# Install Python 3.10+ and pip
+sudo apt update
+sudo apt install python3.10 python3-pip python3-venv
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install VPN Manager
+pip install -e ".[dev,test,docs]"
+
+# Verify installation
+vpn --version
+vpn doctor
+```
+
+### Docker Installation
+
+```bash
+# Using Docker Compose
+docker-compose -f docker/docker-compose.yml up -d
+
+# Or build from Dockerfile
+docker build -f docker/Dockerfile -t vpn-manager .
+docker run -it vpn-manager vpn --help
 ```
 
 ## 🚀 Quick Start
 
-### 1. Verify Installation
+### 1. Initialize Configuration
 
 ```bash
-vpn --version
-vpn --help
-```
-
-### 2. System Check
-
-```bash
-vpn doctor
-```
-
-### 3. Initialize Configuration
-
-```bash
+# Create default configuration
 vpn config init
+
+# Or use YAML configuration
+vpn yaml init --template production
 ```
 
-### 4. Create Your First User
+### 2. Create Your First User
 
 ```bash
+# Interactive mode
+vpn users create --interactive
+
+# Direct creation
 vpn users create alice --protocol vless --email alice@example.com
 ```
 
-### 5. Install VPN Server
+### 3. Install VPN Server
 
 ```bash
+# Install VLESS server
 vpn server install --protocol vless --port 8443 --name main-server
+
+# Install with advanced options
+vpn server install --protocol shadowsocks \
+  --port 8388 \
+  --name shadow-server \
+  --cipher chacha20-ietf-poly1305
 ```
 
-### 6. Start Server
+### 4. Launch Terminal UI
 
 ```bash
-vpn server start main-server
-```
-
-### 7. Get Connection Info
-
-```bash
-vpn users show alice --connection-info
-```
-
-### 8. Launch TUI
-
-```bash
+# Start the interactive TUI
 vpn tui
+
+# Or with specific theme
+vpn tui --theme dark
+```
+
+## 🏗️ Project Structure
+
+```
+vpn/
+├── config/                 # Configuration files
+│   ├── .env.example       # Environment variables template
+│   └── mkdocs.yml         # Documentation configuration
+├── docker/                # Docker-related files
+│   ├── Dockerfile         # Container image definition
+│   ├── docker-compose.yml # Production compose file
+│   └── docker-compose.dev.yml # Development compose file
+├── docs/                  # Documentation
+│   ├── api/              # API reference
+│   ├── guides/           # User and admin guides
+│   └── architecture/     # System design docs
+├── scripts/              # Utility scripts
+│   ├── install.sh        # Installation script
+│   └── dev-setup.sh      # Development setup
+├── tests/                # Test suite
+│   ├── unit/            # Unit tests
+│   ├── integration/     # Integration tests
+│   └── performance/     # Performance benchmarks
+├── vpn/                  # Main package
+│   ├── cli/             # CLI implementation
+│   ├── core/            # Core functionality
+│   ├── protocols/       # VPN protocols
+│   ├── services/        # Business logic
+│   ├── tui/             # Terminal UI
+│   └── utils/           # Utilities
+├── .config/             # Project configuration
+│   ├── git/            # Git configuration
+│   └── qa/             # Quality assurance configs
+├── CHANGELOG.md         # Version history
+├── CLAUDE.md           # AI assistant instructions
+├── LICENSE             # MIT license
+├── Makefile           # Development commands
+├── pyproject.toml     # Project configuration
+├── README.md          # This file
+├── requirements.txt   # Python dependencies
+└── TASK.md           # Development roadmap
 ```
 
 ## 💻 Usage Examples
@@ -143,304 +193,219 @@ vpn tui
 
 ```bash
 # User management
-vpn users list
-vpn users create bob --protocol shadowsocks
-vpn users delete alice
-vpn users stats
+vpn users list --format table
+vpn users create bob --protocol shadowsocks --batch
+vpn users delete alice --confirm
+vpn users stats --real-time
 
 # Server management
-vpn server list
-vpn server status main-server --detailed
-vpn server logs main-server --follow
-vpn server restart main-server
+vpn server list --status active
+vpn server logs main-server --follow --tail 100
+vpn server health --all
+vpn server update main-server --restart
 
-# Proxy services (Alternative method)
-vpn proxy start --type http --port 8888 --auth
-vpn proxy list
-vpn proxy test --url https://google.com
+# Configuration management
+vpn config show --section server
+vpn config set server.domain vpn.example.com
+vpn config validate --env
+vpn config overlay apply production
 
-# Proxy via server install (Docker-based)
-vpn server install --protocol proxy --port 8080
-# Creates HTTP proxy on port 8080 and SOCKS5 on port 1080
+# YAML operations
+vpn yaml validate config.yaml
+vpn yaml template render server.j2
+vpn yaml preset list --category server
+vpn yaml migrate --from toml --to yaml
 
-# System monitoring
-vpn monitor stats
+# Monitoring and performance
 vpn monitor traffic --real-time
-vpn monitor users --active
+vpn monitor users --active --format json
+vpn performance benchmark --duration 60
+vpn performance profile memory
 ```
 
-### Terminal UI Features
+### Terminal UI Navigation
 
-Launch the interactive TUI with `vpn tui`:
+Launch with `vpn tui`:
 
-- **Dashboard**: Real-time system overview
-- **User Management**: Create, edit, and monitor users
-- **Server Management**: Install, configure, and monitor servers
-- **Traffic Monitoring**: Live traffic statistics and charts
-- **System Settings**: Configuration management
-- **Help System**: Built-in documentation and shortcuts
+- **F1**: Help / Keyboard shortcuts
+- **F2**: Dashboard
+- **F3**: Users management
+- **F4**: Server management
+- **F5**: Traffic monitoring
+- **F10**: Context menu
+- **Ctrl+Q**: Quit
+- **Tab**: Navigate between panels
+- **Enter**: Select/Edit
+- **Space**: Toggle selection
 
-### Configuration Management
+### Advanced Configuration
 
 ```bash
-# View current configuration
-vpn config show
+# Environment management
+export VPN_CONFIG_PATH=/etc/vpn-manager
+export VPN_LOG_LEVEL=DEBUG
+export VPN_THEME=cyberpunk
 
-# Set configuration values
-vpn config set server.domain vpn.example.com
-vpn config set server.port 8443
-vpn config set logging.level debug
+# Hot-reload configuration
+vpn config hot-reload start
+# Make changes to config files...
+# Changes are automatically applied
 
-# Export/import configuration
-vpn config export config-backup.toml
-vpn config import config-backup.toml
+# Configuration overlays
+vpn config overlay create high-security
+vpn config overlay edit high-security
+vpn config overlay apply high-security
 ```
 
-## 🏗️ Architecture
+## 🧪 Testing
 
-### Project Structure
+### Running Tests
 
-```
-vpn/
-├── vpn/                    # Main package
-│   ├── cli/               # CLI commands and interface
-│   │   ├── commands/      # Command implementations
-│   │   └── formatters/    # Output formatters
-│   ├── core/              # Core functionality
-│   │   ├── config.py      # Configuration management
-│   │   ├── database.py    # Database operations
-│   │   ├── exceptions.py  # Custom exceptions
-│   │   └── models.py      # Data models
-│   ├── protocols/         # VPN protocol implementations
-│   │   ├── vless.py       # VLESS+Reality protocol
-│   │   ├── shadowsocks.py # Shadowsocks protocol
-│   │   └── wireguard.py   # WireGuard protocol
-│   ├── services/          # Business logic services
-│   │   ├── user_manager.py    # User management
-│   │   ├── server_manager.py  # Server management
-│   │   ├── proxy_server.py    # Proxy services
-│   │   └── docker_manager.py  # Docker operations
-│   ├── tui/               # Terminal UI components
-│   │   ├── screens/       # TUI screens
-│   │   ├── widgets/       # Custom widgets
-│   │   └── dialogs/       # Dialog boxes
-│   ├── templates/         # Configuration templates
-│   └── utils/             # Utility functions
-├── tests/                 # Comprehensive test suite
-├── docs/                  # Documentation and guides
-├── scripts/               # Installation and utility scripts
-├── pyproject.toml         # Project configuration
-├── docker-compose.yml     # Container orchestration
-└── Makefile              # Development commands
+```bash
+# Run all tests
+make test
+
+# Run specific test categories
+make test-unit          # Unit tests only
+make test-integration   # Integration tests
+make test-performance   # Performance benchmarks
+make test-quality       # Quality gates
+
+# Run with coverage
+make coverage
+make coverage-html      # Generate HTML report
+
+# Run tests in parallel
+make test-parallel
 ```
 
-### Key Components
+### Test Infrastructure
 
-#### Protocol System
-- **Base Protocol**: Abstract base class for all protocols
-- **VLESS Implementation**: Complete VLESS+Reality support
-- **Shadowsocks**: Multi-user Shadowsocks with Outline compatibility
-- **WireGuard**: Native WireGuard with peer management
-
-#### Service Layer
-- **User Manager**: User lifecycle and authentication
-- **Server Manager**: VPN server installation and management
-- **Docker Manager**: Container operations and health monitoring
-- **Network Manager**: Firewall and network configuration
-
-#### Data Layer
-- **SQLAlchemy ORM**: Async database operations
-- **Pydantic Models**: Type-safe data validation
-- **Configuration**: TOML-based configuration with validation
-
-## 📚 Documentation
-
-### Proxy Server Guides
-
-- [Proxy Setup Guide](docs/proxy-setup.md) - How to connect to proxy servers after installation
-- [Proxy Troubleshooting](docs/proxy-troubleshooting.md) - Common issues and solutions
-
-### General Guides
-
-- [User Management](docs/user-management.md) - Managing VPN users
-- [Server Configuration](docs/server-config.md) - Advanced server settings
-- [Security Best Practices](docs/security.md) - Security recommendations
+- **13 Test Markers**: unit, integration, slow, performance, load, docker, network, tui, quality, e2e, memory, security
+- **Factory Patterns**: Comprehensive test data generation
+- **Quality Gates**: Automated coverage and quality checks
+- **Performance Benchmarks**: Database, Docker, and caching performance tests
+- **Test Isolation**: Complete test environment management
 
 ## 🔧 Development
 
 ### Setup Development Environment
 
 ```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Clone and setup
+git clone https://github.com/ikeniborn/vpn.git
+cd vpn
+make dev-install
 
-# Install development dependencies
-pip install -e ".[dev]"
-
-# Setup pre-commit hooks
+# Install pre-commit hooks
 pre-commit install
+
+# Verify setup
+make check
 ```
 
 ### Development Commands
 
 ```bash
-# Run tests
-make test
+# Code quality
+make format         # Auto-format code
+make lint          # Run linters
+make type-check    # Type checking
+make check         # All checks
 
-# Run tests with coverage
-make test-cov
+# Testing
+make test-fast     # Quick tests
+make test-watch    # Watch mode
+make benchmark     # Performance tests
 
-# Code formatting
-make format
+# Documentation
+make docs          # Build docs
+make docs-serve    # Live preview
 
-# Type checking
-make type-check
-
-# Linting
-make lint
-
-# Run all checks
-make check
-
-# Clean temporary files
-make clean
+# Cleanup
+make clean         # Remove artifacts
 ```
 
-### Running from Source
+### Contributing
 
-```bash
-# Run CLI
-python -m vpn --help
-
-# Run TUI
-python -m vpn tui
-
-# Run with debugging
-python -m vpn --debug users list
-```
-
-### Testing
-
-```bash
-# Run all tests
-pytest
-
-# Run specific test file
-pytest tests/test_user_manager.py
-
-# Run with coverage
-pytest --cov=vpn --cov-report=html
-
-# Run integration tests
-pytest -m integration
-
-# Run tests excluding slow tests
-pytest -m "not slow"
-```
+1. Fork the repository
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Make changes and test: `make test`
+4. Commit with conventional commits: `git commit -m "feat: add amazing feature"`
+5. Push and create PR: `git push origin feature/amazing-feature`
 
 ## 📊 Performance
 
+### Optimizations Implemented
+
+- **Async Operations**: Full asyncio support with connection pooling
+- **Batch Processing**: Bulk operations for users and containers
+- **Caching Layer**: Advanced caching with TTL and LRU eviction
+- **Memory Profiling**: Built-in memory leak detection
+- **Query Optimization**: SQLAlchemy query optimization with pagination
+- **Lazy Loading**: Virtual scrolling and on-demand data loading
+
 ### Benchmarks
 
-Compared to the original Rust implementation:
-
-- **Startup Time**: ~50ms (Python) vs ~5ms (Rust)
-- **Memory Usage**: ~25MB (Python) vs ~10MB (Rust)
-- **User Creation**: ~30ms (Python) vs ~15ms (Rust)
-- **Docker Operations**: ~100ms (Python) vs ~20ms (Rust)
-
-### Optimizations
-
-- **Async Operations**: All I/O operations are asynchronous
-- **Connection Pooling**: Database and Docker connection reuse
-- **Caching**: Redis-based caching for frequently accessed data
-- **Lazy Loading**: On-demand loading of resources
+- **User Creation**: <30ms per user, <5s for 100 users batch
+- **Container Operations**: <200ms single, <15s for 50 containers batch
+- **Query Performance**: <500ms for paginated queries
+- **Cache Performance**: <1ms for cache hits
+- **Memory Usage**: <50MB idle, optimized with profiling tools
 
 ## 🔒 Security
 
 ### Security Features
 
-- **Key Generation**: Secure cryptographic key generation
-- **Certificate Management**: Automatic TLS certificate handling
+- **Encryption**: AES-256-GCM for sensitive data
+- **Key Management**: Secure key generation and storage
 - **Authentication**: Multi-factor authentication support
-- **Access Control**: Role-based access control (RBAC)
 - **Audit Logging**: Comprehensive security event logging
+- **Input Validation**: Pydantic models with strict validation
+- **Dependency Scanning**: Regular security updates
 
-### Security Best Practices
+### Best Practices
 
 ```bash
 # Enable security features
-vpn config set security.enable_2fa true
-vpn config set security.require_strong_passwords true
+vpn config set security.encryption_enabled true
 vpn config set security.audit_logging true
+vpn config set security.mfa_required true
 
-# Generate secure keys
-vpn crypto generate-keys --algorithm x25519
-vpn crypto generate-cert --domain vpn.example.com
-
-# Monitor security events
+# Security monitoring
 vpn monitor security --real-time
+vpn audit logs --filter security
 ```
 
 ## 📖 Documentation
 
-### Available Documentation
+Comprehensive documentation is available in the `docs/` directory:
 
-- **[Installation Guide](docs/getting-started/installation.md)** - Complete installation instructions
-- **[Quick Start Guide](docs/getting-started/quickstart.md)** - Get up and running quickly
-- **[CLI Commands](docs/user-guide/cli-commands.md)** - Complete CLI reference
-- **[TUI Interface](docs/user-guide/tui-interface.md)** - Terminal UI guide
-- **[Admin Guide](docs/admin-guide/)** - System administration
-- **[API Reference](docs/api/)** - Complete API documentation
-- **[Migration Guide](docs/migration/from-rust.md)** - Migrate from Rust version
+- **[Installation Guide](docs/installation.md)** - Detailed installation instructions
+- **[User Guide](docs/user-guide.md)** - Complete user documentation
+- **[CLI Reference](docs/cli-reference.md)** - All CLI commands
+- **[TUI Guide](docs/tui-guide.md)** - Terminal UI documentation
+- **[API Reference](docs/api-reference.md)** - Python API documentation
+- **[Architecture](docs/architecture.md)** - System design and architecture
+- **[Migration Guide](docs/migration.md)** - Migrate from other VPN solutions
 
-### Building Documentation
+## 🤝 Support
 
-```bash
-# Build documentation
-make docs
+### Getting Help
 
-# Serve documentation locally
-mkdocs serve
-```
+- **Issues**: [GitHub Issues](https://github.com/ikeniborn/vpn/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/ikeniborn/vpn/discussions)
+- **Documentation**: Check the `docs/` directory
+- **Debug Mode**: Run with `--debug` flag for detailed output
 
-## 🔄 Migration from Rust Version
+### Reporting Issues
 
-If you're migrating from the Rust version:
+When reporting issues, include:
 
-```bash
-# Export data from Rust version
-vpn-rust export --format json --output rust-data.json
-
-# Import to Python version
-vpn import --format json --input rust-data.json
-
-# Verify migration
-vpn users list
-vpn server list
-```
-
-See the [Migration Guide](docs/migration/from-rust.md) for detailed instructions.
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and checks: `make check`
-5. Submit a pull request
-
-### Code Style
-
-- **Python**: Follow PEP 8 with Black formatting
-- **Type Hints**: Use type hints throughout
-- **Docstrings**: Google-style docstrings
-- **Testing**: Comprehensive test coverage
+1. System information: `vpn doctor`
+2. Debug output: `vpn --debug [command]`
+3. Configuration: `vpn config show --redacted`
+4. Steps to reproduce
 
 ## 📄 License
 
@@ -449,36 +414,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - Built with [Textual](https://textual.textualize.io/) for the terminal UI
-- Uses [Typer](https://typer.tiangolo.com/) for CLI interface
-- Powered by [AsyncIO](https://docs.python.org/3/library/asyncio.html) for performance
-- Inspired by the original Rust implementation
-
-## 🐛 Support
-
-### Getting Help
-
-- **Documentation**: Check the [docs](docs/) directory
-- **Issues**: [GitHub Issues](https://github.com/ikeniborn/vpn/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/ikeniborn/vpn/discussions)
-- **Discord**: Join our [Discord Community](https://discord.gg/vpn)
-
-### Reporting Issues
-
-When reporting issues, please include:
-
-1. System information: `vpn doctor`
-2. Debug logs: `vpn --debug <command>`
-3. Configuration: `vpn config show`
-4. Steps to reproduce the issue
-
-### Feature Requests
-
-We welcome feature requests! Please:
-
-1. Check existing issues and discussions
-2. Provide detailed use cases
-3. Consider contributing the feature yourself
+- Powered by [Typer](https://typer.tiangolo.com/) for CLI interface
+- Uses [Pydantic](https://pydantic-docs.helpmanual.io/) for data validation
+- Optimized with [SQLAlchemy](https://www.sqlalchemy.org/) for database operations
 
 ---
 
-**Made with ❤️ by the VPN Manager Team**
+**VPN Manager** - Modern, Fast, and Secure VPN Management System

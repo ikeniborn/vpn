@@ -184,30 +184,34 @@ dev-test:
 watch-test:
 	pytest-watch tests/ -- -v --tb=short --no-cov
 
+# Documentation
+docs:
+	mkdocs build -f config/mkdocs.yml
+
+docs-serve:
+	mkdocs serve -f config/mkdocs.yml
+
 # Documentation and reporting
 docs-coverage:
-	python -c "
-	from tests.test_coverage_quality import QualityAnalyzer
-	analyzer = QualityAnalyzer()
-	metrics = analyzer.analyze_quality()
-	print(f'Documentation coverage: {metrics.documentation_coverage:.1f}%')
-	"
+	python -c "\
+from tests.test_coverage_quality import QualityAnalyzer;\
+analyzer = QualityAnalyzer();\
+metrics = analyzer.analyze_quality();\
+print(f'Documentation coverage: {metrics.documentation_coverage:.1f}%')"
 
 type-coverage:
-	python -c "
-	from tests.test_coverage_quality import QualityAnalyzer
-	analyzer = QualityAnalyzer()
-	metrics = analyzer.analyze_quality()
-	print(f'Type annotation coverage: {metrics.type_annotation_coverage:.1f}%')
-	"
+	python -c "\
+from tests.test_coverage_quality import QualityAnalyzer;\
+analyzer = QualityAnalyzer();\
+metrics = analyzer.analyze_quality();\
+print(f'Type annotation coverage: {metrics.type_annotation_coverage:.1f}%')"
 
 # Test data management
 clean-test-data:
-	python -c "
-	import asyncio
-	from tests.test_data_manager import get_test_data_manager
-	asyncio.run(get_test_data_manager().cleanup_all())
-	"
+	python -c "\
+import asyncio;\
+from tests.test_data_manager import get_test_data_manager;\
+asyncio.run(get_test_data_manager().cleanup_all())"
 
 # Performance monitoring
 profile-test:
@@ -215,19 +219,18 @@ profile-test:
 
 # Environment verification
 verify-env:
-	python -c "
-	import sys
-	print(f'Python: {sys.version}')
-	try:
-	    import pytest; print(f'pytest: {pytest.__version__}')
-	    import coverage; print(f'coverage: {coverage.__version__}')
-	    import ruff; print('ruff: available')
-	    import black; print(f'black: {black.__version__}')
-	    import mypy; print('mypy: available')
-	    print('✅ Development environment verified')
-	except ImportError as e:
-	    print(f'❌ Missing dependency: {e}')
-	"
+	python -c "\
+import sys;\
+print(f'Python: {sys.version}');\
+try:\
+    import pytest; print(f'pytest: {pytest.__version__}');\
+    import coverage; print(f'coverage: {coverage.__version__}');\
+    import ruff; print('ruff: available');\
+    import black; print(f'black: {black.__version__}');\
+    import mypy; print('mypy: available');\
+    print('✅ Development environment verified');\
+except ImportError as e:\
+    print(f'❌ Missing dependency: {e}')"
 
 # Quick development shortcuts
 quick: test-fast lint

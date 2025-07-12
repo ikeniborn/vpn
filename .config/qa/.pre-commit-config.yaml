@@ -1,0 +1,263 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+default_language_version:
+  python: python3.11
+
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--unsafe]
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: check-toml
+      - id: check-json
+      - id: pretty-format-json
+        args: [--autofix, --no-sort-keys]
+      - id: check-xml
+      - id: detect-private-key
+      - id: debug-statements
+      - id: check-builtin-literals
+      - id: check-docstring-first
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: fix-byte-order-marker
+      - id: fix-encoding-pragma
+        args: [--remove]
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: name-tests-test
+        args: [--pytest-test-first]
+
+  # Python code formatting - Black
+  - repo: https://github.com/psf/black
+    rev: 24.4.2
+    hooks:
+      - id: black
+        language_version: python3.11
+        args: [--line-length=100]
+
+  # Python code formatting - isort
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: [--profile=black, --line-length=100]
+
+  # Python linting - Ruff (fast Python linter)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # Python linting - Flake8
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        additional_dependencies:
+          - flake8-docstrings
+          - flake8-bugbear
+          - flake8-comprehensions
+          - flake8-simplify
+          - flake8-annotations
+          - flake8-pytest-style
+          - flake8-return
+          - flake8-use-pathlib
+          - flake8-typing-imports
+          - pep8-naming
+        args: [--max-line-length=100, --extend-ignore=E203,W503,D100,D101,D102,D103,D104,D105,D106,D107]
+
+  # Python type checking - MyPy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - pydantic>=2.5.0
+          - sqlalchemy>=2.0.0
+          - types-pyyaml
+          - types-toml
+          - types-aiofiles
+          - types-requests
+          - types-paramiko
+          - types-redis
+          - types-python-dateutil
+        args: [--config-file=pyproject.toml]
+        exclude: ^(tests/|docs/|scripts/)
+
+  # Python security - Bandit
+  - repo: https://github.com/pycqa/bandit
+    rev: 1.7.8
+    hooks:
+      - id: bandit
+        args: [-c, pyproject.toml]
+        additional_dependencies: ["bandit[toml]"]
+        exclude: ^(tests/|docs/)
+
+  # Python docstring formatting
+  - repo: https://github.com/pycqa/pydocstyle
+    rev: 6.3.0
+    hooks:
+      - id: pydocstyle
+        args: [--convention=google]
+        exclude: ^(tests/|docs/|scripts/)
+
+  # Python upgrade syntax
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.15.2
+    hooks:
+      - id: pyupgrade
+        args: [--py311-plus]
+
+  # Python remove unused imports
+  - repo: https://github.com/hadialqattan/pycln
+    rev: v2.4.0
+    hooks:
+      - id: pycln
+        args: [--all]
+
+  # Documentation formatting - blacken-docs
+  - repo: https://github.com/adamchainz/blacken-docs
+    rev: 1.16.0
+    hooks:
+      - id: blacken-docs
+        additional_dependencies: [black==24.4.2]
+
+  # YAML formatting
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        types_or: [yaml, json, markdown]
+        exclude: ^(docs/|\.github/)
+
+  # Shell script analysis
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        args: [-x]
+
+  # Dockerfile linting
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        args: [--ignore=DL3008,DL3009,DL3018]
+
+  # Security - detect secrets
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: ^(\.secrets\.baseline|tests/)
+
+  # License headers (optional - uncomment if needed)
+  # - repo: https://github.com/lucas-c/pre-commit-hooks
+  #   rev: v1.5.5
+  #   hooks:
+  #     - id: insert-license
+  #       name: Add license header to Python files
+  #       files: \.py$
+  #       exclude: ^(docs/|__pycache__|\.git|\.venv|venv|build|dist)
+  #       args:
+  #         - --license-filepath
+  #         - .license-header.txt
+  #         - --comment-style
+  #         - "#"
+  #         - --detect-license-in-X-top-lines=5
+
+  # Markdown formatting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.40.0
+    hooks:
+      - id: markdownlint
+        args: [--fix]
+        exclude: ^(CHANGELOG\.md|docs/.*\.md)
+
+  # Requirements.txt sorting
+  - repo: https://github.com/asottile/reorder-python-imports
+    rev: v3.12.0
+    hooks:
+      - id: reorder-python-imports
+        args: [--py311-plus]
+
+  # Check for merge conflicts
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-vcs-permalinks
+      - id: forbid-new-submodules
+
+  # Commit message linting
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.27.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+  # Python complexity checking
+  - repo: https://github.com/rubik/xenon
+    rev: v0.9.0
+    hooks:
+      - id: xenon
+        args: [--max-average=A, --max-modules=A, --max-absolute=C]
+
+  # Check for hardcoded passwords
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: detect-aws-credentials
+      - id: detect-private-key
+
+# Configuration for specific hooks
+exclude: |
+  (?x)^(
+    \.git/|
+    \.mypy_cache/|
+    \.pytest_cache/|
+    \.venv/|
+    venv/|
+    __pycache__/|
+    build/|
+    dist/|
+    \.eggs/|
+    .*\.egg-info/|
+    htmlcov/|
+    \.coverage|
+    \.tox/|
+    docs/_build/|
+    node_modules/|
+    migrations/|
+    static/|
+    media/|
+    locale/|
+    \.idea/|
+    \.vscode/|
+    \.env.*|
+    \.gitlab-ci\.yml|
+    \.github/.*\.yml|
+    Dockerfile.*|
+    docker-compose.*\.yml|
+    .*\.min\.js|
+    .*\.min\.css
+  )$
+
+# Run only on changed files
+fail_fast: false
+
+# Set up the git commit message hook
+default_install_hook_types: [pre-commit, commit-msg]

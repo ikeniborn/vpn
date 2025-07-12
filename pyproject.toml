@@ -125,7 +125,7 @@ addopts = [
     "--tb=short",
     "-v",
     "--durations=10",
-    "--benchmark-skip",
+    "--benchmark-skip"
 ]
 markers = [
     "unit: Unit tests that test individual components",
