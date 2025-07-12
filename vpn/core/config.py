@@ -85,7 +85,16 @@ class Settings(BaseSettings):
     def create_paths(cls, v: Path) -> Path:
         """Create directories if they don't exist."""
         v = v.expanduser().absolute()
-        v.mkdir(parents=True, exist_ok=True)
+        try:
+            v.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            # If we can't create the directory (e.g., /opt/vpn), 
+            # fall back to user's home directory
+            if str(v).startswith("/opt/"):
+                fallback = Path.home() / ".local" / "share" / "vpn-manager"
+                fallback.mkdir(parents=True, exist_ok=True)
+                return fallback
+            raise
         return v
     
     @field_validator("default_port_range")
