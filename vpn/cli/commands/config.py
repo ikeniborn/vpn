@@ -5,7 +5,7 @@ Enhanced configuration management CLI commands.
 import json
 import os
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import typer
 import yaml

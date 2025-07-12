@@ -3,6 +3,7 @@ CLI utility functions.
 """
 
 import sys
+from functools import wraps
 from typing import Any, Callable, Optional
 
 from rich.console import Console
@@ -99,6 +100,19 @@ def handle_error(
         console.print_exception()
     
     sys.exit(exit_code)
+
+
+def handle_errors(func: Callable) -> Callable:
+    """
+    Decorator to handle CLI errors consistently.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            handle_error(e)
+    return wrapper
 
 
 def validate_choice(

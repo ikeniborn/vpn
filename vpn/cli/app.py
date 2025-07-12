@@ -420,6 +420,7 @@ from vpn.cli.commands.proxy import app as proxy_app
 from vpn.cli.commands.monitor import app as monitor_app
 from vpn.cli.commands.config import app as config_app
 from vpn.cli.commands.compose import app as compose_app
+from vpn.cli.commands.yaml_commands import app as yaml_app
 
 # Add command groups
 app.add_typer(users_app, name="users", help="User management commands")
@@ -428,6 +429,7 @@ app.add_typer(proxy_app, name="proxy", help="Proxy management commands")
 app.add_typer(monitor_app, name="monitor", help="Monitoring and statistics")
 app.add_typer(config_app, name="config", help="Configuration management")
 app.add_typer(compose_app, name="compose", help="Docker Compose orchestration")
+app.add_typer(yaml_app, name="yaml", help="YAML configuration management")
 
 
 def main():
