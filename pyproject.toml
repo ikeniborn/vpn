@@ -117,24 +117,57 @@ addopts = [
     "--cov=vpn",
     "--cov-branch",
     "--cov-report=term-missing:skip-covered",
-    "--cov-report=html",
-    "--cov-report=xml",
+    "--cov-report=html:htmlcov",
+    "--cov-report=xml:coverage.xml",
+    "--cov-report=json:coverage.json",
     "--cov-fail-under=80",
-    "--maxfail=1",
+    "--maxfail=3",
     "--tb=short",
     "-v",
+    "--durations=10",
+    "--benchmark-skip",
 ]
 markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
-    "unit: marks tests as unit tests",
-    "docker: marks tests that require docker",
-    "network: marks tests that require network access",
+    "unit: Unit tests that test individual components",
+    "integration: Integration tests that test component interaction",
+    "slow: Tests that take more than 5 seconds to run",
+    "performance: Performance and benchmark tests",
+    "load: Load testing scenarios with high resource usage",
+    "docker: Tests that require Docker daemon",
+    "network: Tests that require network access",
+    "tui: Tests for terminal user interface",
+    "quality: Code quality and coverage validation tests",
+    "e2e: End-to-end integration tests",
+    "memory: Memory usage and leak detection tests",
+    "security: Security-related tests",
 ]
 filterwarnings = [
     "error",
     "ignore::UserWarning",
     "ignore::DeprecationWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+    "ignore::ResourceWarning",
+]
+# Test discovery patterns
+norecursedirs = [
+    ".*",
+    "build",
+    "dist",
+    "CVS",
+    "_darcs", 
+    "{arch}",
+    "*.egg",
+    "venv",
+    ".venv",
+    "node_modules",
+]
+# Timeout for tests
+timeout = 300
+timeout_method = "thread"
+# Parallel test execution
+addopts_parallel = [
+    "-n", "auto",
+    "--dist", "worksteal",
 ]
 
 # Coverage configuration

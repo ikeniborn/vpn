@@ -722,3 +722,337 @@ class EnhancedDockerManager(EnhancedBaseService[Container]):
         if container_id in self._last_cache_update:
             del self._last_cache_update[container_id]
         # Keep container cache but force reload on next access
+    
+    # Batch Operations for Performance Optimization
+    
+    @with_retry()
+    async def start_containers_batch(
+        self, 
+        container_ids: List[str], 
+        max_concurrent: int = 5
+    ) -> Dict[str, bool]:
+        """
+        Start multiple containers concurrently.
+        
+        Args:
+            container_ids: List of container IDs to start
+            max_concurrent: Maximum number of concurrent operations
+            
+        Returns:
+            Dict mapping container_id to success status
+        """
+        if not container_ids:
+            return {}
+            
+        results = {}
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def start_single(container_id: str) -> tuple[str, bool]:
+            async with semaphore:
+                try:
+                    await self.start_container(container_id)
+                    return container_id, True
+                except Exception as e:
+                    self.logger.error(f"Failed to start container {container_id}: {e}")
+                    return container_id, False
+        
+        # Execute operations concurrently
+        tasks = [start_single(cid) for cid in container_ids]
+        completed_results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for result in completed_results:
+            if isinstance(result, tuple):
+                container_id, success = result
+                results[container_id] = success
+        
+        self.logger.info(f"Started {sum(results.values())}/{len(container_ids)} containers")
+        return results
+    
+    @with_retry()
+    async def stop_containers_batch(
+        self, 
+        container_ids: List[str], 
+        max_concurrent: int = 5,
+        timeout: int = 10
+    ) -> Dict[str, bool]:
+        """
+        Stop multiple containers concurrently.
+        
+        Args:
+            container_ids: List of container IDs to stop
+            max_concurrent: Maximum number of concurrent operations
+            timeout: Timeout for each stop operation
+            
+        Returns:
+            Dict mapping container_id to success status
+        """
+        if not container_ids:
+            return {}
+            
+        results = {}
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def stop_single(container_id: str) -> tuple[str, bool]:
+            async with semaphore:
+                try:
+                    await self.stop_container(container_id, timeout=timeout)
+                    return container_id, True
+                except Exception as e:
+                    self.logger.error(f"Failed to stop container {container_id}: {e}")
+                    return container_id, False
+        
+        # Execute operations concurrently
+        tasks = [stop_single(cid) for cid in container_ids]
+        completed_results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for result in completed_results:
+            if isinstance(result, tuple):
+                container_id, success = result
+                results[container_id] = success
+        
+        self.logger.info(f"Stopped {sum(results.values())}/{len(container_ids)} containers")
+        return results
+    
+    @with_retry()
+    async def restart_containers_batch(
+        self, 
+        container_ids: List[str], 
+        max_concurrent: int = 3,
+        timeout: int = 10
+    ) -> Dict[str, bool]:
+        """
+        Restart multiple containers concurrently.
+        
+        Args:
+            container_ids: List of container IDs to restart
+            max_concurrent: Maximum number of concurrent operations
+            timeout: Timeout for each restart operation
+            
+        Returns:
+            Dict mapping container_id to success status
+        """
+        if not container_ids:
+            return {}
+            
+        results = {}
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def restart_single(container_id: str) -> tuple[str, bool]:
+            async with semaphore:
+                try:
+                    await self.restart_container(container_id, timeout=timeout)
+                    return container_id, True
+                except Exception as e:
+                    self.logger.error(f"Failed to restart container {container_id}: {e}")
+                    return container_id, False
+        
+        # Execute operations concurrently
+        tasks = [restart_single(cid) for cid in container_ids]
+        completed_results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for result in completed_results:
+            if isinstance(result, tuple):
+                container_id, success = result
+                results[container_id] = success
+        
+        self.logger.info(f"Restarted {sum(results.values())}/{len(container_ids)} containers")
+        return results
+    
+    @with_retry()
+    async def get_containers_stats_batch(
+        self, 
+        container_ids: List[str], 
+        max_concurrent: int = 10
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Get stats for multiple containers concurrently.
+        
+        Args:
+            container_ids: List of container IDs to get stats for
+            max_concurrent: Maximum number of concurrent operations
+            
+        Returns:
+            Dict mapping container_id to stats
+        """
+        if not container_ids:
+            return {}
+            
+        results = {}
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def get_stats_single(container_id: str) -> tuple[str, Dict[str, Any]]:
+            async with semaphore:
+                try:
+                    stats = await self.get_container_stats(container_id)
+                    return container_id, stats
+                except Exception as e:
+                    self.logger.error(f"Failed to get stats for container {container_id}: {e}")
+                    return container_id, {}
+        
+        # Execute operations concurrently
+        tasks = [get_stats_single(cid) for cid in container_ids]
+        completed_results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for result in completed_results:
+            if isinstance(result, tuple):
+                container_id, stats = result
+                results[container_id] = stats
+        
+        self.logger.debug(f"Retrieved stats for {len([r for r in results.values() if r])} containers")
+        return results
+    
+    @with_retry()
+    async def remove_containers_batch(
+        self, 
+        container_ids: List[str], 
+        max_concurrent: int = 5,
+        force: bool = False
+    ) -> Dict[str, bool]:
+        """
+        Remove multiple containers concurrently.
+        
+        Args:
+            container_ids: List of container IDs to remove
+            max_concurrent: Maximum number of concurrent operations
+            force: Force removal even if container is running
+            
+        Returns:
+            Dict mapping container_id to success status
+        """
+        if not container_ids:
+            return {}
+            
+        results = {}
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def remove_single(container_id: str) -> tuple[str, bool]:
+            async with semaphore:
+                try:
+                    await self.remove_container(container_id, force=force)
+                    return container_id, True
+                except Exception as e:
+                    self.logger.error(f"Failed to remove container {container_id}: {e}")
+                    return container_id, False
+        
+        # Execute operations concurrently
+        tasks = [remove_single(cid) for cid in container_ids]
+        completed_results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for result in completed_results:
+            if isinstance(result, tuple):
+                container_id, success = result
+                results[container_id] = success
+                
+                # Clear from cache if successful
+                if success:
+                    self._container_cache.pop(container_id, None)
+                    self._invalidate_cache(container_id)
+        
+        self.logger.info(f"Removed {sum(results.values())}/{len(container_ids)} containers")
+        return results
+    
+    @with_retry()
+    async def get_containers_batch(
+        self, 
+        container_ids: List[str], 
+        use_cache: bool = True,
+        max_concurrent: int = 10
+    ) -> Dict[str, Optional[Container]]:
+        """
+        Get multiple containers concurrently.
+        
+        Args:
+            container_ids: List of container IDs to fetch
+            use_cache: Whether to use cache for lookup
+            max_concurrent: Maximum number of concurrent operations
+            
+        Returns:
+            Dict mapping container_id to Container object (or None if not found)
+        """
+        if not container_ids:
+            return {}
+            
+        results = {}
+        missing_ids = []
+        
+        # Check cache first if enabled
+        if use_cache:
+            for container_id in container_ids:
+                if container_id in self._container_cache:
+                    results[container_id] = self._container_cache[container_id]
+                else:
+                    missing_ids.append(container_id)
+        else:
+            missing_ids = container_ids
+        
+        # Fetch missing containers concurrently
+        if missing_ids:
+            semaphore = asyncio.Semaphore(max_concurrent)
+            
+            async def get_single(container_id: str) -> tuple[str, Optional[Container]]:
+                async with semaphore:
+                    try:
+                        container = await self.get_container(container_id)
+                        return container_id, container
+                    except Exception as e:
+                        self.logger.debug(f"Container {container_id} not found: {e}")
+                        return container_id, None
+            
+            # Execute operations concurrently
+            tasks = [get_single(cid) for cid in missing_ids]
+            completed_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for result in completed_results:
+                if isinstance(result, tuple):
+                    container_id, container = result
+                    results[container_id] = container
+                    
+                    # Update cache if container found
+                    if container and use_cache:
+                        self._container_cache[container_id] = container
+        
+        self.logger.debug(f"Retrieved {len([c for c in results.values() if c is not None])} containers")
+        return results
+    
+    async def create_containers_batch(
+        self,
+        container_configs: List[Dict[str, Any]],
+        max_concurrent: int = 3
+    ) -> Dict[str, Optional[Container]]:
+        """
+        Create multiple containers concurrently.
+        
+        Args:
+            container_configs: List of container configuration dicts
+            max_concurrent: Maximum number of concurrent operations
+            
+        Returns:
+            Dict mapping container name to Container object (or None if failed)
+        """
+        if not container_configs:
+            return {}
+            
+        results = {}
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def create_single(config: Dict[str, Any]) -> tuple[str, Optional[Container]]:
+            async with semaphore:
+                try:
+                    container = await self.create_container(**config)
+                    return config.get('name', 'unnamed'), container
+                except Exception as e:
+                    self.logger.error(f"Failed to create container {config.get('name', 'unnamed')}: {e}")
+                    return config.get('name', 'unnamed'), None
+        
+        # Execute operations concurrently
+        tasks = [create_single(config) for config in container_configs]
+        completed_results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for result in completed_results:
+            if isinstance(result, tuple):
+                name, container = result
+                results[name] = container
+        
+        successful = len([c for c in results.values() if c is not None])
+        self.logger.info(f"Created {successful}/{len(container_configs)} containers")
+        return results
