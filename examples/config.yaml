@@ -1,0 +1,60 @@
+# VPN Manager Configuration (YAML)
+# This is an example configuration file showing all available options
+
+# Application settings
+app:
+  debug: false
+  log_level: INFO
+  
+# VPN server defaults
+server:
+  default_protocol: vless
+  enable_firewall: true
+  auto_start_servers: true
+  port_range:
+    min: 10000
+    max: 65000
+  
+# Terminal UI settings
+tui:
+  theme: dark
+  refresh_rate: 1
+  show_stats: true
+  shortcuts:
+    quit: "q"
+    help: "?"
+    refresh: "r"
+  
+# Docker configuration
+docker:
+  socket: /var/run/docker.sock
+  timeout: 30
+  max_connections: 10
+  labels:
+    managed_by: vpn-manager
+    
+# Database settings
+database:
+  url: sqlite+aiosqlite:///vpn.db
+  echo: false
+  pool_size: 5
+  
+# Network configuration
+network:
+  enable_ipv6: false
+  dns_servers:
+    - 8.8.8.8
+    - 8.8.4.4
+  firewall:
+    enable: true
+    allow_ping: true
+    
+# Monitoring settings
+monitoring:
+  enable: true
+  metrics_port: 9090
+  retention_days: 30
+  alerts:
+    cpu_threshold: 90.0
+    memory_threshold: 90.0
+    disk_threshold: 85.0

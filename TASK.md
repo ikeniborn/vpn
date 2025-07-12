@@ -2,7 +2,7 @@
 
 **Created**: 2025-07-12  
 **Status**: Active  
-**Goal**: Optimize project with modern stack (Textual 0.45+, Typer, Pydantic 2.11+), improve stability and documentation
+**Goal**: Optimize project with modern stack (Textual 0.45+, Typer, Pydantic 2.11+, PyYAML), improve stability and documentation
 
 ## Phase 1: Stack Modernization (Priority: High)
 
@@ -32,6 +32,13 @@
 - [ ] Create interactive mode for complex operations
 - [ ] Add progress bars for long-running operations
 - [ ] Implement proper exit codes
+
+### 1.5 Expand PyYAML Usage
+- [ ] Implement YAML configuration file support
+- [ ] Create YAML schema validation
+- [ ] Add YAML-based template system for VPN configs
+- [ ] Support YAML for user-defined presets
+- [ ] Create YAML config migration tools
 
 ## Phase 2: Service Layer Architecture (Priority: High)
 
@@ -64,6 +71,9 @@
 - [ ] Implement configuration validation on startup
 - [ ] Add configuration schema documentation
 - [ ] Create configuration migration system
+- [ ] Add PyYAML support for configuration files (alongside TOML)
+- [ ] Create unified config loader supporting both YAML and TOML formats
+- [ ] Generate example config files in both formats
 
 ### 3.2 Environment Management
 - [ ] Document all environment variables
@@ -202,6 +212,7 @@
    - Pydantic 2.11+ features utilized
    - Textual 0.47+ advanced features
    - Typer 0.12+ with full completions
+   - PyYAML for flexible configuration
 
 4. **Documentation**
    - 100% API documentation
