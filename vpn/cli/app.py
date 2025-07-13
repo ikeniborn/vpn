@@ -152,9 +152,13 @@ def tui():
 
 @app.command()
 def menu():
-    """Launch interactive menu (legacy)."""
-    console.print("[yellow]The menu command is deprecated. Use 'vpn tui' instead.[/yellow]")
-    tui()
+    """Launch interactive CLI menu."""
+    with handle_cli_errors("Interactive menu"):
+        from vpn.cli.interactive_menu import run_interactive_menu
+        
+        console.print("[bold]Launching Interactive Menu...[/bold]")
+        run_interactive_menu()
+        exit_manager.exit_with_code(ExitCode.SUCCESS, "Menu session completed")
 
 
 @app.command()
@@ -308,6 +312,7 @@ def exit_codes():
 @app.command()
 def completions(
     shell: str = typer.Argument(
+        ...,
         help="Shell type: bash, zsh, fish, powershell"
     ),
     install: bool = typer.Option(

@@ -34,12 +34,13 @@ class NavigationSidebar(Widget):
     }
     """
 
-    current_screen = reactive("dashboard")
+    current_screen = reactive("main_menu")
 
     def compose(self) -> ComposeResult:
         """Create navigation items."""
         with Vertical():
             yield Static("VPN Manager", classes="sidebar-title")
+            yield NavigationItem("🏠 Main Menu", "main_menu", id="nav-main")
             yield NavigationItem("📊 Dashboard", "dashboard", id="nav-dashboard")
             yield NavigationItem("👥 Users", "users", id="nav-users")
             yield NavigationItem("🖥️  Servers", "servers", id="nav-servers")

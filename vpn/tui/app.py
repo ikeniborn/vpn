@@ -7,6 +7,7 @@ from textual.binding import Binding
 from textual.widgets import Footer, Header
 
 from vpn.tui.screens.dashboard import DashboardScreen
+from vpn.tui.screens.main_menu import MainMenuScreen
 from vpn.tui.screens.monitoring import MonitoringScreen
 from vpn.tui.screens.servers import ServersScreen
 from vpn.tui.screens.settings import SettingsScreen
@@ -22,6 +23,7 @@ class VPNManagerApp(App):
     SUB_TITLE = "Terminal User Interface"
 
     BINDINGS = [
+        Binding("h", "push_screen('main_menu')", "Home", priority=True),
         Binding("d", "push_screen('dashboard')", "Dashboard", priority=True),
         Binding("u", "push_screen('users')", "Users", priority=True),
         Binding("s", "push_screen('servers')", "Servers", priority=True),
@@ -34,6 +36,7 @@ class VPNManagerApp(App):
     ]
 
     SCREENS = {
+        "main_menu": MainMenuScreen,
         "dashboard": DashboardScreen,
         "users": UsersScreen,
         "servers": ServersScreen,
@@ -53,8 +56,8 @@ class VPNManagerApp(App):
 
     def on_mount(self) -> None:
         """Called when app starts."""
-        # Push the dashboard screen by default
-        self.push_screen("dashboard")
+        # Push the main menu screen by default
+        self.push_screen("main_menu")
 
     def action_push_screen(self, screen: str) -> None:
         """Push a screen onto the screen stack."""
