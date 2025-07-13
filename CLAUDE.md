@@ -4,256 +4,309 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Python-based VPN management system providing comprehensive tools for managing VLESS+Reality, Shadowsocks, WireGuard VPN servers, and HTTP/SOCKS5 proxy servers. Features a rich Terminal User Interface (TUI) built with Textual and CLI tools using Typer.
+This is a Rust-based VPN management system that provides comprehensive tools for managing Xray (VLESS+Reality), Outline VPN servers, and HTTP/SOCKS5 proxy servers. It replaces an original Bash implementation with a type-safe, high-performance alternative written in Rust.
 
-## Development Commands
+### Key Infrastructure Components
 
-### Essential Development Workflow
+- **Proxy/Load Balancer**: Traefik v3.x for reverse proxy, load balancing, and automatic SSL/TLS termination
+- **VPN Server**: Xray-core with VLESS+Reality protocol for secure tunneling
+- **Proxy Server**: Custom Rust-based HTTP/HTTPS and SOCKS5 proxy with authentication
+- **Identity Management**: Custom Rust-based identity service with LDAP/OAuth2 support
+- **Monitoring**: Prometheus + Grafana + Jaeger for comprehensive observability
+- **Storage**: PostgreSQL for persistent data, Redis for sessions and caching
+- **Orchestration**: Docker Compose with Traefik service discovery
+- **Deployment**: Multi-arch Docker images (amd64, arm64) available on Docker Hub
 
-```bash
-# Initial setup
-pip install -e ".[dev,test,docs]"
-pre-commit install
+## Build and Development Commands
 
-# Run single test
-pytest tests/test_user_manager.py::TestUserManager::test_create_user -v
-
-# Run tests matching pattern  
-pytest -k "test_create" -v
-
-# Quick checks before commit
-make check  # Runs lint + type-check + test
-
-# Auto-fix code issues
-make fix    # Runs black + ruff --fix
-```
-
-### Build and Quality Commands
+### Core Development Commands
 
 ```bash
-# Testing
-make test          # Run all tests
-make test-cov      # Generate coverage report
+# Build the entire workspace
+cargo build --workspace
 
-# Code quality
-make format        # Format with black
-make lint          # Check with ruff
-make type-check    # Type check with mypy
+# Build with optimizations (release mode)
+cargo build --release --workspace
+
+# Install the CLI tool
+cargo install --path crates/vpn-cli
+
+# Run tests for all crates
+cargo test --workspace
+
+# Run tests for a specific crate
+cargo test -p vpn-users
+cargo test -p vpn-docker
+cargo test -p vpn-proxy
+
+# Format all code
+cargo fmt --all
+
+# Run linter with all features
+cargo clippy --all-features --workspace -- -D warnings
+
+# Check for security vulnerabilities
+cargo audit
+
+# Generate and open documentation
+cargo doc --workspace --open
+
+# Run benchmarks
+cargo bench
 
 # Clean build artifacts
-make clean
-
-# Documentation
-make docs          # Build docs
-make docs-serve    # Serve docs locally
+cargo clean
 ```
 
-### Running the Application
+### Docker Build Commands
 
 ```bash
-# CLI mode
-python -m vpn --help
-python -m vpn users list
-python -m vpn server install --protocol vless --port 8443
+# Build multi-arch Docker images locally
+./scripts/docker-build.sh
 
-# TUI mode
-python -m vpn tui
+# Build and push to registry
+PUSH=true ./scripts/docker-build.sh
 
-# Development/debug mode
-python -m vpn --debug users create test-user --protocol vless
+# Build specific image
+docker buildx build --platform linux/amd64,linux/arm64 -t vpn:latest .
+
+# Deploy using Docker Hub images
+docker-compose -f docker-compose.hub.yml up -d
+
+# Quick start with Docker
+curl -L https://raw.githubusercontent.com/yourusername/vpn/master/docker-compose.hub.yml -o docker-compose.yml
+docker-compose up -d
 ```
 
-## High-Level Architecture
+### Running Specific Tests
 
-### Core Architecture Principles
+```bash
+# Run a single test by name
+cargo test test_user_creation
 
-The codebase follows a **layered architecture** with clear separation of concerns:
+# Run tests matching a pattern
+cargo test user::
 
-```
-User Input → CLI/TUI Layer → Service Layer → Core Layer → External Systems
-```
+# Run tests with output displayed
+cargo test -- --nocapture
 
-### Critical Architectural Components
+# Run tests in a specific module
+cargo test --package vpn-users --lib user::tests
 
-#### 1. **Async Service Layer Pattern**
-All services inherit from `BaseService` and use async/await throughout:
-
-```python
-# vpn/services/base.py defines the pattern
-# All services (UserManager, ServerManager, etc.) follow this async pattern
-# Services are stateless and can be instantiated per-request
+# Run integration tests only
+cargo test --test integration_tests
 ```
 
-#### 2. **Protocol Factory System**
-VPN protocols are implemented via factory pattern:
+### Cross-Compilation
 
-```python
-# vpn/protocols/base.py - Abstract protocol interface
-# Each protocol (VLESS, Shadowsocks, WireGuard) implements this interface
-# Protocol selection happens at runtime based on user input
+```bash
+# Install cross-compilation tool
+cargo install cross
+
+# Build for ARM64 (e.g., Raspberry Pi 4)
+cross build --target aarch64-unknown-linux-gnu --release
+
+# Build for ARMv7 (e.g., Raspberry Pi 3)
+cross build --target armv7-unknown-linux-gnueabihf --release
 ```
 
-#### 3. **Configuration Hierarchy**
-Configuration follows a clear precedence order:
+### CLI Usage Examples
+
+```bash
+# Check privileges status
+vpn privileges
+
+# List users (read-only, no sudo needed)
+vpn users list
+
+# Create user (requires sudo, will prompt)
+vpn users create alice
+
+# Install VPN server
+sudo vpn install --protocol vless --port 8443
+
+# Install proxy server
+sudo vpn install --protocol proxy-server --port 8888
+
+# Proxy management
+vpn proxy status --detailed
+vpn proxy monitor --user alice
+vpn proxy test https://google.com
+
+# Run with custom install path
+vpn --install-path /tmp/test-vpn users list
+
+# Use verbose mode to see privilege information
+vpn --verbose users list
+```
+
+## Architecture and Crate Structure
+
+### Workspace Layout
+
+The project uses a Rust workspace with specialized crates organized in layers:
 
 ```
-1. Environment variables (VPN_*)
-2. User config file (~/.config/vpn-manager/config.toml)  
-3. System config (/etc/vpn-manager/config.toml)
-4. Default values (vpn/core/config.py)
+Core Libraries (Foundation Layer):
+├── vpn-crypto     # Cryptographic operations (X25519, UUID, QR codes)
+├── vpn-docker     # Docker container management and health monitoring
+├── vpn-network    # Network utilities (port checking, firewall, IP detection)
+└── vpn-compose    # Docker Compose orchestration and service management
+
+Service Layer (Business Logic):
+├── vpn-users      # User lifecycle, connection links, batch operations
+├── vpn-server     # Server installation, configuration, lifecycle
+├── vpn-proxy      # HTTP/HTTPS and SOCKS5 proxy server with auth
+├── vpn-monitor    # Traffic stats, health monitoring, alerts, metrics
+├── vpn-identity   # Identity service with LDAP/OAuth2 support
+├── vpn-cluster    # Distributed clustering and coordination
+├── vpn-operator   # Kubernetes operator for VPN management
+└── vpn-telemetry  # Advanced telemetry and observability
+
+Application Layer:
+└── vpn-cli        # CLI interface, interactive menu, privilege management
+
+Runtime Layer:
+├── vpn-runtime    # Runtime abstraction and factory patterns
+└── vpn-types      # Shared types and validation
+
+Deprecated Crates:
+└── vpn-containerd # DEPRECATED: Containerd runtime (kept for reference)
 ```
 
-#### 4. **Docker Integration Architecture**
-Docker operations are abstracted through DockerManager:
+### Key Design Patterns
 
-- All VPN servers run as Docker containers
-- Container lifecycle is managed asynchronously
-- Health checks run in background tasks
-- Resource limits enforced via Docker API
+1. **Error Handling**: Each crate defines its own error type using `thiserror`, with automatic conversion between crate errors.
 
-#### 5. **TUI Component Architecture**
-The TUI uses Textual's reactive programming model:
+2. **Async/Await**: All I/O operations use Tokio for async execution. Docker operations, file I/O, and network calls are all async.
 
-```python
-# Screens (vpn/tui/screens/) - Full page views
-# Widgets (vpn/tui/widgets/) - Reusable components  
-# Dialogs (vpn/tui/dialogs/) - Modal interactions
-# Context menus implemented via ContextMenuMixin
-```
+3. **Privilege Management**: The CLI automatically detects when operations need root privileges and can request elevation via sudo with user confirmation.
 
-### Key Design Decisions
+4. **Read-Only Mode**: When running without proper permissions, the system gracefully degrades to read-only mode instead of failing.
 
-1. **SQLite for Local State**: User data and server configs stored locally in SQLite
-2. **Template-Based Configs**: Jinja2 templates generate VPN server configurations
-3. **Type Safety First**: Pydantic models validate all data at boundaries
-4. **Factory Pattern for Extensibility**: New protocols can be added without changing core code
-5. **Async Throughout**: Even synchronous operations wrapped in async for consistency
+5. **Modular Configuration**: Each crate can operate independently with its own configuration, but they compose into a unified system.
 
-### Critical File Relationships
+### Critical Cross-Crate Dependencies
 
-#### User Creation Flow
-1. `vpn/cli/commands/users.py` → CLI entry point
-2. `vpn/services/user_manager.py` → Business logic
-3. `vpn/protocols/{protocol}.py` → Protocol-specific config generation
-4. `vpn/services/docker_manager.py` → Container deployment
-5. `vpn/templates/{protocol}/` → Configuration templates
+1. **UserManager** (vpn-users) requires:
+   - ServerConfig for server details
+   - Storage path with write permissions (or falls back to read-only)
+   - Docker connectivity for container operations
 
-#### TUI Navigation Flow
-1. `vpn/tui/app.py` → Main app and screen routing
-2. `vpn/tui/screens/dashboard.py` → Default landing screen
-3. `vpn/tui/widgets/navigation.py` → Menu system
-4. Context menus triggered by right-click or F10 in any widget
+2. **ServerInstaller** (vpn-server) orchestrates:
+   - ContainerManager (vpn-docker) for Docker operations
+   - FirewallManager (vpn-network) for network rules
+   - ConfigGenerator (vpn-users) for user configurations
 
-### Performance Considerations
+3. **CommandHandler** (vpn-cli) coordinates:
+   - All service layer crates for operations
+   - PrivilegeManager for permission handling
+   - ConfigManager for settings
 
-- **Connection Pooling**: Docker client reused across operations
-- **Lazy Loading**: TUI screens load data on-demand
-- **Async I/O**: All file/network operations are async
-- **Caching**: User/server lists cached with TTL
+### State Management
+
+- **User data**: Stored as JSON files in `{install_path}/users/{user_id}/config.json`
+- **Server config**: TOML format in `/etc/vpn/config.toml` or specified path
+- **Docker state**: Managed by Docker daemon, accessed via bollard API
+- **Logs**: Written to `/var/log/vpn/` or specified directory
+
+### Key Gotchas and Solutions
+
+1. **Permission Errors**: The system handles permission denied errors gracefully:
+   ```rust
+   // In UserManager::load_users_from_disk()
+   if e.kind() == std::io::ErrorKind::PermissionDenied {
+       // Switch to read-only mode
+       return Ok(());
+   }
+   ```
+
+2. **Docker API Changes**: Using bollard 0.15, some APIs changed:
+   - CPU stats are no longer Option<T>
+   - wait_container returns a Stream, not a Future
+   - Network bytes don't return Option
+
+3. **Lifetime Issues**: BatchOperations uses Arc<UserManager> instead of lifetimes to avoid complexity.
+
+4. **Import Paths**: 
+   - VpnProtocol comes from `vpn_users::user::VpnProtocol`
+   - Protocol/Direction come from `vpn_network::firewall::{Protocol, Direction}`
 
 ## Testing Strategy
 
-### Test Organization
+### Unit Tests
+- Each crate has unit tests in `src/` files using `#[cfg(test)]` modules
+- Test data uses tempdir for isolation
+- Mock Docker responses for container tests
 
-```
-tests/
-├── test_models.py          # Pydantic model validation
-├── test_*_manager.py       # Service layer tests
-├── test_protocols.py       # Protocol implementations
-├── test_cli_*.py          # CLI command tests
-├── test_tui_*.py          # TUI component tests
-└── test_docker_*.py       # Docker integration tests
-```
+### Integration Tests
+- Located in `tests/integration_tests.rs`
+- Test CLI binary compilation and execution
+- Verify workspace builds successfully
 
-### Running Specific Test Categories
+### Manual Testing Scenarios
+1. Test privilege escalation: `vpn users create testuser`
+2. Test read-only mode: `vpn users list` (without sudo)
+3. Test performance: `vpn benchmark --compare-bash`
 
-```bash
-# Unit tests only
-pytest -m "not integration and not tui"
+## CI/CD Pipeline
 
-# TUI tests (require special setup)
-pytest tests/test_tui_*.py
+GitHub Actions workflows (`.github/workflows/`):
+- **ci.yml**: Tests on Ubuntu and macOS with stable and beta Rust
+- **release.yml**: Automated releases with binary artifacts
+- Security audit with cargo-audit
+- Code coverage with tarpaulin
+- Cross-compilation for ARM architectures
+- Multi-arch Docker image builds
+- Caching for faster builds
 
-# Integration tests (require Docker)
-pytest -m integration --docker
-```
+## Performance Characteristics
 
-## Common Development Patterns
+Current optimized performance:
+- **Startup time**: 0.005s (95% better than original target)
+- **Memory usage**: ~10MB (optimized with connection pooling)
+- **Docker operations**: <20ms (with caching)
+- **User creation**: 15ms
+- **Key generation**: 8ms
+- Concurrent operations via Tokio async runtime
+- Zero-cost abstractions for type safety
 
-### Adding New VPN Protocol
+Compared to original Bash implementation:
+- 26x faster startup time
+- 73% reduction in memory usage
 
-1. Create `vpn/protocols/new_protocol.py` implementing `BaseProtocol`
-2. Add protocol to `ProtocolType` enum in `vpn/core/models.py`
-3. Register in protocol factory (`vpn/protocols/__init__.py`)
-4. Add templates in `vpn/templates/new_protocol/`
-5. Add tests in `tests/test_protocols.py`
+## Common Development Tasks
 
-### Adding New CLI Command
+### Adding a New Command
+1. Add variant to `Commands` enum in `crates/vpn-cli/src/cli.rs`
+2. Add handler method in `CommandHandler` (commands.rs)
+3. Update pattern match in `main.rs`
+4. Add tests in relevant crate
 
-1. Create command function in appropriate file under `vpn/cli/commands/`
-2. Use Typer decorators for arguments and options
-3. Call appropriate service layer methods
-4. Format output using `vpn/cli/formatters/`
-5. Add tests in `tests/test_cli_*.py`
+### Updating Docker API Calls
+1. Check bollard 0.15 documentation for API
+2. Handle both success and error cases
+3. Update error types if needed
+4. Test with actual Docker daemon
 
-### Extending TUI
+### Adding New User Fields
+1. Update `User` struct in `vpn-users/src/user.rs`
+2. Update serialization/deserialization
+3. Update CLI display formatting
 
-1. New screens go in `vpn/tui/screens/`
-2. Register screen in `VPNManagerApp.SCREENS` dict
-3. Add navigation menu item in `Navigation` widget
-4. For context menus, use `ContextMenuMixin`
-5. Test with `AppTest` from Textual
+## Documentation Structure
 
-## Environment Variables
+Comprehensive documentation is organized in the `docs/` directory:
+- **docs/CHANGELOG.md**: Complete version history
+- **docs/architecture/**: System architecture diagrams and design docs
+- **docs/guides/**: User guides for Docker, operations, performance, security
+- **docs/specs/**: Technical specifications for components
 
-Key environment variables that affect behavior:
+## Project Status
 
-- `VPN_DEBUG=1` - Enable debug logging
-- `VPN_CONFIG_PATH` - Override config file location
-- `VPN_INSTALL_PATH` - VPN installation directory
-- `VPN_LOG_LEVEL` - Set logging level
-- `VPN_NO_COLOR=1` - Disable colored output
-
-## Dependencies and Tooling
-
-The project uses Poetry for dependency management but provides pip-compatible installation. Key tool versions:
-
-- Python 3.10+ (3.11 recommended)
-- Docker 20.10+ (required for VPN servers)
-- Make (optional, for convenience commands)
-
-## Error Handling Philosophy
-
-- User-facing errors provide actionable messages
-- Internal errors logged with full context
-- Async exceptions properly propagated
-- Docker errors wrapped with helpful context
-- Network errors include retry suggestions
-
-## MCP (Model Context Protocol) Integration
-
-### Using context7 for Programming Documentation
-
-The project integrates with MCP's context7 server to access programming language documentation and reference materials. This provides:
-
-- **Real-time documentation access**: Get up-to-date documentation for Python, frameworks, and libraries
-- **Contextual code examples**: Access relevant code snippets and best practices
-- **API reference lookup**: Quick access to method signatures and parameter details
-
-### Setup and Usage
-
-1. Configure MCP context7 in your Claude Code environment
-2. When working on code, context7 automatically provides relevant documentation
-3. Use for:
-   - Framework-specific patterns (Textual, Typer, Pydantic)
-   - Python standard library references
-   - Docker API documentation
-   - Async/await best practices
-
-### Benefits for This Project
-
-- **Textual TUI Development**: Access Textual widget documentation and examples
-- **Typer CLI Patterns**: Get CLI decorator syntax and option configurations
-- **Pydantic Validation**: Reference model validation patterns
-- **Docker SDK**: Lookup container management APIs
-- **Async Patterns**: Best practices for asyncio usage
+**Current Status**: Production Ready - Maintenance Mode
+- Core development completed (8 weeks, ~50,000+ lines of code)
+- All major features implemented and tested
+- Docker Hub images available for multi-arch deployment
+- Comprehensive documentation and architecture diagrams
+- Focus: Testing improvements, optimization, and future enhancements

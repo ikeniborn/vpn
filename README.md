@@ -1,426 +1,313 @@
-# VPN Manager - Python Implementation
+# VPN Management System
 
-[![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Code Style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Type Checking](https://img.shields.io/badge/type%20checking-mypy-blue.svg)](https://mypy-lang.org/)
-[![Tests](https://img.shields.io/badge/tests-pytest-orange.svg)](https://pytest.org/)
+🦀 **Высокопроизводительная система управления VPN на Rust** с поддержкой Xray (VLESS+Reality), Outline VPN и прокси-серверов.
 
-Modern VPN Management System with rich Terminal User Interface (TUI) and comprehensive CLI tools. This is a complete Python rewrite of the original Rust-based VPN Manager, offering enhanced usability, cross-platform support, and extensive protocol coverage.
+[![CI Status](https://github.com/ikeniborn/vpn/workflows/CI/badge.svg)](https://github.com/ikeniborn/vpn/actions)
+[![Docker Build](https://github.com/ikeniborn/vpn/workflows/Docker%20Build%20and%20Publish/badge.svg)](https://github.com/ikeniborn/vpn/actions)
+[![Security Audit](https://github.com/ikeniborn/vpn/workflows/Security%20Audit/badge.svg)](https://github.com/ikeniborn/vpn/actions)
+[![Rust Version](https://img.shields.io/badge/rust-1.75+-blue.svg)](https://www.rust-lang.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## 🚀 Features
-
-### VPN Protocols
-- **VLESS+Reality**: State-of-the-art protocol with Reality obfuscation
-- **Shadowsocks**: High-performance proxy with multiple cipher support
-- **WireGuard**: Modern VPN protocol with native performance
-- **HTTP/SOCKS5 Proxy**: Built-in proxy servers with authentication
-
-### User Interface
-- **🎨 Rich TUI**: Interactive terminal interface built with Textual
-- **🔧 CLI Interface**: Comprehensive command-line tools with Typer
-- **📊 Real-time Monitoring**: Live traffic statistics and system metrics
-- **🎯 Multi-format Output**: JSON, YAML, table, and plain text formats
-
-### Infrastructure
-- **🐳 Docker Integration**: Full container lifecycle management
-- **🔐 Security First**: Secure key generation and certificate management
-- **🌐 Multi-platform**: Linux, macOS, and Windows support
-- **📈 Scalable**: Support for multiple servers and thousands of users
-
-### Advanced Features
-- **Batch Operations**: Mass user creation and management
-- **Configuration Templates**: Jinja2-based templating system
-- **Health Monitoring**: Automatic server health checks
-- **Performance Optimization**: Caching, batch operations, and memory profiling
-- **Comprehensive Testing**: 13 test markers, quality gates, and benchmarks
-
-## 📋 System Requirements
-
-### Minimum Requirements
-- **Python**: 3.10 or higher
-- **Operating System**: Linux, macOS, or Windows
-- **Memory**: 512MB RAM
-- **Storage**: 100MB free disk space
-- **Docker**: 20.10+ (for VPN server functionality)
-
-### Recommended Requirements
-- **Python**: 3.11 or higher
-- **Memory**: 2GB RAM
-- **Storage**: 1GB free disk space
-- **Docker**: Latest stable version
-
-## 🛠️ Installation
-
-### Quick Installation
+## 🚀 Быстрый старт
 
 ```bash
-# Clone the repository
+# Установка одной командой (НЕ используйте sudo)
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install.sh | bash
+
+# После установки
+vpn menu  # Интерактивное меню
+```
+
+## ✨ Основные возможности
+
+### Протоколы и безопасность
+- **VPN протоколы**: VLESS+Reality, VMess, Trojan, Shadowsocks
+- **Прокси-сервер**: HTTP/HTTPS и SOCKS5 с аутентификацией
+- **Шифрование**: X25519, Reality protocol, автоматическая ротация ключей
+- **Управление доступом**: LDAP/OAuth2, IP-whitelist, rate limiting
+
+### Производительность
+- **Запуск**: 0.005с (в 420 раз быстрее bash-версии)
+- **Память**: ~10MB (на 78% меньше)
+- **Операции**: создание пользователя 15мс, генерация ключей 8мс
+- **Zero-copy**: использование Linux splice для оптимальной передачи данных
+
+### Инфраструктура
+- **Orchestration**: Docker Compose с Traefik v3.x
+- **Мониторинг**: Prometheus + Grafana + Jaeger
+- **Хранение**: PostgreSQL + Redis
+- **Архитектуры**: x86_64, ARM64, ARMv7
+
+## 📦 Установка
+
+### Системные требования
+
+**Минимальные:**
+- CPU: 1 vCPU
+- RAM: 512MB
+- Storage: 2GB
+- OS: Linux с systemd
+
+**Рекомендуемые:**
+- CPU: 2+ vCPU
+- RAM: 1GB+
+- Storage: 10GB+
+
+### Варианты установки
+
+#### 1. Через GitHub Releases (рекомендуется)
+
+```bash
+# Автоматическая установка последней версии на удаленном сервере
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install-remote.sh | sudo bash
+
+# Установка определенной версии
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install-remote.sh | sudo bash -s -- --version v1.2.3
+
+# Дополнительные опции
+sudo ./install-remote.sh --install-dir /opt/vpn/bin --config-dir /opt/vpn/config
+sudo ./install-remote.sh --no-docker --no-firewall  # Минимальная установка
+```
+
+**Ручная установка из releases:**
+
+```bash
+# Скачать бинарный файл для вашей платформы
+wget https://github.com/ikeniborn/vpn/releases/download/v1.2.3/vpn-x86_64-unknown-linux-gnu.tar.gz
+wget https://github.com/ikeniborn/vpn/releases/download/v1.2.3/vpn-x86_64-unknown-linux-gnu.tar.gz.sha256
+
+# Проверить контрольную сумму
+sha256sum -c vpn-x86_64-unknown-linux-gnu.tar.gz.sha256
+
+# Установить
+tar -xzf vpn-x86_64-unknown-linux-gnu.tar.gz
+sudo cp vpn /usr/local/bin/
+sudo chmod +x /usr/local/bin/vpn
+```
+
+**Поддерживаемые платформы:**
+- `x86_64-unknown-linux-gnu` - Linux x86_64
+- `aarch64-unknown-linux-gnu` - Linux ARM64 (Raspberry Pi 4+)
+- `armv7-unknown-linux-gnueabihf` - Linux ARMv7 (Raspberry Pi 3)
+- `x86_64-unknown-linux-musl` - Linux x86_64 (статическая сборка)
+- `x86_64-apple-darwin` - macOS Intel
+- `aarch64-apple-darwin` - macOS Apple Silicon
+- `x86_64-pc-windows-msvc` - Windows x86_64
+
+**Docker образы доступны для:**
+- `linux/amd64` - Intel/AMD x86_64
+- `linux/arm64` - ARM64 (включая Apple Silicon, AWS Graviton)
+- `linux/arm/v7` - ARMv7 (Raspberry Pi 3+)
+
+```bash
+# Использование через Docker
+docker run --rm ghcr.io/ikeniborn/vpn:latest --help
+```
+
+#### 2. Автоматическая установка (локальная)
+
+```bash
+# Полная установка с Docker
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install.sh | bash
+
+# Опции установки
+./install.sh --no-menu       # Без интерактивного меню
+./install.sh --skip-docker   # Без Docker
+./install.sh --binary-only   # Только бинарный файл
+```
+
+#### 2. Production развертывание
+
+**Docker (рекомендуется):**
+
+**Вариант 1: Через Docker Registry (рекомендуется для команд)**
+```bash
+# На сборочной машине
+docker build -t myregistry.com/vpn:latest .
+docker push myregistry.com/vpn:latest
+
+# На production сервере
+docker pull myregistry.com/vpn:latest
+docker-compose up -d
+```
+
+**Вариант 2: Через файл (для изолированных сред)**
+```bash
+# На сборочной машине
+./scripts/docker-build.sh
+docker save vpn:latest | gzip > vpn-$(date +%Y%m%d).tar.gz
+# Размер архива: ~25-30MB
+
+# Передача на production (выберите один способ):
+scp vpn-*.tar.gz user@server:/tmp/
+# или через USB/внешний носитель
+# или через S3/облачное хранилище
+
+# На production сервере
+docker load < vpn-*.tar.gz
+docker-compose up -d
+```
+
+**Вариант 3: Multi-arch сборка через Docker Hub**
+```bash
+# Сборка и публикация multi-arch образа
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -t yourusername/vpn:latest --push .
+
+# На любом сервере (автоматически выберет нужную архитектуру)
+docker pull yourusername/vpn:latest
+```
+
+**Бинарные файлы:**
+```bash
+# Клонировать и собрать локально
 git clone https://github.com/ikeniborn/vpn.git
 cd vpn
-
-# Run the installation script (either command works)
-bash scripts/install.sh
-# or
-bash scripts/install/install.sh
+cargo build --release
+sudo cp target/release/vpn /usr/local/bin/
+sudo chmod +x /usr/local/bin/vpn
 ```
 
-The installation script will:
-- ✅ Install system dependencies (Ubuntu/Debian/RHEL/macOS)
-- ✅ Create isolated Python environment
-- ✅ Install VPN Manager with all dependencies
-- ✅ Configure shell integration
-- ✅ Run initial system checks
-
-### Manual Installation
+#### 3. Сборка из исходников
 
 ```bash
-# Install Python 3.10+ and pip
-sudo apt update
-sudo apt install python3.10 python3-pip python3-venv
+# Установить Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install VPN Manager
-pip install -e ".[dev,test,docs]"
-
-# Verify installation
-vpn --version
-vpn doctor
-```
-
-### Docker Installation
-
-```bash
-# Using Docker Compose
-docker-compose -f docker/docker-compose.yml up -d
-
-# Or build from Dockerfile
-docker build -f docker/Dockerfile -t vpn-manager .
-docker run -it vpn-manager vpn --help
-```
-
-## 🚀 Quick Start
-
-### 1. Initialize Configuration
-
-```bash
-# Create default configuration
-vpn config init
-
-# Or use YAML configuration
-vpn yaml init --template production
-```
-
-### 2. Create Your First User
-
-```bash
-# Interactive mode
-vpn users create --interactive
-
-# Direct creation
-vpn users create alice --protocol vless --email alice@example.com
-```
-
-### 3. Install VPN Server
-
-```bash
-# Install VLESS server
-vpn server install --protocol vless --port 8443 --name main-server
-
-# Install with advanced options
-vpn server install --protocol shadowsocks \
-  --port 8388 \
-  --name shadow-server \
-  --cipher chacha20-ietf-poly1305
-```
-
-### 4. Launch Terminal UI
-
-```bash
-# Start the interactive TUI
-vpn tui
-
-# Or with specific theme
-vpn tui --theme dark
-```
-
-## 🏗️ Project Structure
-
-```
-vpn/
-├── config/                 # Configuration files
-│   └── mkdocs.yml         # Documentation configuration
-├── docker/                # Docker-related files
-│   ├── Dockerfile         # Container image definition
-│   ├── docker-compose.yml # Production compose file
-│   └── docker-compose.dev.yml # Development compose file
-├── docs/                  # Documentation
-│   ├── api/              # API reference
-│   ├── guides/           # User and admin guides
-│   └── architecture/     # System design docs
-├── scripts/              # Utility scripts
-│   ├── install.sh        # Installation script
-│   └── dev-setup.sh      # Development setup
-├── tests/                # Test suite
-│   ├── unit/            # Unit tests
-│   ├── integration/     # Integration tests
-│   └── performance/     # Performance benchmarks
-├── vpn/                  # Main package
-│   ├── cli/             # CLI implementation
-│   ├── core/            # Core functionality
-│   ├── protocols/       # VPN protocols
-│   ├── services/        # Business logic
-│   ├── tui/             # Terminal UI
-│   └── utils/           # Utilities
-├── .config/             # Project configuration
-│   ├── git/            # Git configuration
-│   └── qa/             # Quality assurance configs
-├── .env.example        # Environment variables template
-├── .pre-commit-config.yaml # Pre-commit hooks configuration
-├── CHANGELOG.md         # Version history
-├── CLAUDE.md           # AI assistant instructions
-├── LICENSE             # MIT license
-├── Makefile           # Development commands
-├── pyproject.toml     # Project configuration
-├── README.md          # This file
-├── requirements.txt   # Python dependencies
-└── TASK.md           # Development roadmap
-```
-
-## 💻 Usage Examples
-
-### CLI Commands
-
-```bash
-# User management
-vpn users list --format table
-vpn users create bob --protocol shadowsocks --batch
-vpn users delete alice --confirm
-vpn users stats --real-time
-
-# Server management
-vpn server list --status active
-vpn server logs main-server --follow --tail 100
-vpn server health --all
-vpn server update main-server --restart
-
-# Configuration management
-vpn config show --section server
-vpn config set server.domain vpn.example.com
-vpn config validate --env
-vpn config overlay apply production
-
-# YAML operations
-vpn yaml validate config.yaml
-vpn yaml template render server.j2
-vpn yaml preset list --category server
-vpn yaml migrate --from toml --to yaml
-
-# Monitoring and performance
-vpn monitor traffic --real-time
-vpn monitor users --active --format json
-vpn performance benchmark --duration 60
-vpn performance profile memory
-```
-
-### Terminal UI Navigation
-
-Launch with `vpn tui`:
-
-- **F1**: Help / Keyboard shortcuts
-- **F2**: Dashboard
-- **F3**: Users management
-- **F4**: Server management
-- **F5**: Traffic monitoring
-- **F10**: Context menu
-- **Ctrl+Q**: Quit
-- **Tab**: Navigate between panels
-- **Enter**: Select/Edit
-- **Space**: Toggle selection
-
-### Advanced Configuration
-
-```bash
-# Environment management
-export VPN_CONFIG_PATH=/etc/vpn-manager
-export VPN_LOG_LEVEL=DEBUG
-export VPN_THEME=cyberpunk
-
-# Hot-reload configuration
-vpn config hot-reload start
-# Make changes to config files...
-# Changes are automatically applied
-
-# Configuration overlays
-vpn config overlay create high-security
-vpn config overlay edit high-security
-vpn config overlay apply high-security
-```
-
-## 🧪 Testing
-
-### Running Tests
-
-```bash
-# Run all tests
-make test
-
-# Run specific test categories
-make test-unit          # Unit tests only
-make test-integration   # Integration tests
-make test-performance   # Performance benchmarks
-make test-quality       # Quality gates
-
-# Run with coverage
-make coverage
-make coverage-html      # Generate HTML report
-
-# Run tests in parallel
-make test-parallel
-```
-
-### Test Infrastructure
-
-- **13 Test Markers**: unit, integration, slow, performance, load, docker, network, tui, quality, e2e, memory, security
-- **Factory Patterns**: Comprehensive test data generation
-- **Quality Gates**: Automated coverage and quality checks
-- **Performance Benchmarks**: Database, Docker, and caching performance tests
-- **Test Isolation**: Complete test environment management
-
-## 🔧 Development
-
-### Setup Development Environment
-
-```bash
-# Clone and setup
+# Клонировать и собрать
 git clone https://github.com/ikeniborn/vpn.git
 cd vpn
-make dev-install
-
-# Install pre-commit hooks
-pre-commit install
-
-# Verify setup
-make check
+cargo install --path crates/vpn-cli
 ```
 
-### Development Commands
+## 💻 Использование
+
+### Основные команды
 
 ```bash
-# Code quality
-make format         # Auto-format code
-make lint          # Run linters
-make type-check    # Type checking
-make check         # All checks
+# Управление сервером
+sudo vpn install --protocol vless --port 443
+sudo vpn status
+sudo vpn start/stop/restart
 
-# Testing
-make test-fast     # Quick tests
-make test-watch    # Watch mode
-make benchmark     # Performance tests
+# Управление пользователями
+sudo vpn users create alice
+vpn users list
+vpn users link alice --qr
 
-# Documentation
-make docs          # Build docs
-make docs-serve    # Live preview
+# Прокси-сервер
+sudo vpn install --protocol proxy-server --port 8888
+vpn proxy status --detailed
+vpn proxy monitor --user alice
 
-# Cleanup
-make clean         # Remove artifacts
+# Мониторинг
+vpn doctor              # Диагностика системы
+vpn monitor traffic     # Статистика трафика
+vpn monitor health      # Проверка здоровья
 ```
 
-### Contributing
-
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/amazing-feature`
-3. Make changes and test: `make test`
-4. Commit with conventional commits: `git commit -m "feat: add amazing feature"`
-5. Push and create PR: `git push origin feature/amazing-feature`
-
-## 📊 Performance
-
-### Optimizations Implemented
-
-- **Async Operations**: Full asyncio support with connection pooling
-- **Batch Processing**: Bulk operations for users and containers
-- **Caching Layer**: Advanced caching with TTL and LRU eviction
-- **Memory Profiling**: Built-in memory leak detection
-- **Query Optimization**: SQLAlchemy query optimization with pagination
-- **Lazy Loading**: Virtual scrolling and on-demand data loading
-
-### Benchmarks
-
-- **User Creation**: <30ms per user, <5s for 100 users batch
-- **Container Operations**: <200ms single, <15s for 50 containers batch
-- **Query Performance**: <500ms for paginated queries
-- **Cache Performance**: <1ms for cache hits
-- **Memory Usage**: <50MB idle, optimized with profiling tools
-
-## 🔒 Security
-
-### Security Features
-
-- **Encryption**: AES-256-GCM for sensitive data
-- **Key Management**: Secure key generation and storage
-- **Authentication**: Multi-factor authentication support
-- **Audit Logging**: Comprehensive security event logging
-- **Input Validation**: Pydantic models with strict validation
-- **Dependency Scanning**: Regular security updates
-
-### Best Practices
+### Интерактивное меню
 
 ```bash
-# Enable security features
-vpn config set security.encryption_enabled true
-vpn config set security.audit_logging true
-vpn config set security.mfa_required true
-
-# Security monitoring
-vpn monitor security --real-time
-vpn audit logs --filter security
+vpn menu  # Удобный интерфейс для всех операций
 ```
 
-## 📖 Documentation
+### Конфигурация
 
-Comprehensive documentation is available in the `docs/` directory:
+```bash
+vpn config edit                    # Редактировать конфигурацию
+vpn config set server.port 8443    # Изменить параметр
+```
 
-- **[Installation Guide](docs/installation.md)** - Detailed installation instructions
-- **[User Guide](docs/user-guide.md)** - Complete user documentation
-- **[CLI Reference](docs/cli-reference.md)** - All CLI commands
-- **[TUI Guide](docs/tui-guide.md)** - Terminal UI documentation
-- **[API Reference](docs/api-reference.md)** - Python API documentation
-- **[Architecture](docs/architecture.md)** - System design and architecture
-- **[Migration Guide](docs/migration.md)** - Migrate from other VPN solutions
+## 🏗️ Архитектура
 
-## 🤝 Support
+### Стек сервисов
 
-### Getting Help
+```
+├── Traefik v3.x        # Reverse proxy, SSL, балансировка
+├── VPN Server          # Xray-core (VLESS+Reality)
+├── Proxy Auth          # Аутентификация для прокси
+├── Identity Service    # LDAP/OAuth2 интеграция
+├── PostgreSQL          # База данных
+├── Redis               # Кеш и сессии
+├── Prometheus          # Метрики
+├── Grafana             # Дашборды
+└── Jaeger              # Трассировка
+```
 
-- **Issues**: [GitHub Issues](https://github.com/ikeniborn/vpn/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/ikeniborn/vpn/discussions)
-- **Documentation**: Check the `docs/` directory
-- **Debug Mode**: Run with `--debug` flag for detailed output
+### Структура проекта
 
-### Reporting Issues
+```
+crates/
+├── vpn-cli/        # CLI интерфейс
+├── vpn-server/     # Управление сервером
+├── vpn-users/      # Управление пользователями
+├── vpn-proxy/      # HTTP/SOCKS5 прокси
+├── vpn-docker/     # Docker интеграция
+├── vpn-compose/    # Docker Compose
+├── vpn-crypto/     # Криптография
+├── vpn-network/    # Сетевые утилиты
+├── vpn-monitor/    # Мониторинг
+├── vpn-identity/   # Управление идентификацией
+└── vpn-types/      # Общие типы
+```
 
-When reporting issues, include:
+## 📊 Производительность
 
-1. System information: `vpn doctor`
-2. Debug output: `vpn --debug [command]`
-3. Configuration: `vpn config show --redacted`
-4. Steps to reproduce
+| Операция | Bash | Rust | Улучшение |
+|----------|------|------|-----------|
+| Запуск | 2.1с | 0.005с | **420x** |
+| Создание пользователя | 250мс | 15мс | **16.7x** |
+| Генерация ключей | 180мс | 8мс | **22.5x** |
+| Docker операции | 320мс | 20мс | **16x** |
+| Использование памяти | 45MB | 10MB | **-78%** |
 
-## 📄 License
+## 📖 Документация
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Полная документация доступна в каталоге [docs/](docs/). 
 
-## 🙏 Acknowledgments
+### Основные разделы
 
-- Built with [Textual](https://textual.textualize.io/) for the terminal UI
-- Powered by [Typer](https://typer.tiangolo.com/) for CLI interface
-- Uses [Pydantic](https://pydantic-docs.helpmanual.io/) for data validation
-- Optimized with [SQLAlchemy](https://www.sqlalchemy.org/) for database operations
+- **[Быстрый старт](docs/guides/DOCKER.md)** - Установка и первые шаги
+- **[Руководство по эксплуатации](docs/guides/OPERATIONS.md)** - Управление и обслуживание
+- **[Безопасность](docs/guides/SECURITY.md)** - Настройка безопасности и best practices
+- **[Оглавление документации](docs/README.md)** - Полный список документов
+
+### По темам
+
+- **Развертывание**: [Docker](docs/guides/DOCKER.md) | [Распространение образов](docs/guides/DOCKER_DISTRIBUTION.md)
+- **Архитектура**: [Система](docs/architecture/system-architecture.md) | [Сеть](docs/architecture/network-topology.md) | [Компоненты](docs/architecture/crate-dependencies.md)
+- **Оптимизация**: [Производительность](docs/guides/PERFORMANCE.md) | [Сборка](docs/BUILD_OPTIMIZATION.md)
+- **Разработка**: [История изменений](docs/CHANGELOG.md) | [Спецификации](docs/specs/)
+
+## 🤝 Участие в разработке
+
+Мы приветствуем вклад в проект! См. [CONTRIBUTING.md](CONTRIBUTING.md).
+
+```bash
+# Разработка
+cargo test --workspace          # Тесты
+cargo fmt --all                 # Форматирование
+cargo clippy --workspace        # Линтер
+cargo audit                     # Проверка безопасности
+```
+
+## 📄 Лицензия
+
+MIT License - см. [LICENSE](LICENSE)
+
+## 📊 Статус проекта
+
+**Production Ready** - режим поддержки
+
+- ✅ 8 недель разработки
+- ✅ ~50,000+ строк кода
+- ✅ 15+ специализированных crates
+- ✅ Multi-arch Docker образы
+- ✅ Полная документация
 
 ---
 
-**VPN Manager** - Modern, Fast, and Secure VPN Management System
+**Сделано с ❤️ и 🦀 Rust**
+
+[🐛 Issues](https://github.com/ikeniborn/vpn/issues) | [💬 Discussions](https://github.com/ikeniborn/vpn/discussions)
