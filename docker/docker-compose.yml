@@ -17,7 +17,7 @@ services:
       - vpn-logs:/var/log/vpn-manager
     environment:
       - VPN_LOG_LEVEL=info
-      - VPN_DATABASE_URL=sqlite:////home/app/.local/share/vpn-manager/vpn.db
+      - VPN_DATABASE_URL=sqlite:////home/app/.local/share/vpn-manager/db/vpn.db
       - VPN_DOCKER_HOST=unix:///var/run/docker.sock
     ports:
       - "8443:8443"    # VLESS

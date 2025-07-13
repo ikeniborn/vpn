@@ -657,7 +657,7 @@ app:
 database:
   type: "{{ db_type | default('sqlite') }}"
   {% if db_type == 'sqlite' -%}
-  path: "{{ db_path | default('~/.config/vpn-manager/vpn.db') }}"
+  path: "{{ db_path | default('~/.config/vpn-manager/db/vpn.db') }}"
   {% else -%}
   host: "{{ db_host | default('localhost') }}"
   port: {{ db_port | default(5432) }}
@@ -778,7 +778,7 @@ app:
   log_level: "DEBUG"
 
 database:
-  path: "./dev_vpn.db"
+  path: "./db/dev_vpn.db"
 
 docker:
   auto_remove: true

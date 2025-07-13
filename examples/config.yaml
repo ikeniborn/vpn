@@ -35,7 +35,7 @@ docker:
     
 # Database settings
 database:
-  url: sqlite+aiosqlite:///vpn.db
+  url: sqlite+aiosqlite:///db/vpn.db
   echo: false
   pool_size: 5
   

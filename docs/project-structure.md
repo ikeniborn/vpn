@@ -9,7 +9,6 @@ The VPN Manager project follows a clean, organized structure designed for mainta
 ```
 vpn/                        # Root directory
 ├── config/                 # Application configuration files
-│   ├── .env.example       # Environment variables template
 │   └── mkdocs.yml         # Documentation configuration
 ├── docker/                # Docker-related files
 │   ├── Dockerfile         # Container image definition
@@ -61,12 +60,12 @@ vpn/                        # Root directory
 │   ├── git/            # Git configuration
 │   │   └── .license-header.txt
 │   └── qa/             # Quality assurance configs
-│       ├── .coveragerc  # Coverage configuration
-│       ├── .pre-commit-config.yaml
 │       ├── pytest.ini   # Pytest configuration
 │       └── *.yml        # QA tool configs
 ├── .github/             # GitHub configuration
 │   └── workflows/       # CI/CD workflows
+├── .env.example        # Environment variables template
+├── .pre-commit-config.yaml # Pre-commit hooks configuration
 ├── CHANGELOG.md         # Version history
 ├── CLAUDE.md           # AI assistant instructions
 ├── LICENSE             # MIT license

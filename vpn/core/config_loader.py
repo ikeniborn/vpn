@@ -242,7 +242,7 @@ class ConfigLoader:
                 "timeout": 30,
             },
             "database": {
-                "url": "sqlite+aiosqlite:///vpn.db",
+                "url": "sqlite+aiosqlite:///db/vpn.db",
                 "echo": False,
             }
         }

@@ -177,7 +177,7 @@ class RustMigrator:
                 "default_port": rust_config.get("default_port", 8443),
             },
             "database": {
-                "url": "sqlite+aiosqlite:///vpn.db",
+                "url": "sqlite+aiosqlite:///db/vpn.db",
             }
         }
 

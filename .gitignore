@@ -2,7 +2,7 @@
 /config/.env
 /config/config.toml
 /config/config.yaml
-/vpn.db
+/db/
 /reports/
 
 # Byte-compiled / optimized / DLL files
@@ -155,7 +155,7 @@ cython_debug/
 Thumbs.db
 
 # Project specific
-vpn.db
+*.db
 *.db-journal
 logs/
 temp/

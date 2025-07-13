@@ -29,7 +29,7 @@ echo
 
 # 2. Check database
 log "Checking database..."
-DB_PATH="${VPN_DATA_PATH:-$HOME/.local/share/vpn-manager}/vpn.db"
+DB_PATH="${VPN_DATA_PATH:-$HOME/.local/share/vpn-manager}/db/vpn.db"
 if [ -f "$DB_PATH" ]; then
     success "Database exists at: $DB_PATH"
     echo "Database size: $(du -h "$DB_PATH" | cut -f1)"

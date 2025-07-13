@@ -658,7 +658,7 @@ class YamlMigrationEngine:
             },
             'database': {
                 'type': legacy_data.get('DB_TYPE', 'sqlite'),
-                'path': legacy_data.get('DB_PATH', '~/.config/vpn-manager/vpn.db')
+                'path': legacy_data.get('DB_PATH', '~/.config/vpn-manager/db/vpn.db')
             },
             'docker': {
                 'host': legacy_data.get('DOCKER_HOST', 'unix:///var/run/docker.sock'),
@@ -859,7 +859,7 @@ class YamlMigrationEngine:
                 description="Database path from environment",
                 source_path="VPN_DATABASE_PATH",
                 target_path="database.path",
-                default_value="~/.config/vpn-manager/vpn.db"
+                default_value="~/.config/vpn-manager/db/vpn.db"
             ),
             MigrationRule(
                 name="docker_host",

@@ -654,7 +654,7 @@ Configure VPN Manager using environment variables:
 |----------|-------------|---------|
 | `VPN_CONFIG_PATH` | Configuration file path | `~/.config/vpn-manager/config.toml` |
 | `VPN_LOG_LEVEL` | Log level | `info` |
-| `VPN_DATABASE_URL` | Database URL | `sqlite:///vpn.db` |
+| `VPN_DATABASE_URL` | Database URL | `sqlite:///db/vpn.db` |
 | `VPN_DOCKER_HOST` | Docker host | `unix:///var/run/docker.sock` |
 | `VPN_NO_COLOR` | Disable colors | `false` |
 

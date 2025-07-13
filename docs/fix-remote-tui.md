@@ -128,7 +128,7 @@ vpn --version
 sudo vpn --version
 
 # Check database
-ls -la ~/.local/share/vpn-manager/vpn.db
+ls -la ~/.local/share/vpn-manager/db/vpn.db
 
 # Check Docker
 docker ps

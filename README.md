@@ -152,7 +152,6 @@ vpn tui --theme dark
 ```
 vpn/
 ├── config/                 # Configuration files
-│   ├── .env.example       # Environment variables template
 │   └── mkdocs.yml         # Documentation configuration
 ├── docker/                # Docker-related files
 │   ├── Dockerfile         # Container image definition
@@ -179,6 +178,8 @@ vpn/
 ├── .config/             # Project configuration
 │   ├── git/            # Git configuration
 │   └── qa/             # Quality assurance configs
+├── .env.example        # Environment variables template
+├── .pre-commit-config.yaml # Pre-commit hooks configuration
 ├── CHANGELOG.md         # Version history
 ├── CLAUDE.md           # AI assistant instructions
 ├── LICENSE             # MIT license

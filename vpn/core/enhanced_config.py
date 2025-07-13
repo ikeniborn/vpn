@@ -59,7 +59,7 @@ class DatabaseConfig(BaseModel):
     )
 
     url: str = Field(
-        default="sqlite+aiosqlite:///vpn.db",
+        default="sqlite+aiosqlite:///db/vpn.db",
         description="Database connection URL"
     )
     echo: bool = Field(

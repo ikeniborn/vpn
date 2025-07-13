@@ -100,7 +100,7 @@ def migrate_config():
     # Convert to Python format
     python_config = {
         "database": {
-            "url": "sqlite:///vpn.db"
+            "url": "sqlite:///db/vpn.db"
         },
         "server": {
             "host": rust_config.get("server", {}).get("host", "0.0.0.0"),
@@ -263,7 +263,7 @@ The Python version uses the same TOML format but with some structural changes:
     image = "teddysun/xray:latest"
     
     [database]
-    url = "sqlite:///vpn.db"
+    url = "sqlite:///db/vpn.db"
     ```
 
 ## Step-by-Step Migration
@@ -385,7 +385,7 @@ sudo chown -R vpn-manager:vpn-manager /var/lib/vpn-manager/
 #### 2. Database Migration Errors
 ```bash
 # Reset database and re-migrate
-rm ~/.config/vpn-manager/vpn.db
+rm ~/.config/vpn-manager/db/vpn.db
 vpn migrate from-rust --reset-database
 ```
 
@@ -489,7 +489,7 @@ vpn users export --format json --include-keys > "$BACKUP_DIR/users_$DATE.json"
 vpn config export > "$BACKUP_DIR/config_$DATE.toml"
 
 # Backup database
-cp ~/.config/vpn-manager/vpn.db "$BACKUP_DIR/database_$DATE.db"
+cp ~/.config/vpn-manager/db/vpn.db "$BACKUP_DIR/database_$DATE.db"
 
 # Backup logs
 tar -czf "$BACKUP_DIR/logs_$DATE.tar.gz" /var/log/vpn-manager/

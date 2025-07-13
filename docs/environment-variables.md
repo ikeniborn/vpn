@@ -80,7 +80,7 @@ VPN_MONITORING__METRICS_PORT=9090
 
 | Variable | Description | Default | Example |
 |----------|-------------|---------|---------|
-| `VPN_DATABASE__URL` | Database connection URL | "sqlite+aiosqlite:///vpn.db" | `VPN_DATABASE__URL=postgresql://user:pass@localhost/vpn` |
+| `VPN_DATABASE__URL` | Database connection URL | "sqlite+aiosqlite:///db/vpn.db" | `VPN_DATABASE__URL=postgresql://user:pass@localhost/vpn` |
 | `VPN_DATABASE__ECHO` | Enable SQL query logging | `false` | `VPN_DATABASE__ECHO=true` |
 | `VPN_DATABASE__POOL_SIZE` | Connection pool size | 5 | `VPN_DATABASE__POOL_SIZE=10` |
 | `VPN_DATABASE__MAX_OVERFLOW` | Pool overflow connections | 10 | `VPN_DATABASE__MAX_OVERFLOW=20` |
@@ -211,7 +211,7 @@ You can also use a `.env` file in your project root or config directory:
 # .env file example
 VPN_DEBUG=false
 VPN_LOG_LEVEL=INFO
-VPN_DATABASE__URL=sqlite:///vpn.db
+VPN_DATABASE__URL=sqlite:///db/vpn.db
 VPN_DOCKER__TIMEOUT=60
 VPN_NETWORK__DEFAULT_PORT_RANGE=10000,20000
 VPN_SECURITY__ENABLE_AUTH=true

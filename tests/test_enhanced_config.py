@@ -38,7 +38,7 @@ class TestDatabaseConfig:
         """Test default database configuration values."""
         config = DatabaseConfig()
 
-        assert config.url == "sqlite+aiosqlite:///vpn.db"
+        assert config.url == "sqlite+aiosqlite:///db/vpn.db"
         assert config.echo is False
         assert config.pool_size == 5
         assert config.max_overflow == 10

@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     data_path: Path = Path.home() / ".local" / "share" / "vpn-manager"
 
     # Database
-    database_url: str = "sqlite+aiosqlite:///vpn.db"
+    database_url: str = "sqlite+aiosqlite:///db/vpn.db"
     database_echo: bool = False
 
     # Docker
