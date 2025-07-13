@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # Configuration
-REPO_OWNER="${REPO_OWNER:-your-org}"
+REPO_OWNER="${REPO_OWNER:-ikeniborn}"
 REPO_NAME="${REPO_NAME:-vpn}"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 CONFIG_DIR="${CONFIG_DIR:-/etc/vpn}"

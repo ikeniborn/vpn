@@ -3,14 +3,16 @@ name: Docker Build and Publish
 on:
   push:
     branches:
+      - rust
       - master
-      - master
+      - main
     tags:
       - 'v*'
   pull_request:
     branches:
+      - rust
       - master
-      - master
+      - main
   workflow_dispatch:
 
 env:
@@ -103,7 +105,7 @@ jobs:
           cache-to: type=gha,mode=max
           
       - name: Update Docker Hub description
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/rust' || github.ref == 'refs/heads/master')
         uses: peter-evans/dockerhub-description@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}

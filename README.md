@@ -59,10 +59,10 @@ vpn menu  # Интерактивное меню
 
 ```bash
 # Автоматическая установка последней версии на удаленном сервере
-curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install-remote.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install-remote.sh | sudo bash
 
 # Установка определенной версии
-curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install-remote.sh | sudo bash -s -- --version v1.2.3
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install-remote.sh | sudo bash -s -- --version v1.2.3
 
 # Дополнительные опции
 sudo ./install-remote.sh --install-dir /opt/vpn/bin --config-dir /opt/vpn/config
@@ -108,7 +108,7 @@ docker run --rm ghcr.io/ikeniborn/vpn:latest --help
 
 ```bash
 # Полная установка с Docker
-curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install.sh | bash
 
 # Опции установки
 ./install.sh --no-menu       # Без интерактивного меню

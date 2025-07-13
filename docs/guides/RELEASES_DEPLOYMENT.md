@@ -50,7 +50,7 @@ git push origin --tags
 #### Ubuntu/Debian
 ```bash
 # Автоматическая установка
-curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install-remote.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install-remote.sh | sudo bash
 
 # Ручная установка
 wget https://github.com/ikeniborn/vpn/releases/latest/download/vpn-x86_64-unknown-linux-gnu.tar.gz
@@ -63,7 +63,7 @@ sudo cp vpn /usr/local/bin/
 #### CentOS/RHEL/Fedora
 ```bash
 # Автоматическая установка
-curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install-remote.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install-remote.sh | sudo bash
 
 # Ручная установка
 wget https://github.com/ikeniborn/vpn/releases/latest/download/vpn-x86_64-unknown-linux-gnu.tar.gz
@@ -193,7 +193,7 @@ jobs:
     - name: Deploy to server
       run: |
         ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-          "curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install-remote.sh | sudo bash -s -- --version ${{ github.event.inputs.version }}"
+          "curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install-remote.sh | sudo bash -s -- --version ${{ github.event.inputs.version }}"
 ```
 
 ### GitLab CI
@@ -204,7 +204,7 @@ deploy_vpn:
   script:
     - |
       ssh $SERVER_USER@$SERVER_HOST \
-        "curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install-remote.sh | sudo bash -s -- --version $VERSION"
+        "curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install-remote.sh | sudo bash -s -- --version $VERSION"
   variables:
     VERSION: "latest"
   when: manual
@@ -220,7 +220,7 @@ deploy_vpn:
   tasks:
     - name: Download and install VPN
       shell: |
-        curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install-remote.sh | bash -s -- --version {{ vpn_version | default('latest') }}
+        curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install-remote.sh | bash -s -- --version {{ vpn_version | default('latest') }}
       args:
         creates: /usr/local/bin/vpn
 ```
@@ -238,7 +238,7 @@ LATEST_VERSION=$(curl -s https://api.github.com/repos/ikeniborn/vpn/releases/lat
 
 if [[ "$CURRENT_VERSION" != "$LATEST_VERSION" ]]; then
     echo "Updating VPN from $CURRENT_VERSION to $LATEST_VERSION"
-    curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install-remote.sh | bash -s -- --version "$LATEST_VERSION" --force
+    curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install-remote.sh | bash -s -- --version "$LATEST_VERSION" --force
     systemctl restart vpn-manager
     echo "VPN updated successfully"
 else
@@ -329,7 +329,7 @@ check_updates() {
     
     if [[ "$current_version" != "$latest_version" ]]; then
         echo "New version available: $latest_version (current: $current_version)"
-        echo "Update with: curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install-remote.sh | sudo bash -s -- --version $latest_version --force"
+        echo "Update with: curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install-remote.sh | sudo bash -s -- --version $latest_version --force"
         return 1
     else
         echo "VPN is up to date: $current_version"
@@ -346,7 +346,7 @@ check_updates
 
 ```bash
 # Откат к конкретной версии
-sudo curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install-remote.sh | bash -s -- --version v1.1.0 --force
+sudo curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install-remote.sh | bash -s -- --version v1.1.0 --force
 
 # Сохранение текущей версии перед обновлением
 sudo cp /usr/local/bin/vpn /usr/local/bin/vpn.backup.$(date +%Y%m%d)
@@ -365,7 +365,7 @@ NEW_VERSION="$1"
 cp /usr/local/bin/vpn "$BACKUP_PATH"
 
 # Обновить
-if curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install-remote.sh | bash -s -- --version "$NEW_VERSION" --force; then
+if curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install-remote.sh | bash -s -- --version "$NEW_VERSION" --force; then
     # Проверить работоспособность
     if vpn --version >/dev/null 2>&1; then
         echo "Update successful"
@@ -417,7 +417,7 @@ curl -s https://api.github.com/repos/ikeniborn/vpn/releases | jq -r '.[].tag_nam
 ```bash
 # Найти последний pre-release
 BETA_VERSION=$(curl -s https://api.github.com/repos/ikeniborn/vpn/releases | jq -r '.[] | select(.prerelease==true) | .tag_name' | head -n1)
-sudo curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install-remote.sh | bash -s -- --version "$BETA_VERSION" --force
+sudo curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install-remote.sh | bash -s -- --version "$BETA_VERSION" --force
 ```
 
 ### Как настроить автоматические обновления только для patch-версий?
@@ -428,7 +428,7 @@ CURRENT_MAJOR_MINOR=$(vpn --version | grep -oP 'v\d+\.\d+')
 LATEST_PATCH=$(curl -s https://api.github.com/repos/ikeniborn/vpn/releases | jq -r --arg prefix "$CURRENT_MAJOR_MINOR" '.[] | select(.tag_name | startswith($prefix)) | .tag_name' | head -n1)
 
 if [[ "$LATEST_PATCH" ]]; then
-    curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install-remote.sh | bash -s -- --version "$LATEST_PATCH" --force
+    curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install-remote.sh | bash -s -- --version "$LATEST_PATCH" --force
 fi
 ```
 
