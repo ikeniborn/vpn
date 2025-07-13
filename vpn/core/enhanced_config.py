@@ -1,21 +1,18 @@
-"""
-Enhanced configuration management with Pydantic 2.11+ features.
+"""Enhanced configuration management with Pydantic 2.11+ features.
 """
 
-import os
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
     computed_field,
     field_serializer,
     field_validator,
     model_validator,
-    ConfigDict,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -60,7 +57,7 @@ class DatabaseConfig(BaseModel):
         validate_assignment=True,
         extra="forbid"
     )
-    
+
     url: str = Field(
         default="sqlite+aiosqlite:///vpn.db",
         description="Database connection URL"
@@ -87,30 +84,30 @@ class DatabaseConfig(BaseModel):
         le=300,
         description="Connection pool timeout in seconds"
     )
-    
+
     @field_validator("url")
     @classmethod
     def validate_database_url(cls, v: str) -> str:
         """Validate database URL format."""
         if not v:
             raise ValueError("Database URL cannot be empty")
-        
+
         supported_schemes = ["sqlite", "sqlite+aiosqlite", "postgresql", "postgresql+asyncpg"]
         scheme = v.split("://")[0] if "://" in v else ""
-        
+
         if scheme not in supported_schemes:
             raise ValueError(
                 f"Unsupported database scheme '{scheme}'. "
                 f"Supported: {', '.join(supported_schemes)}"
             )
         return v
-    
+
     @computed_field
     @property
     def is_sqlite(self) -> bool:
         """Check if using SQLite database."""
         return self.url.startswith("sqlite")
-    
+
     @computed_field
     @property
     def is_memory_db(self) -> bool:
@@ -125,7 +122,7 @@ class DockerConfig(BaseModel):
         validate_assignment=True,
         extra="forbid"
     )
-    
+
     socket: str = Field(
         default="/var/run/docker.sock",
         description="Docker socket path"
@@ -142,19 +139,19 @@ class DockerConfig(BaseModel):
         le=50,
         description="Maximum Docker client connections"
     )
-    registry_url: Optional[str] = Field(
+    registry_url: str | None = Field(
         default=None,
         description="Private Docker registry URL"
     )
-    registry_username: Optional[str] = Field(
+    registry_username: str | None = Field(
         default=None,
         description="Registry username"
     )
-    registry_password: Optional[str] = Field(
+    registry_password: str | None = Field(
         default=None,
         description="Registry password"
     )
-    
+
     @field_validator("socket")
     @classmethod
     def validate_socket_path(cls, v: str) -> str:
@@ -163,14 +160,14 @@ class DockerConfig(BaseModel):
             socket_path = v[7:]  # Remove unix:// prefix
         else:
             socket_path = v
-        
+
         if not socket_path.startswith("/"):
             raise ValueError("Docker socket must be an absolute path")
-        
+
         return v
-    
+
     @field_serializer("registry_password")
-    def serialize_password(self, value: Optional[str]) -> Optional[str]:
+    def serialize_password(self, value: str | None) -> str | None:
         """Mask password in serialization."""
         return "***" if value else None
 
@@ -182,8 +179,8 @@ class NetworkConfig(BaseModel):
         validate_assignment=True,
         extra="forbid"
     )
-    
-    default_port_range: Tuple[int, int] = Field(
+
+    default_port_range: tuple[int, int] = Field(
         default=(10000, 65000),
         description="Default port range for VPN servers"
     )
@@ -195,22 +192,22 @@ class NetworkConfig(BaseModel):
         default=True,
         description="Backup firewall rules before modification"
     )
-    allowed_networks: List[str] = Field(
+    allowed_networks: list[str] = Field(
         default_factory=lambda: ["0.0.0.0/0"],
         description="Allowed networks for VPN access"
     )
-    blocked_ports: Set[int] = Field(
+    blocked_ports: set[int] = Field(
         default_factory=set,
         description="Ports blocked from automatic assignment"
     )
-    health_check_endpoints: List[str] = Field(
+    health_check_endpoints: list[str] = Field(
         default_factory=lambda: ["8.8.8.8", "1.1.1.1"],
         description="Endpoints for network health checks"
     )
-    
+
     @field_validator("default_port_range")
     @classmethod
-    def validate_port_range(cls, v: Tuple[int, int]) -> Tuple[int, int]:
+    def validate_port_range(cls, v: tuple[int, int]) -> tuple[int, int]:
         """Validate port range."""
         min_port, max_port = v
         if min_port < 1024:
@@ -220,10 +217,10 @@ class NetworkConfig(BaseModel):
         if min_port >= max_port:
             raise ValueError("Minimum port must be less than maximum port")
         return v
-    
+
     @field_validator("allowed_networks")
     @classmethod
-    def validate_networks(cls, v: List[str]) -> List[str]:
+    def validate_networks(cls, v: list[str]) -> list[str]:
         """Validate network CIDR notation."""
         import ipaddress
         for network in v:
@@ -232,7 +229,7 @@ class NetworkConfig(BaseModel):
             except ValueError:
                 raise ValueError(f"Invalid network CIDR: {network}")
         return v
-    
+
     @computed_field
     @property
     def port_range_size(self) -> int:
@@ -247,12 +244,12 @@ class SecurityConfig(BaseModel):
         validate_assignment=True,
         extra="forbid"
     )
-    
+
     enable_auth: bool = Field(
         default=True,
         description="Enable authentication"
     )
-    secret_key: Optional[str] = Field(
+    secret_key: str | None = Field(
         default=None,
         min_length=32,
         description="Secret key for token generation"
@@ -285,7 +282,7 @@ class SecurityConfig(BaseModel):
         default=True,
         description="Require complex passwords"
     )
-    
+
     @model_validator(mode="after")
     def validate_auth_requirements(self) -> "SecurityConfig":
         """Validate authentication requirements."""
@@ -294,12 +291,12 @@ class SecurityConfig(BaseModel):
             import secrets
             self.secret_key = secrets.token_urlsafe(32)
         return self
-    
+
     @field_serializer("secret_key")
-    def serialize_secret_key(self, value: Optional[str]) -> Optional[str]:
+    def serialize_secret_key(self, value: str | None) -> str | None:
         """Mask secret key in serialization."""
         return f"{value[:8]}..." if value else None
-    
+
     @computed_field
     @property
     def token_expire_timedelta(self) -> timedelta:
@@ -314,7 +311,7 @@ class MonitoringConfig(BaseModel):
         validate_assignment=True,
         extra="forbid"
     )
-    
+
     enable_metrics: bool = Field(
         default=True,
         description="Enable metrics collection"
@@ -359,11 +356,11 @@ class MonitoringConfig(BaseModel):
         default=False,
         description="Enable OpenTelemetry tracing"
     )
-    otlp_endpoint: Optional[str] = Field(
+    otlp_endpoint: str | None = Field(
         default=None,
         description="OpenTelemetry collector endpoint"
     )
-    
+
     @computed_field
     @property
     def metrics_retention_timedelta(self) -> timedelta:
@@ -378,7 +375,7 @@ class TUIConfig(BaseModel):
         validate_assignment=True,
         extra="forbid"
     )
-    
+
     theme: Theme = Field(
         default=Theme.DARK,
         description="TUI color theme"
@@ -413,7 +410,7 @@ class TUIConfig(BaseModel):
         le=2.0,
         description="Animation duration in seconds"
     )
-    keyboard_shortcuts: Dict[str, str] = Field(
+    keyboard_shortcuts: dict[str, str] = Field(
         default_factory=lambda: {
             "quit": "q,ctrl+c",
             "help": "h,f1",
@@ -432,7 +429,7 @@ class PathConfig(BaseModel):
         validate_assignment=True,
         extra="forbid"
     )
-    
+
     install_path: Path = Field(
         default=Path("/opt/vpn"),
         description="Installation directory"
@@ -453,7 +450,7 @@ class PathConfig(BaseModel):
         default=Path(__file__).parent.parent / "templates",
         description="Template directory"
     )
-    
+
     @field_validator("install_path", "config_path", "data_path", "log_path")
     @classmethod
     def create_paths(cls, v: Path) -> Path:
@@ -469,7 +466,7 @@ class PathConfig(BaseModel):
                 return fallback
             raise
         return v
-    
+
     @computed_field
     @property
     def backup_path(self) -> Path:
@@ -477,13 +474,13 @@ class PathConfig(BaseModel):
         backup_dir = self.data_path / "backups"
         backup_dir.mkdir(parents=True, exist_ok=True)
         return backup_dir
-    
+
     def get_server_config_path(self, server_name: str) -> Path:
         """Get path for server configuration file."""
         server_dir = self.config_path / "servers"
         server_dir.mkdir(parents=True, exist_ok=True)
         return server_dir / f"{server_name}.toml"
-    
+
     def get_user_data_path(self, username: str) -> Path:
         """Get path for user data directory."""
         user_dir = self.data_path / "users" / username
@@ -492,8 +489,7 @@ class PathConfig(BaseModel):
 
 
 class EnhancedSettings(BaseSettings):
-    """
-    Enhanced application settings with Pydantic 2.11+ features.
+    """Enhanced application settings with Pydantic 2.11+ features.
     
     Environment variables are prefixed with VPN_.
     For example: VPN_DEBUG=true, VPN_APP__LOG_LEVEL=DEBUG
@@ -507,7 +503,7 @@ class EnhancedSettings(BaseSettings):
         extra="ignore",
         str_strip_whitespace=True,
     )
-    
+
     # Application metadata
     app_name: str = Field(
         default="VPN Manager",
@@ -525,7 +521,7 @@ class EnhancedSettings(BaseSettings):
         default=LogLevel.INFO,
         description="Logging level"
     )
-    
+
     # Configuration sections
     paths: PathConfig = Field(
         default_factory=PathConfig,
@@ -555,7 +551,7 @@ class EnhancedSettings(BaseSettings):
         default_factory=TUIConfig,
         description="Terminal UI configuration"
     )
-    
+
     # Server defaults
     default_protocol: ProtocolType = Field(
         default=ProtocolType.VLESS,
@@ -565,7 +561,7 @@ class EnhancedSettings(BaseSettings):
         default=True,
         description="Auto-start servers on application start"
     )
-    
+
     # Development settings
     reload: bool = Field(
         default=False,
@@ -575,13 +571,13 @@ class EnhancedSettings(BaseSettings):
         default=False,
         description="Enable performance profiling"
     )
-    
+
     @model_validator(mode="after")
     def post_validation(self) -> "EnhancedSettings":
         """Post-validation processing."""
         # Ensure log directory exists
         self.paths.log_path.mkdir(parents=True, exist_ok=True)
-        
+
         # Set database path if using SQLite
         if self.database.is_sqlite and not self.database.is_memory_db:
             # Update database URL to use absolute path
@@ -592,18 +588,18 @@ class EnhancedSettings(BaseSettings):
                     absolute_path = self.paths.data_path / db_file
                     scheme = self.database.url.split("///")[0]
                     self.database.url = f"{scheme}///{absolute_path}"
-        
+
         return self
-    
+
     @computed_field
     @property
     def is_development(self) -> bool:
         """Check if running in development mode."""
         return self.debug or self.reload or self.profile
-    
+
     @computed_field
     @property
-    def config_file_paths(self) -> List[Path]:
+    def config_file_paths(self) -> list[Path]:
         """Get list of potential config file locations."""
         return [
             Path.cwd() / "config.yaml",
@@ -613,7 +609,7 @@ class EnhancedSettings(BaseSettings):
             Path("/etc/vpn-manager/config.yaml"),
             Path("/etc/vpn-manager/config.toml"),
         ]
-    
+
     @field_serializer("log_level")
     def serialize_log_level(self, value: LogLevel) -> str:
         """Serialize log level enum."""
@@ -627,7 +623,7 @@ class RuntimeConfig(BaseModel):
         extra="forbid",
         str_strip_whitespace=True,
     )
-    
+
     # Runtime flags
     dry_run: bool = Field(
         default=False,
@@ -653,7 +649,7 @@ class RuntimeConfig(BaseModel):
         default=False,
         description="Disable colored output"
     )
-    
+
     # Operation settings
     operation_timeout: int = Field(
         default=300,  # 5 minutes
@@ -673,13 +669,13 @@ class RuntimeConfig(BaseModel):
         le=10,
         description="Number of retry attempts for failed operations"
     )
-    
+
     # Current session info
-    session_id: Optional[str] = Field(
+    session_id: str | None = Field(
         default=None,
         description="Current session identifier"
     )
-    user_id: Optional[str] = Field(
+    user_id: str | None = Field(
         default=None,
         description="Current user identifier"
     )
@@ -687,13 +683,13 @@ class RuntimeConfig(BaseModel):
         default_factory=datetime.utcnow,
         description="Session start time"
     )
-    
+
     @computed_field
     @property
     def session_duration(self) -> timedelta:
         """Get current session duration."""
         return datetime.utcnow() - self.start_time
-    
+
     @computed_field
     @property
     def effective_log_level(self) -> LogLevel:
@@ -707,8 +703,8 @@ class RuntimeConfig(BaseModel):
 
 
 # Global configuration instances
-_enhanced_settings: Optional[EnhancedSettings] = None
-_runtime_config: Optional[RuntimeConfig] = None
+_enhanced_settings: EnhancedSettings | None = None
+_runtime_config: RuntimeConfig | None = None
 
 
 def get_settings() -> EnhancedSettings:
@@ -739,9 +735,9 @@ def update_runtime_config(**kwargs) -> RuntimeConfig:
     global _runtime_config
     if _runtime_config is None:
         _runtime_config = RuntimeConfig()
-    
+
     for key, value in kwargs.items():
         if hasattr(_runtime_config, key):
             setattr(_runtime_config, key, value)
-    
+
     return _runtime_config

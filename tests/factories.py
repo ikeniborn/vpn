@@ -5,10 +5,9 @@ This module provides factories for creating test data objects with
 realistic and consistent data for comprehensive testing.
 """
 
-import json
 import uuid
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import factory
 from factory import fuzzy
@@ -20,17 +19,17 @@ fake = Faker()
 
 class BaseFactory(factory.Factory):
     """Base factory with common configurations."""
-    
+
     class Meta:
         abstract = True
-    
+
     @classmethod
-    def create_batch_dict(cls, size: int, **kwargs) -> List[Dict[str, Any]]:
+    def create_batch_dict(cls, size: int, **kwargs) -> list[dict[str, Any]]:
         """Create a batch of factory instances as dictionaries."""
         return [cls.build_dict(**kwargs) for _ in range(size)]
-    
+
     @classmethod
-    def build_dict(cls, **kwargs) -> Dict[str, Any]:
+    def build_dict(cls, **kwargs) -> dict[str, Any]:
         """Build factory instance as dictionary."""
         instance = cls.build(**kwargs)
         if hasattr(instance, '__dict__'):
@@ -40,10 +39,10 @@ class BaseFactory(factory.Factory):
 
 class UserDataFactory(BaseFactory):
     """Factory for creating user data dictionaries."""
-    
+
     class Meta:
         model = dict
-    
+
     id = factory.LazyFunction(lambda: str(uuid.uuid4()))
     username = factory.Sequence(lambda n: f"testuser{n}")
     email = factory.LazyAttribute(lambda obj: f"{obj.username}@{fake.domain_name()}")
@@ -54,7 +53,7 @@ class UserDataFactory(BaseFactory):
     created_at = factory.LazyFunction(datetime.utcnow)
     updated_at = factory.LazyFunction(datetime.utcnow)
     expires_at = factory.LazyFunction(lambda: datetime.utcnow() + timedelta(days=30))
-    
+
     @factory.lazy_attribute
     def protocol_settings(self):
         """Generate protocol-specific settings."""
@@ -87,11 +86,11 @@ class UserDataFactory(BaseFactory):
 
 class AdminUserDataFactory(UserDataFactory):
     """Factory for admin users."""
-    
+
     username = factory.Sequence(lambda n: f"admin{n}")
     email = factory.LazyAttribute(lambda obj: f"{obj.username}@admin.local")
     status = 'active'
-    
+
     @factory.lazy_attribute
     def privileges(self):
         return ['user_management', 'server_management', 'system_admin']
@@ -99,23 +98,23 @@ class AdminUserDataFactory(UserDataFactory):
 
 class ExpiredUserDataFactory(UserDataFactory):
     """Factory for expired users."""
-    
+
     status = 'expired'
     expires_at = factory.LazyFunction(lambda: datetime.utcnow() - timedelta(days=1))
 
 
 class ContainerDataFactory(BaseFactory):
     """Factory for Docker container data."""
-    
+
     class Meta:
         model = dict
-    
+
     id = factory.LazyFunction(lambda: fake.sha256()[:12])
     name = factory.Sequence(lambda n: f"vpn_container_{n}")
     status = fuzzy.FuzzyChoice(['running', 'stopped', 'paused', 'restarting'])
     image = 'vpn-server:latest'
     created = factory.LazyFunction(datetime.utcnow)
-    
+
     @factory.lazy_attribute
     def network_settings(self):
         return {
@@ -123,14 +122,14 @@ class ContainerDataFactory(BaseFactory):
             'Gateway': '172.17.0.1',
             'NetworkMode': 'bridge'
         }
-    
+
     @factory.lazy_attribute
     def ports(self):
         port = fake.random_int(8000, 9000)
         return {
             f"{port}/tcp": [{"HostIp": "0.0.0.0", "HostPort": str(port)}]
         }
-    
+
     @factory.lazy_attribute
     def environment(self):
         return {
@@ -152,13 +151,13 @@ class StoppedContainerFactory(ContainerDataFactory):
 
 class ProtocolConfigFactory(BaseFactory):
     """Factory for protocol configurations."""
-    
+
     class Meta:
         model = dict
-    
+
     type = fuzzy.FuzzyChoice(['vless', 'shadowsocks', 'wireguard', 'http', 'socks5'])
     port = fuzzy.FuzzyInteger(8000, 9000)
-    
+
     @factory.lazy_attribute
     def settings(self):
         """Generate protocol-specific settings."""
@@ -220,16 +219,16 @@ class WireguardProtocolFactory(ProtocolConfigFactory):
 
 class ConnectionInfoFactory(BaseFactory):
     """Factory for connection information."""
-    
+
     class Meta:
         model = dict
-    
+
     server_ip = factory.LazyFunction(fake.ipv4)
     server_port = fuzzy.FuzzyInteger(8000, 9000)
     client_id = factory.LazyFunction(lambda: str(uuid.uuid4()))
     public_key = factory.LazyFunction(lambda: fake.sha256()[:44])
     private_key = factory.LazyFunction(lambda: fake.sha256()[:44])
-    
+
     @factory.lazy_attribute
     def connection_string(self):
         """Generate connection string based on protocol."""
@@ -238,15 +237,15 @@ class ConnectionInfoFactory(BaseFactory):
 
 class TrafficStatsFactory(BaseFactory):
     """Factory for traffic statistics."""
-    
+
     class Meta:
         model = dict
-    
+
     upload_mb = fuzzy.FuzzyFloat(0, 1000, precision=2)
     download_mb = fuzzy.FuzzyFloat(0, 5000, precision=2)
     total_mb = factory.LazyAttribute(lambda obj: obj.upload_mb + obj.download_mb)
     last_activity = factory.LazyFunction(lambda: datetime.utcnow() - timedelta(hours=fake.random_int(1, 24)))
-    
+
     @factory.lazy_attribute
     def daily_stats(self):
         """Generate daily traffic statistics."""
@@ -262,14 +261,14 @@ class TrafficStatsFactory(BaseFactory):
 
 class CryptoKeysFactory(BaseFactory):
     """Factory for cryptographic keys."""
-    
+
     class Meta:
         model = dict
-    
+
     public_key = factory.LazyFunction(lambda: fake.sha256()[:44])
     private_key = factory.LazyFunction(lambda: fake.sha256()[:44])
     shared_secret = factory.LazyFunction(lambda: fake.sha256()[:32])
-    
+
     @factory.lazy_attribute
     def key_pair(self):
         """Generate additional key pair information."""
@@ -282,10 +281,10 @@ class CryptoKeysFactory(BaseFactory):
 
 class ServerConfigFactory(BaseFactory):
     """Factory for server configurations."""
-    
+
     class Meta:
         model = dict
-    
+
     name = factory.Sequence(lambda n: f"vpn-server-{n}")
     host = factory.LazyFunction(fake.ipv4)
     domain = factory.LazyFunction(fake.domain_name)
@@ -293,7 +292,7 @@ class ServerConfigFactory(BaseFactory):
     protocol = fuzzy.FuzzyChoice(['vless', 'shadowsocks', 'wireguard'])
     max_users = fuzzy.FuzzyInteger(10, 1000)
     region = factory.LazyFunction(fake.country_code)
-    
+
     @factory.lazy_attribute
     def ssl_config(self):
         return {
@@ -306,36 +305,36 @@ class ServerConfigFactory(BaseFactory):
 
 class NetworkConfigFactory(BaseFactory):
     """Factory for network configurations."""
-    
+
     class Meta:
         model = dict
-    
+
     interface = factory.LazyFunction(lambda: fake.random_element(['eth0', 'wg0', 'tun0']))
     subnet = factory.LazyFunction(lambda: f"10.{fake.random_int(0, 255)}.0.0/16")
     dns_servers = factory.LazyFunction(lambda: ['1.1.1.1', '8.8.8.8'])
     mtu = fuzzy.FuzzyInteger(1280, 1500)
-    
+
     @factory.lazy_attribute
     def firewall_rules(self):
         return [
             f"ALLOW {self.interface} IN",
             f"ALLOW {self.interface} OUT",
-            f"DROP ALL IN"
+            "DROP ALL IN"
         ]
 
 
 class TestScenarioFactory(BaseFactory):
     """Factory for creating test scenarios."""
-    
+
     class Meta:
         model = dict
-    
+
     name = factory.Sequence(lambda n: f"test_scenario_{n}")
     description = factory.LazyFunction(fake.text)
     users_count = fuzzy.FuzzyInteger(1, 10)
     containers_count = fuzzy.FuzzyInteger(1, 5)
     duration_minutes = fuzzy.FuzzyInteger(1, 60)
-    
+
     @factory.lazy_attribute
     def expected_results(self):
         return {
@@ -347,19 +346,19 @@ class TestScenarioFactory(BaseFactory):
 
 class LoadTestDataFactory(BaseFactory):
     """Factory for load testing data."""
-    
+
     class Meta:
         model = dict
-    
+
     concurrent_users = fuzzy.FuzzyInteger(10, 100)
     requests_per_second = fuzzy.FuzzyInteger(10, 1000)
     test_duration = fuzzy.FuzzyInteger(60, 3600)  # 1 minute to 1 hour
-    
+
     @factory.lazy_attribute
     def user_data_batch(self):
         """Generate batch of users for load testing."""
         return UserDataFactory.create_batch_dict(self.concurrent_users)
-    
+
     @factory.lazy_attribute
     def container_data_batch(self):
         """Generate batch of containers for load testing."""
@@ -368,17 +367,17 @@ class LoadTestDataFactory(BaseFactory):
 
 class PerformanceBenchmarkFactory(BaseFactory):
     """Factory for performance benchmark data."""
-    
+
     class Meta:
         model = dict
-    
+
     operation_name = factory.LazyFunction(lambda: fake.random_element([
         'user_creation', 'container_start', 'config_generation', 'stats_collection'
     ]))
     target_duration_ms = fuzzy.FuzzyInteger(100, 5000)
     target_memory_mb = fuzzy.FuzzyInteger(10, 100)
     sample_size = fuzzy.FuzzyInteger(10, 100)
-    
+
     @factory.lazy_attribute
     def baseline_metrics(self):
         return {
@@ -390,17 +389,17 @@ class PerformanceBenchmarkFactory(BaseFactory):
 
 class ErrorScenarioFactory(BaseFactory):
     """Factory for error testing scenarios."""
-    
+
     class Meta:
         model = dict
-    
+
     error_type = factory.LazyFunction(lambda: fake.random_element([
         'network_error', 'database_error', 'docker_error', 'validation_error'
     ]))
     error_message = factory.LazyFunction(fake.sentence)
     should_retry = factory.LazyFunction(fake.boolean)
     retry_count = fuzzy.FuzzyInteger(0, 3)
-    
+
     @factory.lazy_attribute
     def error_context(self):
         return {
@@ -411,17 +410,17 @@ class ErrorScenarioFactory(BaseFactory):
 
 
 # Convenience functions for common factory combinations
-def create_complete_user_scenario(count: int = 1) -> List[Dict[str, Any]]:
+def create_complete_user_scenario(count: int = 1) -> list[dict[str, Any]]:
     """Create complete user scenarios with all related data."""
     scenarios = []
-    
+
     for _ in range(count):
         user_data = UserDataFactory.build_dict()
         protocol_config = ProtocolConfigFactory.build_dict(type=user_data['protocol_type'])
         connection_info = ConnectionInfoFactory.build_dict()
         traffic_stats = TrafficStatsFactory.build_dict()
         crypto_keys = CryptoKeysFactory.build_dict()
-        
+
         scenario = {
             'user': user_data,
             'protocol': protocol_config,
@@ -430,11 +429,11 @@ def create_complete_user_scenario(count: int = 1) -> List[Dict[str, Any]]:
             'keys': crypto_keys
         }
         scenarios.append(scenario)
-    
+
     return scenarios
 
 
-def create_docker_test_environment(containers_count: int = 3) -> Dict[str, Any]:
+def create_docker_test_environment(containers_count: int = 3) -> dict[str, Any]:
     """Create a complete Docker test environment."""
     return {
         'containers': ContainerDataFactory.create_batch_dict(containers_count),
@@ -443,7 +442,7 @@ def create_docker_test_environment(containers_count: int = 3) -> Dict[str, Any]:
     }
 
 
-def create_performance_test_suite() -> Dict[str, Any]:
+def create_performance_test_suite() -> dict[str, Any]:
     """Create a complete performance test suite."""
     return {
         'load_test': LoadTestDataFactory.build_dict(),
@@ -454,25 +453,25 @@ def create_performance_test_suite() -> Dict[str, Any]:
 
 # Export all factories
 __all__ = [
-    'UserDataFactory',
-    'AdminUserDataFactory', 
-    'ExpiredUserDataFactory',
-    'ContainerDataFactory',
-    'RunningContainerFactory',
-    'StoppedContainerFactory',
-    'ProtocolConfigFactory',
-    'VlessProtocolFactory',
-    'ShadowsocksProtocolFactory',
-    'WireguardProtocolFactory',
+    'AdminUserDataFactory',
     'ConnectionInfoFactory',
-    'TrafficStatsFactory',
+    'ContainerDataFactory',
     'CryptoKeysFactory',
-    'ServerConfigFactory',
-    'NetworkConfigFactory',
-    'TestScenarioFactory',
-    'LoadTestDataFactory',
-    'PerformanceBenchmarkFactory',
     'ErrorScenarioFactory',
+    'ExpiredUserDataFactory',
+    'LoadTestDataFactory',
+    'NetworkConfigFactory',
+    'PerformanceBenchmarkFactory',
+    'ProtocolConfigFactory',
+    'RunningContainerFactory',
+    'ServerConfigFactory',
+    'ShadowsocksProtocolFactory',
+    'StoppedContainerFactory',
+    'TestScenarioFactory',
+    'TrafficStatsFactory',
+    'UserDataFactory',
+    'VlessProtocolFactory',
+    'WireguardProtocolFactory',
     'create_complete_user_scenario',
     'create_docker_test_environment',
     'create_performance_test_suite'

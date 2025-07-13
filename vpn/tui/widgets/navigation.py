@@ -1,5 +1,4 @@
-"""
-Navigation sidebar widget.
+"""Navigation sidebar widget.
 """
 
 from textual import on
@@ -12,7 +11,7 @@ from textual.widgets import Button, Static
 
 class NavigationItem(Button):
     """Individual navigation item."""
-    
+
     def __init__(
         self,
         label: str,
@@ -28,15 +27,15 @@ class NavigationItem(Button):
 
 class NavigationSidebar(Widget):
     """Navigation sidebar for switching between screens."""
-    
+
     DEFAULT_CSS = """
     NavigationSidebar {
         dock: left;
     }
     """
-    
+
     current_screen = reactive("dashboard")
-    
+
     def compose(self) -> ComposeResult:
         """Create navigation items."""
         with Vertical():
@@ -46,22 +45,22 @@ class NavigationSidebar(Widget):
             yield NavigationItem("🖥️  Servers", "servers", id="nav-servers")
             yield NavigationItem("📈 Monitoring", "monitoring", id="nav-monitoring")
             yield NavigationItem("⚙️  Settings", "settings", id="nav-settings")
-    
+
     def on_mount(self) -> None:
         """Called when widget is mounted."""
         self.update_active_item()
-    
+
     def watch_current_screen(self, screen_name: str) -> None:
         """Watch for screen changes."""
         self.update_active_item()
-    
+
     def update_active_item(self) -> None:
         """Update active navigation item."""
         for item in self.query(NavigationItem):
             item.remove_class("active")
             if item.screen_name == self.current_screen:
                 item.add_class("active")
-    
+
     @on(NavigationItem.Pressed)
     def handle_nav_click(self, event: NavigationItem.Pressed) -> None:
         """Handle navigation item click."""

@@ -1,20 +1,19 @@
-"""
-Confirmation dialog for dangerous operations.
+"""Confirmation dialog for dangerous operations.
 """
 
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Button, Static
 
 
 class ConfirmDialog(ModalScreen):
     """Modal confirmation dialog."""
-    
+
     DEFAULT_CSS = """
     ConfirmDialog {
         align: center middle;
@@ -45,24 +44,24 @@ class ConfirmDialog(ModalScreen):
         height: 3;
     }
     """
-    
+
     BINDINGS = [
         Binding("escape", "cancel", "Cancel"),
         Binding("enter", "confirm", "Confirm"),
     ]
-    
+
     def __init__(
         self,
         title: str = "Confirm",
         message: str = "Are you sure?",
-        callback: Optional[Callable] = None
+        callback: Callable | None = None
     ):
         """Initialize confirmation dialog."""
         super().__init__()
         self.title = title
         self.message = message
         self.callback = callback
-    
+
     def compose(self) -> ComposeResult:
         """Create dialog layout."""
         with Container():
@@ -71,14 +70,14 @@ class ConfirmDialog(ModalScreen):
             with Horizontal(classes="button-container"):
                 yield Button("Cancel", id="cancel-btn", variant="default")
                 yield Button("Confirm", id="confirm-btn", variant="primary")
-    
+
     @on(Button.Pressed, "#confirm-btn")
     def action_confirm(self) -> None:
         """Handle confirmation."""
         if self.callback:
             self.callback()
         self.dismiss()
-    
+
     @on(Button.Pressed, "#cancel-btn")
     def action_cancel(self) -> None:
         """Handle cancellation."""

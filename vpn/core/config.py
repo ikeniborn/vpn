@@ -1,53 +1,50 @@
-"""
-Configuration management using Pydantic Settings.
+"""Configuration management using Pydantic Settings.
 """
 
 from pathlib import Path
-from typing import Optional, Tuple
 
-from pydantic import Field, field_validator
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """
-    Application settings with environment variable support.
+    """Application settings with environment variable support.
     
     Environment variables are prefixed with VPN_.
     For example: VPN_DEBUG=true, VPN_INSTALL_PATH=/opt/vpn
     """
-    
+
     # Application settings
     app_name: str = "VPN Manager"
     version: str = "2.0.0"
     debug: bool = False
     log_level: str = "INFO"
-    
+
     # Paths
     install_path: Path = Path("/opt/vpn")
     config_path: Path = Path.home() / ".config" / "vpn-manager"
     data_path: Path = Path.home() / ".local" / "share" / "vpn-manager"
-    
+
     # Database
     database_url: str = "sqlite+aiosqlite:///vpn.db"
     database_echo: bool = False
-    
+
     # Docker
     docker_socket: str = "/var/run/docker.sock"
     docker_timeout: int = 30
     docker_max_connections: int = 10
-    
+
     # Server defaults
     default_protocol: str = "vless"
-    default_port_range: Tuple[int, int] = (10000, 65000)
+    default_port_range: tuple[int, int] = (10000, 65000)
     enable_firewall: bool = True
     auto_start_servers: bool = True
-    
+
     # Security
     enable_auth: bool = True
-    secret_key: Optional[str] = None
+    secret_key: str | None = None
     token_expire_minutes: int = 60 * 24  # 24 hours
-    
+
     # Monitoring
     enable_metrics: bool = True
     metrics_port: int = 9090
@@ -55,21 +52,21 @@ class Settings(BaseSettings):
     alert_cpu_threshold: float = 90.0
     alert_memory_threshold: float = 90.0
     alert_disk_threshold: float = 85.0
-    
+
     # TUI settings
     tui_theme: str = "dark"
     tui_refresh_rate: int = 1  # seconds
-    
+
     # Development
     reload: bool = False
-    
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="VPN_",
         case_sensitive=False,
         validate_default=True,
     )
-    
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
@@ -79,7 +76,7 @@ class Settings(BaseSettings):
         if v not in valid_levels:
             raise ValueError(f"Invalid log level. Must be one of: {', '.join(valid_levels)}")
         return v
-    
+
     @field_validator("install_path", "config_path", "data_path")
     @classmethod
     def create_paths(cls, v: Path) -> Path:
@@ -88,7 +85,7 @@ class Settings(BaseSettings):
         try:
             v.mkdir(parents=True, exist_ok=True)
         except PermissionError:
-            # If we can't create the directory (e.g., /opt/vpn), 
+            # If we can't create the directory (e.g., /opt/vpn),
             # fall back to user's home directory
             if str(v).startswith("/opt/"):
                 fallback = Path.home() / ".local" / "share" / "vpn-manager"
@@ -96,10 +93,10 @@ class Settings(BaseSettings):
                 return fallback
             raise
         return v
-    
+
     @field_validator("default_port_range")
     @classmethod
-    def validate_port_range(cls, v: Tuple[int, int]) -> Tuple[int, int]:
+    def validate_port_range(cls, v: tuple[int, int]) -> tuple[int, int]:
         """Validate port range."""
         min_port, max_port = v
         if min_port < 1024:
@@ -109,7 +106,7 @@ class Settings(BaseSettings):
         if min_port >= max_port:
             raise ValueError("Minimum port must be less than maximum port")
         return v
-    
+
     @property
     def database_path(self) -> Path:
         """Get database file path from URL."""
@@ -120,16 +117,16 @@ class Settings(BaseSettings):
                 return Path(":memory:")
             return self.data_path / path_part
         return Path(":memory:")
-    
+
     @property
     def is_development(self) -> bool:
         """Check if running in development mode."""
         return self.debug or self.reload
-    
+
     def get_server_config_path(self, server_name: str) -> Path:
         """Get path for server configuration file."""
         return self.config_path / "servers" / f"{server_name}.toml"
-    
+
     def get_user_data_path(self, username: str) -> Path:
         """Get path for user data directory."""
         path = self.data_path / "users" / username
@@ -143,7 +140,7 @@ settings = Settings()
 
 class RuntimeConfig(BaseSettings):
     """Runtime configuration that can be modified during execution."""
-    
+
     # Runtime flags
     dry_run: bool = False
     force: bool = False
@@ -151,14 +148,14 @@ class RuntimeConfig(BaseSettings):
     verbose: bool = False
     output_format: str = "table"
     no_color: bool = False
-    
+
     # Operation timeouts
     operation_timeout: int = 300  # 5 minutes
-    
+
     model_config = SettingsConfigDict(
         validate_default=True,
     )
-    
+
     @field_validator("output_format")
     @classmethod
     def validate_output_format(cls, v: str) -> str:

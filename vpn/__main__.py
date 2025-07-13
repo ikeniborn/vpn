@@ -1,5 +1,4 @@
-"""
-Entry point for running VPN Manager as a module.
+"""Entry point for running VPN Manager as a module.
 
 Usage:
     python -m vpn

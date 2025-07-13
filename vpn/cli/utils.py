@@ -1,10 +1,10 @@
-"""
-CLI utility functions.
+"""CLI utility functions.
 """
 
 import sys
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable, Optional
+from typing import Any
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -18,8 +18,7 @@ def confirm_action(
     default: bool = False,
     abort: bool = True
 ) -> bool:
-    """
-    Ask for confirmation.
+    """Ask for confirmation.
     
     Args:
         message: Confirmation message
@@ -30,11 +29,11 @@ def confirm_action(
         True if confirmed
     """
     confirmed = Confirm.ask(message, default=default)
-    
+
     if not confirmed and abort:
         console.print("[yellow]Operation cancelled[/yellow]")
         sys.exit(0)
-    
+
     return confirmed
 
 
@@ -44,8 +43,7 @@ def show_progress(
     *args,
     **kwargs
 ) -> Any:
-    """
-    Show progress spinner while executing task.
+    """Show progress spinner while executing task.
     
     Args:
         task_description: Description to show
@@ -62,7 +60,7 @@ def show_progress(
         console=console,
     ) as progress:
         task = progress.add_task(task_description, total=None)
-        
+
         try:
             result = task_function(*args, **kwargs)
             progress.update(task, completed=True)
@@ -77,8 +75,7 @@ def handle_error(
     exit_code: int = 1,
     show_traceback: bool = False
 ) -> None:
-    """
-    Handle CLI errors consistently.
+    """Handle CLI errors consistently.
     
     Args:
         error: Exception to handle
@@ -86,7 +83,7 @@ def handle_error(
         show_traceback: Show full traceback
     """
     from vpn.core.exceptions import VPNError
-    
+
     if isinstance(error, VPNError):
         console.print(f"[red]Error:[/red] {error.message}")
         if error.details:
@@ -94,17 +91,16 @@ def handle_error(
             for key, value in error.details.items():
                 console.print(f"  {key}: {value}")
     else:
-        console.print(f"[red]Error:[/red] {str(error)}")
-    
+        console.print(f"[red]Error:[/red] {error!s}")
+
     if show_traceback:
         console.print_exception()
-    
+
     sys.exit(exit_code)
 
 
 def handle_errors(func: Callable) -> Callable:
-    """
-    Decorator to handle CLI errors consistently.
+    """Decorator to handle CLI errors consistently.
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -118,10 +114,9 @@ def handle_errors(func: Callable) -> Callable:
 def validate_choice(
     value: str,
     choices: list,
-    error_message: Optional[str] = None
+    error_message: str | None = None
 ) -> str:
-    """
-    Validate user choice against allowed values.
+    """Validate user choice against allowed values.
     
     Args:
         value: User input
@@ -137,13 +132,12 @@ def validate_choice(
     if value not in choices:
         msg = error_message or f"Invalid choice. Must be one of: {', '.join(choices)}"
         raise ValueError(msg)
-    
+
     return value
 
 
 def format_size(bytes: int) -> str:
-    """
-    Format bytes as human-readable size.
+    """Format bytes as human-readable size.
     
     Args:
         bytes: Size in bytes
@@ -155,13 +149,12 @@ def format_size(bytes: int) -> str:
         if bytes < 1024.0:
             return f"{bytes:.2f} {unit}"
         bytes /= 1024.0
-    
+
     return f"{bytes:.2f} PB"
 
 
 def format_duration(seconds: int) -> str:
-    """
-    Format seconds as human-readable duration.
+    """Format seconds as human-readable duration.
     
     Args:
         seconds: Duration in seconds

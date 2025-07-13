@@ -1,15 +1,11 @@
-"""
-System diagnostics utilities for VPN Manager.
+"""System diagnostics utilities for VPN Manager.
 """
 
-import asyncio
 import os
 import platform
 import shutil
 import subprocess
 import sys
-from pathlib import Path
-from typing import Dict, List, Tuple
 
 import psutil
 from docker import DockerClient
@@ -23,7 +19,7 @@ logger = get_logger(__name__)
 
 class DiagnosticCheck:
     """Represents a single diagnostic check."""
-    
+
     def __init__(self, name: str, status: str, details: str, severity: str = "info"):
         self.name = name
         self.status = status  # ✓, ⚠, ✗
@@ -33,36 +29,36 @@ class DiagnosticCheck:
 
 class SystemDiagnostics:
     """System diagnostics checker."""
-    
+
     def __init__(self):
-        self.checks: List[DiagnosticCheck] = []
-    
-    async def run_all_checks(self) -> List[DiagnosticCheck]:
+        self.checks: list[DiagnosticCheck] = []
+
+    async def run_all_checks(self) -> list[DiagnosticCheck]:
         """Run all diagnostic checks."""
         self.checks = []
-        
+
         # Basic system checks
         await self._check_python_version()
         await self._check_platform()
         await self._check_memory()
         await self._check_disk_space()
-        
+
         # VPN Manager specific checks
         await self._check_directories()
         await self._check_database()
         await self._check_permissions()
-        
+
         # External dependencies
         await self._check_docker()
         await self._check_network_tools()
         await self._check_firewall()
-        
+
         # Configuration checks
         await self._check_configuration()
         await self._check_ports()
-        
+
         return self.checks
-    
+
     async def _check_python_version(self):
         """Check Python version compatibility."""
         version = sys.version_info
@@ -87,12 +83,12 @@ class SystemDiagnostics:
                 f"Python {version.major}.{version.minor} (3.10+ required)",
                 "error"
             ))
-    
+
     async def _check_platform(self):
         """Check platform compatibility."""
         system = platform.system()
         supported = system in ["Linux", "Darwin", "Windows"]
-        
+
         if supported:
             self.checks.append(DiagnosticCheck(
                 "Platform",
@@ -107,13 +103,13 @@ class SystemDiagnostics:
                 f"{system} (limited support)",
                 "warning"
             ))
-    
+
     async def _check_memory(self):
         """Check available memory."""
         memory = psutil.virtual_memory()
         total_gb = memory.total / (1024**3)
         available_gb = memory.available / (1024**3)
-        
+
         if available_gb >= 1.0:
             self.checks.append(DiagnosticCheck(
                 "Memory",
@@ -135,13 +131,13 @@ class SystemDiagnostics:
                 f"{available_gb:.1f}GB available (insufficient)",
                 "error"
             ))
-    
+
     async def _check_disk_space(self):
         """Check available disk space."""
         try:
             usage = psutil.disk_usage(str(settings.data_path.parent))
             free_gb = usage.free / (1024**3)
-            
+
             if free_gb >= 5.0:
                 self.checks.append(DiagnosticCheck(
                     "Disk Space",
@@ -170,7 +166,7 @@ class SystemDiagnostics:
                 f"Unable to check: {e}",
                 "error"
             ))
-    
+
     async def _check_directories(self):
         """Check VPN Manager directories."""
         directories = [
@@ -178,7 +174,7 @@ class SystemDiagnostics:
             ("Data", settings.data_path),
             ("Installation", settings.install_path),
         ]
-        
+
         for name, path in directories:
             if path.exists() and os.access(path, os.R_OK | os.W_OK):
                 self.checks.append(DiagnosticCheck(
@@ -201,18 +197,19 @@ class SystemDiagnostics:
                     f"{path} (missing)",
                     "error"
                 ))
-    
+
     async def _check_database(self):
         """Check database connectivity."""
         try:
-            from vpn.core.database import get_session
             from sqlalchemy import text
-            
+
+            from vpn.core.database import get_session
+
             async for session in get_session():
                 # Simple query to test connection
                 await session.execute(text("SELECT 1"))
                 break  # Exit after successful test
-            
+
             self.checks.append(DiagnosticCheck(
                 "Database",
                 "✓",
@@ -226,12 +223,12 @@ class SystemDiagnostics:
                 f"Connection failed: {e}",
                 "error"
             ))
-    
+
     async def _check_permissions(self):
         """Check user permissions."""
         is_root = os.geteuid() == 0 if hasattr(os, 'geteuid') else False
         can_bind_privileged = self._can_bind_privileged_ports()
-        
+
         if is_root:
             self.checks.append(DiagnosticCheck(
                 "Permissions",
@@ -253,14 +250,14 @@ class SystemDiagnostics:
                 "Limited permissions (use sudo for server operations)",
                 "warning"
             ))
-    
+
     async def _check_docker(self):
         """Check Docker availability."""
         try:
             client = DockerClient.from_env()
             version = client.version()
             client.ping()
-            
+
             self.checks.append(DiagnosticCheck(
                 "Docker",
                 "✓",
@@ -281,7 +278,7 @@ class SystemDiagnostics:
                 f"Docker check failed: {e}",
                 "error"
             ))
-    
+
     async def _check_network_tools(self):
         """Check network tools availability."""
         tools = {
@@ -289,16 +286,16 @@ class SystemDiagnostics:
             "ip": "Network configuration",
             "ss": "Socket statistics",
         }
-        
+
         available_tools = []
         missing_tools = []
-        
+
         for tool, description in tools.items():
             if shutil.which(tool):
                 available_tools.append(f"{tool} ({description})")
             else:
                 missing_tools.append(tool)
-        
+
         if not missing_tools:
             self.checks.append(DiagnosticCheck(
                 "Network Tools",
@@ -320,7 +317,7 @@ class SystemDiagnostics:
                 f"Most tools missing: {', '.join(missing_tools)}",
                 "error"
             ))
-    
+
     async def _check_firewall(self):
         """Check firewall status."""
         try:
@@ -328,7 +325,7 @@ class SystemDiagnostics:
                 # Check iptables
                 result = subprocess.run(
                     ["iptables", "-L", "-n"],
-                    capture_output=True,
+                    check=False, capture_output=True,
                     text=True,
                     timeout=5
                 )
@@ -367,13 +364,13 @@ class SystemDiagnostics:
                 f"Firewall check failed: {e}",
                 "error"
             ))
-    
+
     async def _check_configuration(self):
         """Check configuration validity."""
         try:
             # Check if settings are valid
             config_valid = settings.config_path.exists() or True  # Default config is valid
-            
+
             if config_valid:
                 self.checks.append(DiagnosticCheck(
                     "Configuration",
@@ -395,18 +392,18 @@ class SystemDiagnostics:
                 f"Configuration check failed: {e}",
                 "error"
             ))
-    
+
     async def _check_ports(self):
         """Check for port conflicts."""
         try:
             # Check common VPN ports
             common_ports = [443, 8443, 1080, 8080]
             in_use_ports = []
-            
+
             for conn in psutil.net_connections():
                 if conn.laddr and conn.laddr.port in common_ports:
                     in_use_ports.append(conn.laddr.port)
-            
+
             if not in_use_ports:
                 self.checks.append(DiagnosticCheck(
                     "Port Availability",
@@ -428,11 +425,11 @@ class SystemDiagnostics:
                 f"Unable to check ports: {e}",
                 "warning"
             ))
-    
+
     def _can_bind_privileged_ports(self) -> bool:
         """Check if we can bind to privileged ports (<1024)."""
         import socket
-        
+
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.bind(('127.0.0.1', 443))
@@ -445,11 +442,11 @@ class SystemDiagnostics:
             return True
         except Exception:
             return False
-    
-    def get_summary(self) -> Dict[str, int]:
+
+    def get_summary(self) -> dict[str, int]:
         """Get summary of check results."""
         summary = {"total": len(self.checks), "passed": 0, "warnings": 0, "errors": 0}
-        
+
         for check in self.checks:
             if check.status == "✓":
                 summary["passed"] += 1
@@ -457,11 +454,11 @@ class SystemDiagnostics:
                 summary["warnings"] += 1
             elif check.status == "✗":
                 summary["errors"] += 1
-        
+
         return summary
 
 
-async def run_diagnostics() -> Tuple[List[DiagnosticCheck], Dict[str, int]]:
+async def run_diagnostics() -> tuple[list[DiagnosticCheck], dict[str, int]]:
     """Run complete system diagnostics."""
     diagnostics = SystemDiagnostics()
     checks = await diagnostics.run_all_checks()

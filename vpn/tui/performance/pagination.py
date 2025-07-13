@@ -1,31 +1,23 @@
-"""
-Data Pagination System for VPN Manager TUI.
+"""Data Pagination System for VPN Manager TUI.
 
 This module provides efficient pagination widgets and data management
 for handling large datasets with smooth navigation and performance optimization.
 """
 
-import asyncio
 import math
-from typing import Any, Dict, List, Optional, Callable, Union, Generic, TypeVar, Protocol
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from abc import ABC, abstractmethod
 from enum import Enum
-
-from textual.app import ComposeResult
-from textual.widget import Widget
-from textual.widgets import Button, Static, Input, Select, LoadingIndicator
-from textual.containers import Container, Horizontal, Vertical
-from textual.reactive import reactive, var
-from textual.message import Message
-from textual.binding import Binding
-from textual.events import Click
+from typing import Any, Generic, Protocol, TypeVar
 
 from rich.console import Console, RenderableType
-from rich.text import Text
 from rich.table import Table
-from rich.panel import Panel
-from rich.align import Align
+from rich.text import Text
+from textual.app import ComposeResult
+from textual.containers import Container, Horizontal
+from textual.message import Message
+from textual.widget import Widget
+from textual.widgets import Button, Input, LoadingIndicator, Select, Static
 
 console = Console()
 
@@ -64,7 +56,7 @@ class PageInfo:
     has_previous: bool = False
     start_index: int = 0
     end_index: int = 0
-    
+
     def update(self, current_page: int, page_size: int, total_items: int) -> None:
         """Update pagination info."""
         self.current_page = max(1, current_page)
@@ -82,81 +74,81 @@ class PageRequest:
     """Page request with filtering and sorting."""
     page: int = 1
     page_size: int = 20
-    sort_configs: List[SortConfig] = field(default_factory=list)
-    filter_configs: List[FilterConfig] = field(default_factory=list)
+    sort_configs: list[SortConfig] = field(default_factory=list)
+    filter_configs: list[FilterConfig] = field(default_factory=list)
     search_query: str = ""
 
 
 @dataclass
 class PageResult(Generic[T]):
     """Page result with data and metadata."""
-    items: List[T]
+    items: list[T]
     page_info: PageInfo
     load_time: float = 0.0
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class PaginatedDataSource(Protocol[T]):
     """Protocol for paginated data sources."""
-    
+
     async def get_page(self, request: PageRequest) -> PageResult[T]:
         """Get page of data based on request."""
         ...
-    
-    async def get_total_count(self, filters: List[FilterConfig] = None, search: str = "") -> int:
+
+    async def get_total_count(self, filters: list[FilterConfig] = None, search: str = "") -> int:
         """Get total item count with optional filtering."""
         ...
-    
-    def get_sort_fields(self) -> List[str]:
+
+    def get_sort_fields(self) -> list[str]:
         """Get available sort fields."""
         ...
-    
-    def get_filter_fields(self) -> List[Dict[str, Any]]:
+
+    def get_filter_fields(self) -> list[dict[str, Any]]:
         """Get available filter fields with metadata."""
         ...
 
 
 class InMemoryDataSource(Generic[T]):
     """In-memory paginated data source."""
-    
-    def __init__(self, 
-                 items: List[T],
-                 sort_fields: Optional[List[str]] = None,
-                 filter_fields: Optional[List[Dict[str, Any]]] = None):
+
+    def __init__(self,
+                 items: list[T],
+                 sort_fields: list[str] | None = None,
+                 filter_fields: list[dict[str, Any]] | None = None):
         self.items = items
         self.sort_fields = sort_fields or []
         self.filter_fields = filter_fields or []
-    
+
     async def get_page(self, request: PageRequest) -> PageResult[T]:
         """Get page of data."""
         import time
         start_time = time.perf_counter()
-        
+
         try:
             # Apply filters
             filtered_items = self._apply_filters(self.items, request.filter_configs, request.search_query)
-            
+
             # Apply sorting
             sorted_items = self._apply_sorting(filtered_items, request.sort_configs)
-            
+
             # Calculate pagination
             total_items = len(sorted_items)
             page_info = PageInfo()
             page_info.update(request.page, request.page_size, total_items)
-            
+
             # Extract page items
             start_idx = page_info.start_index
             end_idx = page_info.end_index
             page_items = sorted_items[start_idx:end_idx]
-            
+
             load_time = time.perf_counter() - start_time
-            
+
             return PageResult(
                 items=page_items,
                 page_info=page_info,
                 load_time=load_time
             )
-            
+
         except Exception as e:
             load_time = time.perf_counter() - start_time
             return PageResult(
@@ -165,25 +157,25 @@ class InMemoryDataSource(Generic[T]):
                 load_time=load_time,
                 error=str(e)
             )
-    
-    async def get_total_count(self, filters: List[FilterConfig] = None, search: str = "") -> int:
+
+    async def get_total_count(self, filters: list[FilterConfig] = None, search: str = "") -> int:
         """Get total count with filtering."""
         filters = filters or []
         filtered_items = self._apply_filters(self.items, filters, search)
         return len(filtered_items)
-    
-    def get_sort_fields(self) -> List[str]:
+
+    def get_sort_fields(self) -> list[str]:
         """Get available sort fields."""
         return self.sort_fields
-    
-    def get_filter_fields(self) -> List[Dict[str, Any]]:
+
+    def get_filter_fields(self) -> list[dict[str, Any]]:
         """Get available filter fields."""
         return self.filter_fields
-    
-    def _apply_filters(self, items: List[T], filters: List[FilterConfig], search: str) -> List[T]:
+
+    def _apply_filters(self, items: list[T], filters: list[FilterConfig], search: str) -> list[T]:
         """Apply filters to items."""
         filtered = items
-        
+
         # Apply search
         if search:
             search_lower = search.lower()
@@ -191,19 +183,19 @@ class InMemoryDataSource(Generic[T]):
                 item for item in filtered
                 if search_lower in str(item).lower()
             ]
-        
+
         # Apply field filters
         for filter_config in filters:
             filtered = self._apply_single_filter(filtered, filter_config)
-        
+
         return filtered
-    
-    def _apply_single_filter(self, items: List[T], filter_config: FilterConfig) -> List[T]:
+
+    def _apply_single_filter(self, items: list[T], filter_config: FilterConfig) -> list[T]:
         """Apply single filter to items."""
         field = filter_config.field
         value = filter_config.value
         operator = filter_config.operator
-        
+
         def matches(item: T) -> bool:
             try:
                 if hasattr(item, field):
@@ -212,7 +204,7 @@ class InMemoryDataSource(Generic[T]):
                     item_value = item.get(field)
                 else:
                     return False
-                
+
                 if operator == "eq":
                     return item_value == value
                 elif operator == "ne":
@@ -233,22 +225,22 @@ class InMemoryDataSource(Generic[T]):
                     return str(item_value).lower().endswith(str(value).lower())
                 else:
                     return True
-                    
+
             except Exception:
                 return False
-        
+
         return [item for item in items if matches(item)]
-    
-    def _apply_sorting(self, items: List[T], sort_configs: List[SortConfig]) -> List[T]:
+
+    def _apply_sorting(self, items: list[T], sort_configs: list[SortConfig]) -> list[T]:
         """Apply sorting to items."""
         if not sort_configs:
             return items
-        
+
         def sort_key(item: T):
             keys = []
             for sort_config in sort_configs:
                 field = sort_config.field
-                
+
                 try:
                     if hasattr(item, field):
                         value = getattr(item, field)
@@ -256,7 +248,7 @@ class InMemoryDataSource(Generic[T]):
                         value = item.get(field)
                     else:
                         value = ""
-                    
+
                     # Handle reverse sorting
                     if sort_config.order == SortOrder.DESC:
                         if isinstance(value, (int, float)):
@@ -264,17 +256,17 @@ class InMemoryDataSource(Generic[T]):
                         elif isinstance(value, str):
                             # For strings, we'll sort in reverse later
                             pass
-                    
+
                     keys.append(value)
-                    
+
                 except Exception:
                     keys.append("")
-            
+
             return keys
-        
+
         # Sort items
         sorted_items = sorted(items, key=sort_key)
-        
+
         # Handle string reverse sorting
         if sort_configs and sort_configs[0].order == SortOrder.DESC:
             first_field = sort_configs[0].field
@@ -286,18 +278,18 @@ class InMemoryDataSource(Generic[T]):
                     first_value = items[0].get(first_field)
                 else:
                     first_value = ""
-                
+
                 if isinstance(first_value, str):
                     sorted_items.reverse()
             except Exception:
                 pass
-        
+
         return sorted_items
 
 
 class PaginationControls(Widget):
     """Pagination control widget."""
-    
+
     DEFAULT_CSS = """
     PaginationControls {
         height: 3;
@@ -325,32 +317,32 @@ class PaginationControls(Widget):
         margin: 0 1;
     }
     """
-    
+
     class PageChanged(Message):
         """Message sent when page changes."""
-        
+
         def __init__(self, page: int) -> None:
             super().__init__()
             self.page = page
-    
+
     class PageSizeChanged(Message):
         """Message sent when page size changes."""
-        
+
         def __init__(self, page_size: int) -> None:
             super().__init__()
             self.page_size = page_size
-    
-    def __init__(self, page_info: Optional[PageInfo] = None, **kwargs):
+
+    def __init__(self, page_info: PageInfo | None = None, **kwargs):
         super().__init__(**kwargs)
         self.page_info = page_info or PageInfo()
-        
+
         # Controls
         self.first_button = Button("⏮ First", id="first", variant="default")
         self.prev_button = Button("◀ Prev", id="prev", variant="default")
         self.page_input = Input(value=str(self.page_info.current_page), id="page_input")
         self.next_button = Button("Next ▶", id="next", variant="default")
         self.last_button = Button("Last ⏭", id="last", variant="default")
-        
+
         # Page size selector
         self.page_size_select = Select([
             ("10", 10),
@@ -359,10 +351,10 @@ class PaginationControls(Widget):
             ("100", 100),
             ("200", 200)
         ], value=self.page_info.page_size, id="page_size")
-        
+
         # Info display
         self.info_display = Static("", id="page_info")
-    
+
     def compose(self) -> ComposeResult:
         """Compose pagination controls."""
         with Horizontal():
@@ -376,41 +368,41 @@ class PaginationControls(Widget):
             yield Static("Show:")
             yield self.page_size_select
             yield self.info_display
-    
+
     def update_page_info(self, page_info: PageInfo) -> None:
         """Update pagination information."""
         self.page_info = page_info
-        
+
         # Update controls
         self.first_button.disabled = not page_info.has_previous
         self.prev_button.disabled = not page_info.has_previous
         self.next_button.disabled = not page_info.has_next
         self.last_button.disabled = not page_info.has_next
-        
+
         # Update page input
         self.page_input.value = str(page_info.current_page)
-        
+
         # Update page size
         self.page_size_select.value = page_info.page_size
-        
+
         # Update info display
         if page_info.total_items > 0:
             info_text = f"Showing {page_info.start_index + 1}-{page_info.end_index} of {page_info.total_items}"
         else:
             info_text = "No items"
-        
+
         self.info_display.update(info_text)
-        
+
         # Update page count in label
         for child in self.children:
             if isinstance(child, Static) and "of" in str(child.renderable):
                 child.update(f"of {page_info.total_pages}")
                 break
-    
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""
         button_id = event.button.id
-        
+
         if button_id == "first":
             self.post_message(self.PageChanged(1))
         elif button_id == "prev":
@@ -421,7 +413,7 @@ class PaginationControls(Widget):
             self.post_message(self.PageChanged(new_page))
         elif button_id == "last":
             self.post_message(self.PageChanged(self.page_info.total_pages))
-    
+
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle page input submission."""
         if event.input.id == "page_input":
@@ -435,7 +427,7 @@ class PaginationControls(Widget):
             except ValueError:
                 # Reset to current page
                 event.input.value = str(self.page_info.current_page)
-    
+
     def on_select_changed(self, event: Select.Changed) -> None:
         """Handle page size selection."""
         if event.select.id == "page_size":
@@ -444,7 +436,7 @@ class PaginationControls(Widget):
 
 class SearchAndFilter(Widget):
     """Search and filter controls widget."""
-    
+
     DEFAULT_CSS = """
     SearchAndFilter {
         height: 4;
@@ -471,37 +463,37 @@ class SearchAndFilter(Widget):
         margin: 0 1;
     }
     """
-    
+
     class SearchChanged(Message):
         """Message sent when search query changes."""
-        
+
         def __init__(self, query: str) -> None:
             super().__init__()
             self.query = query
-    
+
     class SortChanged(Message):
         """Message sent when sort changes."""
-        
+
         def __init__(self, field: str, order: SortOrder) -> None:
             super().__init__()
             self.field = field
             self.order = order
-    
+
     class FilterChanged(Message):
         """Message sent when filter changes."""
-        
-        def __init__(self, filters: List[FilterConfig]) -> None:
+
+        def __init__(self, filters: list[FilterConfig]) -> None:
             super().__init__()
             self.filters = filters
-    
-    def __init__(self, 
-                 sort_fields: Optional[List[str]] = None,
-                 filter_fields: Optional[List[Dict[str, Any]]] = None,
+
+    def __init__(self,
+                 sort_fields: list[str] | None = None,
+                 filter_fields: list[dict[str, Any]] | None = None,
                  **kwargs):
         super().__init__(**kwargs)
         self.sort_fields = sort_fields or []
         self.filter_fields = filter_fields or []
-        
+
         # Controls
         self.search_input = Input(placeholder="Search...", id="search")
         self.sort_select = Select([
@@ -512,7 +504,7 @@ class SearchAndFilter(Widget):
             ("Descending", SortOrder.DESC)
         ], value=SortOrder.ASC, id="sort_order")
         self.clear_button = Button("Clear", id="clear", variant="default")
-    
+
     def compose(self) -> ComposeResult:
         """Compose search and filter controls."""
         with Horizontal():
@@ -522,21 +514,21 @@ class SearchAndFilter(Widget):
             yield self.sort_select
             yield self.sort_order_select
             yield self.clear_button
-    
+
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle search input changes."""
         if event.input.id == "search":
             self.post_message(self.SearchChanged(event.value))
-    
+
     def on_select_changed(self, event: Select.Changed) -> None:
         """Handle sort selection changes."""
         if event.select.id in ("sort_field", "sort_order"):
             field = self.sort_select.value
             order = self.sort_order_select.value
-            
+
             if field:
                 self.post_message(self.SortChanged(field, order))
-    
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""
         if event.button.id == "clear":
@@ -547,7 +539,7 @@ class SearchAndFilter(Widget):
 
 class PaginatedTable(Widget):
     """Paginated table widget combining data display with controls."""
-    
+
     DEFAULT_CSS = """
     PaginatedTable {
         height: 100%;
@@ -577,48 +569,48 @@ class PaginatedTable(Widget):
         color: $error;
     }
     """
-    
+
     class ItemSelected(Message):
         """Message sent when item is selected."""
-        
+
         def __init__(self, item: Any, index: int) -> None:
             super().__init__()
             self.item = item
             self.index = index
-    
+
     def __init__(self,
                  data_source: PaginatedDataSource[T],
-                 columns: List[Dict[str, Any]],
+                 columns: list[dict[str, Any]],
                  page_size: int = 20,
-                 item_renderer: Optional[Callable[[T, int], RenderableType]] = None,
+                 item_renderer: Callable[[T, int], RenderableType] | None = None,
                  **kwargs):
         super().__init__(**kwargs)
-        
+
         self.data_source = data_source
         self.columns = columns
         self.item_renderer = item_renderer or self._default_item_renderer
-        
+
         # State
         self.current_request = PageRequest(page_size=page_size)
-        self.current_result: Optional[PageResult[T]] = None
+        self.current_result: PageResult[T] | None = None
         self.is_loading = False
-        
+
         # Components
         self.search_filter = SearchAndFilter(
             sort_fields=data_source.get_sort_fields(),
             filter_fields=data_source.get_filter_fields()
         )
         self.pagination_controls = PaginationControls()
-        
+
         # Data display
         self.data_container = Container(classes="table-container")
         self.data_display = Static("", classes="table-data")
         self.loading_display = LoadingIndicator()
         self.error_display = Static("", classes="error")
-        
+
         # Selected item tracking
-        self.selected_index: Optional[int] = None
-    
+        self.selected_index: int | None = None
+
     def compose(self) -> ComposeResult:
         """Compose paginated table."""
         yield self.search_filter
@@ -627,67 +619,67 @@ class PaginatedTable(Widget):
             yield self.loading_display
             yield self.error_display
         yield self.pagination_controls
-    
+
     def on_mount(self) -> None:
         """Initialize table when mounted."""
         self.refresh_data()
-    
+
     async def refresh_data(self) -> None:
         """Refresh table data."""
         if self.is_loading:
             return
-        
+
         self.is_loading = True
         self._show_loading()
-        
+
         try:
             # Get data from source
             result = await self.data_source.get_page(self.current_request)
             self.current_result = result
-            
+
             if result.error:
                 self._show_error(result.error)
             else:
                 self._show_data(result)
                 self.pagination_controls.update_page_info(result.page_info)
-            
+
         except Exception as e:
             self._show_error(str(e))
-        
+
         finally:
             self.is_loading = False
-    
+
     def _show_loading(self) -> None:
         """Show loading state."""
         self.data_display.visible = False
         self.error_display.visible = False
         self.loading_display.visible = True
-    
+
     def _show_error(self, error: str) -> None:
         """Show error state."""
         self.data_display.visible = False
         self.loading_display.visible = False
         self.error_display.update(f"Error: {error}")
         self.error_display.visible = True
-    
+
     def _show_data(self, result: PageResult[T]) -> None:
         """Show data."""
         self.loading_display.visible = False
         self.error_display.visible = False
-        
+
         # Render data
         rendered = self._render_data(result.items)
         self.data_display.update(rendered)
         self.data_display.visible = True
-    
-    def _render_data(self, items: List[T]) -> RenderableType:
+
+    def _render_data(self, items: list[T]) -> RenderableType:
         """Render data items."""
         if not items:
             return Text("No data available", style="dim")
-        
+
         # Create table
         table = Table()
-        
+
         # Add columns
         for column in self.columns:
             table.add_column(
@@ -695,7 +687,7 @@ class PaginatedTable(Widget):
                 width=column.get('width'),
                 overflow=column.get('overflow', 'ellipsis')
             )
-        
+
         # Add rows
         for i, item in enumerate(items):
             if isinstance(item, dict):
@@ -708,63 +700,63 @@ class PaginatedTable(Widget):
                 else:
                     # Fallback to string representation
                     row_data = [str(item)] + [''] * (len(self.columns) - 1)
-            
+
             # Apply formatting
             for j, column in enumerate(self.columns):
                 if j < len(row_data):
                     formatter = column.get('formatter')
                     if formatter:
                         row_data[j] = formatter(row_data[j])
-            
+
             table.add_row(*row_data)
-        
+
         return table
-    
+
     def _default_item_renderer(self, item: T, index: int) -> RenderableType:
         """Default item renderer."""
         if isinstance(item, dict):
             return [str(item.get(col['key'], '')) for col in self.columns]
         else:
             return str(item)
-    
+
     # Event handlers
-    
+
     def on_pagination_controls_page_changed(self, event: PaginationControls.PageChanged) -> None:
         """Handle page change."""
         self.current_request.page = event.page
         self.refresh_data()
-    
+
     def on_pagination_controls_page_size_changed(self, event: PaginationControls.PageSizeChanged) -> None:
         """Handle page size change."""
         self.current_request.page_size = event.page_size
         self.current_request.page = 1  # Reset to first page
         self.refresh_data()
-    
+
     def on_search_and_filter_search_changed(self, event: SearchAndFilter.SearchChanged) -> None:
         """Handle search change."""
         self.current_request.search_query = event.query
         self.current_request.page = 1  # Reset to first page
         self.refresh_data()
-    
+
     def on_search_and_filter_sort_changed(self, event: SearchAndFilter.SortChanged) -> None:
         """Handle sort change."""
         self.current_request.sort_configs = [SortConfig(event.field, event.order)]
         self.refresh_data()
-    
-    def get_current_items(self) -> List[T]:
+
+    def get_current_items(self) -> list[T]:
         """Get current page items."""
         if self.current_result:
             return self.current_result.items
         return []
-    
-    def get_performance_stats(self) -> Dict[str, Any]:
+
+    def get_performance_stats(self) -> dict[str, Any]:
         """Get performance statistics."""
         stats = {
             'current_page': self.current_request.page,
             'page_size': self.current_request.page_size,
             'is_loading': self.is_loading,
         }
-        
+
         if self.current_result:
             stats.update({
                 'load_time': self.current_result.load_time,
@@ -772,7 +764,7 @@ class PaginatedTable(Widget):
                 'total_pages': self.current_result.page_info.total_pages,
                 'items_on_page': len(self.current_result.items)
             })
-        
+
         return stats
 
 
@@ -780,13 +772,13 @@ class PaginatedTable(Widget):
 
 class DemoUser:
     """Demo user class for testing."""
-    
+
     def __init__(self, name: str, email: str, active: bool, created_at: str):
         self.name = name
         self.email = email
         self.active = active
         self.created_at = created_at
-    
+
     def __str__(self) -> str:
         return f"{self.name} ({self.email})"
 
@@ -795,7 +787,7 @@ def create_demo_data_source() -> InMemoryDataSource[DemoUser]:
     """Create demo data source for testing."""
     import random
     from datetime import datetime, timedelta
-    
+
     users = []
     for i in range(500):
         user = DemoUser(
@@ -805,7 +797,7 @@ def create_demo_data_source() -> InMemoryDataSource[DemoUser]:
             created_at=(datetime.now() - timedelta(days=random.randint(0, 365))).strftime("%Y-%m-%d")
         )
         users.append(user)
-    
+
     return InMemoryDataSource(
         items=users,
         sort_fields=["name", "email", "active", "created_at"],
@@ -820,25 +812,25 @@ def create_demo_data_source() -> InMemoryDataSource[DemoUser]:
 def demo_paginated_table():
     """Demo paginated table usage."""
     from textual.app import App
-    
+
     class PaginationDemo(App):
         def compose(self) -> ComposeResult:
             data_source = create_demo_data_source()
-            
+
             columns = [
                 {"key": "name", "title": "Name", "width": 15},
                 {"key": "email", "title": "Email", "width": 25},
                 {"key": "active", "title": "Active", "width": 8, "formatter": lambda x: "✓" if x else "✗"},
                 {"key": "created_at", "title": "Created", "width": 12}
             ]
-            
+
             table = PaginatedTable(
                 data_source=data_source,
                 columns=columns,
                 page_size=10
             )
             yield table
-    
+
     return PaginationDemo()
 
 

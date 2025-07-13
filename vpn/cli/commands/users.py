@@ -1,18 +1,14 @@
-"""
-User management CLI commands.
+"""User management CLI commands.
 """
 
 from pathlib import Path
-from typing import List, Optional
 
 import typer
 from rich.console import Console
-from rich.progress import track
-from rich.prompt import Confirm, Prompt
+from rich.prompt import Confirm
 
 from vpn.cli.formatters.base import get_formatter
-from vpn.core.config import runtime_config
-from vpn.core.exceptions import UserAlreadyExistsError, UserNotFoundError, VPNError
+from vpn.core.exceptions import UserAlreadyExistsError, VPNError
 from vpn.core.models import ProtocolType, UserStatus
 from vpn.services.user_manager import UserManager
 from vpn.utils.logger import get_logger
@@ -31,19 +27,19 @@ def run_async(coro):
 
 @app.command("list")
 def list_users(
-    status: Optional[str] = typer.Option(
+    status: str | None = typer.Option(
         None,
         "--status",
         "-s",
         help="Filter by status: active, inactive, suspended",
     ),
-    limit: Optional[int] = typer.Option(
+    limit: int | None = typer.Option(
         None,
         "--limit",
         "-l",
         help="Limit number of results",
     ),
-    format: Optional[str] = typer.Option(
+    format: str | None = typer.Option(
         None,
         "--format",
         "-f",
@@ -53,16 +49,16 @@ def list_users(
     """List all VPN users."""
     try:
         formatter = get_formatter(format)
-        
+
         async def _list():
             manager = UserManager()
             status_filter = UserStatus(status) if status else None
             users = await manager.list(status=status_filter, limit=limit)
-            
+
             if not users:
                 console.print(formatter.format_warning("No users found"))
                 return
-            
+
             # Prepare data for display
             user_data = []
             for user in users:
@@ -78,7 +74,7 @@ def list_users(
                     },
                     "created": user.created_at.strftime("%Y-%m-%d %H:%M"),
                 })
-            
+
             # Format output
             output = formatter.format_list(
                 user_data,
@@ -86,9 +82,9 @@ def list_users(
                 title="VPN Users"
             )
             console.print(output)
-        
+
         run_async(_list())
-        
+
     except Exception as e:
         console.print(formatter.format_error(str(e)))
         raise typer.Exit(1)
@@ -103,7 +99,7 @@ def create_user(
         "-p",
         help="VPN protocol: vless, shadowsocks, wireguard, http, socks5",
     ),
-    email: Optional[str] = typer.Option(
+    email: str | None = typer.Option(
         None,
         "--email",
         "-e",
@@ -115,7 +111,7 @@ def create_user(
         "-f",
         help="Skip confirmation prompts",
     ),
-    format: Optional[str] = typer.Option(
+    format: str | None = typer.Option(
         None,
         "--format",
         help="Output format: table, json, yaml, plain",
@@ -124,7 +120,7 @@ def create_user(
     """Create a new VPN user."""
     try:
         formatter = get_formatter(format)
-        
+
         # Validate protocol
         try:
             protocol_type = ProtocolType(protocol)
@@ -135,7 +131,7 @@ def create_user(
                 {"valid_protocols": valid_protocols}
             ))
             raise typer.Exit(1)
-        
+
         # Confirm creation
         if not force:
             if not Confirm.ask(
@@ -144,10 +140,10 @@ def create_user(
             ):
                 console.print("Operation cancelled")
                 raise typer.Exit(0)
-        
+
         async def _create():
             manager = UserManager()
-            
+
             with console.status(f"Creating user '{username}'..."):
                 try:
                     user = await manager.create(
@@ -155,7 +151,7 @@ def create_user(
                         protocol=protocol_type,
                         email=email
                     )
-                    
+
                     # Display created user
                     user_data = {
                         "id": str(user.id),
@@ -166,20 +162,20 @@ def create_user(
                         "uuid": user.keys.uuid,
                         "created_at": user.created_at.isoformat(),
                     }
-                    
+
                     output = formatter.format_single(
                         user_data,
                         title=f"User Created: {username}"
                     )
                     console.print(output)
                     console.print(formatter.format_success(f"User '{username}' created successfully"))
-                    
+
                 except UserAlreadyExistsError:
                     console.print(formatter.format_error(f"User '{username}' already exists"))
                     raise typer.Exit(1)
-        
+
         run_async(_create())
-        
+
     except VPNError as e:
         console.print(formatter.format_error(str(e)))
         raise typer.Exit(1)
@@ -198,7 +194,7 @@ def delete_user(
     """Delete a VPN user."""
     try:
         formatter = get_formatter()
-        
+
         # Confirm deletion
         if not force:
             if not Confirm.ask(
@@ -207,28 +203,28 @@ def delete_user(
             ):
                 console.print("Operation cancelled")
                 raise typer.Exit(0)
-        
+
         async def _delete():
             manager = UserManager()
-            
+
             # Get user first
             user = await manager.get_by_username(username)
             if not user:
                 console.print(formatter.format_error(f"User '{username}' not found"))
                 raise typer.Exit(1)
-            
+
             # Delete user
             with console.status(f"Deleting user '{username}'..."):
                 deleted = await manager.delete(str(user.id))
-                
+
                 if deleted:
                     console.print(formatter.format_success(f"User '{username}' deleted successfully"))
                 else:
                     console.print(formatter.format_error(f"Failed to delete user '{username}'"))
                     raise typer.Exit(1)
-        
+
         run_async(_delete())
-        
+
     except Exception as e:
         console.print(formatter.format_error(str(e)))
         raise typer.Exit(1)
@@ -243,7 +239,7 @@ def show_user(
         "-k",
         help="Show sensitive key information",
     ),
-    format: Optional[str] = typer.Option(
+    format: str | None = typer.Option(
         None,
         "--format",
         "-f",
@@ -253,15 +249,15 @@ def show_user(
     """Show detailed information for a user."""
     try:
         formatter = get_formatter(format)
-        
+
         async def _show():
             manager = UserManager()
-            
+
             user = await manager.get_by_username(username)
             if not user:
                 console.print(formatter.format_error(f"User '{username}' not found"))
                 raise typer.Exit(1)
-            
+
             # Prepare user data
             user_data = {
                 "id": str(user.id),
@@ -277,7 +273,7 @@ def show_user(
                 "traffic_download_mb": f"{user.traffic.download_mb:.2f}",
                 "traffic_total_mb": f"{user.traffic.total_mb:.2f}",
             }
-            
+
             # Add keys if requested
             if show_keys:
                 user_data.update({
@@ -285,15 +281,15 @@ def show_user(
                     "public_key": user.keys.public_key or "Not set",
                     "short_id": user.keys.short_id or "Not set",
                 })
-            
+
             output = formatter.format_single(
                 user_data,
                 title=f"User Details: {username}"
             )
             console.print(output)
-        
+
         run_async(_show())
-        
+
     except Exception as e:
         console.print(formatter.format_error(str(e)))
         raise typer.Exit(1)
@@ -302,19 +298,19 @@ def show_user(
 @app.command("update")
 def update_user(
     username: str = typer.Argument(..., help="Username to update"),
-    status: Optional[str] = typer.Option(
+    status: str | None = typer.Option(
         None,
         "--status",
         "-s",
         help="New status: active, inactive, suspended",
     ),
-    email: Optional[str] = typer.Option(
+    email: str | None = typer.Option(
         None,
         "--email",
         "-e",
         help="New email address",
     ),
-    notes: Optional[str] = typer.Option(
+    notes: str | None = typer.Option(
         None,
         "--notes",
         "-n",
@@ -324,21 +320,21 @@ def update_user(
     """Update user information."""
     try:
         formatter = get_formatter()
-        
+
         # Check if any updates provided
         if not any([status, email, notes]):
             console.print(formatter.format_error("No updates specified"))
             raise typer.Exit(1)
-        
+
         async def _update():
             manager = UserManager()
-            
+
             # Get user
             user = await manager.get_by_username(username)
             if not user:
                 console.print(formatter.format_error(f"User '{username}' not found"))
                 raise typer.Exit(1)
-            
+
             # Prepare updates
             updates = {}
             if status:
@@ -347,25 +343,25 @@ def update_user(
                 except ValueError:
                     console.print(formatter.format_error(f"Invalid status: {status}"))
                     raise typer.Exit(1)
-            
+
             if email is not None:
                 updates["email"] = email if email != "none" else None
-            
+
             if notes is not None:
                 updates["notes"] = notes
-            
+
             # Update user
             with console.status(f"Updating user '{username}'..."):
                 updated_user = await manager.update(str(user.id), **updates)
-                
+
                 if updated_user:
                     console.print(formatter.format_success(f"User '{username}' updated successfully"))
                 else:
                     console.print(formatter.format_error(f"Failed to update user '{username}'"))
                     raise typer.Exit(1)
-        
+
         run_async(_update())
-        
+
     except Exception as e:
         console.print(formatter.format_error(str(e)))
         raise typer.Exit(1)
@@ -384,7 +380,7 @@ def reset_traffic(
     """Reset user traffic statistics."""
     try:
         formatter = get_formatter()
-        
+
         # Confirm reset
         if not force:
             if not Confirm.ask(
@@ -393,20 +389,20 @@ def reset_traffic(
             ):
                 console.print("Operation cancelled")
                 raise typer.Exit(0)
-        
+
         async def _reset():
             manager = UserManager()
-            
+
             # Get user
             user = await manager.get_by_username(username)
             if not user:
                 console.print(formatter.format_error(f"User '{username}' not found"))
                 raise typer.Exit(1)
-            
+
             # Reset traffic
             with console.status(f"Resetting traffic for '{username}'..."):
                 updated_user = await manager.reset_traffic(str(user.id))
-                
+
                 if updated_user:
                     console.print(formatter.format_success(
                         f"Traffic statistics reset for user '{username}'"
@@ -416,9 +412,9 @@ def reset_traffic(
                         f"Failed to reset traffic for user '{username}'"
                     ))
                     raise typer.Exit(1)
-        
+
         run_async(_reset())
-        
+
     except Exception as e:
         console.print(formatter.format_error(str(e)))
         raise typer.Exit(1)
@@ -448,16 +444,16 @@ def export_users(
     """Export all users to file."""
     try:
         formatter = get_formatter()
-        
+
         async def _export():
             manager = UserManager()
-            
+
             with console.status("Exporting users..."):
                 data = await manager.export_users(
                     format=format,
                     include_keys=include_keys
                 )
-                
+
                 if output:
                     output.write_text(data)
                     console.print(formatter.format_success(
@@ -465,9 +461,9 @@ def export_users(
                     ))
                 else:
                     console.print(data)
-        
+
         run_async(_export())
-        
+
     except Exception as e:
         console.print(formatter.format_error(str(e)))
         raise typer.Exit(1)
@@ -500,16 +496,16 @@ def import_users(
     """Import users from file."""
     try:
         formatter = get_formatter()
-        
+
         # Read input file
         data = input_file.read_text()
-        
+
         async def _import():
             manager = UserManager()
-            
+
             if dry_run:
                 console.print(formatter.format_info("Dry run mode - no changes will be made"))
-            
+
             with console.status("Importing users..."):
                 if not dry_run:
                     stats = await manager.import_users(
@@ -517,7 +513,7 @@ def import_users(
                         format=format,
                         skip_existing=skip_existing
                     )
-                    
+
                     console.print(formatter.format_success(
                         f"Import complete: {stats['imported']} imported, "
                         f"{stats['skipped']} skipped, {stats['failed']} failed"
@@ -529,9 +525,9 @@ def import_users(
                     console.print(formatter.format_info(
                         f"Would import {len(users)} users"
                     ))
-        
+
         run_async(_import())
-        
+
     except Exception as e:
         console.print(formatter.format_error(str(e)))
         raise typer.Exit(1)
@@ -558,7 +554,7 @@ def show_connection(
         "-q",
         help="Display QR code",
     ),
-    format: Optional[str] = typer.Option(
+    format: str | None = typer.Option(
         None,
         "--format",
         "-f",
@@ -568,16 +564,16 @@ def show_connection(
     """Generate connection information for a user."""
     try:
         formatter = get_formatter(format)
-        
+
         async def _connection():
             manager = UserManager()
-            
+
             # Get user
             user = await manager.get_by_username(username)
             if not user:
                 console.print(formatter.format_error(f"User '{username}' not found"))
                 raise typer.Exit(1)
-            
+
             # Generate connection info
             with console.status("Generating connection information..."):
                 conn_info = await manager.generate_connection_info(
@@ -585,7 +581,7 @@ def show_connection(
                     server_address=server,
                     server_port=port
                 )
-                
+
                 # Prepare display data
                 conn_data = {
                     "username": username,
@@ -595,13 +591,13 @@ def show_connection(
                     "link": conn_info.connection_link,
                     "instructions": conn_info.instructions,
                 }
-                
+
                 output = formatter.format_single(
                     conn_data,
                     title=f"Connection Info: {username}"
                 )
                 console.print(output)
-                
+
                 # Display QR code if requested
                 if qr and conn_info.qr_code:
                     if conn_info.qr_code.startswith("data:image"):
@@ -612,9 +608,9 @@ def show_connection(
                         # ASCII QR code
                         console.print("\n[bold]QR Code:[/bold]")
                         console.print(conn_info.qr_code)
-        
+
         run_async(_connection())
-        
+
     except Exception as e:
         console.print(formatter.format_error(str(e)))
         raise typer.Exit(1)
@@ -640,7 +636,7 @@ def show_qr_code(
         "--style",
         help="QR code style: unicode, ascii",
     ),
-    save: Optional[Path] = typer.Option(
+    save: Path | None = typer.Option(
         None,
         "--save",
         help="Save QR code as image file",
@@ -650,13 +646,13 @@ def show_qr_code(
     try:
         async def _show_qr():
             manager = UserManager()
-            
+
             # Get user
             user = await manager.get_by_username(username)
             if not user:
                 console.print(f"[red]User '{username}' not found[/red]")
                 raise typer.Exit(1)
-            
+
             # Generate connection info
             with console.status("Generating connection QR code..."):
                 conn_info = await manager.generate_connection_info(
@@ -664,11 +660,11 @@ def show_qr_code(
                     server_address=server,
                     server_port=port
                 )
-                
+
                 if not conn_info.connection_link:
                     console.print("[red]Failed to generate connection link[/red]")
                     raise typer.Exit(1)
-                
+
                 # Display QR code in terminal
                 display_connection_qr(
                     connection_url=conn_info.connection_link,
@@ -677,7 +673,7 @@ def show_qr_code(
                     style=style,
                     console=console
                 )
-                
+
                 # Save image if requested
                 if save:
                     from vpn.utils.qr_display import TerminalQRCode
@@ -689,10 +685,10 @@ def show_qr_code(
                     if success:
                         console.print(f"\n[green]✓ QR code image saved to: {save}[/green]")
                     else:
-                        console.print(f"\n[red]✗ Failed to save QR code image[/red]")
-        
+                        console.print("\n[red]✗ Failed to save QR code image[/red]")
+
         run_async(_show_qr())
-        
+
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)

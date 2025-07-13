@@ -1,8 +1,6 @@
-"""
-Server status widget with context menu support for server management.
+"""Server status widget with context menu support for server management.
 """
 
-from typing import List, Optional
 
 from textual import on
 from textual.app import ComposeResult
@@ -13,7 +11,11 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import DataTable, Static
 
-from vpn.tui.widgets.context_menu import ContextMenuItem, ContextMenuMixin, create_server_context_menu
+from vpn.tui.widgets.context_menu import (
+    ContextMenuItem,
+    ContextMenuMixin,
+    create_server_context_menu,
+)
 from vpn.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -21,7 +23,7 @@ logger = get_logger(__name__)
 
 class ServerStatus(Widget, ContextMenuMixin):
     """Widget showing server status information with context menu support."""
-    
+
     DEFAULT_CSS = """
     ServerStatus {
         width: 100%;
@@ -49,45 +51,45 @@ class ServerStatus(Widget, ContextMenuMixin):
         dock: bottom;
     }
     """
-    
-    selected_server: reactive[Optional[str]] = reactive(None)
-    
+
+    selected_server: reactive[str | None] = reactive(None)
+
     class ServerAction(Message):
         """Message sent when a server action is triggered."""
-        
+
         def __init__(self, action: str, server_name: str) -> None:
             self.action = action
             self.server_name = server_name
             super().__init__()
-    
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.servers_data = []
         # Initialize context menu attributes from mixin
         self._context_menu = None
         self._context_menu_items = []
-    
+
     def compose(self) -> ComposeResult:
         """Create widget layout."""
         with Vertical():
             # Header
             yield Static("🖥️ Server Status", classes="header")
-            
+
             # Server table
             table = DataTable(id="server_table", cursor_type="row", classes="server-table")
             table.add_columns("Server", "Protocol", "Port", "Status", "Uptime", "CPU", "Memory")
             yield table
-            
+
             # Footer
             yield Static("Right-click for server actions • F10 for keyboard menu", classes="footer")
-    
+
     def on_mount(self) -> None:
         """Setup the table when mounted."""
         self.refresh_servers()
-        
+
         # Set up context menu
         self.set_context_menu_items(self._create_server_context_menu())
-    
+
     def refresh_servers(self) -> None:
         """Refresh server data and update table."""
         # Sample data - replace with real data from server manager
@@ -129,15 +131,15 @@ class ServerStatus(Widget, ContextMenuMixin):
                 "memory": "32MB"
             }
         ]
-        
+
         self._update_table()
-    
+
     def _update_table(self) -> None:
         """Update the data table with server information."""
         try:
             table = self.query_one("#server_table", DataTable)
             table.clear()
-            
+
             for server in self.servers_data:
                 # Format status with color and icon
                 status_text = server["status"].title()
@@ -147,7 +149,7 @@ class ServerStatus(Widget, ContextMenuMixin):
                     status_text = f"🔴 {status_text}"
                 elif server["status"] == "error":
                     status_text = f"🟡 {status_text}"
-                
+
                 # Format CPU and memory with colors
                 cpu_usage = server["cpu"]
                 if "%" in cpu_usage:
@@ -158,7 +160,7 @@ class ServerStatus(Widget, ContextMenuMixin):
                         cpu_usage = f"[yellow]{cpu_usage}[/yellow]"
                     else:
                         cpu_usage = f"[green]{cpu_usage}[/green]"
-                
+
                 table.add_row(
                     server["name"],
                     server["protocol"],
@@ -171,13 +173,13 @@ class ServerStatus(Widget, ContextMenuMixin):
                 )
         except Exception as e:
             logger.error(f"Failed to update server table: {e}")
-    
+
     @on(DataTable.RowSelected)
     def on_row_selected(self, event: DataTable.RowSelected) -> None:
         """Handle row selection in the data table."""
         if event.row_key:
             self.selected_server = event.row_key.value
-    
+
     def on_click(self, event) -> None:
         """Handle click events for context menu."""
         if hasattr(event, 'button') and event.button == 3:  # Right click
@@ -189,7 +191,7 @@ class ServerStatus(Widget, ContextMenuMixin):
         else:
             # Hide context menu on left click
             self.hide_context_menu()
-    
+
     def on_key(self, event) -> None:
         """Handle keyboard events."""
         if event.key == "f10" or (event.key == "f" and event.shift):
@@ -219,33 +221,33 @@ class ServerStatus(Widget, ContextMenuMixin):
             # View logs
             self._handle_server_action("logs", self.selected_server)
             event.prevent_default()
-        
+
         # Call parent handler
         super().on_key(event)
-    
-    def _get_server_info(self, server_name: str) -> Optional[dict]:
+
+    def _get_server_info(self, server_name: str) -> dict | None:
         """Get server information by name."""
         return next((s for s in self.servers_data if s["name"] == server_name), None)
-    
-    def _create_server_context_menu(self) -> List[ContextMenuItem]:
+
+    def _create_server_context_menu(self) -> list[ContextMenuItem]:
         """Create context menu items for server management."""
         if not self.selected_server:
             return []
-        
+
         server_info = self._get_server_info(self.selected_server)
         if not server_info:
             return []
-        
+
         # Determine protocol type
         protocol = server_info.get("protocol", "").lower()
         is_proxy = protocol in ["http/socks5", "proxy", "unified_proxy"]
-        
+
         # Get base menu items from helper function
         base_items = create_server_context_menu(protocol if is_proxy else None)
-        
+
         # Update actions to use local handler
         is_running = server_info["status"] == "running"
-        
+
         items = []
         for item in base_items:
             if item.label == "Start Server" or item.label == "Stop Server":
@@ -305,9 +307,9 @@ class ServerStatus(Widget, ContextMenuMixin):
                 ))
             elif item.separator:
                 items.append(item)
-        
+
         return items
-    
+
     def _handle_server_action(self, action: str, server_name: str) -> None:
         """Handle server action from context menu."""
         try:
@@ -321,13 +323,13 @@ class ServerStatus(Widget, ContextMenuMixin):
                 self._update_server_status(server_name, "stopped")
                 # In a real implementation, you would wait for restart
                 self._update_server_status(server_name, "running")
-            
+
             # Post message for parent to handle
             self.post_message(self.ServerAction(action, server_name))
-            
+
         except Exception as e:
             logger.error(f"Failed to handle server action {action}: {e}")
-    
+
     def _update_server_status(self, server_name: str, new_status: str) -> None:
         """Update server status in the data."""
         for server in self.servers_data:
@@ -342,18 +344,18 @@ class ServerStatus(Widget, ContextMenuMixin):
                     server["cpu"] = "0%"
                     server["memory"] = "0MB"
                 break
-        
+
         self._update_table()
-    
-    def get_selected_server(self) -> Optional[str]:
+
+    def get_selected_server(self) -> str | None:
         """Get the currently selected server."""
         return self.selected_server
-    
+
     def get_server_count(self) -> int:
         """Get the total number of servers."""
         return len(self.servers_data)
-    
-    def get_running_servers(self) -> List[dict]:
+
+    def get_running_servers(self) -> list[dict]:
         """Get list of running servers."""
         return [s for s in self.servers_data if s["status"] == "running"]
 

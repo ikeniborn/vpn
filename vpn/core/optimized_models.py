@@ -1,5 +1,4 @@
-"""
-Optimized Pydantic models using Pydantic 2.11+ performance features.
+"""Optimized Pydantic models using Pydantic 2.11+ performance features.
 
 This module demonstrates performance optimizations including:
 - Frozen models for immutable data
@@ -12,28 +11,22 @@ This module demonstrates performance optimizations including:
 
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StringConstraints,
+    computed_field,
+    confloat,
+    conint,
     field_serializer,
     field_validator,
-    computed_field,
-    model_serializer,
     model_validator,
-    BeforeValidator,
-    AfterValidator,
-    StringConstraints,
-    conint,
-    confloat,
     validate_call,
 )
-from pydantic.functional_validators import field_validator as functional_field_validator
-from pydantic.json_schema import JsonSchemaValue
-
 
 # Performance optimization: Use Annotated types with constraints
 PortNumber = Annotated[int, Field(ge=1024, le=65535)]
@@ -72,30 +65,30 @@ class ServerStatus(str, Enum):
 # Performance: Frozen model for immutable data
 class OptimizedTrafficStats(BaseModel):
     """Optimized traffic statistics model with frozen config."""
-    
+
     model_config = ConfigDict(
         frozen=True,  # Makes model immutable and hashable
         cache_strings='keys',  # Cache string operations
         revalidate_instances='never',  # Skip revalidation of already-validated instances
     )
-    
+
     upload_bytes: Annotated[int, Field(ge=0)] = 0
     download_bytes: Annotated[int, Field(ge=0)] = 0
     total_bytes: Annotated[int, Field(ge=0)] = 0
     last_reset: datetime = Field(default_factory=datetime.utcnow)
-    
+
     @computed_field
     @property
     def upload_mb(self) -> float:
         """Upload in megabytes."""
         return round(self.upload_bytes / (1024 * 1024), 2)
-    
+
     @computed_field
     @property
     def download_mb(self) -> float:
         """Download in megabytes."""
         return round(self.download_bytes / (1024 * 1024), 2)
-    
+
     @computed_field
     @property
     def total_mb(self) -> float:
@@ -107,49 +100,49 @@ class OptimizedTrafficStats(BaseModel):
 class VLESSConfig(BaseModel):
     """VLESS protocol configuration."""
     protocol_type: Literal["vless"] = "vless"
-    flow: Optional[str] = None
+    flow: str | None = None
     encryption: str = "none"
     reality_enabled: bool = False
-    reality_public_key: Optional[str] = None
-    reality_short_id: Optional[str] = None
+    reality_public_key: str | None = None
+    reality_short_id: str | None = None
 
 
 class ShadowsocksConfig(BaseModel):
     """Shadowsocks protocol configuration."""
     protocol_type: Literal["shadowsocks"] = "shadowsocks"
     method: str = "chacha20-ietf-poly1305"
-    password: Optional[str] = None
+    password: str | None = None
 
 
 class WireGuardConfig(BaseModel):
     """WireGuard protocol configuration."""
     protocol_type: Literal["wireguard"] = "wireguard"
-    private_key: Optional[str] = None
-    public_key: Optional[str] = None
-    endpoint: Optional[str] = None
-    allowed_ips: List[str] = Field(default_factory=list)
+    private_key: str | None = None
+    public_key: str | None = None
+    endpoint: str | None = None
+    allowed_ips: list[str] = Field(default_factory=list)
 
 
 class ProxyConfig(BaseModel):
     """HTTP/SOCKS5 proxy configuration."""
     protocol_type: Literal["http", "socks5"] = "http"
     auth_required: bool = False
-    username: Optional[str] = None
-    password: Optional[str] = None
-    rate_limit: Optional[int] = None
-    connection_limit: Optional[int] = None
+    username: str | None = None
+    password: str | None = None
+    rate_limit: int | None = None
+    connection_limit: int | None = None
 
 
 # Discriminated union for efficient protocol parsing
 ProtocolConfigUnion = Annotated[
-    Union[VLESSConfig, ShadowsocksConfig, WireGuardConfig, ProxyConfig],
+    VLESSConfig | ShadowsocksConfig | WireGuardConfig | ProxyConfig,
     Field(discriminator='protocol_type')
 ]
 
 
 class OptimizedUser(BaseModel):
     """Optimized user model with performance features."""
-    
+
     model_config = ConfigDict(
         # Performance optimizations
         validate_assignment=True,  # Validate on assignment
@@ -159,19 +152,19 @@ class OptimizedUser(BaseModel):
         # Schema optimizations
         json_schema_serialization_defaults_required=True,
     )
-    
+
     id: UUID = Field(default_factory=uuid4)
     username: Username
-    email: Optional[Email] = None
+    email: Email | None = None
     status: UserStatus = UserStatus.ACTIVE
     protocol_config: ProtocolConfigUnion  # Discriminated union
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: Optional[datetime] = None
-    expires_at: Optional[datetime] = None
+    updated_at: datetime | None = None
+    expires_at: datetime | None = None
     traffic: OptimizedTrafficStats = Field(
         default_factory=lambda: OptimizedTrafficStats()
     )
-    
+
     # Performance: Cached computed fields
     @computed_field
     @property
@@ -182,16 +175,16 @@ class OptimizedUser(BaseModel):
         if self.expires_at and datetime.utcnow() > self.expires_at:
             return False
         return True
-    
+
     @computed_field
     @property
-    def days_until_expiry(self) -> Optional[int]:
+    def days_until_expiry(self) -> int | None:
         """Days until account expires."""
         if not self.expires_at:
             return None
         delta = self.expires_at - datetime.utcnow()
         return max(0, delta.days)
-    
+
     # Performance: Use BeforeValidator for preprocessing
     @field_validator('username', mode='before')
     @classmethod
@@ -200,23 +193,23 @@ class OptimizedUser(BaseModel):
         if isinstance(v, str):
             return v.lower().strip()
         return v
-    
+
     @field_validator('email', mode='before')
     @classmethod
-    def normalize_email(cls, v: Optional[str]) -> Optional[str]:
+    def normalize_email(cls, v: str | None) -> str | None:
         """Normalize email to lowercase."""
         if v and isinstance(v, str):
             return v.lower().strip()
         return v
-    
+
     # Optimized serialization
     @field_serializer('id', when_used='json')
     def serialize_uuid(self, value: UUID) -> str:
         """Serialize UUID to string."""
         return str(value)
-    
+
     @field_serializer('created_at', 'updated_at', 'expires_at', when_used='json')
-    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+    def serialize_datetime(self, value: datetime | None) -> str | None:
         """Serialize datetime to ISO format."""
         return value.isoformat() if value else None
 
@@ -224,40 +217,40 @@ class OptimizedUser(BaseModel):
 # Performance: Frozen configuration models
 class OptimizedFirewallRule(BaseModel):
     """Optimized firewall rule with frozen config."""
-    
+
     model_config = ConfigDict(
         frozen=True,
         cache_strings='all',
     )
-    
+
     protocol: Literal["tcp", "udp", "both"] = "tcp"
     port: PortNumber
-    source: Optional[Union[IPAddress, CIDR]] = None
+    source: IPAddress | CIDR | None = None
     action: Literal["allow", "deny"] = "allow"
-    comment: Optional[str] = Field(None, max_length=255)
+    comment: str | None = Field(None, max_length=255)
 
 
 class OptimizedDockerConfig(BaseModel):
     """Optimized Docker configuration."""
-    
+
     model_config = ConfigDict(
         validate_default=True,
         cache_strings='all',
     )
-    
+
     image: Annotated[str, StringConstraints(min_length=1, max_length=255)]
     tag: str = "latest"
-    container_name: Optional[Annotated[str, StringConstraints(max_length=64)]] = None
-    environment: Dict[str, str] = Field(default_factory=dict)
-    volumes: List[str] = Field(default_factory=list)
-    ports: Dict[str, PortNumber] = Field(default_factory=dict)
-    networks: List[str] = Field(default_factory=list)
+    container_name: Annotated[str, StringConstraints(max_length=64)] | None = None
+    environment: dict[str, str] = Field(default_factory=dict)
+    volumes: list[str] = Field(default_factory=list)
+    ports: dict[str, PortNumber] = Field(default_factory=dict)
+    networks: list[str] = Field(default_factory=list)
     restart_policy: Literal["no", "always", "unless-stopped"] = "unless-stopped"
-    
+
     # Performance: Validate environment variables
     @field_validator('environment')
     @classmethod
-    def validate_environment(cls, v: Dict[str, str]) -> Dict[str, str]:
+    def validate_environment(cls, v: dict[str, str]) -> dict[str, str]:
         """Validate environment variables."""
         for key in v:
             if not key.replace('_', '').isalnum():
@@ -267,7 +260,7 @@ class OptimizedDockerConfig(BaseModel):
 
 class OptimizedServerConfig(BaseModel):
     """Optimized server configuration with performance features."""
-    
+
     model_config = ConfigDict(
         validate_assignment=True,
         cache_strings='all',
@@ -275,25 +268,25 @@ class OptimizedServerConfig(BaseModel):
         ser_json_timedelta='float',
         ser_json_bytes='base64',
     )
-    
+
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: Annotated[str, StringConstraints(min_length=1, max_length=64)]
     protocol_config: ProtocolConfigUnion
     port: PortNumber
     docker_config: OptimizedDockerConfig
-    firewall_rules: List[OptimizedFirewallRule] = Field(default_factory=list)
+    firewall_rules: list[OptimizedFirewallRule] = Field(default_factory=list)
     status: ServerStatus = ServerStatus.STOPPED
     auto_start: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: Optional[datetime] = None
-    
+    updated_at: datetime | None = None
+
     # Performance: Model-level validation
     @model_validator(mode='after')
     def validate_server_config(self) -> 'OptimizedServerConfig':
         """Validate server configuration consistency."""
         # Ensure firewall rules match server port
         server_port_rule_exists = any(
-            rule.port == self.port 
+            rule.port == self.port
             for rule in self.firewall_rules
         )
         if not server_port_rule_exists and self.firewall_rules:
@@ -307,13 +300,13 @@ class OptimizedServerConfig(BaseModel):
                 )
             )
         return self
-    
+
     @computed_field
     @property
     def is_running(self) -> bool:
         """Check if server is running."""
         return self.status == ServerStatus.RUNNING
-    
+
     @computed_field
     @property
     def container_name(self) -> str:
@@ -329,13 +322,13 @@ class OptimizedServerConfig(BaseModel):
 def create_optimized_user(
     username: Username,
     protocol_type: ProtocolType,
-    email: Optional[Email] = None,
-    expires_days: Optional[conint(ge=1, le=365)] = None,
+    email: Email | None = None,
+    expires_days: conint(ge=1, le=365) | None = None,
 ) -> OptimizedUser:
     """Create an optimized user with validation."""
     # Create protocol config based on type
-    protocol_config: Union[VLESSConfig, ShadowsocksConfig, WireGuardConfig, ProxyConfig]
-    
+    protocol_config: VLESSConfig | ShadowsocksConfig | WireGuardConfig | ProxyConfig
+
     if protocol_type == ProtocolType.VLESS:
         protocol_config = VLESSConfig()
     elif protocol_type == ProtocolType.SHADOWSOCKS:
@@ -346,11 +339,11 @@ def create_optimized_user(
         protocol_config = ProxyConfig(protocol_type=protocol_type.value)
     else:
         raise ValueError(f"Unsupported protocol type: {protocol_type}")
-    
+
     expires_at = None
     if expires_days:
         expires_at = datetime.utcnow() + timedelta(days=expires_days)
-    
+
     return OptimizedUser(
         username=username,
         email=email,
@@ -362,16 +355,16 @@ def create_optimized_user(
 # Performance: Batch validation for multiple users
 @validate_call
 def validate_user_batch(
-    users: List[Dict[str, Any]],
+    users: list[dict[str, Any]],
     max_batch_size: conint(ge=1, le=1000) = 100,
-) -> tuple[List[OptimizedUser], List[Dict[str, Any]]]:
+) -> tuple[list[OptimizedUser], list[dict[str, Any]]]:
     """Validate a batch of users efficiently."""
     if len(users) > max_batch_size:
         raise ValueError(f"Batch size {len(users)} exceeds maximum {max_batch_size}")
-    
+
     valid_users = []
     invalid_users = []
-    
+
     for user_data in users:
         try:
             user = OptimizedUser(**user_data)
@@ -381,32 +374,32 @@ def validate_user_batch(
                 'data': user_data,
                 'error': str(e)
             })
-    
+
     return valid_users, invalid_users
 
 
 # Performance monitoring model
 class PerformanceMetrics(BaseModel):
     """Model for tracking performance metrics."""
-    
+
     model_config = ConfigDict(
         frozen=True,
         cache_strings='all',
     )
-    
+
     operation: str
     duration_ms: confloat(ge=0)
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     success: bool = True
-    error: Optional[str] = None
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-    
+    error: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
     @computed_field
     @property
     def duration_seconds(self) -> float:
         """Duration in seconds."""
         return self.duration_ms / 1000.0
-    
+
     @computed_field
     @property
     def is_slow(self) -> bool:

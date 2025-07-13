@@ -1,5 +1,4 @@
-"""
-TUI event handlers.
+"""TUI event handlers.
 """
 
 from .proxy_auth_handler import ProxyAuthHandler

@@ -1,5 +1,4 @@
-"""
-Command alias system for Typer CLI.
+"""Command alias system for Typer CLI.
 
 This module provides a comprehensive command alias system that allows users to:
 - Create custom aliases for complex commands
@@ -10,18 +9,18 @@ This module provides a comprehensive command alias system that allows users to:
 """
 
 import json
-import shlex
 import re
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
-from dataclasses import dataclass, asdict
+import shlex
+from dataclasses import asdict, dataclass
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
 from rich.syntax import Syntax
+from rich.table import Table
 
 console = Console()
 
@@ -32,55 +31,55 @@ class CommandAlias:
     name: str
     command: str
     description: str = ""
-    parameters: Dict[str, str] = None
+    parameters: dict[str, str] = None
     created_at: str = ""
     used_count: int = 0
-    
+
     def __post_init__(self):
         if self.parameters is None:
             self.parameters = {}
         if not self.created_at:
             self.created_at = datetime.now().isoformat()
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert alias to dictionary."""
         return asdict(self)
-    
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'CommandAlias':
+    def from_dict(cls, data: dict[str, Any]) -> 'CommandAlias':
         """Create alias from dictionary."""
         return cls(**data)
 
 
 class AliasManager:
     """Manages command aliases for the CLI."""
-    
-    def __init__(self, config_dir: Optional[Path] = None):
+
+    def __init__(self, config_dir: Path | None = None):
         """Initialize alias manager."""
         self.config_dir = config_dir or Path.home() / ".config" / "vpn-manager"
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.aliases_file = self.config_dir / "aliases.json"
-        
-        self._aliases: Dict[str, CommandAlias] = {}
+
+        self._aliases: dict[str, CommandAlias] = {}
         self._load_aliases()
-    
+
     def _load_aliases(self) -> None:
         """Load aliases from configuration file."""
         if self.aliases_file.exists():
             try:
-                with open(self.aliases_file, 'r') as f:
+                with open(self.aliases_file) as f:
                     data = json.load(f)
-                
+
                 for alias_data in data.get('aliases', []):
                     alias = CommandAlias.from_dict(alias_data)
                     self._aliases[alias.name] = alias
-            
+
             except Exception as e:
                 console.print(f"[yellow]Warning: Could not load aliases: {e}[/yellow]")
                 self._create_default_aliases()
         else:
             self._create_default_aliases()
-    
+
     def _save_aliases(self) -> None:
         """Save aliases to configuration file."""
         try:
@@ -89,13 +88,13 @@ class AliasManager:
                 'version': '1.0',
                 'updated_at': datetime.now().isoformat()
             }
-            
+
             with open(self.aliases_file, 'w') as f:
                 json.dump(data, f, indent=2)
-        
+
         except Exception as e:
             console.print(f"[red]Error saving aliases: {e}[/red]")
-    
+
     def _create_default_aliases(self) -> None:
         """Create default useful aliases."""
         default_aliases = [
@@ -120,7 +119,7 @@ class AliasManager:
                 command="monitor status --refresh",
                 description="Show real-time system status"
             ),
-            
+
             # User management shortcuts
             CommandAlias(
                 name="useradd",
@@ -140,7 +139,7 @@ class AliasManager:
                 description="Modify user settings",
                 parameters={"$1": "username"}
             ),
-            
+
             # Server management shortcuts
             CommandAlias(
                 name="start",
@@ -166,7 +165,7 @@ class AliasManager:
                 description="Follow server logs",
                 parameters={"$1": "server_name"}
             ),
-            
+
             # Monitoring shortcuts
             CommandAlias(
                 name="status",
@@ -178,7 +177,7 @@ class AliasManager:
                 command="monitor traffic --period day",
                 description="Show daily traffic stats"
             ),
-            
+
             # Configuration shortcuts
             CommandAlias(
                 name="backup",
@@ -191,7 +190,7 @@ class AliasManager:
                 description="Restore from backup",
                 parameters={"$1": "backup_file"}
             ),
-            
+
             # Complex operations
             CommandAlias(
                 name="deploy",
@@ -205,7 +204,7 @@ class AliasManager:
                 description="Create multiple users",
                 parameters={"$1": "count", "$2": "protocol"}
             ),
-            
+
             # Diagnostic shortcuts
             CommandAlias(
                 name="check",
@@ -218,32 +217,32 @@ class AliasManager:
                 description="Comprehensive system check with fixes"
             ),
         ]
-        
+
         for alias in default_aliases:
             self._aliases[alias.name] = alias
-        
+
         self._save_aliases()
         console.print("[green]Default aliases created[/green]")
-    
+
     def add_alias(self, name: str, command: str, description: str = "", force: bool = False) -> bool:
         """Add a new alias."""
         if name in self._aliases and not force:
             return False
-        
+
         # Parse parameters from command
         parameters = self._extract_parameters(command)
-        
+
         alias = CommandAlias(
             name=name,
             command=command,
             description=description,
             parameters=parameters
         )
-        
+
         self._aliases[name] = alias
         self._save_aliases()
         return True
-    
+
     def remove_alias(self, name: str) -> bool:
         """Remove an alias."""
         if name in self._aliases:
@@ -251,38 +250,38 @@ class AliasManager:
             self._save_aliases()
             return True
         return False
-    
-    def get_alias(self, name: str) -> Optional[CommandAlias]:
+
+    def get_alias(self, name: str) -> CommandAlias | None:
         """Get an alias by name."""
         return self._aliases.get(name)
-    
-    def list_aliases(self, pattern: Optional[str] = None) -> List[CommandAlias]:
+
+    def list_aliases(self, pattern: str | None = None) -> list[CommandAlias]:
         """List all aliases, optionally filtered by pattern."""
         aliases = list(self._aliases.values())
-        
+
         if pattern:
             aliases = [
                 alias for alias in aliases
-                if pattern.lower() in alias.name.lower() or 
+                if pattern.lower() in alias.name.lower() or
                    pattern.lower() in alias.description.lower() or
                    pattern.lower() in alias.command.lower()
             ]
-        
+
         return sorted(aliases, key=lambda a: a.name)
-    
-    def expand_alias(self, name: str, args: List[str]) -> Optional[Tuple[str, List[str]]]:
+
+    def expand_alias(self, name: str, args: list[str]) -> tuple[str, list[str]] | None:
         """Expand an alias with arguments."""
         alias = self.get_alias(name)
         if not alias:
             return None
-        
+
         # Increment usage count
         alias.used_count += 1
         self._save_aliases()
-        
+
         # Expand command with parameters
         expanded_command = self._expand_command(alias.command, args)
-        
+
         # Parse the expanded command
         try:
             command_parts = shlex.split(expanded_command)
@@ -297,54 +296,54 @@ class AliasManager:
                 command = command_parts[0]
                 command_args = command_parts[1:]
                 return command, command_args
-        
+
         return None
-    
-    def _extract_parameters(self, command: str) -> Dict[str, str]:
+
+    def _extract_parameters(self, command: str) -> dict[str, str]:
         """Extract parameter placeholders from command."""
         parameters = {}
-        
+
         # Find $1, $2, etc. parameters
         positional_params = re.findall(r'\$(\d+)', command)
         for param in positional_params:
             parameters[f'${param}'] = f'arg{param}'
-        
+
         # Find ${name} parameters
         named_params = re.findall(r'\$\{([^}]+)\}', command)
         for param in named_params:
             parameters[f'${{{param}}}'] = param
-        
+
         return parameters
-    
-    def _expand_command(self, command: str, args: List[str]) -> str:
+
+    def _expand_command(self, command: str, args: list[str]) -> str:
         """Expand command with provided arguments."""
         expanded = command
-        
+
         # Expand positional parameters ($1, $2, etc.)
         for i, arg in enumerate(args, 1):
             expanded = expanded.replace(f'${i}', arg)
-        
+
         # Expand named parameters (${name})
         # This could be enhanced to support environment variables
-        
+
         return expanded
-    
-    def get_suggestions(self, partial_name: str) -> List[str]:
+
+    def get_suggestions(self, partial_name: str) -> list[str]:
         """Get alias suggestions for partial name."""
         return [
             alias.name for alias in self._aliases.values()
             if alias.name.startswith(partial_name)
         ]
-    
-    def import_aliases(self, file_path: Path) -> Tuple[int, List[str]]:
+
+    def import_aliases(self, file_path: Path) -> tuple[int, list[str]]:
         """Import aliases from a file."""
         imported_count = 0
         errors = []
-        
+
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path) as f:
                 data = json.load(f)
-            
+
             for alias_data in data.get('aliases', []):
                 try:
                     alias = CommandAlias.from_dict(alias_data)
@@ -352,33 +351,33 @@ class AliasManager:
                     imported_count += 1
                 except Exception as e:
                     errors.append(f"Failed to import alias '{alias_data.get('name', 'unknown')}': {e}")
-            
+
             if imported_count > 0:
                 self._save_aliases()
-        
+
         except Exception as e:
             errors.append(f"Failed to read file: {e}")
-        
+
         return imported_count, errors
-    
-    def export_aliases(self, file_path: Path, pattern: Optional[str] = None) -> int:
+
+    def export_aliases(self, file_path: Path, pattern: str | None = None) -> int:
         """Export aliases to a file."""
         aliases_to_export = self.list_aliases(pattern)
-        
+
         data = {
             'aliases': [alias.to_dict() for alias in aliases_to_export],
             'exported_at': datetime.now().isoformat(),
             'version': '1.0'
         }
-        
+
         with open(file_path, 'w') as f:
             json.dump(data, f, indent=2)
-        
+
         return len(aliases_to_export)
 
 
 # Global alias manager instance
-_global_alias_manager: Optional[AliasManager] = None
+_global_alias_manager: AliasManager | None = None
 
 
 def get_alias_manager() -> AliasManager:
@@ -391,13 +390,12 @@ def get_alias_manager() -> AliasManager:
 
 def setup_alias_commands(app: typer.Typer) -> None:
     """Set up alias management commands."""
-    
     alias_app = typer.Typer(
         name="alias",
         help="Manage command aliases",
         no_args_is_help=True
     )
-    
+
     @alias_app.command("add")
     def add_alias(
         name: str = typer.Argument(help="Alias name"),
@@ -407,10 +405,10 @@ def setup_alias_commands(app: typer.Typer) -> None:
     ):
         """Add a new command alias."""
         manager = get_alias_manager()
-        
+
         if manager.add_alias(name, command, description, force):
             console.print(f"[green]✓ Alias '{name}' added successfully[/green]")
-            
+
             # Show parameter info if any
             alias = manager.get_alias(name)
             if alias and alias.parameters:
@@ -420,36 +418,36 @@ def setup_alias_commands(app: typer.Typer) -> None:
         else:
             console.print(f"[red]✗ Alias '{name}' already exists. Use --force to overwrite[/red]")
             raise typer.Exit(1)
-    
+
     @alias_app.command("remove")
     def remove_alias(
         name: str = typer.Argument(help="Alias name to remove")
     ):
         """Remove a command alias."""
         manager = get_alias_manager()
-        
+
         if manager.remove_alias(name):
             console.print(f"[green]✓ Alias '{name}' removed successfully[/green]")
         else:
             console.print(f"[red]✗ Alias '{name}' not found[/red]")
             raise typer.Exit(1)
-    
+
     @alias_app.command("list")
     def list_aliases(
-        pattern: Optional[str] = typer.Option(None, "--pattern", "-p", help="Filter aliases by pattern"),
+        pattern: str | None = typer.Option(None, "--pattern", "-p", help="Filter aliases by pattern"),
         verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed information")
     ):
         """List all command aliases."""
         manager = get_alias_manager()
         aliases = manager.list_aliases(pattern)
-        
+
         if not aliases:
             if pattern:
                 console.print(f"[yellow]No aliases found matching pattern: {pattern}[/yellow]")
             else:
                 console.print("[yellow]No aliases defined[/yellow]")
             return
-        
+
         if verbose:
             # Detailed view
             for alias in aliases:
@@ -460,7 +458,7 @@ def setup_alias_commands(app: typer.Typer) -> None:
                     panel_content += f"[bold]Parameters:[/bold] {', '.join(alias.parameters.keys())}\n"
                 panel_content += f"[bold]Used:[/bold] {alias.used_count} times\n"
                 panel_content += f"[bold]Created:[/bold] {alias.created_at[:10]}"
-                
+
                 console.print(Panel(panel_content, title=f"[green]{alias.name}[/green]"))
         else:
             # Table view
@@ -469,7 +467,7 @@ def setup_alias_commands(app: typer.Typer) -> None:
             table.add_column("Command", style="blue", width=40)
             table.add_column("Description", style="dim", width=30)
             table.add_column("Used", justify="right", width=8)
-            
+
             for alias in aliases:
                 table.add_row(
                     alias.name,
@@ -477,9 +475,9 @@ def setup_alias_commands(app: typer.Typer) -> None:
                     alias.description[:27] + "..." if len(alias.description) > 30 else alias.description,
                     str(alias.used_count)
                 )
-            
+
             console.print(table)
-    
+
     @alias_app.command("show")
     def show_alias(
         name: str = typer.Argument(help="Alias name to show")
@@ -487,27 +485,27 @@ def setup_alias_commands(app: typer.Typer) -> None:
         """Show detailed information about an alias."""
         manager = get_alias_manager()
         alias = manager.get_alias(name)
-        
+
         if not alias:
             console.print(f"[red]✗ Alias '{name}' not found[/red]")
             raise typer.Exit(1)
-        
+
         panel_content = f"[bold]Command:[/bold] {alias.command}\n"
         if alias.description:
             panel_content += f"[bold]Description:[/bold] {alias.description}\n"
-        
+
         if alias.parameters:
-            panel_content += f"\n[bold]Parameters:[/bold]\n"
+            panel_content += "\n[bold]Parameters:[/bold]\n"
             for param, desc in alias.parameters.items():
                 panel_content += f"  {param}: {desc}\n"
-        
-        panel_content += f"\n[bold]Usage Statistics:[/bold]\n"
+
+        panel_content += "\n[bold]Usage Statistics:[/bold]\n"
         panel_content += f"  Used: {alias.used_count} times\n"
         panel_content += f"  Created: {alias.created_at}\n"
-        
+
         # Show usage examples
         if alias.parameters:
-            panel_content += f"\n[bold]Usage Examples:[/bold]\n"
+            panel_content += "\n[bold]Usage Examples:[/bold]\n"
             if '$1' in alias.parameters:
                 panel_content += f"  vpn {name} example_arg\n"
             if len(alias.parameters) > 1:
@@ -515,9 +513,9 @@ def setup_alias_commands(app: typer.Typer) -> None:
                 panel_content += f"  vpn {name} {' '.join(args)}\n"
         else:
             panel_content += f"\n[bold]Usage:[/bold]\n  vpn {name}\n"
-        
+
         console.print(Panel(panel_content, title=f"[green]Alias: {name}[/green]"))
-    
+
     @alias_app.command("import")
     def import_aliases(
         file_path: Path = typer.Argument(help="File to import aliases from")
@@ -526,64 +524,64 @@ def setup_alias_commands(app: typer.Typer) -> None:
         if not file_path.exists():
             console.print(f"[red]✗ File not found: {file_path}[/red]")
             raise typer.Exit(1)
-        
+
         manager = get_alias_manager()
         imported_count, errors = manager.import_aliases(file_path)
-        
+
         if imported_count > 0:
             console.print(f"[green]✓ Imported {imported_count} aliases successfully[/green]")
-        
+
         if errors:
-            console.print(f"\n[yellow]Warnings/Errors:[/yellow]")
+            console.print("\n[yellow]Warnings/Errors:[/yellow]")
             for error in errors:
                 console.print(f"  • {error}")
-        
+
         if imported_count == 0 and errors:
             raise typer.Exit(1)
-    
+
     @alias_app.command("export")
     def export_aliases(
         file_path: Path = typer.Argument(help="File to export aliases to"),
-        pattern: Optional[str] = typer.Option(None, "--pattern", "-p", help="Export only aliases matching pattern")
+        pattern: str | None = typer.Option(None, "--pattern", "-p", help="Export only aliases matching pattern")
     ):
         """Export aliases to a JSON file."""
         manager = get_alias_manager()
-        
+
         try:
             exported_count = manager.export_aliases(file_path, pattern)
             console.print(f"[green]✓ Exported {exported_count} aliases to {file_path}[/green]")
         except Exception as e:
             console.print(f"[red]✗ Export failed: {e}[/red]")
             raise typer.Exit(1)
-    
+
     # Add alias command group to main app
     app.add_typer(alias_app, name="alias", help="Manage command aliases")
 
 
-def process_command_with_aliases(command_parts: List[str]) -> List[str]:
+def process_command_with_aliases(command_parts: list[str]) -> list[str]:
     """Process command parts and expand aliases if found."""
     if not command_parts:
         return command_parts
-    
+
     manager = get_alias_manager()
     command_name = command_parts[0]
     args = command_parts[1:]
-    
+
     # Check if first part is an alias
     expansion = manager.expand_alias(command_name, args)
     if expansion:
         expanded_command, expanded_args = expansion
-        
+
         # Recursively process in case the expanded command also contains aliases
         new_parts = [expanded_command] + expanded_args
         return process_command_with_aliases(new_parts)
-    
+
     return command_parts
 
 
 def show_alias_examples():
     """Show examples of alias usage."""
-    examples = """
+    examples = r"""
 # Create simple aliases
 vpn alias add ls "users list"
 vpn alias add ps "server list"
@@ -611,6 +609,6 @@ vpn alias export my-aliases.json              # Export all aliases
 vpn alias export team-aliases.json --pattern team  # Export team-related aliases
 vpn alias import shared-aliases.json          # Import aliases from file
 """
-    
+
     syntax = Syntax(examples, "bash", theme="monokai", line_numbers=False)
     console.print(Panel(syntax, title="[bold green]Alias Examples[/bold green]"))

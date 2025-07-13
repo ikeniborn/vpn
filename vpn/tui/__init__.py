@@ -1,5 +1,4 @@
-"""
-VPN Manager Terminal User Interface (TUI).
+"""VPN Manager Terminal User Interface (TUI).
 
 Built with Textual for a modern, responsive terminal experience.
 """

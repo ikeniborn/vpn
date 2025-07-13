@@ -1,5 +1,4 @@
-"""
-Stats card widget for displaying metrics.
+"""Stats card widget for displaying metrics.
 """
 
 from textual.app import ComposeResult
@@ -12,7 +11,7 @@ from textual.widgets import Static
 
 class StatsCard(Widget):
     """Card widget for displaying statistics."""
-    
+
     DEFAULT_CSS = """
     StatsCard {
         height: 7;
@@ -38,9 +37,9 @@ class StatsCard(Widget):
         height: 3;
     }
     """
-    
+
     value = reactive("0")
-    
+
     def __init__(
         self,
         title: str,
@@ -52,13 +51,13 @@ class StatsCard(Widget):
         super().__init__(id=id, classes=classes)
         self.title = title
         self.value = value
-    
+
     def compose(self) -> ComposeResult:
         """Create card layout."""
         with Vertical():
             yield Static(self.title, classes="stats-title")
             yield Static(self.value, classes="stats-value")
-    
+
     def watch_value(self, new_value: str) -> None:
         """Update displayed value."""
         try:

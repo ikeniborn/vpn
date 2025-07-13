@@ -1,16 +1,15 @@
-"""
-JSON Schema examples using Pydantic 2.11+ features.
+"""JSON Schema examples using Pydantic 2.11+ features.
 """
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.json_schema import JsonSchemaValue
 
 
 class VPNProtocolConfig(BaseModel):
     """VPN Protocol configuration with rich JSON schema."""
-    
+
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [
@@ -21,7 +20,7 @@ class VPNProtocolConfig(BaseModel):
                     "transport": "tcp"
                 },
                 {
-                    "protocol": "shadowsocks", 
+                    "protocol": "shadowsocks",
                     "method": "chacha20-ietf-poly1305",
                     "port": 8388,
                     "transport": "tcp"
@@ -29,7 +28,7 @@ class VPNProtocolConfig(BaseModel):
             ]
         }
     )
-    
+
     protocol: Annotated[
         Literal["vless", "shadowsocks", "wireguard"],
         Field(
@@ -41,7 +40,7 @@ class VPNProtocolConfig(BaseModel):
             }}
         )
     ]
-    
+
     port: Annotated[
         int,
         Field(
@@ -51,7 +50,7 @@ class VPNProtocolConfig(BaseModel):
             json_schema_extra={"default": 8443}
         )
     ]
-    
+
     transport: Annotated[
         Literal["tcp", "udp", "grpc", "ws"],
         Field(
@@ -60,30 +59,30 @@ class VPNProtocolConfig(BaseModel):
                 "default": "tcp",
                 "enum_descriptions": {
                     "tcp": "Reliable TCP transport",
-                    "udp": "Fast UDP transport", 
+                    "udp": "Fast UDP transport",
                     "grpc": "gRPC transport for better censorship resistance",
                     "ws": "WebSocket transport for HTTP compatibility"
                 }
             }
         )
     ]
-    
+
     @classmethod
     def model_json_schema(cls, **kwargs) -> JsonSchemaValue:
         """Generate enhanced JSON schema."""
         schema = super().model_json_schema(**kwargs)
-        
+
         # Add custom schema properties
         schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
         schema["title"] = "VPN Protocol Configuration"
         schema["description"] = "Configuration for various VPN protocols supported by VPN Manager"
-        
+
         return schema
 
 
 class UserQuota(BaseModel):
     """User quota configuration with detailed schema."""
-    
+
     max_devices: Annotated[
         int,
         Field(
@@ -93,7 +92,7 @@ class UserQuota(BaseModel):
             examples=[1, 3, 5, 10]
         )
     ] = 3
-    
+
     bandwidth_limit_mbps: Annotated[
         float | None,
         Field(
@@ -103,7 +102,7 @@ class UserQuota(BaseModel):
             examples=[10.0, 100.0, 1000.0, None]
         )
     ] = None
-    
+
     traffic_limit_gb: Annotated[
         float | None,
         Field(
@@ -112,7 +111,7 @@ class UserQuota(BaseModel):
             examples=[100.0, 500.0, 1000.0, None]
         )
     ] = None
-    
+
     expires_days: Annotated[
         int | None,
         Field(
@@ -122,7 +121,7 @@ class UserQuota(BaseModel):
             examples=[30, 90, 180, 365, None]
         )
     ] = None
-    
+
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [

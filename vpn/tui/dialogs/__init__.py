@@ -1,5 +1,4 @@
-"""
-Dialog components for VPN Manager TUI.
+"""Dialog components for VPN Manager TUI.
 """
 
 from .confirm import ConfirmDialog

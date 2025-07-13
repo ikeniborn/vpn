@@ -1,23 +1,21 @@
-"""
-YAML schema validation system for VPN Manager.
+"""YAML schema validation system for VPN Manager.
 
 This module provides comprehensive YAML schema validation using Pydantic models
 and JSON Schema generation for YAML configuration files.
 """
 
 import json
-import jsonschema
-from pathlib import Path
-from typing import Dict, Any, List, Optional, Union, Type, get_origin, get_args
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
+from typing import Any
 
-from pydantic import BaseModel, Field, create_model, ValidationError
-from pydantic.json_schema import GenerateJsonSchema, JsonSchemaValue
+import jsonschema
+from pydantic import BaseModel, Field, ValidationError
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
+from rich.table import Table
 
 console = Console()
 
@@ -67,16 +65,16 @@ class PresetScope(str, Enum):
 class ValidationResult:
     """Result of YAML schema validation."""
     is_valid: bool
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
-    schema_version: Optional[str] = None
-    validated_data: Optional[Dict[str, Any]] = None
-    
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    schema_version: str | None = None
+    validated_data: dict[str, Any] | None = None
+
     @property
     def has_errors(self) -> bool:
         """Check if validation has errors."""
         return len(self.errors) > 0
-    
+
     @property
     def has_warnings(self) -> bool:
         """Check if validation has warnings."""
@@ -96,12 +94,12 @@ class AppConfig(BaseModel):
 class DatabaseConfig(BaseModel):
     """Database configuration schema."""
     type: str = Field(default="sqlite", pattern=r"^(sqlite|postgresql|mysql)$", description="Database type")
-    path: Optional[str] = Field(default=None, description="SQLite database file path")
-    host: Optional[str] = Field(default=None, description="Database host")
-    port: Optional[int] = Field(default=None, ge=1, le=65535, description="Database port")
-    name: Optional[str] = Field(default=None, description="Database name")
-    user: Optional[str] = Field(default=None, description="Database user")
-    password: Optional[str] = Field(default=None, description="Database password")
+    path: str | None = Field(default=None, description="SQLite database file path")
+    host: str | None = Field(default=None, description="Database host")
+    port: int | None = Field(default=None, ge=1, le=65535, description="Database port")
+    name: str | None = Field(default=None, description="Database name")
+    user: str | None = Field(default=None, description="Database user")
+    password: str | None = Field(default=None, description="Database password")
     pool_size: int = Field(default=10, ge=1, le=100, description="Connection pool size")
     max_overflow: int = Field(default=20, ge=0, le=100, description="Maximum pool overflow")
 
@@ -123,7 +121,7 @@ class PortRange(BaseModel):
     """Port range configuration."""
     start: int = Field(ge=1, le=65535, description="Start port")
     end: int = Field(ge=1, le=65535, description="End port")
-    
+
     def model_post_init(self, __context: Any) -> None:
         """Validate port range."""
         if self.start > self.end:
@@ -133,8 +131,8 @@ class PortRange(BaseModel):
 class NetworkConfig(BaseModel):
     """Network configuration schema."""
     bind_address: str = Field(default="0.0.0.0", pattern=r"^(\d{1,3}\.){3}\d{1,3}$", description="Bind address")
-    ports: Dict[str, Union[int, PortRange]] = Field(default_factory=dict, description="Port mappings")
-    dns_servers: List[str] = Field(default_factory=lambda: ["1.1.1.1", "8.8.8.8"], description="DNS servers")
+    ports: dict[str, int | PortRange] = Field(default_factory=dict, description="Port mappings")
+    dns_servers: list[str] = Field(default_factory=lambda: ["1.1.1.1", "8.8.8.8"], description="DNS servers")
 
 
 class TLSConfig(BaseModel):
@@ -219,7 +217,7 @@ class VLESSRealityConfig(BaseModel):
     """VLESS Reality configuration."""
     enabled: bool = Field(default=True, description="Enable Reality")
     dest: str = Field(default="example.com:443", description="Reality destination")
-    server_names: List[str] = Field(default_factory=lambda: ["example.com"], description="Server names")
+    server_names: list[str] = Field(default_factory=lambda: ["example.com"], description="Server names")
 
 
 class VLESSConfig(BaseModel):
@@ -283,7 +281,7 @@ class VPNConfigSchema(BaseModel):
     ui: UIConfig = Field(default_factory=UIConfig, description="UI configuration")
     paths: PathsConfig = Field(default_factory=PathsConfig, description="Paths configuration")
     protocols: ProtocolsConfig = Field(default_factory=ProtocolsConfig, description="Protocols configuration")
-    
+
     class Config:
         """Pydantic configuration."""
         extra = "forbid"  # Disallow extra fields
@@ -297,15 +295,15 @@ class UserConfig(BaseModel):
     """User configuration in preset."""
     username: str = Field(min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_-]+$", description="Username")
     protocol: ProtocolType = Field(description="VPN protocol")
-    email: Optional[str] = Field(default=None, pattern=r"^[^@]+@[^@]+\.[^@]+$", description="User email")
-    expires_in: Optional[int] = Field(default=None, ge=3600, description="Expiry time in seconds")
-    traffic_limit: Union[str, int] = Field(default="unlimited", description="Traffic limit")
+    email: str | None = Field(default=None, pattern=r"^[^@]+@[^@]+\.[^@]+$", description="User email")
+    expires_in: int | None = Field(default=None, ge=3600, description="Expiry time in seconds")
+    traffic_limit: str | int = Field(default="unlimited", description="Traffic limit")
     active: bool = Field(default=True, description="User is active")
-    
+
     # Protocol-specific configurations
-    vless: Optional[Dict[str, Any]] = Field(default=None, description="VLESS-specific configuration")
-    shadowsocks: Optional[Dict[str, Any]] = Field(default=None, description="Shadowsocks-specific configuration")
-    wireguard: Optional[Dict[str, Any]] = Field(default=None, description="WireGuard-specific configuration")
+    vless: dict[str, Any] | None = Field(default=None, description="VLESS-specific configuration")
+    shadowsocks: dict[str, Any] | None = Field(default=None, description="Shadowsocks-specific configuration")
+    wireguard: dict[str, Any] | None = Field(default=None, description="WireGuard-specific configuration")
 
 
 class ServerConfig(BaseModel):
@@ -313,42 +311,42 @@ class ServerConfig(BaseModel):
     name: str = Field(min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$", description="Server name")
     protocol: ProtocolType = Field(description="Server protocol")
     port: int = Field(ge=1024, le=65535, description="Server port")
-    domain: Optional[str] = Field(default=None, description="Server domain")
+    domain: str | None = Field(default=None, description="Server domain")
     auto_start: bool = Field(default=True, description="Auto-start server")
-    
+
     # Resource configuration
-    resources: Optional[Dict[str, Any]] = Field(default=None, description="Resource limits")
-    
+    resources: dict[str, Any] | None = Field(default=None, description="Resource limits")
+
     # Protocol-specific configurations
-    vless: Optional[Dict[str, Any]] = Field(default=None, description="VLESS server configuration")
-    shadowsocks: Optional[Dict[str, Any]] = Field(default=None, description="Shadowsocks server configuration")
-    wireguard: Optional[Dict[str, Any]] = Field(default=None, description="WireGuard server configuration")
+    vless: dict[str, Any] | None = Field(default=None, description="VLESS server configuration")
+    shadowsocks: dict[str, Any] | None = Field(default=None, description="Shadowsocks server configuration")
+    wireguard: dict[str, Any] | None = Field(default=None, description="WireGuard server configuration")
 
 
 class NetworkRoute(BaseModel):
     """Network route configuration."""
     destination: str = Field(description="Route destination")
     gateway: str = Field(description="Route gateway")
-    metric: Optional[int] = Field(default=None, ge=1, le=1000, description="Route metric")
+    metric: int | None = Field(default=None, ge=1, le=1000, description="Route metric")
 
 
 class AlertConfig(BaseModel):
     """Alert configuration."""
     name: str = Field(min_length=1, max_length=100, description="Alert name")
     condition: str = Field(description="Alert condition")
-    threshold: Union[int, float] = Field(description="Alert threshold")
+    threshold: int | float = Field(description="Alert threshold")
     action: str = Field(default="notify", description="Alert action")
 
 
 class PresetNetworkConfig(BaseModel):
     """Network configuration for preset."""
     isolation: bool = Field(default=True, description="Network isolation")
-    custom_routes: List[NetworkRoute] = Field(default_factory=list, description="Custom routes")
+    custom_routes: list[NetworkRoute] = Field(default_factory=list, description="Custom routes")
 
 
 class PresetMonitoringConfig(BaseModel):
     """Monitoring configuration for preset."""
-    alerts: List[AlertConfig] = Field(default_factory=list, description="Alert configurations")
+    alerts: list[AlertConfig] = Field(default_factory=list, description="Alert configurations")
 
 
 class PresetMetadata(BaseModel):
@@ -363,11 +361,11 @@ class PresetMetadata(BaseModel):
 class UserPresetSchema(BaseModel):
     """User preset configuration schema."""
     preset: PresetMetadata = Field(description="Preset metadata")
-    users: List[UserConfig] = Field(default_factory=list, description="User configurations")
-    servers: List[ServerConfig] = Field(default_factory=list, description="Server configurations")
+    users: list[UserConfig] = Field(default_factory=list, description="User configurations")
+    servers: list[ServerConfig] = Field(default_factory=list, description="Server configurations")
     network: PresetNetworkConfig = Field(default_factory=PresetNetworkConfig, description="Network configuration")
     monitoring: PresetMonitoringConfig = Field(default_factory=PresetMonitoringConfig, description="Monitoring configuration")
-    
+
     class Config:
         """Pydantic configuration."""
         extra = "forbid"
@@ -380,8 +378,8 @@ class ResourceLimits(BaseModel):
     """Resource limits configuration."""
     memory: str = Field(default="512MB", pattern=r"^\d+(\.\d+)?(MB|GB)$", description="Memory limit")
     cpu_limit: str = Field(default="1.0", pattern=r"^\d+(\.\d+)?$", description="CPU limit")
-    cpu_reservation: Optional[str] = Field(default=None, pattern=r"^\d+(\.\d+)?$", description="CPU reservation")
-    memory_reservation: Optional[str] = Field(default=None, pattern=r"^\d+(\.\d+)?(MB|GB)$", description="Memory reservation")
+    cpu_reservation: str | None = Field(default=None, pattern=r"^\d+(\.\d+)?$", description="CPU reservation")
+    memory_reservation: str | None = Field(default=None, pattern=r"^\d+(\.\d+)?(MB|GB)$", description="Memory reservation")
 
 
 class VolumeMount(BaseModel):
@@ -401,12 +399,12 @@ class PortMapping(BaseModel):
 class DockerServerConfig(BaseModel):
     """Docker configuration for server."""
     image: str = Field(description="Docker image")
-    tag: Optional[str] = Field(default=None, description="Image tag")
+    tag: str | None = Field(default=None, description="Image tag")
     restart_policy: str = Field(default="unless-stopped", description="Restart policy")
     resources: ResourceLimits = Field(default_factory=ResourceLimits, description="Resource limits")
-    environment: Dict[str, str] = Field(default_factory=dict, description="Environment variables")
-    volumes: List[VolumeMount] = Field(default_factory=list, description="Volume mounts")
-    ports: List[PortMapping] = Field(default_factory=list, description="Port mappings")
+    environment: dict[str, str] = Field(default_factory=dict, description="Environment variables")
+    volumes: list[VolumeMount] = Field(default_factory=list, description="Volume mounts")
+    ports: list[PortMapping] = Field(default_factory=list, description="Port mappings")
 
 
 class HealthCheckConfig(BaseModel):
@@ -415,7 +413,7 @@ class HealthCheckConfig(BaseModel):
     interval: int = Field(default=30, ge=5, le=300, description="Health check interval in seconds")
     timeout: int = Field(default=10, ge=1, le=60, description="Health check timeout in seconds")
     retries: int = Field(default=3, ge=1, le=10, description="Health check retries")
-    command: Optional[str] = Field(default=None, description="Health check command")
+    command: str | None = Field(default=None, description="Health check command")
 
 
 class MetricConfig(BaseModel):
@@ -423,20 +421,20 @@ class MetricConfig(BaseModel):
     name: str = Field(description="Metric name")
     type: str = Field(pattern=r"^(counter|gauge|histogram|summary)$", description="Metric type")
     description: str = Field(description="Metric description")
-    labels: List[str] = Field(default_factory=list, description="Metric labels")
+    labels: list[str] = Field(default_factory=list, description="Metric labels")
 
 
 class ServerMonitoringConfig(BaseModel):
     """Server monitoring configuration."""
     metrics_enabled: bool = Field(default=True, description="Enable metrics")
-    metrics_port: Optional[int] = Field(default=None, ge=1024, le=65535, description="Metrics port")
-    custom_metrics: List[MetricConfig] = Field(default_factory=list, description="Custom metrics")
+    metrics_port: int | None = Field(default=None, ge=1024, le=65535, description="Metrics port")
+    custom_metrics: list[MetricConfig] = Field(default_factory=list, description="Custom metrics")
 
 
 class ServerConfigSchema(BaseModel):
     """Individual server configuration schema."""
-    server: Dict[str, Any] = Field(description="Server configuration")
-    
+    server: dict[str, Any] = Field(description="Server configuration")
+
     class Config:
         """Pydantic configuration."""
         extra = "allow"  # Allow extra fields for flexibility
@@ -444,7 +442,7 @@ class ServerConfigSchema(BaseModel):
 
 class YamlSchemaValidator:
     """YAML schema validator using Pydantic models."""
-    
+
     def __init__(self):
         """Initialize schema validator."""
         self.schemas = {
@@ -452,93 +450,92 @@ class YamlSchemaValidator:
             "user_preset": UserPresetSchema,
             "server_config": ServerConfigSchema,
         }
-        self.generated_schemas: Dict[str, Dict[str, Any]] = {}
-    
+        self.generated_schemas: dict[str, dict[str, Any]] = {}
+
     def validate_yaml_data(
         self,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         schema_type: str = "config"
     ) -> ValidationResult:
-        """
-        Validate YAML data against schema.
+        """Validate YAML data against schema.
         
         Args:
             data: YAML data to validate
             schema_type: Type of schema (config, user_preset, server_config)
         """
         result = ValidationResult(is_valid=False)
-        
+
         if schema_type not in self.schemas:
             result.errors.append(f"Unknown schema type: {schema_type}")
             return result
-        
+
         schema_model = self.schemas[schema_type]
-        
+
         try:
             # Validate with Pydantic
             validated_instance = schema_model(**data)
             result.validated_data = validated_instance.model_dump()
             result.is_valid = True
             result.schema_version = getattr(schema_model, '__version__', '1.0.0')
-            
+
         except ValidationError as e:
             for error in e.errors():
                 field_path = ' -> '.join(str(loc) for loc in error['loc'])
                 result.errors.append(f"Field '{field_path}': {error['msg']}")
         except Exception as e:
             result.errors.append(f"Validation error: {e}")
-        
+
         return result
-    
-    def generate_json_schema(self, schema_type: str = "config") -> Dict[str, Any]:
+
+    def generate_json_schema(self, schema_type: str = "config") -> dict[str, Any]:
         """Generate JSON schema for YAML validation."""
         if schema_type not in self.schemas:
             raise ValueError(f"Unknown schema type: {schema_type}")
-        
+
         if schema_type in self.generated_schemas:
             return self.generated_schemas[schema_type]
-        
+
         schema_model = self.schemas[schema_type]
         json_schema = schema_model.model_json_schema()
-        
+
         # Add custom properties
         json_schema["$schema"] = "http://json-schema.org/draft-07/schema#"
         json_schema["title"] = f"VPN Manager {schema_type.replace('_', ' ').title()} Schema"
         json_schema["description"] = f"Schema for VPN Manager {schema_type} YAML files"
-        
+
         self.generated_schemas[schema_type] = json_schema
         return json_schema
-    
+
     def save_json_schema(self, schema_type: str, output_path: Path) -> bool:
         """Save JSON schema to file."""
         try:
             schema = self.generate_json_schema(schema_type)
-            
+
             output_path.parent.mkdir(parents=True, exist_ok=True)
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(schema, f, indent=2)
-            
+
             return True
         except Exception as e:
             console.print(f"[red]Error saving schema: {e}[/red]")
             return False
-    
+
     def validate_with_jsonschema(
         self,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         schema_type: str = "config"
     ) -> ValidationResult:
         """Validate using JSON Schema (alternative to Pydantic)."""
         result = ValidationResult(is_valid=False)
-        
+
         try:
             schema = self.generate_json_schema(schema_type)
             jsonschema.validate(data, schema)
-            
+
             result.is_valid = True
             result.validated_data = data
             result.schema_version = schema.get('version', '1.0.0')
-            
+
         except jsonschema.ValidationError as e:
             result.errors.append(f"Schema validation error: {e.message}")
             if e.absolute_path:
@@ -548,81 +545,81 @@ class YamlSchemaValidator:
             result.errors.append(f"Schema error: {e.message}")
         except Exception as e:
             result.errors.append(f"Validation error: {e}")
-        
+
         return result
-    
+
     def get_schema_documentation(self, schema_type: str = "config") -> str:
         """Generate documentation for schema."""
         if schema_type not in self.schemas:
             return f"Unknown schema type: {schema_type}"
-        
+
         schema_model = self.schemas[schema_type]
         schema = self.generate_json_schema(schema_type)
-        
+
         # Generate markdown documentation
         docs = f"# {schema['title']}\n\n"
         docs += f"{schema['description']}\n\n"
-        
-        def document_properties(properties: Dict[str, Any], level: int = 2) -> str:
+
+        def document_properties(properties: dict[str, Any], level: int = 2) -> str:
             """Document schema properties recursively."""
             doc = ""
-            
+
             for prop_name, prop_schema in properties.items():
                 doc += "#" * level + f" {prop_name}\n\n"
-                
+
                 if 'description' in prop_schema:
                     doc += f"{prop_schema['description']}\n\n"
-                
+
                 if 'type' in prop_schema:
                     doc += f"**Type:** `{prop_schema['type']}`\n\n"
-                
+
                 if 'default' in prop_schema:
                     doc += f"**Default:** `{prop_schema['default']}`\n\n"
-                
+
                 if 'enum' in prop_schema:
                     doc += f"**Allowed values:** {', '.join(f'`{v}`' for v in prop_schema['enum'])}\n\n"
-                
+
                 if 'pattern' in prop_schema:
                     doc += f"**Pattern:** `{prop_schema['pattern']}`\n\n"
-                
+
                 if 'minimum' in prop_schema or 'maximum' in prop_schema:
                     min_val = prop_schema.get('minimum', 'none')
                     max_val = prop_schema.get('maximum', 'none')
                     doc += f"**Range:** {min_val} to {max_val}\n\n"
-                
+
                 # Handle nested objects
                 if prop_schema.get('type') == 'object' and 'properties' in prop_schema:
                     doc += document_properties(prop_schema['properties'], level + 1)
-                
+
                 doc += "\n"
-            
+
             return doc
-        
+
         if 'properties' in schema:
             docs += document_properties(schema['properties'])
-        
+
         return docs
-    
+
     def show_schema_info(self, schema_type: str = "config") -> None:
         """Display schema information in a formatted table."""
         if schema_type not in self.schemas:
             console.print(f"[red]Unknown schema type: {schema_type}[/red]")
             return
-        
+
         schema_model = self.schemas[schema_type]
         schema = self.generate_json_schema(schema_type)
-        
+
         # Create info panel
         info_text = f"[bold]{schema['title']}[/bold]\n"
         info_text += f"{schema['description']}\n\n"
         info_text += f"[blue]Schema Type:[/blue] {schema_type}\n"
         info_text += f"[blue]Model:[/blue] {schema_model.__name__}\n"
-        
+
         if 'properties' in schema:
             info_text += f"[blue]Fields:[/blue] {len(schema['properties'])}\n"
-        
+
         console.print(Panel(info_text, title="Schema Information"))
-        
+
         # Create fields table
         if 'properties' in schema:
             table = Table(title="Schema Fields")
@@ -630,20 +627,20 @@ class YamlSchemaValidator:
             table.add_column("Type", style="green", width=15)
             table.add_column("Required", justify="center", width=10)
             table.add_column("Description", style="dim")
-            
+
             required_fields = set(schema.get('required', []))
-            
+
             for field_name, field_schema in schema['properties'].items():
                 field_type = field_schema.get('type', 'unknown')
                 is_required = "✓" if field_name in required_fields else ""
                 description = field_schema.get('description', '')
-                
+
                 # Truncate long descriptions
                 if len(description) > 50:
                     description = description[:47] + "..."
-                
+
                 table.add_row(field_name, field_type, is_required, description)
-            
+
             console.print(table)
 
 
@@ -651,12 +648,12 @@ class YamlSchemaValidator:
 yaml_schema_validator = YamlSchemaValidator()
 
 
-def validate_yaml_config(data: Dict[str, Any], schema_type: str = "config") -> ValidationResult:
+def validate_yaml_config(data: dict[str, Any], schema_type: str = "config") -> ValidationResult:
     """Convenience function to validate YAML configuration."""
     return yaml_schema_validator.validate_yaml_data(data, schema_type)
 
 
-def generate_config_schema(schema_type: str = "config") -> Dict[str, Any]:
+def generate_config_schema(schema_type: str = "config") -> dict[str, Any]:
     """Convenience function to generate JSON schema."""
     return yaml_schema_validator.generate_json_schema(schema_type)
 
@@ -670,14 +667,14 @@ if __name__ == "__main__":
     # Generate and save all schemas when module is run directly
     schema_dir = Path(__file__).parent.parent / "schemas"
     schema_dir.mkdir(exist_ok=True)
-    
+
     for schema_type in yaml_schema_validator.schemas.keys():
         output_path = schema_dir / f"{schema_type}_schema.json"
         if save_schema_file(schema_type, output_path):
             console.print(f"[green]✓ Generated schema: {output_path}[/green]")
         else:
             console.print(f"[red]✗ Failed to generate schema: {output_path}[/red]")
-    
+
     # Display schema info
     for schema_type in yaml_schema_validator.schemas.keys():
         yaml_schema_validator.show_schema_info(schema_type)

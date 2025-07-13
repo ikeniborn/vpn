@@ -1,5 +1,4 @@
-"""
-Monitoring and statistics CLI commands.
+"""Monitoring and statistics CLI commands.
 """
 
 import typer

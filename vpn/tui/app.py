@@ -1,29 +1,26 @@
-"""
-Main Textual application for VPN Manager TUI.
+"""Main Textual application for VPN Manager TUI.
 """
 
-from typing import Optional
 
-from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.widgets import Footer, Header
 
 from vpn.tui.screens.dashboard import DashboardScreen
-from vpn.tui.screens.users import UsersScreen
-from vpn.tui.screens.servers import ServersScreen
 from vpn.tui.screens.monitoring import MonitoringScreen
+from vpn.tui.screens.servers import ServersScreen
 from vpn.tui.screens.settings import SettingsScreen
+from vpn.tui.screens.users import UsersScreen
 from vpn.tui.widgets.navigation import NavigationSidebar
 
 
 class VPNManagerApp(App):
     """Main VPN Manager TUI application."""
-    
+
     CSS_PATH = "styles.css"
     TITLE = "VPN Manager"
     SUB_TITLE = "Terminal User Interface"
-    
+
     BINDINGS = [
         Binding("d", "push_screen('dashboard')", "Dashboard", priority=True),
         Binding("u", "push_screen('users')", "Users", priority=True),
@@ -35,7 +32,7 @@ class VPNManagerApp(App):
         Binding("?", "help", "Help"),
         Binding("t", "toggle_theme", "Theme"),
     ]
-    
+
     SCREENS = {
         "dashboard": DashboardScreen,
         "users": UsersScreen,
@@ -43,34 +40,33 @@ class VPNManagerApp(App):
         "monitoring": MonitoringScreen,
         "settings": SettingsScreen,
     }
-    
+
     def __init__(self):
         """Initialize the application."""
         super().__init__()
-        self.current_theme = "dark"
-    
+
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
         yield Header()
         yield NavigationSidebar()
         yield Footer()
-    
+
     def on_mount(self) -> None:
         """Called when app starts."""
         # Push the dashboard screen by default
         self.push_screen("dashboard")
-    
+
     def action_push_screen(self, screen: str) -> None:
         """Push a screen onto the screen stack."""
         if screen in self.SCREENS:
             self.push_screen(self.SCREENS[screen]())
-    
+
     def action_toggle_theme(self) -> None:
         """Toggle between dark and light themes."""
-        self.current_theme = "light" if self.current_theme == "dark" else "dark"
-        self.dark = self.current_theme == "dark"
-        self.notify(f"Switched to {self.current_theme} theme")
-    
+        self.dark = not self.dark
+        theme_name = "dark" if self.dark else "light"
+        self.notify(f"Switched to {theme_name} theme")
+
     def action_help(self) -> None:
         """Show help screen."""
         from vpn.tui.screens.help import HelpScreen

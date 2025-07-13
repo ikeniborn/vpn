@@ -1,18 +1,17 @@
-"""
-VPN protocol implementations.
+"""VPN protocol implementations.
 """
 
 from .base import BaseProtocol, ProtocolConfig
-from .vless import VLESSProtocol
-from .shadowsocks import ShadowsocksProtocol
-from .wireguard import WireGuardProtocol
 from .proxy import ProxyProtocol
+from .shadowsocks import ShadowsocksProtocol
+from .vless import VLESSProtocol
+from .wireguard import WireGuardProtocol
 
 __all__ = [
     "BaseProtocol",
     "ProtocolConfig",
-    "VLESSProtocol",
-    "ShadowsocksProtocol",
-    "WireGuardProtocol",
     "ProxyProtocol",
+    "ShadowsocksProtocol",
+    "VLESSProtocol",
+    "WireGuardProtocol",
 ]

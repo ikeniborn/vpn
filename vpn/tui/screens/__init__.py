@@ -1,21 +1,20 @@
-"""
-TUI screens for VPN Manager.
+"""TUI screens for VPN Manager.
 """
 
 from .base import BaseScreen
 from .dashboard import DashboardScreen
-from .users import UsersScreen
-from .servers import ServersScreen
-from .monitoring import MonitoringScreen
-from .settings import SettingsScreen
 from .help import HelpScreen
+from .monitoring import MonitoringScreen
+from .servers import ServersScreen
+from .settings import SettingsScreen
+from .users import UsersScreen
 
 __all__ = [
     "BaseScreen",
     "DashboardScreen",
-    "UsersScreen",
-    "ServersScreen",
-    "MonitoringScreen",
-    "SettingsScreen",
     "HelpScreen",
+    "MonitoringScreen",
+    "ServersScreen",
+    "SettingsScreen",
+    "UsersScreen",
 ]

@@ -3,11 +3,9 @@ Pytest configuration and shared fixtures.
 """
 
 import asyncio
-import os
-import tempfile
+from collections.abc import AsyncGenerator, Generator
 from pathlib import Path
-from typing import AsyncGenerator, Generator, Dict, Any
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -16,9 +14,9 @@ from sqlalchemy.orm import sessionmaker
 
 # Import models and database
 try:
-    from vpn.core.database import Base, UserDB
-    from vpn.core.models import User, ProtocolType, UserStatus
     from vpn.core.config import Settings
+    from vpn.core.database import Base, UserDB
+    from vpn.core.models import ProtocolType, User, UserStatus
 except ImportError:
     # Handle import errors gracefully during test discovery
     Base = None
@@ -43,23 +41,23 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         echo=False,
         connect_args={"check_same_thread": False}
     )
-    
+
     # Create tables if Base is available
     if Base is not None:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-    
+
     # Create session
     async_session = sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False
     )
-    
+
     async with async_session() as session:
         try:
             yield session
         finally:
             await session.rollback()
-    
+
     await engine.dispose()
 
 
@@ -71,11 +69,11 @@ async def db_engine():
         echo=False,
         connect_args={"check_same_thread": False}
     )
-    
+
     if Base is not None:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-    
+
     yield engine
     await engine.dispose()
 
@@ -144,8 +142,7 @@ def mock_docker_container(mocker):
 @pytest.fixture
 def mock_enhanced_docker_manager(mocker, mock_docker_client):
     """Create a mock EnhancedDockerManager."""
-    from unittest.mock import AsyncMock
-    
+
     manager = mocker.MagicMock()
     manager.start_container = AsyncMock()
     manager.stop_container = AsyncMock()
@@ -153,12 +150,12 @@ def mock_enhanced_docker_manager(mocker, mock_docker_client):
     manager.get_container = AsyncMock()
     manager.list_containers = AsyncMock(return_value=[])
     manager.get_container_stats = AsyncMock(return_value={})
-    
+
     # Batch operations
     manager.start_containers_batch = AsyncMock(return_value={})
     manager.stop_containers_batch = AsyncMock(return_value={})
     manager.get_containers_stats_batch = AsyncMock(return_value={})
-    
+
     return manager
 
 
@@ -173,10 +170,10 @@ def test_env_vars(monkeypatch):
         "VPN_INSTALL_PATH": "/tmp/test_vpn",
         "VPN_DATABASE_URL": "sqlite+aiosqlite:///:memory:",
     }
-    
+
     for key, value in test_vars.items():
         monkeypatch.setenv(key, value)
-    
+
     return test_vars
 
 
@@ -187,11 +184,11 @@ def isolated_filesystem(tmp_path):
     config_dir = tmp_path / "config"
     data_dir = tmp_path / "data"
     install_dir = tmp_path / "install"
-    
+
     config_dir.mkdir()
     data_dir.mkdir()
     install_dir.mkdir()
-    
+
     return {
         "root": tmp_path,
         "config": config_dir,
@@ -205,7 +202,7 @@ def test_settings(isolated_filesystem, test_env_vars):
     """Create test settings configuration."""
     if Settings is None:
         return {}
-    
+
     return Settings(
         debug=True,
         log_level="DEBUG",
@@ -221,9 +218,10 @@ def test_settings(isolated_filesystem, test_env_vars):
 def performance_monitor():
     """Fixture for performance monitoring in tests."""
     import time
-    import psutil
     import tracemalloc
-    
+
+    import psutil
+
     class PerformanceMonitor:
         def __init__(self):
             self.start_time = None
@@ -231,25 +229,25 @@ def performance_monitor():
             self.start_memory = None
             self.end_memory = None
             self.process = psutil.Process()
-            
+
         def start(self):
             tracemalloc.start()
             self.start_time = time.time()
             self.start_memory = self.process.memory_info().rss
-            
+
         def stop(self):
             self.end_time = time.time()
             self.end_memory = self.process.memory_info().rss
             current, peak = tracemalloc.get_traced_memory()
             tracemalloc.stop()
-            
+
             return {
                 "duration": self.end_time - self.start_time,
                 "memory_delta": self.end_memory - self.start_memory,
                 "peak_memory": peak,
                 "current_memory": current
             }
-    
+
     return PerformanceMonitor()
 
 
@@ -295,12 +293,12 @@ async def async_context():
     class AsyncTestContext:
         def __init__(self):
             self.tasks = []
-            
+
         async def add_task(self, coro):
             task = asyncio.create_task(coro)
             self.tasks.append(task)
             return task
-            
+
         async def cleanup(self):
             for task in self.tasks:
                 if not task.done():
@@ -309,7 +307,7 @@ async def async_context():
                         await task
                     except asyncio.CancelledError:
                         pass
-    
+
     context = AsyncTestContext()
     try:
         yield context
@@ -352,15 +350,15 @@ def pytest_collection_modifyitems(config, items):
         # Auto-mark slow tests
         if "slow" in item.nodeid or "load" in item.nodeid:
             item.add_marker(pytest.mark.slow)
-            
+
         # Auto-mark integration tests
         if "integration" in item.nodeid or "test_e2e" in item.nodeid:
             item.add_marker(pytest.mark.integration)
-            
+
         # Auto-mark docker tests
         if "docker" in item.nodeid:
             item.add_marker(pytest.mark.docker)
-            
+
         # Auto-mark TUI tests
         if "tui" in item.nodeid:
             item.add_marker(pytest.mark.tui)

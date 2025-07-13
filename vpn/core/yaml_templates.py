@@ -1,29 +1,33 @@
-"""
-YAML-based template system for VPN configurations.
+"""YAML-based template system for VPN configurations.
 
 This module provides a comprehensive template system for generating VPN configurations
 using YAML templates with Jinja2 templating engine.
 """
 
-import os
-import uuid
-import secrets
 import base64
 import hashlib
-from pathlib import Path
-from typing import Dict, Any, List, Optional, Union, Callable
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from enum import Enum
+import os
 import re
+import secrets
+import uuid
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Any
 
-from jinja2 import (
-    Environment, FileSystemLoader, DictLoader, Template,
-    select_autoescape, StrictUndefined, TemplateNotFound,
-    TemplateSyntaxError, TemplateRuntimeError
-)
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, x25519
+from jinja2 import (
+    Environment,
+    FileSystemLoader,
+    StrictUndefined,
+    TemplateNotFound,
+    TemplateRuntimeError,
+    TemplateSyntaxError,
+    select_autoescape,
+)
 from rich.console import Console
 
 console = Console()
@@ -47,19 +51,19 @@ class TemplateType(str, Enum):
 class TemplateContext:
     """Context for template rendering."""
     template_type: TemplateType
-    variables: Dict[str, Any] = field(default_factory=dict)
-    functions: Dict[str, Callable] = field(default_factory=dict)
-    filters: Dict[str, Callable] = field(default_factory=dict)
-    globals: Dict[str, Any] = field(default_factory=dict)
-    
+    variables: dict[str, Any] = field(default_factory=dict)
+    functions: dict[str, Callable] = field(default_factory=dict)
+    filters: dict[str, Callable] = field(default_factory=dict)
+    globals: dict[str, Any] = field(default_factory=dict)
+
     def update(self, **kwargs) -> None:
         """Update context variables."""
         self.variables.update(kwargs)
-    
+
     def add_function(self, name: str, func: Callable) -> None:
         """Add custom function to context."""
         self.functions[name] = func
-    
+
     def add_filter(self, name: str, func: Callable) -> None:
         """Add custom filter to context."""
         self.filters[name] = func
@@ -70,16 +74,16 @@ class TemplateResult:
     """Result of template rendering."""
     content: str
     template_type: TemplateType
-    variables_used: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
-    render_time: Optional[float] = None
-    
+    variables_used: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    render_time: float | None = None
+
     @property
     def is_valid(self) -> bool:
         """Check if rendering was successful."""
         return len(self.errors) == 0
-    
+
     @property
     def has_warnings(self) -> bool:
         """Check if there are warnings."""
@@ -88,18 +92,18 @@ class TemplateResult:
 
 class VPNTemplateEngine:
     """Enhanced template engine for VPN configurations."""
-    
-    def __init__(self, template_dirs: Optional[List[Path]] = None):
+
+    def __init__(self, template_dirs: list[Path] | None = None):
         """Initialize template engine."""
         self.template_dirs = template_dirs or [
             Path(__file__).parent.parent / "templates",
             Path.home() / ".config" / "vpn-manager" / "templates"
         ]
-        
+
         # Ensure template directories exist
         for template_dir in self.template_dirs:
             template_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Setup Jinja2 environment
         self.env = Environment(
             loader=FileSystemLoader([str(d) for d in self.template_dirs]),
@@ -109,12 +113,12 @@ class VPNTemplateEngine:
             lstrip_blocks=True,
             keep_trailing_newline=True
         )
-        
+
         # Add custom functions, filters, and globals
         self._setup_template_functions()
         self._setup_template_filters()
         self._setup_template_globals()
-    
+
     def _setup_template_functions(self) -> None:
         """Setup custom template functions."""
         self.env.globals.update({
@@ -136,7 +140,7 @@ class VPNTemplateEngine:
             'file_exists': lambda path: Path(path).exists(),
             'dir_exists': lambda path: Path(path).is_dir(),
         })
-    
+
     def _setup_template_filters(self) -> None:
         """Setup custom template filters."""
         self.env.filters.update({
@@ -153,7 +157,7 @@ class VPNTemplateEngine:
             'quote_shell': self._quote_shell_filter,
             'indent_yaml': self._indent_yaml_filter,
         })
-    
+
     def _setup_template_globals(self) -> None:
         """Setup global template variables."""
         self.env.globals.update({
@@ -170,15 +174,14 @@ class VPNTemplateEngine:
                 'wireguard': ['curve25519', 'ed25519'],
             },
         })
-    
+
     def render_template(
         self,
         template_name: str,
         context: TemplateContext,
-        output_path: Optional[Path] = None
+        output_path: Path | None = None
     ) -> TemplateResult:
-        """
-        Render template with context.
+        """Render template with context.
         
         Args:
             template_name: Name of template file
@@ -187,41 +190,41 @@ class VPNTemplateEngine:
         """
         import time
         start_time = time.time()
-        
+
         result = TemplateResult(
             content="",
             template_type=context.template_type
         )
-        
+
         try:
             # Load template
             template = self.env.get_template(template_name)
-            
+
             # Prepare rendering context
             render_context = {
                 **context.variables,
                 **context.globals,
                 **context.functions
             }
-            
+
             # Add custom filters to environment
             if context.filters:
                 for name, filter_func in context.filters.items():
                     self.env.filters[name] = filter_func
-            
+
             # Render template
             content = template.render(**render_context)
             result.content = content
-            
+
             # Track variables used (simplified - would need AST analysis for complete accuracy)
             result.variables_used = list(context.variables.keys())
-            
+
             # Save to file if output path provided
             if output_path:
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(output_path, 'w', encoding='utf-8') as f:
                     f.write(content)
-            
+
         except TemplateNotFound as e:
             result.errors.append(f"Template not found: {e}")
         except TemplateSyntaxError as e:
@@ -230,10 +233,10 @@ class VPNTemplateEngine:
             result.errors.append(f"Template runtime error: {e}")
         except Exception as e:
             result.errors.append(f"Unexpected error: {e}")
-        
+
         result.render_time = time.time() - start_time
         return result
-    
+
     def create_template(
         self,
         template_name: str,
@@ -247,7 +250,7 @@ class VPNTemplateEngine:
             # Choose appropriate template directory (first writable one)
             template_dir = self.template_dirs[0]
             template_path = template_dir / f"{template_name}.yaml"
-            
+
             # Add template header
             header = f"""# VPN Manager Template: {template_name}
 # Type: {template_type.value}
@@ -260,44 +263,44 @@ class VPNTemplateEngine:
 # Available filters: to_port_range, to_cidr, to_duration, etc.
 
 """
-            
+
             full_content = header + template_content
-            
+
             with open(template_path, 'w', encoding='utf-8') as f:
                 f.write(full_content)
-            
+
             return True
-            
+
         except Exception as e:
             console.print(f"[red]Error creating template: {e}[/red]")
             return False
-    
-    def list_templates(self, template_type: Optional[TemplateType] = None) -> List[str]:
+
+    def list_templates(self, template_type: TemplateType | None = None) -> list[str]:
         """List available templates."""
         templates = []
-        
+
         for template_dir in self.template_dirs:
             if not template_dir.exists():
                 continue
-            
+
             for template_file in template_dir.glob("*.yaml"):
                 template_name = template_file.stem
-                
+
                 # Filter by type if specified
                 if template_type:
                     try:
-                        with open(template_file, 'r') as f:
+                        with open(template_file) as f:
                             header = f.read(500)  # Read first 500 chars
                         if f"Type: {template_type.value}" not in header:
                             continue
                     except:
                         continue
-                
+
                 templates.append(template_name)
-        
+
         return sorted(list(set(templates)))  # Remove duplicates and sort
-    
-    def get_template_info(self, template_name: str) -> Dict[str, Any]:
+
+    def get_template_info(self, template_name: str) -> dict[str, Any]:
         """Get template metadata."""
         info = {
             'name': template_name,
@@ -309,94 +312,94 @@ class VPNTemplateEngine:
             'path': None,
             'size': 0,
         }
-        
+
         try:
             template = self.env.get_template(f"{template_name}.yaml")
             info['exists'] = True
-            
+
             # Get template source and metadata
             source = self.env.loader.get_source(self.env, f"{template_name}.yaml")
             info['path'] = source[1]  # filename
-            
+
             if info['path']:
                 template_path = Path(info['path'])
                 info['size'] = template_path.stat().st_size
-                
+
                 # Parse metadata from header
-                with open(template_path, 'r') as f:
+                with open(template_path) as f:
                     content = f.read(1000)  # Read first 1000 chars for metadata
-                
+
                 # Extract metadata using regex
                 type_match = re.search(r'# Type: (.+)', content)
                 if type_match:
                     info['type'] = type_match.group(1).strip()
-                
+
                 desc_match = re.search(r'# Description: (.+)', content)
                 if desc_match:
                     info['description'] = desc_match.group(1).strip()
-                
+
                 author_match = re.search(r'# Author: (.+)', content)
                 if author_match:
                     info['author'] = author_match.group(1).strip()
-                
+
                 created_match = re.search(r'# Created: (.+)', content)
                 if created_match:
                     info['created'] = created_match.group(1).strip()
-            
+
         except TemplateNotFound:
             pass
         except Exception as e:
             info['error'] = str(e)
-        
+
         return info
-    
+
     def validate_template(self, template_name: str) -> TemplateResult:
         """Validate template syntax."""
         result = TemplateResult(
             content="",
             template_type=TemplateType.VLESS  # Default, will be updated
         )
-        
+
         try:
             template = self.env.get_template(f"{template_name}.yaml")
-            
+
             # Try to render with minimal context to check syntax
             minimal_context = {
                 'server_name': 'test',
                 'port': 8443,
                 'protocol': 'vless',
             }
-            
+
             # This will raise syntax errors if template is invalid
             template.render(**minimal_context)
-            
+
             # Template is valid
             result.content = "Template syntax is valid"
-            
+
         except TemplateNotFound:
             result.errors.append(f"Template '{template_name}' not found")
         except TemplateSyntaxError as e:
             result.errors.append(f"Syntax error in template: {e}")
         except Exception as e:
             result.warnings.append(f"Template may have runtime issues: {e}")
-        
+
         return result
-    
+
     # Helper methods for template functions
-    
+
     def _generate_random_password(self, length: int = 32) -> str:
         """Generate random password."""
         alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
         return ''.join(secrets.choice(alphabet) for _ in range(length))
-    
+
     def _generate_random_hex(self, length: int = 32) -> str:
         """Generate random hex string."""
         return secrets.token_hex(length // 2)
-    
+
     def _generate_random_base64(self, length: int = 32) -> str:
         """Generate random base64 string."""
         return base64.b64encode(secrets.token_bytes(length)).decode('ascii')
-    
+
     def _generate_wireguard_key(self) -> str:
         """Generate WireGuard private key."""
         key = x25519.X25519PrivateKey.generate()
@@ -407,7 +410,7 @@ class VPNTemplateEngine:
                 encryption_algorithm=serialization.NoEncryption()
             )
         ).decode('ascii')
-    
+
     def _generate_wireguard_public(self, private_key: str) -> str:
         """Generate WireGuard public key from private key."""
         try:
@@ -422,12 +425,12 @@ class VPNTemplateEngine:
             ).decode('ascii')
         except:
             return self._generate_random_base64(32)
-    
-    def _generate_x25519_key(self) -> Dict[str, str]:
+
+    def _generate_x25519_key(self) -> dict[str, str]:
         """Generate X25519 key pair."""
         private_key = x25519.X25519PrivateKey.generate()
         public_key = private_key.public_key()
-        
+
         return {
             'private': base64.b64encode(
                 private_key.private_bytes(
@@ -443,31 +446,31 @@ class VPNTemplateEngine:
                 )
             ).decode('ascii')
         }
-    
-    def _generate_rsa_key(self, key_size: int = 2048) -> Dict[str, str]:
+
+    def _generate_rsa_key(self, key_size: int = 2048) -> dict[str, str]:
         """Generate RSA key pair."""
         private_key = rsa.generate_private_key(
             public_exponent=65537,
             key_size=key_size
         )
         public_key = private_key.public_key()
-        
+
         private_pem = private_key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.PKCS8,
             encryption_algorithm=serialization.NoEncryption()
         )
-        
+
         public_pem = public_key.public_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PublicFormat.SubjectPublicKeyInfo
         )
-        
+
         return {
             'private': private_pem.decode('utf-8'),
             'public': public_pem.decode('utf-8')
         }
-    
+
     def _hash_password(self, password: str, algorithm: str = 'sha256') -> str:
         """Hash password using specified algorithm."""
         if algorithm == 'sha256':
@@ -476,38 +479,36 @@ class VPNTemplateEngine:
             return hashlib.md5(password.encode()).hexdigest()
         else:
             return password
-    
+
     def _encode_base64(self, text: str) -> str:
         """Encode text to base64."""
         return base64.b64encode(text.encode('utf-8')).decode('ascii')
-    
+
     def _decode_base64(self, encoded: str) -> str:
         """Decode base64 to text."""
         try:
             return base64.b64decode(encoded).decode('utf-8')
         except:
             return encoded
-    
+
     # Filter methods
-    
-    def _port_range_filter(self, value: Union[int, str]) -> str:
+
+    def _port_range_filter(self, value: int | str) -> str:
         """Format port range."""
-        if isinstance(value, int):
-            return str(value)
-        elif '-' in str(value):
+        if isinstance(value, int) or '-' in str(value):
             return str(value)
         else:
             return str(value)
-    
+
     def _cidr_filter(self, ip: str, prefix: int = 24) -> str:
         """Format IP address as CIDR."""
         return f"{ip}/{prefix}"
-    
-    def _duration_filter(self, seconds: Union[int, str]) -> str:
+
+    def _duration_filter(self, seconds: int | str) -> str:
         """Format duration in human-readable format."""
         if isinstance(seconds, str):
             return seconds
-        
+
         if seconds >= 86400:
             return f"{seconds // 86400}d"
         elif seconds >= 3600:
@@ -516,54 +517,54 @@ class VPNTemplateEngine:
             return f"{seconds // 60}m"
         else:
             return f"{seconds}s"
-    
-    def _file_size_filter(self, bytes_value: Union[int, str]) -> str:
+
+    def _file_size_filter(self, bytes_value: int | str) -> str:
         """Format file size in human-readable format."""
         if isinstance(bytes_value, str):
             return bytes_value
-        
+
         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
             if bytes_value < 1024:
                 return f"{bytes_value:.1f}{unit}"
             bytes_value /= 1024
         return f"{bytes_value:.1f}PB"
-    
+
     def _yaml_filter(self, value: Any) -> str:
         """Convert value to YAML format."""
         import yaml
         return yaml.dump(value, default_flow_style=False)
-    
+
     def _from_yaml_filter(self, value: str) -> Any:
         """Parse YAML string."""
         import yaml
         return yaml.safe_load(value)
-    
+
     def _json_filter(self, value: Any) -> str:
         """Convert value to JSON format."""
         import json
         return json.dumps(value, indent=2)
-    
+
     def _from_json_filter(self, value: str) -> Any:
         """Parse JSON string."""
         import json
         return json.loads(value)
-    
+
     def _slugify_filter(self, value: str) -> str:
         """Convert string to URL-safe slug."""
         import re
         value = re.sub(r'[^\w\s-]', '', value.lower())
         return re.sub(r'[-\s]+', '-', value).strip('-')
-    
+
     def _sanitize_filter(self, value: str) -> str:
         """Sanitize string for use in configuration."""
         import re
         return re.sub(r'[^\w\-.]', '_', value)
-    
+
     def _quote_shell_filter(self, value: str) -> str:
         """Quote string for shell usage."""
         import shlex
         return shlex.quote(value)
-    
+
     def _indent_yaml_filter(self, value: str, indent: int = 2) -> str:
         """Indent YAML content."""
         lines = value.split('\n')
@@ -574,7 +575,7 @@ class VPNTemplateEngine:
 def create_default_vpn_templates():
     """Create default VPN configuration templates."""
     engine = VPNTemplateEngine()
-    
+
     # VLESS template
     vless_template = """# VLESS Server Configuration
 server:
@@ -653,14 +654,14 @@ logging:
   access_log: "{{ access_log | default('/var/log/xray/access.log') }}"
   error_log: "{{ error_log | default('/var/log/xray/error.log') }}"
 """
-    
+
     engine.create_template(
         "vless_server",
         vless_template,
         TemplateType.VLESS,
         "VLESS server with Reality configuration"
     )
-    
+
     # Shadowsocks template
     shadowsocks_template = """# Shadowsocks Server Configuration
 server:
@@ -722,14 +723,14 @@ monitoring:
   metrics_enabled: {{ metrics_enabled | default(true) | lower }}
   prometheus_port: {{ prometheus_port | default(9090) }}
 """
-    
+
     engine.create_template(
         "shadowsocks_server",
         shadowsocks_template,
         TemplateType.SHADOWSOCKS,
         "Shadowsocks server with optimization settings"
     )
-    
+
     # WireGuard template
     wireguard_template = """# WireGuard Server Configuration
 server:
@@ -830,14 +831,14 @@ health_check:
   timeout: {{ health_check_timeout | default(10) }}
   command: "wg show {{ interface | default('wg0') }}"
 """
-    
+
     engine.create_template(
         "wireguard_server",
         wireguard_template,
         TemplateType.WIREGUARD,
         "WireGuard server with peer management"
     )
-    
+
     # HTTP Proxy template
     http_proxy_template = """# HTTP Proxy Server Configuration
 server:
@@ -912,14 +913,14 @@ health_check:
   timeout: {{ health_check_timeout | default(5) }}
   command: "curl -f http://localhost:{{ port }}/health || exit 1"
 """
-    
+
     engine.create_template(
         "http_proxy",
         http_proxy_template,
         TemplateType.HTTP_PROXY,
         "HTTP proxy server with authentication and access control"
     )
-    
+
     # Docker Compose template
     docker_compose_template = """# Docker Compose for VPN Services
 version: '3.8'
@@ -1016,14 +1017,14 @@ volumes:
   {% endfor %}
 {% endif %}
 """
-    
+
     engine.create_template(
         "docker_compose",
         docker_compose_template,
         TemplateType.DOCKER_COMPOSE,
         "Docker Compose configuration for VPN services"
     )
-    
+
     console.print("[green]✓ Default VPN templates created successfully[/green]")
 
 
@@ -1034,8 +1035,8 @@ vpn_template_engine = VPNTemplateEngine()
 def render_vpn_template(
     template_name: str,
     template_type: TemplateType,
-    variables: Dict[str, Any],
-    output_path: Optional[Path] = None
+    variables: dict[str, Any],
+    output_path: Path | None = None
 ) -> TemplateResult:
     """Convenience function to render VPN template."""
     context = TemplateContext(template_type=template_type, variables=variables)

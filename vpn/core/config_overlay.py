@@ -1,5 +1,4 @@
-"""
-Configuration overlay system for layered configuration management.
+"""Configuration overlay system for layered configuration management.
 
 Supports multiple configuration layers with precedence:
 1. Environment variables (highest priority)
@@ -12,7 +11,7 @@ Supports multiple configuration layers with precedence:
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import yaml
 from pydantic import ValidationError
@@ -27,18 +26,18 @@ logger = get_logger(__name__)
 
 class ConfigOverlay:
     """Manages configuration overlays and merging."""
-    
+
     def __init__(self):
         """Initialize config overlay manager."""
         self.loader = ConfigLoader()
-        self._overlay_cache: Dict[str, Dict[str, Any]] = {}
-    
+        self._overlay_cache: dict[str, dict[str, Any]] = {}
+
     def create_overlay(
         self,
         name: str,
-        config_data: Dict[str, Any],
-        base_config: Optional[str] = None,
-        description: Optional[str] = None
+        config_data: dict[str, Any],
+        base_config: str | None = None,
+        description: str | None = None
     ) -> Path:
         """Create a configuration overlay file.
         
@@ -54,9 +53,9 @@ class ConfigOverlay:
         settings = EnhancedSettings()
         overlay_dir = settings.paths.config_path / "overlays"
         overlay_dir.mkdir(parents=True, exist_ok=True)
-        
+
         overlay_path = overlay_dir / f"{name}.yaml"
-        
+
         # Create overlay metadata
         overlay_content = {
             "meta": {
@@ -67,18 +66,18 @@ class ConfigOverlay:
                 "overlay_version": "1.0"
             }
         }
-        
+
         # Add configuration data
         overlay_content.update(config_data)
-        
+
         # Save overlay file
         with open(overlay_path, 'w') as f:
             yaml.dump(overlay_content, f, default_flow_style=False, sort_keys=False)
-        
+
         logger.info(f"Created configuration overlay: {overlay_path}")
         return overlay_path
-    
-    def list_overlays(self) -> List[Dict[str, Any]]:
+
+    def list_overlays(self) -> list[dict[str, Any]]:
         """List available configuration overlays.
         
         Returns:
@@ -86,17 +85,17 @@ class ConfigOverlay:
         """
         settings = EnhancedSettings()
         overlay_dir = settings.paths.config_path / "overlays"
-        
+
         if not overlay_dir.exists():
             return []
-        
+
         overlays = []
-        
+
         for overlay_file in overlay_dir.glob("*.yaml"):
             try:
                 overlay_data = self.loader.load_config(overlay_file)
                 meta = overlay_data.get("meta", {})
-                
+
                 overlays.append({
                     "name": overlay_file.stem,
                     "path": overlay_file,
@@ -104,7 +103,7 @@ class ConfigOverlay:
                     "base_config": meta.get("base_config"),
                     "overlay_version": meta.get("overlay_version", "unknown")
                 })
-                
+
             except Exception as e:
                 logger.warning(f"Failed to load overlay {overlay_file}: {e}")
                 overlays.append({
@@ -114,10 +113,10 @@ class ConfigOverlay:
                     "base_config": None,
                     "overlay_version": "error"
                 })
-        
+
         return sorted(overlays, key=lambda x: x["name"])
-    
-    def load_overlay(self, name: str) -> Dict[str, Any]:
+
+    def load_overlay(self, name: str) -> dict[str, Any]:
         """Load a specific configuration overlay.
         
         Args:
@@ -128,33 +127,33 @@ class ConfigOverlay:
         """
         if name in self._overlay_cache:
             return self._overlay_cache[name].copy()
-        
+
         settings = EnhancedSettings()
         overlay_path = settings.paths.config_path / "overlays" / f"{name}.yaml"
-        
+
         if not overlay_path.exists():
             raise ConfigurationError(f"Overlay not found: {name}")
-        
+
         try:
             overlay_data = self.loader.load_config(overlay_path)
-            
+
             # Remove metadata from config data
             config_data = {k: v for k, v in overlay_data.items() if k != "meta"}
-            
+
             # Cache the overlay
             self._overlay_cache[name] = config_data.copy()
-            
+
             logger.debug(f"Loaded overlay: {name}")
             return config_data
-            
+
         except Exception as e:
             raise ConfigurationError(f"Failed to load overlay {name}: {e}")
-    
+
     def merge_configs(
         self,
-        base_config: Dict[str, Any],
-        *overlay_configs: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        base_config: dict[str, Any],
+        *overlay_configs: dict[str, Any]
+    ) -> dict[str, Any]:
         """Merge multiple configuration dictionaries.
         
         Args:
@@ -165,13 +164,13 @@ class ConfigOverlay:
             Merged configuration
         """
         result = base_config.copy()
-        
+
         for overlay in overlay_configs:
             result = self._deep_merge(result, overlay)
-        
+
         return result
-    
-    def _deep_merge(self, base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _deep_merge(self, base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
         """Deep merge two configuration dictionaries.
         
         Args:
@@ -182,7 +181,7 @@ class ConfigOverlay:
             Merged configuration
         """
         result = base.copy()
-        
+
         for key, value in overlay.items():
             if key in result and isinstance(result[key], dict) and isinstance(value, dict):
                 # Recursively merge nested dictionaries
@@ -190,14 +189,14 @@ class ConfigOverlay:
             else:
                 # Override or add new value
                 result[key] = value
-        
+
         return result
-    
+
     def apply_overlays(
         self,
-        base_config_path: Optional[Path] = None,
-        overlay_names: Optional[List[str]] = None,
-        environment_overrides: Optional[Dict[str, Any]] = None
+        base_config_path: Path | None = None,
+        overlay_names: list[str] | None = None,
+        environment_overrides: dict[str, Any] | None = None
     ) -> EnhancedSettings:
         """Apply configuration overlays to create final configuration.
         
@@ -217,9 +216,9 @@ class ConfigOverlay:
             # Use default configuration
             base_config = {}
             logger.debug("Using default configuration as base")
-        
+
         configs_to_merge = [base_config]
-        
+
         # Apply overlays in order
         if overlay_names:
             for overlay_name in overlay_names:
@@ -230,32 +229,32 @@ class ConfigOverlay:
                 except Exception as e:
                     logger.error(f"Failed to apply overlay {overlay_name}: {e}")
                     raise ConfigurationError(f"Overlay application failed: {overlay_name}")
-        
+
         # Apply environment overrides
         if environment_overrides:
             configs_to_merge.append(environment_overrides)
             logger.debug("Applied environment overrides")
-        
+
         # Merge all configurations
         final_config = self.merge_configs(*configs_to_merge)
-        
+
         # Create and validate final settings
         try:
             settings = EnhancedSettings(**final_config)
-            logger.info(f"Configuration overlays applied successfully")
+            logger.info("Configuration overlays applied successfully")
             return settings
         except ValidationError as e:
             logger.error(f"Configuration validation failed after overlay application: {e}")
             raise ConfigurationError(f"Invalid merged configuration: {e}")
-    
-    def create_predefined_overlays(self) -> List[Path]:
+
+    def create_predefined_overlays(self) -> list[Path]:
         """Create predefined overlay templates.
         
         Returns:
             List of created overlay paths
         """
         overlays = []
-        
+
         # Development overlay
         dev_config = {
             "debug": True,
@@ -277,7 +276,7 @@ class ConfigOverlay:
             dev_config,
             description="Development environment configuration"
         ))
-        
+
         # Production overlay
         prod_config = {
             "debug": False,
@@ -303,7 +302,7 @@ class ConfigOverlay:
             prod_config,
             description="Production environment configuration"
         ))
-        
+
         # Testing overlay
         test_config = {
             "debug": True,
@@ -324,7 +323,7 @@ class ConfigOverlay:
             test_config,
             description="Testing environment configuration"
         ))
-        
+
         # Docker overlay
         docker_config = {
             "paths": {
@@ -344,7 +343,7 @@ class ConfigOverlay:
             docker_config,
             description="Docker deployment configuration"
         ))
-        
+
         # High-security overlay
         security_config = {
             "security": {
@@ -366,10 +365,10 @@ class ConfigOverlay:
             security_config,
             description="High security configuration"
         ))
-        
+
         logger.info(f"Created {len(overlays)} predefined overlays")
         return overlays
-    
+
     def delete_overlay(self, name: str) -> bool:
         """Delete a configuration overlay.
         
@@ -381,25 +380,25 @@ class ConfigOverlay:
         """
         settings = EnhancedSettings()
         overlay_path = settings.paths.config_path / "overlays" / f"{name}.yaml"
-        
+
         if not overlay_path.exists():
             logger.warning(f"Overlay not found for deletion: {name}")
             return False
-        
+
         try:
             overlay_path.unlink()
-            
+
             # Remove from cache
             if name in self._overlay_cache:
                 del self._overlay_cache[name]
-            
+
             logger.info(f"Deleted overlay: {name}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to delete overlay {name}: {e}")
             return False
-    
+
     def export_overlay(self, name: str, output_path: Path, format_type: str = "yaml") -> bool:
         """Export an overlay to a file.
         
@@ -413,7 +412,7 @@ class ConfigOverlay:
         """
         try:
             overlay_config = self.load_overlay(name)
-            
+
             if format_type.lower() == "json":
                 with open(output_path, 'w') as f:
                     json.dump(overlay_config, f, indent=2)
@@ -426,14 +425,14 @@ class ConfigOverlay:
                     toml.dump(overlay_config, f)
             else:
                 raise ValueError(f"Unsupported export format: {format_type}")
-            
+
             logger.info(f"Exported overlay {name} to {output_path}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to export overlay {name}: {e}")
             return False
-    
+
     def clear_cache(self):
         """Clear the overlay cache."""
         self._overlay_cache.clear()
@@ -441,7 +440,7 @@ class ConfigOverlay:
 
 
 # Global overlay manager instance
-_config_overlay: Optional[ConfigOverlay] = None
+_config_overlay: ConfigOverlay | None = None
 
 
 def get_config_overlay() -> ConfigOverlay:
@@ -453,8 +452,8 @@ def get_config_overlay() -> ConfigOverlay:
 
 
 def apply_configuration_overlays(
-    overlay_names: List[str],
-    base_config_path: Optional[Path] = None
+    overlay_names: list[str],
+    base_config_path: Path | None = None
 ) -> EnhancedSettings:
     """Apply configuration overlays and return final settings.
     

@@ -1,24 +1,24 @@
-"""
-Main CLI application using Typer.
+"""Main CLI application using Typer.
 """
 
 import asyncio
-import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich import print as rprint
 from rich.console import Console
 
 from vpn import __version__
+from vpn.cli.exit_codes import (
+    ExitCode,
+    exit_manager,
+    handle_cli_errors,
+    setup_exit_codes_for_cli,
+    show_exit_codes_help,
+)
 from vpn.core.config import RuntimeConfig, settings
 from vpn.core.exceptions import VPNError
-from vpn.utils.logger import LogContext, get_logger, setup_logging
-from vpn.cli.exit_codes import (
-    ExitCode, exit_manager, handle_cli_errors, setup_exit_codes_for_cli,
-    show_exit_codes_help
-)
+from vpn.utils.logger import get_logger, setup_logging
 
 # Initialize CLI app
 app = typer.Typer(
@@ -82,44 +82,43 @@ def main(
         "--no-color",
         help="Disable colored output",
     ),
-    config_file: Optional[Path] = typer.Option(
+    config_file: Path | None = typer.Option(
         None,
         "--config",
         "-c",
         help="Path to configuration file",
     ),
 ):
-    """
-    VPN Manager - Modern VPN Management System
+    """VPN Manager - Modern VPN Management System
     
     Manage VPN servers, users, and configurations with ease.
     """
     # Set up exit code handling
     setup_exit_codes_for_cli()
-    
+
     # Update runtime configuration
     runtime_config.quiet = quiet
     runtime_config.verbose = verbose
     runtime_config.output_format = output_format
     runtime_config.no_color = no_color
-    
+
     # Update settings if debug is enabled
     if debug:
         settings.debug = True
         settings.log_level = "DEBUG"
-    
+
     # Setup logging based on flags
     log_level = None
     if quiet:
         log_level = "ERROR"
     elif verbose or debug:
         log_level = "DEBUG"
-    
+
     setup_logging(
         log_level=log_level,
         rich_output=not no_color,
     )
-    
+
     # Load custom config file if provided
     if config_file:
         if config_file.exists():
@@ -138,7 +137,7 @@ def tui():
     with handle_cli_errors("TUI launch"):
         try:
             from vpn.tui.app import VPNManagerApp
-            
+
             console.print("[bold]Launching VPN Manager TUI...[/bold]")
             app = VPNManagerApp()
             app.run()
@@ -162,20 +161,21 @@ def menu():
 def doctor():
     """Run comprehensive system diagnostics."""
     async def _run_doctor():
-        from vpn.utils.diagnostics import run_diagnostics
         from rich.table import Table
-        
+
+        from vpn.utils.diagnostics import run_diagnostics
+
         console.print("[bold]Running comprehensive system diagnostics...[/bold]\n")
-        
+
         with console.status("Performing diagnostic checks..."):
             checks, summary = await run_diagnostics()
-        
+
         # Display results
         table = Table(title="System Diagnostics Report", show_header=True)
         table.add_column("Component", style="cyan", width=20)
         table.add_column("Status", justify="center", width=8)
         table.add_column("Details", style="dim")
-        
+
         for check in checks:
             status_style = "green" if check.status == "✓" else "yellow" if check.status == "⚠" else "red"
             table.add_row(
@@ -183,16 +183,16 @@ def doctor():
                 f"[{status_style}]{check.status}[/{status_style}]",
                 check.details
             )
-        
+
         console.print(table)
-        
+
         # Display summary
         console.print("\n[bold]Summary:[/bold]")
         console.print(f"  Total checks: {summary['total']}")
         console.print(f"  [green]✓ Passed: {summary['passed']}[/green]")
         console.print(f"  [yellow]⚠ Warnings: {summary['warnings']}[/yellow]")
         console.print(f"  [red]✗ Errors: {summary['errors']}[/red]")
-        
+
         # Determine exit code based on results
         if summary['errors'] == 0 and summary['warnings'] == 0:
             console.print("\n[green]✅ System is ready for VPN operations![/green]")
@@ -204,7 +204,7 @@ def doctor():
             console.print("\n[red]❌ System has issues that need to be resolved.[/red]")
             console.print("[dim]Run 'vpn doctor --help' for troubleshooting tips.[/dim]")
             return ExitCode.SYSTEM_ERROR
-    
+
     with handle_cli_errors("System diagnostics"):
         exit_code = run_async(_run_doctor())
         exit_manager.exit_with_code(exit_code)
@@ -214,7 +214,7 @@ def doctor():
 def init():
     """Initialize VPN Manager configuration."""
     console.print("[bold]Initializing VPN Manager...[/bold]\n")
-    
+
     with handle_cli_errors("VPN Manager initialization"):
         # Create directories
         for path_name, path in [
@@ -227,20 +227,20 @@ def init():
             else:
                 path.mkdir(parents=True, exist_ok=True)
                 console.print(f"[green]✓[/green] Created {path_name} directory: {path}")
-        
+
         # Initialize database
         from vpn.core.database import init_database
-        
+
         asyncio.run(init_database())
-        console.print(f"[green]✓[/green] Database initialized")
-        
+        console.print("[green]✓[/green] Database initialized")
+
         console.print("\n[green]Initialization complete![/green]")
         exit_manager.exit_with_code(ExitCode.SUCCESS, "VPN Manager initialized successfully")
 
 
 @app.command()
 def migrate(
-    rust_path: Optional[Path] = typer.Option(
+    rust_path: Path | None = typer.Option(
         None,
         "--rust-path",
         help="Path to Rust VPN Manager installation"
@@ -259,42 +259,41 @@ def migrate(
     """Migrate from Rust VPN Manager to Python version."""
     async def _run_migration():
         from vpn.utils.migration import migrate_from_rust
-        
+
         if dry_run:
             console.print("[blue]🔍 Analyzing Rust installation (dry run)...[/blue]\n")
         else:
             console.print("[bold]🚀 Migrating from Rust VPN Manager...[/bold]\n")
-            
+
             if not no_backup:
                 console.print("[yellow]Creating backup before migration...[/yellow]")
-        
+
         try:
             migrated_count, errors = await migrate_from_rust(
                 rust_path=rust_path,
                 backup=not no_backup,
                 dry_run=dry_run
             )
-            
+
             if dry_run:
                 console.print(f"\n[blue]Dry run complete: {migrated_count} users found[/blue]")
+            elif migrated_count > 0:
+                console.print(f"\n[green]✅ Migration successful: {migrated_count} users migrated[/green]")
             else:
-                if migrated_count > 0:
-                    console.print(f"\n[green]✅ Migration successful: {migrated_count} users migrated[/green]")
-                else:
-                    console.print("\n[yellow]⚠️ No users migrated[/yellow]")
-            
+                console.print("\n[yellow]⚠️ No users migrated[/yellow]")
+
             if errors:
                 console.print(f"\n[red]❌ {len(errors)} errors occurred:[/red]")
                 for error in errors:
                     console.print(f"  • {error}")
-                    
+
                 if not dry_run:
                     raise typer.Exit(1)
-            
+
         except Exception as e:
             console.print(f"\n[red]Migration failed: {e}[/red]")
             raise typer.Exit(1)
-    
+
     with handle_cli_errors("Migration"):
         run_async(_run_migration())
 
@@ -319,21 +318,21 @@ def completions(
 ):
     """Generate shell completions for VPN Manager."""
     from typer.completion import get_completion
-    
+
     valid_shells = ["bash", "zsh", "fish", "powershell"]
     if shell not in valid_shells:
         console.print(f"[red]Invalid shell: {shell}[/red]")
         console.print(f"Valid shells: {', '.join(valid_shells)}")
         raise typer.Exit(1)
-    
+
     try:
         # Generate completion script
         completion_script = get_completion(shell)
-        
+
         if install:
             # Install to shell configuration
             home = Path.home()
-            
+
             if shell == "bash":
                 config_files = [home / ".bashrc", home / ".bash_profile"]
                 completion_line = 'eval "$(_VPN_COMPLETE=bash_source vpn)"'
@@ -344,10 +343,10 @@ def completions(
                 config_dir = home / ".config" / "fish" / "completions"
                 config_dir.mkdir(parents=True, exist_ok=True)
                 completion_file = config_dir / "vpn.fish"
-                
+
                 with open(completion_file, 'w') as f:
                     f.write(completion_script)
-                
+
                 console.print(f"[green]✓ Fish completions installed to: {completion_file}[/green]")
                 console.print("[blue]Restart your shell or run: source ~/.config/fish/config.fish[/blue]")
                 return
@@ -356,19 +355,19 @@ def completions(
                 console.print("Add this to your PowerShell profile:")
                 console.print(completion_script)
                 return
-            
+
             # For bash/zsh, add to config files
             installed = False
             for config_file in config_files:
                 if config_file.exists():
                     # Check if already installed
-                    with open(config_file, 'r') as f:
+                    with open(config_file) as f:
                         content = f.read()
-                    
+
                     if completion_line not in content:
                         with open(config_file, 'a') as f:
                             f.write(f"\n# VPN Manager completions\n{completion_line}\n")
-                        
+
                         console.print(f"[green]✓ Completions added to: {config_file}[/green]")
                         installed = True
                         break
@@ -376,17 +375,17 @@ def completions(
                         console.print(f"[yellow]Completions already installed in: {config_file}[/yellow]")
                         installed = True
                         break
-            
+
             if installed:
                 console.print("[blue]Restart your shell or run: source ~/.bashrc (or ~/.zshrc)[/blue]")
             else:
                 console.print("[red]Could not find shell configuration file[/red]")
                 console.print(f"Add this line to your shell config:\n{completion_line}")
-        
+
         else:
             # Just output the completion script
             console.print(completion_script)
-    
+
     except Exception as e:
         console.print(f"[red]Failed to generate completions: {e}[/red]")
         raise typer.Exit(1)
@@ -403,7 +402,7 @@ def run_async(coro):
         logger.error(f"{e.error_code}: {e.message}")
         if e.details:
             logger.debug(f"Details: {e.details}")
-        
+
         # Map VPN error to appropriate exit code
         code = exit_manager.handle_exception(e)
         exit_manager.exit_with_code(code, f"{e.error_code}: {e.message}")
@@ -414,12 +413,12 @@ def run_async(coro):
 
 
 # Import command groups
-from vpn.cli.commands.users import app as users_app
-from vpn.cli.commands.server import app as server_app
-from vpn.cli.commands.proxy import app as proxy_app
-from vpn.cli.commands.monitor import app as monitor_app
-from vpn.cli.commands.config import app as config_app
 from vpn.cli.commands.compose import app as compose_app
+from vpn.cli.commands.config import app as config_app
+from vpn.cli.commands.monitor import app as monitor_app
+from vpn.cli.commands.proxy import app as proxy_app
+from vpn.cli.commands.server import app as server_app
+from vpn.cli.commands.users import app as users_app
 from vpn.cli.commands.yaml_commands import app as yaml_app
 
 # Add command groups

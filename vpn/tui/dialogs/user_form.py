@@ -1,8 +1,7 @@
-"""
-User form dialog for creating/editing users.
+"""User form dialog for creating/editing users.
 """
 
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from textual import on
 from textual.app import ComposeResult
@@ -11,12 +10,12 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Select, Static
 
-from vpn.core.models import User, ProtocolType
+from vpn.core.models import ProtocolType, User
 
 
 class UserFormDialog(ModalScreen):
     """Modal dialog for user form."""
-    
+
     DEFAULT_CSS = """
     UserFormDialog {
         align: center middle;
@@ -60,30 +59,30 @@ class UserFormDialog(ModalScreen):
         margin-top: 2;
     }
     """
-    
+
     BINDINGS = [
         Binding("escape", "cancel", "Cancel"),
         Binding("ctrl+s", "save", "Save"),
     ]
-    
+
     def __init__(
         self,
-        user: Optional[User] = None,
-        callback: Optional[Callable] = None
+        user: User | None = None,
+        callback: Callable | None = None
     ):
         """Initialize user form dialog."""
         super().__init__()
         self.user = user
         self.callback = callback
         self.is_edit = user is not None
-    
+
     def compose(self) -> ComposeResult:
         """Create form layout."""
         title = f"Edit User: {self.user.username}" if self.is_edit else "Create New User"
-        
+
         with Container():
             yield Static(title, classes="dialog-title")
-            
+
             # Username field
             with Vertical(classes="form-group"):
                 yield Label("Username:", classes="form-label")
@@ -93,7 +92,7 @@ class UserFormDialog(ModalScreen):
                     id="username-input",
                     disabled=self.is_edit  # Can't change username
                 )
-            
+
             # Email field
             with Vertical(classes="form-group"):
                 yield Label("Email (optional):", classes="form-label")
@@ -102,7 +101,7 @@ class UserFormDialog(ModalScreen):
                     placeholder="user@example.com",
                     id="email-input"
                 )
-            
+
             # Protocol selection
             with Vertical(classes="form-group"):
                 yield Label("Protocol:", classes="form-label")
@@ -115,7 +114,7 @@ class UserFormDialog(ModalScreen):
                     value=current_protocol,
                     id="protocol-select"
                 )
-            
+
             # Status selection (edit only)
             if self.is_edit:
                 with Vertical(classes="form-group"):
@@ -130,12 +129,12 @@ class UserFormDialog(ModalScreen):
                         value=self.user.status,
                         id="status-select"
                     )
-            
+
             # Buttons
             with Horizontal(classes="button-container"):
                 yield Button("Cancel", id="cancel-btn", variant="default")
                 yield Button("Save", id="save-btn", variant="primary")
-    
+
     @on(Button.Pressed, "#save-btn")
     def action_save(self) -> None:
         """Handle save action."""
@@ -145,21 +144,21 @@ class UserFormDialog(ModalScreen):
             "email": self.query_one("#email-input", Input).value or None,
             "protocol": self.query_one("#protocol-select", Select).value,
         }
-        
+
         if self.is_edit:
             user_data["status"] = self.query_one("#status-select", Select).value
-        
+
         # Validate
         if not user_data["username"]:
             self.app.notify("Username is required", severity="error")
             return
-        
+
         # Call callback
         if self.callback:
             self.callback(user_data)
-        
+
         self.dismiss()
-    
+
     @on(Button.Pressed, "#cancel-btn")
     def action_cancel(self) -> None:
         """Handle cancel action."""

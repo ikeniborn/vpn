@@ -1,29 +1,26 @@
-"""
-Unified configuration loader supporting multiple formats.
+"""Unified configuration loader supporting multiple formats.
 """
 
-import os
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import toml
 import yaml
-from pydantic import ValidationError
 
 from vpn.core.exceptions import ConfigurationError
 
 
 class ConfigLoader:
     """Unified configuration loader supporting YAML and TOML formats."""
-    
+
     SUPPORTED_FORMATS = {
         '.yaml': 'yaml',
         '.yml': 'yaml',
         '.toml': 'toml',
     }
-    
+
     @classmethod
-    def load_config(cls, config_path: Union[str, Path]) -> Dict[str, Any]:
+    def load_config(cls, config_path: str | Path) -> dict[str, Any]:
         """Load configuration from file with format auto-detection.
         
         Args:
@@ -36,7 +33,7 @@ class ConfigLoader:
             ConfigurationError: If file format is unsupported or parsing fails
         """
         config_path = Path(config_path)
-        
+
         if not config_path.exists():
             raise ConfigurationError(
                 f"Configuration file not found: {config_path}",
@@ -46,7 +43,7 @@ class ConfigLoader:
                     "Run 'vpn config generate' to create example config"
                 ]
             )
-        
+
         # Detect format by extension
         suffix = config_path.suffix.lower()
         if suffix not in cls.SUPPORTED_FORMATS:
@@ -58,11 +55,11 @@ class ConfigLoader:
                     "Convert your config to supported format"
                 ]
             )
-        
+
         format_type = cls.SUPPORTED_FORMATS[suffix]
-        
+
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path) as f:
                 if format_type == 'yaml':
                     return yaml.safe_load(f) or {}
                 else:  # toml
@@ -92,13 +89,13 @@ class ConfigLoader:
                 f"Failed to load configuration: {e}",
                 details={"file": str(config_path), "format": format_type}
             )
-    
+
     @classmethod
     def save_config(
         cls,
-        config_data: Dict[str, Any],
-        config_path: Union[str, Path],
-        format_type: Optional[str] = None
+        config_data: dict[str, Any],
+        config_path: str | Path,
+        format_type: str | None = None
     ) -> None:
         """Save configuration to file.
         
@@ -109,7 +106,7 @@ class ConfigLoader:
                         auto-detect if None
         """
         config_path = Path(config_path)
-        
+
         # Auto-detect format if not specified
         if format_type is None:
             suffix = config_path.suffix.lower()
@@ -117,10 +114,10 @@ class ConfigLoader:
                 format_type = cls.SUPPORTED_FORMATS[suffix]
             else:
                 format_type = 'toml'  # Default to TOML
-        
+
         # Ensure parent directory exists
         config_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         try:
             with open(config_path, 'w') as f:
                 if format_type == 'yaml':
@@ -138,13 +135,13 @@ class ConfigLoader:
                 f"Failed to save configuration: {e}",
                 details={"file": str(config_path), "format": format_type}
             )
-    
+
     @classmethod
     def merge_configs(
         cls,
-        *configs: Dict[str, Any],
+        *configs: dict[str, Any],
         deep: bool = True
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Merge multiple configuration dictionaries.
         
         Args:
@@ -155,17 +152,17 @@ class ConfigLoader:
             Merged configuration dictionary
         """
         result = {}
-        
+
         for config in configs:
             if deep:
                 result = cls._deep_merge(result, config)
             else:
                 result.update(config)
-        
+
         return result
-    
+
     @classmethod
-    def _deep_merge(cls, base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
+    def _deep_merge(cls, base: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
         """Deep merge two dictionaries."""
         for key, value in update.items():
             if key in base and isinstance(base[key], dict) and isinstance(value, dict):
@@ -173,13 +170,13 @@ class ConfigLoader:
             else:
                 base[key] = value
         return base
-    
+
     @classmethod
     def find_config_file(
         cls,
         name: str = "config",
-        search_paths: Optional[list[Path]] = None
-    ) -> Optional[Path]:
+        search_paths: list[Path] | None = None
+    ) -> Path | None:
         """Find configuration file in standard locations.
         
         Args:
@@ -191,25 +188,25 @@ class ConfigLoader:
         """
         if search_paths is None:
             search_paths = []
-        
+
         # Standard search locations
         standard_paths = [
             Path.cwd(),  # Current directory
             Path.home() / ".config" / "vpn-manager",  # User config
             Path("/etc") / "vpn-manager",  # System config
         ]
-        
+
         all_paths = search_paths + standard_paths
-        
+
         # Try each format in each location
         for path in all_paths:
             for ext in cls.SUPPORTED_FORMATS:
                 config_file = path / f"{name}{ext}"
                 if config_file.exists():
                     return config_file
-        
+
         return None
-    
+
     @classmethod
     def generate_example_config(
         cls,
@@ -249,12 +246,12 @@ class ConfigLoader:
                 "echo": False,
             }
         }
-        
+
         if format_type == "yaml":
             content = "# VPN Manager Configuration\n"
             if include_comments:
                 content += "# This is an example configuration file in YAML format\n\n"
-            
+
             # Add comments for each section
             yaml_lines = yaml.dump(
                 example_data,
@@ -262,7 +259,7 @@ class ConfigLoader:
                 sort_keys=False,
                 allow_unicode=True
             ).split('\n')
-            
+
             result = []
             for line in yaml_lines:
                 if line.startswith('app:') and include_comments:
@@ -276,45 +273,45 @@ class ConfigLoader:
                 elif line.startswith('database:') and include_comments:
                     result.append("\n# Database settings")
                 result.append(line)
-            
+
             content += '\n'.join(result)
-            
+
         else:  # toml
             content = "# VPN Manager Configuration\n"
             if include_comments:
                 content += "# This is an example configuration file in TOML format\n\n"
-            
+
             # TOML with sections
             if include_comments:
                 content += "# Application settings\n"
             content += "[app]\n"
             content += f"debug = {str(example_data['app']['debug']).lower()}\n"
             content += f'log_level = "{example_data["app"]["log_level"]}"\n\n'
-            
+
             if include_comments:
                 content += "# VPN server defaults\n"
             content += "[server]\n"
             content += f'default_protocol = "{example_data["server"]["default_protocol"]}"\n'
             content += f"enable_firewall = {str(example_data['server']['enable_firewall']).lower()}\n"
             content += f"auto_start_servers = {str(example_data['server']['auto_start_servers']).lower()}\n\n"
-            
+
             if include_comments:
                 content += "# Terminal UI settings\n"
             content += "[tui]\n"
             content += f'theme = "{example_data["tui"]["theme"]}"\n'
             content += f"refresh_rate = {example_data['tui']['refresh_rate']}\n"
             content += f"show_stats = {str(example_data['tui']['show_stats']).lower()}\n\n"
-            
+
             if include_comments:
                 content += "# Docker configuration\n"
             content += "[docker]\n"
             content += f'socket = "{example_data["docker"]["socket"]}"\n'
             content += f"timeout = {example_data['docker']['timeout']}\n\n"
-            
+
             if include_comments:
                 content += "# Database settings\n"
             content += "[database]\n"
             content += f'url = "{example_data["database"]["url"]}"\n'
             content += f"echo = {str(example_data['database']['echo']).lower()}\n"
-        
+
         return content

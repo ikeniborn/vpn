@@ -1,16 +1,11 @@
-"""
-Docker Compose integration for VPN Manager.
+"""Docker Compose integration for VPN Manager.
 """
 
-import asyncio
-import os
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import yaml
 from rich.console import Console
-from rich.progress import track
 
 from vpn.core.config import settings
 from vpn.core.models import ProtocolType
@@ -22,33 +17,33 @@ console = Console()
 
 class DockerComposeManager:
     """Manages Docker Compose deployments for VPN services."""
-    
+
     def __init__(self, project_name: str = "vpn-manager"):
         self.project_name = project_name
         self.compose_dir = settings.install_path / "compose"
         self.templates_dir = Path(__file__).parent / "templates" / "compose"
         self.compose_file = self.compose_dir / "docker-compose.yml"
         self.env_file = self.compose_dir / ".env"
-    
+
     async def initialize_compose_project(self) -> bool:
         """Initialize a new Docker Compose project."""
         try:
             # Create compose directory
             self.compose_dir.mkdir(parents=True, exist_ok=True)
-            
+
             # Generate base compose configuration
             await self.generate_base_compose()
-            
+
             # Generate environment file
             await self.generate_env_file()
-            
+
             console.print(f"[green]✓ Docker Compose project initialized at: {self.compose_dir}[/green]")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize compose project: {e}")
             return False
-    
+
     async def generate_base_compose(self):
         """Generate base docker-compose.yml file."""
         compose_config = {
@@ -160,11 +155,11 @@ class DockerComposeManager:
                 }
             }
         }
-        
+
         # Write compose file
         with open(self.compose_file, 'w') as f:
             yaml.dump(compose_config, f, default_flow_style=False, sort_keys=False)
-    
+
     async def generate_env_file(self):
         """Generate .env file with default values."""
         env_content = """# VPN Manager Docker Compose Configuration
@@ -202,19 +197,19 @@ ENABLE_MONITORING=true
 GRAFANA_PASSWORD=admin
 PROMETHEUS_RETENTION=7d
 """
-        
+
         with open(self.env_file, 'w') as f:
             f.write(env_content)
-    
-    async def add_vpn_service(self, protocol: ProtocolType, config: Dict) -> bool:
+
+    async def add_vpn_service(self, protocol: ProtocolType, config: dict) -> bool:
         """Add a VPN service to the compose configuration."""
         try:
             # Load existing compose file
-            with open(self.compose_file, 'r') as f:
+            with open(self.compose_file) as f:
                 compose_config = yaml.safe_load(f)
-            
+
             service_name = f"vpn-{protocol.value}"
-            
+
             # Generate service configuration based on protocol
             if protocol == ProtocolType.VLESS:
                 service_config = await self._generate_vless_service(config)
@@ -224,22 +219,22 @@ PROMETHEUS_RETENTION=7d
                 service_config = await self._generate_wireguard_service(config)
             else:
                 raise ValueError(f"Unsupported protocol: {protocol}")
-            
+
             # Add service to compose config
             compose_config['services'][service_name] = service_config
-            
+
             # Write updated compose file
             with open(self.compose_file, 'w') as f:
                 yaml.dump(compose_config, f, default_flow_style=False, sort_keys=False)
-            
+
             console.print(f"[green]✓ Added {protocol.value} service to compose configuration[/green]")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to add VPN service: {e}")
             return False
-    
-    async def _generate_vless_service(self, config: Dict) -> Dict:
+
+    async def _generate_vless_service(self, config: dict) -> dict:
         """Generate VLESS service configuration."""
         return {
             'image': 'ghcr.io/xtls/xray-core:latest',
@@ -274,12 +269,12 @@ PROMETHEUS_RETENTION=7d
             'labels': [
                 'traefik.enable=true',
                 f'traefik.tcp.routers.vless.rule=HostSNI(`{config.get("domain", "${DOMAIN}")}`)',
-                f'traefik.tcp.routers.vless.entrypoints=vless',
+                'traefik.tcp.routers.vless.entrypoints=vless',
                 f'traefik.tcp.services.vless.loadbalancer.server.port={config.get("port", 8443)}'
             ]
         }
-    
-    async def _generate_shadowsocks_service(self, config: Dict) -> Dict:
+
+    async def _generate_shadowsocks_service(self, config: dict) -> dict:
         """Generate Shadowsocks service configuration."""
         return {
             'image': 'shadowsocks/shadowsocks-libev:latest',
@@ -288,7 +283,7 @@ PROMETHEUS_RETENTION=7d
             'environment': [
                 f"PASSWORD={config.get('password', '${SS_PASSWORD}')}",
                 f"METHOD={config.get('method', 'chacha20-ietf-poly1305')}",
-                f"TIMEOUT=300"
+                "TIMEOUT=300"
             ],
             'command': [
                 'ss-server',
@@ -312,8 +307,8 @@ PROMETHEUS_RETENTION=7d
                 }
             }
         }
-    
-    async def _generate_wireguard_service(self, config: Dict) -> Dict:
+
+    async def _generate_wireguard_service(self, config: dict) -> dict:
         """Generate WireGuard service configuration."""
         return {
             'image': 'linuxserver/wireguard:latest',
@@ -347,14 +342,14 @@ PROMETHEUS_RETENTION=7d
                 }
             }
         }
-    
+
     async def add_monitoring_stack(self) -> bool:
         """Add monitoring services (Prometheus, Grafana, Jaeger)."""
         try:
             # Load existing compose file
-            with open(self.compose_file, 'r') as f:
+            with open(self.compose_file) as f:
                 compose_config = yaml.safe_load(f)
-            
+
             monitoring_services = {
                 'prometheus': {
                     'image': 'prom/prometheus:latest',
@@ -415,51 +410,51 @@ PROMETHEUS_RETENTION=7d
                     ]
                 }
             }
-            
+
             # Add monitoring services
             compose_config['services'].update(monitoring_services)
-            
+
             # Write updated compose file
             with open(self.compose_file, 'w') as f:
                 yaml.dump(compose_config, f, default_flow_style=False, sort_keys=False)
-            
+
             console.print("[green]✓ Added monitoring stack to compose configuration[/green]")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to add monitoring stack: {e}")
             return False
-    
-    async def deploy_stack(self, services: Optional[List[str]] = None) -> bool:
+
+    async def deploy_stack(self, services: list[str] | None = None) -> bool:
         """Deploy the Docker Compose stack."""
         try:
             cmd = ['docker-compose', '-f', str(self.compose_file), '-p', self.project_name]
-            
+
             if services:
                 cmd.extend(['up', '-d'] + services)
             else:
                 cmd.extend(['up', '-d'])
-            
+
             console.print(f"[blue]Deploying stack: {' '.join(cmd)}[/blue]")
-            
+
             result = subprocess.run(
                 cmd,
-                cwd=self.compose_dir,
+                check=False, cwd=self.compose_dir,
                 capture_output=True,
                 text=True
             )
-            
+
             if result.returncode == 0:
                 console.print("[green]✓ Stack deployed successfully[/green]")
                 return True
             else:
                 console.print(f"[red]Stack deployment failed: {result.stderr}[/red]")
                 return False
-                
+
         except Exception as e:
             logger.error(f"Failed to deploy stack: {e}")
             return False
-    
+
     async def scale_service(self, service: str, replicas: int) -> bool:
         """Scale a specific service."""
         try:
@@ -467,65 +462,65 @@ PROMETHEUS_RETENTION=7d
                 'docker-compose', '-f', str(self.compose_file), '-p', self.project_name,
                 'up', '-d', '--scale', f'{service}={replicas}', service
             ]
-            
+
             result = subprocess.run(
                 cmd,
-                cwd=self.compose_dir,
+                check=False, cwd=self.compose_dir,
                 capture_output=True,
                 text=True
             )
-            
+
             if result.returncode == 0:
                 console.print(f"[green]✓ Scaled {service} to {replicas} replicas[/green]")
                 return True
             else:
                 console.print(f"[red]Failed to scale {service}: {result.stderr}[/red]")
                 return False
-                
+
         except Exception as e:
             logger.error(f"Failed to scale service: {e}")
             return False
-    
-    async def get_service_logs(self, service: str, lines: int = 100) -> List[str]:
+
+    async def get_service_logs(self, service: str, lines: int = 100) -> list[str]:
         """Get logs from a specific service."""
         try:
             cmd = [
                 'docker-compose', '-f', str(self.compose_file), '-p', self.project_name,
                 'logs', '--tail', str(lines), service
             ]
-            
+
             result = subprocess.run(
                 cmd,
-                cwd=self.compose_dir,
+                check=False, cwd=self.compose_dir,
                 capture_output=True,
                 text=True
             )
-            
+
             if result.returncode == 0:
                 return result.stdout.split('\n')
             else:
                 logger.error(f"Failed to get logs for {service}: {result.stderr}")
                 return []
-                
+
         except Exception as e:
             logger.error(f"Failed to get service logs: {e}")
             return []
-    
-    async def get_stack_status(self) -> Dict:
+
+    async def get_stack_status(self) -> dict:
         """Get status of all services in the stack."""
         try:
             cmd = [
                 'docker-compose', '-f', str(self.compose_file), '-p', self.project_name,
                 'ps', '--format', 'json'
             ]
-            
+
             result = subprocess.run(
                 cmd,
-                cwd=self.compose_dir,
+                check=False, cwd=self.compose_dir,
                 capture_output=True,
                 text=True
             )
-            
+
             if result.returncode == 0:
                 import json
                 services = json.loads(result.stdout) if result.stdout.strip() else []
@@ -537,33 +532,33 @@ PROMETHEUS_RETENTION=7d
             else:
                 logger.error(f"Failed to get stack status: {result.stderr}")
                 return {'services': [], 'total': 0, 'running': 0}
-                
+
         except Exception as e:
             logger.error(f"Failed to get stack status: {e}")
             return {'services': [], 'total': 0, 'running': 0}
-    
+
     async def remove_stack(self, volumes: bool = False) -> bool:
         """Remove the entire Docker Compose stack."""
         try:
             cmd = ['docker-compose', '-f', str(self.compose_file), '-p', self.project_name, 'down']
-            
+
             if volumes:
                 cmd.append('--volumes')
-            
+
             result = subprocess.run(
                 cmd,
-                cwd=self.compose_dir,
+                check=False, cwd=self.compose_dir,
                 capture_output=True,
                 text=True
             )
-            
+
             if result.returncode == 0:
                 console.print("[green]✓ Stack removed successfully[/green]")
                 return True
             else:
                 console.print(f"[red]Failed to remove stack: {result.stderr}[/red]")
                 return False
-                
+
         except Exception as e:
             logger.error(f"Failed to remove stack: {e}")
             return False

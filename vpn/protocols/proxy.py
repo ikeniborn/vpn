@@ -1,12 +1,10 @@
-"""
-HTTP/HTTPS and SOCKS5 proxy protocol implementation.
+"""HTTP/HTTPS and SOCKS5 proxy protocol implementation.
 """
 
-from typing import Dict, List, Any, Optional
-from pathlib import Path
+from typing import Any
 
-from vpn.protocols.base import BaseProtocol, ProtocolConfig
-from vpn.core.models import ProtocolType, ServerConfig, User, CryptoKeys
+from vpn.core.models import ProtocolType, ServerConfig, User
+from vpn.protocols.base import BaseProtocol
 from vpn.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -14,25 +12,25 @@ logger = get_logger(__name__)
 
 class ProxyProtocol(BaseProtocol):
     """HTTP/HTTPS and SOCKS5 proxy protocol implementation."""
-    
+
     protocol_type = ProtocolType.UNIFIED_PROXY
     default_ports = {
         "http": 8080,
         "socks5": 1080,
     }
-    
+
     def __init__(self, server_config: ServerConfig):
         """Initialize proxy protocol."""
         super().__init__(server_config)
         self.proxy_type = server_config.metadata.get("proxy_type", "http")
-    
+
     def get_docker_image(self) -> str:
         """Get Docker image for proxy server."""
         if self.proxy_type == "socks5":
             return "vimagick/dante:latest"
         return "ubuntu/squid:latest"
-    
-    def get_docker_compose_config(self) -> Dict[str, Any]:
+
+    def get_docker_compose_config(self) -> dict[str, Any]:
         """Generate docker-compose configuration."""
         return {
             "version": "3.8",
@@ -84,8 +82,8 @@ class ProxyProtocol(BaseProtocol):
                 "squid-cache": {"driver": "local"}
             }
         }
-    
-    def get_container_config(self) -> Dict[str, Any]:
+
+    def get_container_config(self) -> dict[str, Any]:
         """Get Docker container configuration."""
         config = {
             "name": f"vpn-proxy-{self.server_config.name}",
@@ -95,7 +93,7 @@ class ProxyProtocol(BaseProtocol):
             "restart": "unless-stopped",
             "networks": ["bridge"],
         }
-        
+
         if self.proxy_type == "http":
             config.update({
                 "image": "ubuntu/squid:latest",
@@ -118,15 +116,15 @@ class ProxyProtocol(BaseProtocol):
                     f"{self.server_config.config_path}/danted.conf": "/etc/danted.conf:ro"
                 }
             })
-        
+
         return config
-    
+
     def generate_server_config(self) -> str:
         """Generate proxy server configuration."""
         if self.proxy_type == "http":
             return self._generate_squid_config()
         return self._generate_dante_config()
-    
+
     def _generate_squid_config(self) -> str:
         """Generate Squid proxy configuration."""
         return """# Squid Proxy Configuration
@@ -170,7 +168,7 @@ refresh_pattern .               0       20%     4320
 # acl authenticated proxy_auth REQUIRED
 # http_access allow authenticated
 """
-    
+
     def _generate_dante_config(self) -> str:
         """Generate Dante SOCKS5 configuration."""
         return """# Dante SOCKS5 Configuration
@@ -193,7 +191,7 @@ socks pass {
     log: error
 }
 """
-    
+
     def generate_user_config(self, user: User) -> str:
         """Generate user configuration."""
         if self.proxy_type == "http":
@@ -202,16 +200,16 @@ socks pass {
             return f"{user.username}:{user.keys.private_key}"
         # For SOCKS5, authentication is handled differently
         return ""
-    
+
     def get_connection_string(self, user: User) -> str:
         """Get connection string for users."""
         host = self.server_config.public_ip or "server-ip"
-        
+
         if self.proxy_type == "http":
             return f"http://{user.username}:{user.keys.private_key}@{host}:{self.server_config.port}"
         return f"socks5://{user.username}:{user.keys.private_key}@{host}:{self.default_ports['socks5']}"
-    
-    def get_firewall_rules(self) -> List[Dict[str, Any]]:
+
+    def get_firewall_rules(self) -> list[dict[str, Any]]:
         """Get firewall rules for proxy."""
         rules = [
             {
@@ -222,37 +220,37 @@ socks pass {
                 "comment": f"Proxy {self.proxy_type} port"
             }
         ]
-        
+
         if self.proxy_type == "all":
             # Add SOCKS5 port
             rules.append({
                 "action": "allow",
-                "direction": "in", 
+                "direction": "in",
                 "protocol": "tcp",
                 "port": self.default_ports["socks5"],
                 "comment": "SOCKS5 proxy port"
             })
-        
+
         return rules
-    
-    def validate_config(self, config: Dict[str, Any]) -> bool:
+
+    def validate_config(self, config: dict[str, Any]) -> bool:
         """Validate protocol configuration."""
         proxy_type = config.get("proxy_type", "http")
         if proxy_type not in ["http", "socks5", "all"]:
             return False
-        
+
         port = config.get("port", self.default_ports.get("http"))
         if not isinstance(port, int) or port < 1 or port > 65535:
             return False
-        
+
         return True
-    
+
     async def health_check(self) -> bool:
         """Check if proxy server is healthy."""
         # This would be implemented to check proxy connectivity
         return True
-    
-    def get_stats_command(self) -> Optional[str]:
+
+    def get_stats_command(self) -> str | None:
         """Get command to retrieve server statistics."""
         if self.proxy_type == "http":
             return "squidclient -h localhost mgr:info"

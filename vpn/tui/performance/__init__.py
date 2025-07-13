@@ -1,80 +1,75 @@
-"""
-TUI Performance Optimization Package for VPN Manager.
+"""TUI Performance Optimization Package for VPN Manager.
 
 This package provides comprehensive performance optimization tools for the TUI,
 including profiling, virtual scrolling, pagination, reactive optimization, and render caching.
 """
 
-from .profiler import (
-    TUIProfiler,
-    PerformanceMetric,
-    RenderingProfile,
-    WidgetProfile,
-    ScreenProfile,
-    tui_profiler,
-    start_profiling,
-    stop_profiling,
-    profile_operation,
-    measure_render_performance,
-    generate_performance_report
-)
-
-from .virtual_scrolling import (
-    VirtualDataSource,
-    VirtualViewport,
-    VirtualList,
-    VirtualListItem,
-    VirtualTable,
-    SimpleDataSource,
-    AsyncDataSource,
-    DemoDataSource,
-    demo_virtual_list
-)
-
 from .pagination import (
-    SortOrder,
-    SortConfig,
     FilterConfig,
+    InMemoryDataSource,
     PageInfo,
     PageRequest,
     PageResult,
     PaginatedDataSource,
-    InMemoryDataSource,
+    PaginatedTable,
     PaginationControls,
     SearchAndFilter,
-    PaginatedTable,
+    SortConfig,
+    SortOrder,
     create_demo_data_source,
-    demo_paginated_table
+    demo_paginated_table,
 )
-
+from .profiler import (
+    PerformanceMetric,
+    RenderingProfile,
+    ScreenProfile,
+    TUIProfiler,
+    WidgetProfile,
+    generate_performance_report,
+    measure_render_performance,
+    profile_operation,
+    start_profiling,
+    stop_profiling,
+    tui_profiler,
+)
 from .reactive_optimization import (
-    UpdatePriority,
-    UpdateType,
-    UpdateRequest,
-    UpdateBatch,
-    ReactiveScheduler,
+    ExampleOptimizedWidget,
     OptimizedReactive,
     OptimizedWidget,
     ReactiveOptimizer,
+    ReactiveScheduler,
+    UpdateBatch,
+    UpdatePriority,
+    UpdateRequest,
+    UpdateType,
+    create_optimized_reactive,
     get_reactive_optimizer,
     register_optimized_widget,
     schedule_widget_update,
-    create_optimized_reactive,
-    ExampleOptimizedWidget
 )
-
 from .render_cache import (
-    CachePolicy,
-    CacheEvent,
-    CacheEntry,
-    CacheStats,
-    RenderCache,
-    WidgetRenderCache,
     CachedWidget,
+    CacheEntry,
+    CacheEvent,
+    CachePolicy,
+    CacheStats,
+    ExampleCachedWidget,
+    RenderCache,
     RenderCacheManager,
+    WidgetRenderCache,
     get_cache_manager,
     register_cached_widget,
-    ExampleCachedWidget
+)
+from .virtual_scrolling import (
+    AsyncDataSource,
+    DemoDataSource,
+    SimpleDataSource,
+    VirtualDataSource,
+    VirtualList,
+    VirtualListItem,
+    VirtualTable,
+    VirtualViewport,
+    demo_virtual_list,
 )
 
 __all__ = [
@@ -90,7 +85,7 @@ __all__ = [
     'profile_operation',
     'measure_render_performance',
     'generate_performance_report',
-    
+
     # Virtual Scrolling
     'VirtualDataSource',
     'VirtualViewport',
@@ -101,7 +96,7 @@ __all__ = [
     'AsyncDataSource',
     'DemoDataSource',
     'demo_virtual_list',
-    
+
     # Pagination
     'SortOrder',
     'SortConfig',
@@ -116,7 +111,7 @@ __all__ = [
     'PaginatedTable',
     'create_demo_data_source',
     'demo_paginated_table',
-    
+
     # Reactive Optimization
     'UpdatePriority',
     'UpdateType',
@@ -131,7 +126,7 @@ __all__ = [
     'schedule_widget_update',
     'create_optimized_reactive',
     'ExampleOptimizedWidget',
-    
+
     # Render Caching
     'CachePolicy',
     'CacheEvent',
@@ -154,8 +149,7 @@ def initialize_performance_system(
     cache_size_mb: int = 100,
     profiling_duration: float = 60.0
 ) -> dict:
-    """
-    Initialize the complete TUI performance system.
+    """Initialize the complete TUI performance system.
     
     Args:
         enable_profiling: Enable performance profiling
@@ -168,31 +162,30 @@ def initialize_performance_system(
         Dictionary with initialized components
     """
     components = {}
-    
+
     # Initialize profiler
     if enable_profiling:
         components['profiler'] = tui_profiler
         start_profiling()
-    
+
     # Initialize render cache manager
     if enable_caching:
         cache_manager = get_cache_manager()
         # Update cache size if needed
         cache_manager.render_cache.max_size_bytes = cache_size_mb * 1024 * 1024
         components['cache_manager'] = cache_manager
-    
+
     # Initialize reactive optimizer
     if enable_reactive_optimization:
         optimizer = get_reactive_optimizer()
         optimizer.enable_monitoring()
         components['reactive_optimizer'] = optimizer
-    
+
     return components
 
 
 def get_performance_summary() -> dict:
-    """
-    Get comprehensive performance summary from all systems.
+    """Get comprehensive performance summary from all systems.
     
     Returns:
         Dictionary with performance statistics from all components
@@ -201,14 +194,14 @@ def get_performance_summary() -> dict:
         'timestamp': time.time(),
         'components': {}
     }
-    
+
     # Profiler stats
     try:
         profiler_stats = tui_profiler.get_stats() if hasattr(tui_profiler, 'get_stats') else {}
         summary['components']['profiler'] = profiler_stats
     except Exception:
         summary['components']['profiler'] = {'error': 'Failed to get profiler stats'}
-    
+
     # Cache manager stats
     try:
         cache_manager = get_cache_manager()
@@ -216,7 +209,7 @@ def get_performance_summary() -> dict:
         summary['components']['cache'] = cache_stats
     except Exception:
         summary['components']['cache'] = {'error': 'Failed to get cache stats'}
-    
+
     # Reactive optimizer stats
     try:
         optimizer = get_reactive_optimizer()
@@ -224,16 +217,15 @@ def get_performance_summary() -> dict:
         summary['components']['reactive'] = optimizer_stats
     except Exception:
         summary['components']['reactive'] = {'error': 'Failed to get reactive stats'}
-    
+
     return summary
 
 
-def optimize_widget_for_performance(widget, 
+def optimize_widget_for_performance(widget,
                                    enable_caching: bool = True,
                                    enable_reactive_optimization: bool = True,
                                    cache_ttl: float = 300.0) -> None:
-    """
-    Optimize a widget for maximum performance.
+    """Optimize a widget for maximum performance.
     
     Args:
         widget: Widget to optimize
@@ -241,15 +233,14 @@ def optimize_widget_for_performance(widget,
         enable_reactive_optimization: Enable reactive optimization
         cache_ttl: Cache time-to-live in seconds
     """
-    
     # Register for caching
     if enable_caching:
         register_cached_widget(widget)
-        
+
         # Set cache TTL if widget supports it
         if hasattr(widget, 'cache_ttl'):
             widget.cache_ttl = cache_ttl
-    
+
     # Register for reactive optimization
     if enable_reactive_optimization:
         register_optimized_widget(widget)
@@ -257,20 +248,19 @@ def optimize_widget_for_performance(widget,
 
 def shutdown_performance_system() -> None:
     """Shutdown all performance optimization components."""
-    
     # Stop profiling
     try:
         stop_profiling()
     except Exception:
         pass
-    
+
     # Shutdown cache manager
     try:
         cache_manager = get_cache_manager()
         cache_manager.shutdown()
     except Exception:
         pass
-    
+
     # Shutdown reactive optimizer
     try:
         optimizer = get_reactive_optimizer()

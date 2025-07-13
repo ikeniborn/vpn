@@ -1,38 +1,37 @@
-"""
-Custom exceptions for VPN Manager.
+"""Custom exceptions for VPN Manager.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class VPNError(Exception):
     """Base exception for all VPN Manager errors."""
-    
+
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        suggestions: Optional[list[str]] = None,
+        error_code: str | None = None,
+        details: dict[str, Any] | None = None,
+        suggestions: list[str] | None = None,
     ):
         super().__init__(message)
         self.message = message
         self.error_code = error_code or self.__class__.__name__
         self.details = details or {}
         self.suggestions = suggestions or []
-    
+
     def __str__(self) -> str:
         """String representation with suggestions."""
         parts = [self.message]
-        
+
         if self.details:
             parts.append(f"Details: {self.details}")
-        
+
         if self.suggestions:
             parts.append("Suggestions:")
             for i, suggestion in enumerate(self.suggestions, 1):
                 parts.append(f"  {i}. {suggestion}")
-        
+
         return "\n".join(parts)
 
 
@@ -53,7 +52,7 @@ class UserError(VPNError):
 
 class UserNotFoundError(UserError):
     """User not found error."""
-    
+
     def __init__(self, username: str):
         super().__init__(
             f"User '{username}' not found",
@@ -63,7 +62,7 @@ class UserNotFoundError(UserError):
 
 class UserAlreadyExistsError(UserError):
     """User already exists error."""
-    
+
     def __init__(self, username: str):
         super().__init__(
             f"User '{username}' already exists",
@@ -78,7 +77,7 @@ class ServerError(VPNError):
 
 class ServerNotFoundError(ServerError):
     """Server not found error."""
-    
+
     def __init__(self, server_id: str):
         super().__init__(
             f"Server '{server_id}' not found",
@@ -88,7 +87,7 @@ class ServerNotFoundError(ServerError):
 
 class ServerAlreadyRunningError(ServerError):
     """Server already running error."""
-    
+
     def __init__(self, server_id: str):
         super().__init__(
             f"Server '{server_id}' is already running",
@@ -108,7 +107,7 @@ class DockerError(VPNError):
 
 class DockerNotAvailableError(DockerError):
     """Docker is not available or not running."""
-    
+
     def __init__(self):
         super().__init__(
             "Docker is not available. Please ensure Docker is installed and running.",
@@ -128,7 +127,7 @@ class NetworkError(VPNError):
 
 class PortAlreadyInUseError(NetworkError):
     """Port is already in use."""
-    
+
     def __init__(self, port: int, protocol: str = "tcp"):
         super().__init__(
             f"Port {port}/{protocol} is already in use",
@@ -143,7 +142,7 @@ class FirewallError(NetworkError):
 
 class PermissionError(VPNError):
     """Permission related errors."""
-    
+
     def __init__(self, operation: str):
         super().__init__(
             f"Permission denied for operation: {operation}. Run with appropriate privileges.",
@@ -168,7 +167,7 @@ class DatabaseError(VPNError):
 
 class DatabaseNotInitializedError(DatabaseError):
     """Database not initialized."""
-    
+
     def __init__(self):
         super().__init__(
             "Database is not initialized",
@@ -192,7 +191,7 @@ class ProxyError(VPNError):
 
 class AuthenticationError(ProxyError):
     """Authentication failed."""
-    
+
     def __init__(self, reason: str = "Invalid credentials"):
         super().__init__(
             f"Authentication failed: {reason}",
@@ -202,7 +201,7 @@ class AuthenticationError(ProxyError):
 
 class RateLimitError(ProxyError):
     """Rate limit exceeded."""
-    
+
     def __init__(self, limit: int, window: int):
         super().__init__(
             f"Rate limit exceeded: {limit} requests per {window} seconds",

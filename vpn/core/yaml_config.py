@@ -1,5 +1,4 @@
-"""
-Enhanced YAML configuration system for VPN Manager.
+"""Enhanced YAML configuration system for VPN Manager.
 
 This module provides comprehensive YAML configuration support:
 - Advanced YAML configuration loading and validation
@@ -11,16 +10,15 @@ This module provides comprehensive YAML configuration support:
 """
 
 import os
-import yaml
-import tempfile
-from pathlib import Path
-from typing import Dict, Any, List, Optional, Union, Type, Callable
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-import re
+from pathlib import Path
+from typing import Any
 
-from pydantic import BaseModel, ValidationError, Field
-from jinja2 import Template, Environment, FileSystemLoader, select_autoescape
+import yaml
+from jinja2 import Environment, FileSystemLoader, Template, select_autoescape
+from pydantic import BaseModel, ValidationError
 from rich.console import Console
 
 console = Console()
@@ -29,17 +27,17 @@ console = Console()
 @dataclass
 class YamlLoadResult:
     """Result of YAML loading operation."""
-    data: Dict[str, Any]
-    warnings: List[str] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
-    source_file: Optional[Path] = None
+    data: dict[str, Any]
+    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    source_file: Path | None = None
     loaded_at: datetime = field(default_factory=datetime.now)
-    
+
     @property
     def is_valid(self) -> bool:
         """Check if the loaded data is valid."""
         return len(self.errors) == 0
-    
+
     @property
     def has_warnings(self) -> bool:
         """Check if there are warnings."""
@@ -48,7 +46,7 @@ class YamlLoadResult:
 
 class VPNYamlConstructor(yaml.SafeLoader):
     """Custom YAML constructor for VPN-specific data types."""
-    
+
     def __init__(self, stream):
         super().__init__(stream)
         # Add custom constructors
@@ -59,32 +57,32 @@ class VPNYamlConstructor(yaml.SafeLoader):
         self.add_constructor('!env', self._construct_env_var)
         self.add_constructor('!include', self._construct_include)
         self.add_constructor('!merge', self._construct_merge)
-    
+
     def _construct_duration(self, loader, node):
         """Construct duration from string (e.g., '5m', '1h', '30s')."""
         value = loader.construct_scalar(node)
-        
+
         # Parse duration string
         pattern = r'^(\d+)([smhd])$'
         match = re.match(pattern, value.lower())
-        
+
         if not match:
             raise yaml.constructor.ConstructorError(
                 None, None, f"Invalid duration format: {value}", node.start_mark
             )
-        
+
         amount, unit = match.groups()
         amount = int(amount)
-        
+
         multipliers = {
             's': 1,
             'm': 60,
             'h': 3600,
             'd': 86400
         }
-        
+
         return amount * multipliers[unit]
-    
+
     def _construct_protocol(self, loader, node):
         """Construct protocol configuration."""
         if isinstance(node, yaml.ScalarNode):
@@ -97,33 +95,33 @@ class VPNYamlConstructor(yaml.SafeLoader):
             raise yaml.constructor.ConstructorError(
                 None, None, "Protocol must be a string or mapping", node.start_mark
             )
-    
+
     def _construct_port_range(self, loader, node):
         """Construct port range from string (e.g., '8000-8100')."""
         value = loader.construct_scalar(node)
-        
+
         if '-' in value:
             start, end = value.split('-', 1)
             return {"start": int(start), "end": int(end)}
         else:
             port = int(value)
             return {"start": port, "end": port}
-    
+
     def _construct_file_size(self, loader, node):
         """Construct file size from string (e.g., '100MB', '1GB')."""
         value = loader.construct_scalar(node).upper()
-        
+
         pattern = r'^(\d+(?:\.\d+)?)(B|KB|MB|GB|TB)$'
         match = re.match(pattern, value)
-        
+
         if not match:
             raise yaml.constructor.ConstructorError(
                 None, None, f"Invalid file size format: {value}", node.start_mark
             )
-        
+
         amount, unit = match.groups()
         amount = float(amount)
-        
+
         multipliers = {
             'B': 1,
             'KB': 1024,
@@ -131,9 +129,9 @@ class VPNYamlConstructor(yaml.SafeLoader):
             'GB': 1024 ** 3,
             'TB': 1024 ** 4
         }
-        
+
         return int(amount * multipliers[unit])
-    
+
     def _construct_env_var(self, loader, node):
         """Construct value from environment variable."""
         if isinstance(node, yaml.ScalarNode):
@@ -147,41 +145,41 @@ class VPNYamlConstructor(yaml.SafeLoader):
             raise yaml.constructor.ConstructorError(
                 None, None, "Environment variable must be string or mapping", node.start_mark
             )
-        
+
         value = os.getenv(var_name, default)
         if value is None:
             raise yaml.constructor.ConstructorError(
                 None, None, f"Environment variable {var_name} not found", node.start_mark
             )
-        
+
         return value
-    
+
     def _construct_include(self, loader, node):
         """Include another YAML file."""
         filename = loader.construct_scalar(node)
-        
+
         # Get the directory of the current file being loaded
         if hasattr(loader.stream, 'name'):
             current_dir = Path(loader.stream.name).parent
             include_path = current_dir / filename
         else:
             include_path = Path(filename)
-        
+
         if not include_path.exists():
             raise yaml.constructor.ConstructorError(
                 None, None, f"Include file not found: {include_path}", node.start_mark
             )
-        
-        with open(include_path, 'r') as f:
+
+        with open(include_path) as f:
             return yaml.load(f, Loader=VPNYamlConstructor)
-    
+
     def _construct_merge(self, loader, node):
         """Merge multiple mappings."""
         if not isinstance(node, yaml.SequenceNode):
             raise yaml.constructor.ConstructorError(
                 None, None, "Merge requires a sequence", node.start_mark
             )
-        
+
         result = {}
         for item_node in node.value:
             item = loader.construct_object(item_node)
@@ -191,23 +189,23 @@ class VPNYamlConstructor(yaml.SafeLoader):
                 raise yaml.constructor.ConstructorError(
                     None, None, "Merge items must be mappings", item_node.start_mark
                 )
-        
+
         return result
 
 
 class VPNYamlRepresenter(yaml.SafeDumper):
     """Custom YAML representer for VPN-specific data types."""
-    
+
     def __init__(self, stream, **kwargs):
         super().__init__(stream, **kwargs)
         # Add custom representers
         self.add_representer(timedelta, self._represent_duration)
         self.add_representer(Path, self._represent_path)
-    
+
     def _represent_duration(self, dumper, data):
         """Represent duration as string."""
         total_seconds = int(data.total_seconds())
-        
+
         if total_seconds >= 86400 and total_seconds % 86400 == 0:
             return dumper.represent_scalar('!duration', f"{total_seconds // 86400}d")
         elif total_seconds >= 3600 and total_seconds % 3600 == 0:
@@ -216,7 +214,7 @@ class VPNYamlRepresenter(yaml.SafeDumper):
             return dumper.represent_scalar('!duration', f"{total_seconds // 60}m")
         else:
             return dumper.represent_scalar('!duration', f"{total_seconds}s")
-    
+
     def _represent_path(self, dumper, data):
         """Represent Path as string."""
         return dumper.represent_scalar('tag:yaml.org,2002:str', str(data))
@@ -224,12 +222,12 @@ class VPNYamlRepresenter(yaml.SafeDumper):
 
 class YamlConfigManager:
     """Enhanced YAML configuration manager with advanced features."""
-    
-    def __init__(self, template_dir: Optional[Path] = None):
+
+    def __init__(self, template_dir: Path | None = None):
         """Initialize YAML config manager."""
         self.template_dir = template_dir or Path(__file__).parent.parent / "templates" / "config"
         self.template_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Setup Jinja2 environment for templating
         self.jinja_env = Environment(
             loader=FileSystemLoader(str(self.template_dir)),
@@ -237,21 +235,20 @@ class YamlConfigManager:
             trim_blocks=True,
             lstrip_blocks=True
         )
-        
+
         # Add custom Jinja2 filters
         self.jinja_env.filters['to_yaml'] = self._to_yaml_filter
         self.jinja_env.filters['from_yaml'] = self._from_yaml_filter
         self.jinja_env.filters['env_var'] = self._env_var_filter
-    
+
     def load_yaml(
         self,
-        source: Union[str, Path, Dict[str, Any]],
+        source: str | Path | dict[str, Any],
         validate_schema: bool = True,
-        schema_model: Optional[Type[BaseModel]] = None,
-        template_vars: Optional[Dict[str, Any]] = None
+        schema_model: type[BaseModel] | None = None,
+        template_vars: dict[str, Any] | None = None
     ) -> YamlLoadResult:
-        """
-        Load YAML configuration with validation and templating.
+        """Load YAML configuration with validation and templating.
         
         Args:
             source: YAML string, file path, or dictionary
@@ -260,7 +257,7 @@ class YamlConfigManager:
             template_vars: Variables for Jinja2 templating
         """
         result = YamlLoadResult(data={})
-        
+
         try:
             # Handle different source types
             if isinstance(source, dict):
@@ -270,14 +267,14 @@ class YamlConfigManager:
                 if Path(source).exists():
                     # File path
                     result.source_file = Path(source)
-                    with open(source, 'r', encoding='utf-8') as f:
+                    with open(source, encoding='utf-8') as f:
                         yaml_content = f.read()
                 else:
                     # YAML string
                     yaml_content = str(source)
             else:
                 raise ValueError(f"Unsupported source type: {type(source)}")
-            
+
             # Apply templating if variables provided
             if template_vars:
                 try:
@@ -286,7 +283,7 @@ class YamlConfigManager:
                 except Exception as e:
                     result.errors.append(f"Templating error: {e}")
                     return result
-            
+
             # Load YAML with custom constructor
             try:
                 data = yaml.load(yaml_content, Loader=VPNYamlConstructor)
@@ -296,7 +293,7 @@ class YamlConfigManager:
             except yaml.YAMLError as e:
                 result.errors.append(f"YAML parsing error: {e}")
                 return result
-            
+
             # Schema validation
             if validate_schema and schema_model:
                 try:
@@ -308,23 +305,22 @@ class YamlConfigManager:
                         result.errors.append(f"Validation error in {field_path}: {error['msg']}")
                 except Exception as e:
                     result.errors.append(f"Schema validation error: {e}")
-            
+
         except Exception as e:
             result.errors.append(f"Unexpected error: {e}")
-        
+
         return result
-    
+
     def save_yaml(
         self,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         output_path: Path,
-        template_name: Optional[str] = None,
-        template_vars: Optional[Dict[str, Any]] = None,
+        template_name: str | None = None,
+        template_vars: dict[str, Any] | None = None,
         sort_keys: bool = True,
         indent: int = 2
     ) -> bool:
-        """
-        Save configuration as YAML file.
+        """Save configuration as YAML file.
         
         Args:
             data: Configuration data to save
@@ -336,20 +332,20 @@ class YamlConfigManager:
         """
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            
+
             if template_name:
                 # Use template for structured output
                 try:
                     template = self.jinja_env.get_template(template_name)
                     content = template.render(config=data, **(template_vars or {}))
-                    
+
                     with open(output_path, 'w', encoding='utf-8') as f:
                         f.write(content)
-                    
+
                     return True
                 except Exception as e:
                     console.print(f"[yellow]Template error, falling back to direct YAML: {e}[/yellow]")
-            
+
             # Direct YAML dump
             with open(output_path, 'w', encoding='utf-8') as f:
                 yaml.dump(
@@ -362,21 +358,20 @@ class YamlConfigManager:
                     allow_unicode=True,
                     encoding='utf-8'
                 )
-            
+
             return True
-            
+
         except Exception as e:
             console.print(f"[red]Error saving YAML file: {e}[/red]")
             return False
-    
+
     def merge_configs(
         self,
-        base_config: Dict[str, Any],
-        *override_configs: Dict[str, Any],
+        base_config: dict[str, Any],
+        *override_configs: dict[str, Any],
         deep_merge: bool = True
-    ) -> Dict[str, Any]:
-        """
-        Merge multiple configuration dictionaries.
+    ) -> dict[str, Any]:
+        """Merge multiple configuration dictionaries.
         
         Args:
             base_config: Base configuration
@@ -389,29 +384,29 @@ class YamlConfigManager:
             for config in override_configs:
                 result.update(config)
             return result
-        
+
         # Deep merge
-        def deep_merge_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+        def deep_merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
             result = base.copy()
-            
+
             for key, value in override.items():
                 if key in result and isinstance(result[key], dict) and isinstance(value, dict):
                     result[key] = deep_merge_dicts(result[key], value)
                 else:
                     result[key] = value
-            
+
             return result
-        
+
         result = base_config.copy()
         for config in override_configs:
             result = deep_merge_dicts(result, config)
-        
+
         return result
-    
-    def validate_yaml_file(self, file_path: Path, schema_model: Type[BaseModel]) -> YamlLoadResult:
+
+    def validate_yaml_file(self, file_path: Path, schema_model: type[BaseModel]) -> YamlLoadResult:
         """Validate YAML file against Pydantic model."""
         return self.load_yaml(file_path, validate_schema=True, schema_model=schema_model)
-    
+
     def create_template(
         self,
         template_name: str,
@@ -421,40 +416,39 @@ class YamlConfigManager:
         """Create a new YAML template."""
         try:
             template_path = self.template_dir / f"{template_name}.yaml"
-            
+
             # Add template header with description
             if description:
                 header = f"# {description}\n# Generated on {datetime.now().isoformat()}\n\n"
                 template_content = header + template_content
-            
+
             with open(template_path, 'w', encoding='utf-8') as f:
                 f.write(template_content)
-            
+
             return True
-            
+
         except Exception as e:
             console.print(f"[red]Error creating template: {e}[/red]")
             return False
-    
-    def list_templates(self) -> List[str]:
+
+    def list_templates(self) -> list[str]:
         """List available YAML templates."""
         if not self.template_dir.exists():
             return []
-        
+
         templates = []
         for file_path in self.template_dir.glob("*.yaml"):
             templates.append(file_path.stem)
-        
+
         return sorted(templates)
-    
+
     def render_template(
         self,
         template_name: str,
-        variables: Dict[str, Any],
-        output_path: Optional[Path] = None
-    ) -> Union[str, bool]:
-        """
-        Render YAML template with variables.
+        variables: dict[str, Any],
+        output_path: Path | None = None
+    ) -> str | bool:
+        """Render YAML template with variables.
         
         Returns:
             Rendered content if output_path is None, otherwise success boolean
@@ -462,7 +456,7 @@ class YamlConfigManager:
         try:
             template = self.jinja_env.get_template(f"{template_name}.yaml")
             content = template.render(**variables)
-            
+
             if output_path:
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(output_path, 'w', encoding='utf-8') as f:
@@ -470,59 +464,59 @@ class YamlConfigManager:
                 return True
             else:
                 return content
-                
+
         except Exception as e:
             console.print(f"[red]Error rendering template: {e}[/red]")
             return False if output_path else ""
-    
+
     def convert_from_toml(self, toml_path: Path, yaml_path: Path) -> bool:
         """Convert TOML configuration to YAML."""
         try:
             import tomli
-            
+
             with open(toml_path, 'rb') as f:
                 toml_data = tomli.load(f)
-            
+
             return self.save_yaml(toml_data, yaml_path)
-            
+
         except ImportError:
             console.print("[red]tomli package required for TOML conversion[/red]")
             return False
         except Exception as e:
             console.print(f"[red]Error converting TOML to YAML: {e}[/red]")
             return False
-    
+
     def convert_to_toml(self, yaml_path: Path, toml_path: Path) -> bool:
         """Convert YAML configuration to TOML."""
         try:
             import tomli_w
-            
+
             result = self.load_yaml(yaml_path, validate_schema=False)
             if not result.is_valid:
                 console.print(f"[red]YAML file has errors: {result.errors}[/red]")
                 return False
-            
+
             toml_path.parent.mkdir(parents=True, exist_ok=True)
             with open(toml_path, 'wb') as f:
                 tomli_w.dump(result.data, f)
-            
+
             return True
-            
+
         except ImportError:
             console.print("[red]tomli-w package required for TOML conversion[/red]")
             return False
         except Exception as e:
             console.print(f"[red]Error converting YAML to TOML: {e}[/red]")
             return False
-    
+
     def _to_yaml_filter(self, value: Any) -> str:
         """Jinja2 filter to convert value to YAML."""
         return yaml.dump(value, Dumper=VPNYamlRepresenter, default_flow_style=False)
-    
+
     def _from_yaml_filter(self, value: str) -> Any:
         """Jinja2 filter to parse YAML string."""
         return yaml.load(value, Loader=VPNYamlConstructor)
-    
+
     def _env_var_filter(self, var_name: str, default: str = "") -> str:
         """Jinja2 filter to get environment variable."""
         return os.getenv(var_name, default)
@@ -530,27 +524,27 @@ class YamlConfigManager:
 
 class YamlConfigValidator:
     """YAML configuration validator with schema support."""
-    
-    def __init__(self, yaml_manager: Optional[YamlConfigManager] = None):
+
+    def __init__(self, yaml_manager: YamlConfigManager | None = None):
         """Initialize validator."""
         self.yaml_manager = yaml_manager or YamlConfigManager()
-    
-    def validate_structure(self, config: Dict[str, Any], required_sections: List[str]) -> List[str]:
+
+    def validate_structure(self, config: dict[str, Any], required_sections: list[str]) -> list[str]:
         """Validate that required sections exist in configuration."""
         errors = []
-        
+
         for section in required_sections:
             if section not in config:
                 errors.append(f"Missing required section: {section}")
             elif not isinstance(config[section], dict):
                 errors.append(f"Section '{section}' must be a dictionary")
-        
+
         return errors
-    
-    def validate_environment_refs(self, config: Dict[str, Any]) -> List[str]:
+
+    def validate_environment_refs(self, config: dict[str, Any]) -> list[str]:
         """Validate that all environment variable references are available."""
         errors = []
-        
+
         def check_env_refs(obj: Any, path: str = ""):
             if isinstance(obj, dict):
                 for key, value in obj.items():
@@ -562,14 +556,14 @@ class YamlConfigValidator:
                 env_var = obj[2:-1]
                 if env_var not in os.environ:
                     errors.append(f"Environment variable '{env_var}' not found (used in {path})")
-        
+
         check_env_refs(config)
         return errors
-    
-    def validate_file_paths(self, config: Dict[str, Any]) -> List[str]:
+
+    def validate_file_paths(self, config: dict[str, Any]) -> list[str]:
         """Validate that file paths in configuration exist."""
         errors = []
-        
+
         def check_paths(obj: Any, path: str = ""):
             if isinstance(obj, dict):
                 for key, value in obj.items():
@@ -581,17 +575,17 @@ class YamlConfigValidator:
             elif isinstance(obj, list):
                 for i, item in enumerate(obj):
                     check_paths(item, f"{path}[{i}]")
-        
+
         check_paths(config)
         return errors
-    
-    def validate_network_config(self, config: Dict[str, Any]) -> List[str]:
+
+    def validate_network_config(self, config: dict[str, Any]) -> list[str]:
         """Validate network-related configuration."""
         errors = []
-        
+
         if 'network' in config:
             network_config = config['network']
-            
+
             # Validate ports
             if 'ports' in network_config:
                 ports = network_config['ports']
@@ -605,7 +599,7 @@ class YamlConfigValidator:
                                 start, end = port_config['start'], port_config['end']
                                 if not (1 <= start <= end <= 65535):
                                     errors.append(f"Invalid port range for {service}: {start}-{end}")
-            
+
             # Validate IP addresses
             if 'bind_address' in network_config:
                 import ipaddress
@@ -613,7 +607,7 @@ class YamlConfigValidator:
                     ipaddress.ip_address(network_config['bind_address'])
                 except ValueError:
                     errors.append(f"Invalid IP address: {network_config['bind_address']}")
-        
+
         return errors
 
 
@@ -622,13 +616,13 @@ yaml_config_manager = YamlConfigManager()
 
 
 def load_yaml_config(
-    source: Union[str, Path],
-    schema_model: Optional[Type[BaseModel]] = None,
-    template_vars: Optional[Dict[str, Any]] = None
+    source: str | Path,
+    schema_model: type[BaseModel] | None = None,
+    template_vars: dict[str, Any] | None = None
 ) -> YamlLoadResult:
     """Convenience function to load YAML configuration."""
     return yaml_config_manager.load_yaml(
-        source, 
+        source,
         validate_schema=bool(schema_model),
         schema_model=schema_model,
         template_vars=template_vars
@@ -636,9 +630,9 @@ def load_yaml_config(
 
 
 def save_yaml_config(
-    data: Dict[str, Any],
+    data: dict[str, Any],
     output_path: Path,
-    template_name: Optional[str] = None
+    template_name: str | None = None
 ) -> bool:
     """Convenience function to save YAML configuration."""
     return yaml_config_manager.save_yaml(data, output_path, template_name)
@@ -647,7 +641,7 @@ def save_yaml_config(
 def create_default_templates():
     """Create default YAML templates for VPN configuration."""
     manager = yaml_config_manager
-    
+
     # Base configuration template
     base_config_template = """# VPN Manager Base Configuration
 # This template provides a complete configuration structure with sensible defaults
@@ -813,13 +807,13 @@ monitoring:
     enabled: true
 {% endif %}
 """
-    
+
     manager.create_template(
         "base_config",
         base_config_template,
         "Base VPN Manager configuration with all sections and environment support"
     )
-    
+
     # User preset template
     user_preset_template = """# User Preset Configuration
 # Template for creating user-defined presets
@@ -911,13 +905,13 @@ monitoring:
       action: "{{ alert.action | default('notify') }}"
     {% endfor %}
 """
-    
+
     manager.create_template(
         "user_preset",
         user_preset_template,
         "Template for user-defined presets with users, servers, and monitoring"
     )
-    
+
     # Server configuration template
     server_config_template = """# Server Configuration Template
 # Template for individual VPN server configurations
@@ -1110,13 +1104,13 @@ server:
         {% endif %}
       {% endfor %}
 """
-    
+
     manager.create_template(
         "server_config",
         server_config_template,
         "Template for individual VPN server configurations with protocol-specific settings"
     )
-    
+
     console.print("[green]✓ Default YAML templates created successfully[/green]")
 
 
