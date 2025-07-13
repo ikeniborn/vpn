@@ -21,6 +21,7 @@ Technical architecture and design documents:
 Step-by-step guides and tutorials:
 - [Docker Deployment](guides/DOCKER.md) - Docker installation and deployment
 - [Docker Distribution](guides/DOCKER_DISTRIBUTION.md) - Advanced Docker image distribution (in Russian)
+- [GitHub Releases Deployment](guides/RELEASES_DEPLOYMENT.md) - Installation via GitHub releases and CI/CD
 - [Operations Manual](guides/OPERATIONS.md) - Comprehensive operations guide
 - [Performance Tuning](guides/PERFORMANCE.md) - Performance optimization techniques
 - [Security Best Practices](guides/SECURITY.md) - Security configuration and practices

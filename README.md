@@ -55,7 +55,56 @@ vpn menu  # Интерактивное меню
 
 ### Варианты установки
 
-#### 1. Автоматическая установка (рекомендуется)
+#### 1. Через GitHub Releases (рекомендуется)
+
+```bash
+# Автоматическая установка последней версии на удаленном сервере
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install-remote.sh | sudo bash
+
+# Установка определенной версии
+curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/master/scripts/install-remote.sh | sudo bash -s -- --version v1.2.3
+
+# Дополнительные опции
+sudo ./install-remote.sh --install-dir /opt/vpn/bin --config-dir /opt/vpn/config
+sudo ./install-remote.sh --no-docker --no-firewall  # Минимальная установка
+```
+
+**Ручная установка из releases:**
+
+```bash
+# Скачать бинарный файл для вашей платформы
+wget https://github.com/ikeniborn/vpn/releases/download/v1.2.3/vpn-x86_64-unknown-linux-gnu.tar.gz
+wget https://github.com/ikeniborn/vpn/releases/download/v1.2.3/vpn-x86_64-unknown-linux-gnu.tar.gz.sha256
+
+# Проверить контрольную сумму
+sha256sum -c vpn-x86_64-unknown-linux-gnu.tar.gz.sha256
+
+# Установить
+tar -xzf vpn-x86_64-unknown-linux-gnu.tar.gz
+sudo cp vpn /usr/local/bin/
+sudo chmod +x /usr/local/bin/vpn
+```
+
+**Поддерживаемые платформы:**
+- `x86_64-unknown-linux-gnu` - Linux x86_64
+- `aarch64-unknown-linux-gnu` - Linux ARM64 (Raspberry Pi 4+)
+- `armv7-unknown-linux-gnueabihf` - Linux ARMv7 (Raspberry Pi 3)
+- `x86_64-unknown-linux-musl` - Linux x86_64 (статическая сборка)
+- `x86_64-apple-darwin` - macOS Intel
+- `aarch64-apple-darwin` - macOS Apple Silicon
+- `x86_64-pc-windows-msvc` - Windows x86_64
+
+**Docker образы доступны для:**
+- `linux/amd64` - Intel/AMD x86_64
+- `linux/arm64` - ARM64 (включая Apple Silicon, AWS Graviton)
+- `linux/arm/v7` - ARMv7 (Raspberry Pi 3+)
+
+```bash
+# Использование через Docker
+docker run --rm ghcr.io/ikeniborn/vpn:latest --help
+```
+
+#### 2. Автоматическая установка (локальная)
 
 ```bash
 # Полная установка с Docker

@@ -16,7 +16,7 @@ members = [
     "crates/vpn-cluster",
     "crates/vpn-operator",
     "crates/vpn-proxy",
-    # "crates/vpn-identity",  # TODO: Fix SQLX issues before enabling
+    "crates/vpn-identity",
 ]
 
 # Default members for minimal builds
@@ -98,6 +98,10 @@ reqwest = { version = "0.12", features = ["json"] }
 config = "0.14"
 ring = "0.17"
 num_cpus = "1.0"
+
+# Database dependencies
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "migrate"] }
+diesel = { version = "2.1", features = ["postgres", "chrono", "uuid"] }
 
 # Build profiles for optimized compilation
 [profile.release]
