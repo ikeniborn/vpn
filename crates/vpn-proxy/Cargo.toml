@@ -69,12 +69,12 @@ deadpool = "0.9"
 dashmap = "5.5"
 
 # Web framework for auth service
-axum = "0.7"
+axum = "0.8"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 
 # Platform-specific dependencies
 [target.'cfg(target_os = "linux")'.dependencies]
-nix = { version = "0.27", features = ["fs", "zerocopy"] }
+nix = { version = "0.30", features = ["fs", "zerocopy"] }
 
 [dev-dependencies]
 tempfile = "3.8"
