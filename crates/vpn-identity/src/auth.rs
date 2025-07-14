@@ -169,7 +169,10 @@ impl AuthService {
                     self.storage.update_user(&user).await?;
                     
                     // Get user permissions
-                    let permissions = self.storage.get_user_permissions(user.id).await?;
+                    let permissions = self.storage.get_user_permissions(user.id).await?
+                        .into_iter()
+                        .map(|p| p.name)
+                        .collect();
                     
                     // Create JWT token
                     let token = self.create_token(&user)?;
@@ -263,7 +266,10 @@ impl AuthService {
         self.storage.update_user(&user).await?;
         
         // Get user permissions
-        let permissions = self.storage.get_user_permissions(user.id).await?;
+        let permissions = self.storage.get_user_permissions(user.id).await?
+            .into_iter()
+            .map(|p| p.name)
+            .collect();
         
         // Create JWT token
         let token = self.create_token(&user)?;

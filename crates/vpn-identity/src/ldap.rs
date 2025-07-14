@@ -53,7 +53,7 @@ impl LdapProvider {
         
         let entry = entries.into_iter()
             .next()
-            .and_then(|e| SearchEntry::construct(e));
+            .and_then(|e| Some(SearchEntry::construct(e)));
         
         ldap.unbind().await?;
         
@@ -111,7 +111,7 @@ impl LdapProvider {
         ).await?.success()?;
         
         let groups = entries.into_iter()
-            .filter_map(|e| SearchEntry::construct(e))
+            .filter_map(|e| Some(SearchEntry::construct(e)))
             .filter_map(|entry| entry.attrs.get("cn").and_then(|v| v.first()).cloned())
             .collect();
         
@@ -179,7 +179,7 @@ impl AuthProvider for LdapProvider {
     }
 
     async fn verify_configuration(&self) -> Result<()> {
-        let ldap = self.connect().await?;
+        let mut ldap = self.connect().await?;
         ldap.unbind().await?;
         Ok(())
     }

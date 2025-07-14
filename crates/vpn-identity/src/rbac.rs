@@ -79,7 +79,7 @@ impl RbacService {
     /// Assign a role to a user
     pub async fn assign_role(&self, user_id: Uuid, role_name: &str) -> Result<()> {
         // Verify role exists
-        let role = self.storage.get_role_by_name(role_name).await?
+        let _role = self.storage.get_role_by_name(role_name).await?
             .ok_or_else(|| IdentityError::ValidationError(format!("Role '{}' not found", role_name)))?;
 
         // Get user

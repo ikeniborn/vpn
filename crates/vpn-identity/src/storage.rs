@@ -5,16 +5,16 @@ use crate::{
     models::{AuthProvider, Permission, Role, User},
 };
 use chrono::Duration;
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use sqlx::{sqlite::SqlitePoolOptions, SqlitePool, Row};
 use uuid::Uuid;
 
 pub struct Storage {
-    pool: PgPool,
+    pool: SqlitePool,
 }
 
 impl Storage {
     pub async fn new(database_url: &str) -> Result<Self> {
-        let pool = PgPoolOptions::new()
+        let pool = SqlitePoolOptions::new()
             .max_connections(32)
             .connect(database_url)
             .await?;
@@ -59,22 +59,30 @@ impl Storage {
     }
 
     pub async fn get_user(&self, user_id: Uuid) -> Result<Option<User>> {
-        let user = sqlx::query_as!(
-            User,
-            r#"
-            SELECT 
-                id, email, username, display_name,
-                provider as "provider: _",
-                provider_id, password_hash, roles, attributes,
-                is_active, email_verified, created_at, updated_at, last_login
-            FROM users WHERE id = $1
-            "#,
-            user_id
+        let row = sqlx::query(
+            "SELECT id, username, email, display_name, provider, provider_id, roles, created_at, updated_at, last_login FROM users WHERE id = ?"
         )
+        .bind(user_id.to_string())
         .fetch_optional(&self.pool)
         .await?;
         
-        Ok(user)
+        if let Some(row) = row {
+            let user = User {
+                id: row.get("id"),
+                username: row.get("username"),
+                email: row.get("email"),
+                display_name: row.get("display_name"),
+                provider: row.get("provider"),
+                provider_id: row.get("provider_id"),
+                roles: row.get("roles"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+                last_login: row.get("last_login"),
+            };
+            Ok(Some(user))
+        } else {
+            Ok(None)
+        }
     }
 
     pub async fn find_user_by_email(&self, email: &str) -> Result<Option<User>> {
@@ -323,9 +331,9 @@ impl Storage {
     // Session operations (for database-based session tracking if needed)
     pub async fn create_session(
         &self,
-        user_id: Uuid,
-        provider: AuthProvider,
-        expiration: Duration,
+        _user_id: Uuid,
+        _provider: AuthProvider,
+        _expiration: Duration,
     ) -> Result<String> {
         // This is a placeholder - actual implementation would depend on whether
         // you want database-backed sessions in addition to Redis
@@ -333,7 +341,7 @@ impl Storage {
         Ok(session_id)
     }
 
-    pub async fn delete_session(&self, session_id: &str) -> Result<()> {
+    pub async fn delete_session(&self, _session_id: &str) -> Result<()> {
         // Placeholder for database-backed session deletion
         Ok(())
     }

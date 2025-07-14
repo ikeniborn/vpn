@@ -6,9 +6,14 @@ authors = ["VPN Development Team"]
 description = "Identity and authentication management for VPN services"
 license = "MIT"
 
+[[bin]]
+name = "vpn-identity"
+path = "src/bin/vpn-identity-simple.rs"
+
 [dependencies]
 # Async runtime
 tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
 
 # Web framework for OAuth2/OIDC endpoints
 axum = { version = "0.7", features = ["macros", "json"] }
@@ -27,7 +32,7 @@ ldap3 = "0.11"
 jsonwebtoken = "9"
 
 # Database
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json"], default-features = false }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "sqlite", "uuid", "chrono", "json", "macros", "migrate"], default-features = false }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

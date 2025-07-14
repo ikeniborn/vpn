@@ -6,23 +6,19 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use validator::Validate;
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct User {
-    pub id: Uuid,
+    pub id: String, // Use String for SQLite compatibility
     #[validate(email)]
-    pub email: String,
+    pub email: Option<String>,
     pub username: String,
     pub display_name: Option<String>,
-    pub provider: AuthProvider,
+    pub provider: String, // Use String for SQLite compatibility
     pub provider_id: Option<String>,
-    pub password_hash: Option<String>,
-    pub roles: Vec<String>,
-    pub attributes: serde_json::Value,
-    pub is_active: bool,
-    pub email_verified: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub last_login: Option<DateTime<Utc>>,
+    pub roles: String, // JSON string in SQLite
+    pub created_at: String, // Use String for SQLite compatibility
+    pub updated_at: String,
+    pub last_login: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -36,25 +32,23 @@ pub enum AuthProvider {
     Custom(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Role {
-    pub id: Uuid,
+    pub id: String,
     pub name: String,
     pub description: Option<String>,
-    pub permissions: Vec<String>,
-    pub is_system: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub permissions: String, // JSON string in SQLite
+    pub created_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Permission {
-    pub id: Uuid,
+    pub id: String,
     pub name: String,
     pub resource: String,
     pub action: String,
     pub description: Option<String>,
-    pub created_at: DateTime<Utc>,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

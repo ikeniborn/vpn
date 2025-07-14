@@ -68,7 +68,28 @@ vpn menu  # Интерактивное меню
 
 ### Варианты установки
 
-#### 1. Через GitHub Releases (рекомендуется)
+#### 1. Установка из готового релиза (быстрая установка)
+
+```bash
+# Скачать готовый релиз
+wget https://github.com/ikeniborn/vpn/releases/download/latest/vpn-release.tar.gz
+tar -xzf vpn-release.tar.gz
+cd vpn-release
+
+# Установить
+./install.sh
+
+# Проверить установку
+vpn --version
+```
+
+Скрипт установки автоматически:
+- Обнаружит и предложит удалить существующие версии VPN
+- Установит все необходимые компоненты
+- Настроит systemd сервисы
+- Создаст конфигурационные файлы
+
+#### 2. Через GitHub Releases (рекомендуется)
 
 ```bash
 # Автоматическая установка последней версии на удаленном сервере
@@ -117,7 +138,7 @@ sudo chmod +x /usr/local/bin/vpn
 docker run --rm ghcr.io/ikeniborn/vpn:latest --help
 ```
 
-#### 2. Автоматическая установка (локальная)
+#### 3. Автоматическая установка (локальная)
 
 ```bash
 # Полная установка с Docker
@@ -129,7 +150,7 @@ curl -sSL https://raw.githubusercontent.com/ikeniborn/vpn/rust/scripts/install.s
 ./install.sh --binary-only   # Только бинарный файл
 ```
 
-#### 2. Production развертывание
+#### 4. Production развертывание
 
 **Docker (рекомендуется):**
 
@@ -181,7 +202,7 @@ sudo cp target/release/vpn /usr/local/bin/
 sudo chmod +x /usr/local/bin/vpn
 ```
 
-#### 3. Сборка из исходников
+#### 5. Сборка из исходников
 
 **Автоматическая установка Rust-версии (рекомендуется):**
 
@@ -192,6 +213,22 @@ cd vpn
 
 # Запустить скрипт установки (обнаружит и удалит конфликтующие версии)
 ./install.sh
+```
+
+**Сборка релиза из исходников:**
+
+```bash
+# Клонировать репозиторий
+git clone https://github.com/ikeniborn/vpn.git
+cd vpn
+
+# Создать готовый релиз
+./build-release.sh
+
+# Релиз будет создан в каталоге release/
+ls -la release/
+# vpn-release.tar.gz - готовый архив для распространения
+# vpn-release.tar.gz.sha256 - контрольная сумма
 ```
 
 **Ручная сборка:**

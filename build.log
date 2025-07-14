@@ -1,0 +1,821 @@
+Building VPN Management System Release v0.1.0...
+Removing old release archive...
+Building Rust applications...
+   Compiling vpn-identity v0.1.0 (/home/ikeniborn/Documents/Project/vpn/crates/vpn-identity)
+   Compiling vpn-cli v0.1.0 (/home/ikeniborn/Documents/Project/vpn/crates/vpn-cli)
+error[E0432]: unresolved import `async_trait`
+ --> crates/vpn-identity/src/auth.rs:9:5
+  |
+9 | use async_trait::async_trait;
+  |     ^^^^^^^^^^^ use of unresolved module or unlinked crate `async_trait`
+  |
+  = help: if you wanted to use a crate named `async_trait`, use `cargo add async_trait` to add it to your `Cargo.toml`
+
+error[E0432]: unresolved import `async_trait`
+ --> crates/vpn-identity/src/ldap.rs:9:5
+  |
+9 | use async_trait::async_trait;
+  |     ^^^^^^^^^^^ use of unresolved module or unlinked crate `async_trait`
+  |
+  = help: if you wanted to use a crate named `async_trait`, use `cargo add async_trait` to add it to your `Cargo.toml`
+
+error[E0433]: failed to resolve: could not find `migrate` in `sqlx`
+  --> crates/vpn-identity/src/storage.rs:26:15
+   |
+26 |         sqlx::migrate!("./migrations").run(&self.pool).await?;
+   |               ^^^^^^^ could not find `migrate` in `sqlx`
+   |
+note: found an item that was configured out
+  --> /home/ikeniborn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.7.4/src/lib.rs:31:20
+   |
+31 | pub use sqlx_core::migrate;
+   |                    ^^^^^^^
+note: the item is gated behind the `migrate` feature
+  --> /home/ikeniborn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sqlx-0.7.4/src/lib.rs:30:7
+   |
+30 | #[cfg(feature = "migrate")]
+   |       ^^^^^^^^^^^^^^^^^^^
+
+error[E0433]: failed to resolve: could not find `query_as` in `sqlx`
+  --> crates/vpn-identity/src/storage.rs:62:26
+   |
+62 |         let user = sqlx::query_as!(
+   |                          ^^^^^^^^ could not find `query_as` in `sqlx`
+   |
+help: sqlx::query_as is not a macro, but a function, try to remove `!`
+   |
+62 -         let user = sqlx::query_as!(
+62 +         let user = sqlx::query_as(
+   |
+
+error[E0433]: failed to resolve: could not find `query_as` in `sqlx`
+  --> crates/vpn-identity/src/storage.rs:81:26
+   |
+81 |         let user = sqlx::query_as!(
+   |                          ^^^^^^^^ could not find `query_as` in `sqlx`
+   |
+help: sqlx::query_as is not a macro, but a function, try to remove `!`
+   |
+81 -         let user = sqlx::query_as!(
+81 +         let user = sqlx::query_as(
+   |
+
+error[E0433]: failed to resolve: could not find `query_as` in `sqlx`
+   --> crates/vpn-identity/src/storage.rs:100:26
+    |
+100 |         let user = sqlx::query_as!(
+    |                          ^^^^^^^^ could not find `query_as` in `sqlx`
+    |
+help: sqlx::query_as is not a macro, but a function, try to remove `!`
+    |
+100 -         let user = sqlx::query_as!(
+100 +         let user = sqlx::query_as(
+    |
+
+error[E0433]: failed to resolve: could not find `query` in `sqlx`
+   --> crates/vpn-identity/src/storage.rs:119:15
+    |
+119 |         sqlx::query!(
+    |               ^^^^^ could not find `query` in `sqlx`
+    |
+help: sqlx::query is not a macro, but a function, try to remove `!`
+    |
+119 -         sqlx::query!(
+119 +         sqlx::query(
+    |
+
+error[E0433]: failed to resolve: could not find `query` in `sqlx`
+   --> crates/vpn-identity/src/storage.rs:149:15
+    |
+149 |         sqlx::query!("DELETE FROM users WHERE id = $1", user_id)
+    |               ^^^^^ could not find `query` in `sqlx`
+    |
+help: sqlx::query is not a macro, but a function, try to remove `!`
+    |
+149 -         sqlx::query!("DELETE FROM users WHERE id = $1", user_id)
+149 +         sqlx::query("DELETE FROM users WHERE id = $1", user_id)
+    |
+
+error[E0433]: failed to resolve: could not find `query_as` in `sqlx`
+   --> crates/vpn-identity/src/storage.rs:157:27
+    |
+157 |         let users = sqlx::query_as!(
+    |                           ^^^^^^^^ could not find `query_as` in `sqlx`
+    |
+help: sqlx::query_as is not a macro, but a function, try to remove `!`
+    |
+157 -         let users = sqlx::query_as!(
+157 +         let users = sqlx::query_as(
+    |
+
+error[E0433]: failed to resolve: could not find `query` in `sqlx`
+   --> crates/vpn-identity/src/storage.rs:180:15
+    |
+180 |         sqlx::query!(
+    |               ^^^^^ could not find `query` in `sqlx`
+    |
+help: sqlx::query is not a macro, but a function, try to remove `!`
+    |
+180 -         sqlx::query!(
+180 +         sqlx::query(
+    |
+
+error[E0433]: failed to resolve: could not find `query_as` in `sqlx`
+   --> crates/vpn-identity/src/storage.rs:200:26
+    |
+200 |         let role = sqlx::query_as!(
+    |                          ^^^^^^^^ could not find `query_as` in `sqlx`
+    |
+help: sqlx::query_as is not a macro, but a function, try to remove `!`
+    |
+200 -         let role = sqlx::query_as!(
+200 +         let role = sqlx::query_as(
+    |
+
+error[E0433]: failed to resolve: could not find `query_as` in `sqlx`
+   --> crates/vpn-identity/src/storage.rs:215:26
+    |
+215 |         let role = sqlx::query_as!(
+    |                          ^^^^^^^^ could not find `query_as` in `sqlx`
+    |
+help: sqlx::query_as is not a macro, but a function, try to remove `!`
+    |
+215 -         let role = sqlx::query_as!(
+215 +         let role = sqlx::query_as(
+    |
+
+error[E0433]: failed to resolve: could not find `query` in `sqlx`
+   --> crates/vpn-identity/src/storage.rs:230:15
+    |
+230 |         sqlx::query!(
+    |               ^^^^^ could not find `query` in `sqlx`
+    |
+help: sqlx::query is not a macro, but a function, try to remove `!`
+    |
+230 -         sqlx::query!(
+230 +         sqlx::query(
+    |
+
+error[E0433]: failed to resolve: could not find `query` in `sqlx`
+   --> crates/vpn-identity/src/storage.rs:249:15
+    |
+249 |         sqlx::query!("DELETE FROM roles WHERE id = $1", role_id)
+    |               ^^^^^ could not find `query` in `sqlx`
+    |
+help: sqlx::query is not a macro, but a function, try to remove `!`
+    |
+249 -         sqlx::query!("DELETE FROM roles WHERE id = $1", role_id)
+249 +         sqlx::query("DELETE FROM roles WHERE id = $1", role_id)
+    |
+
+error[E0433]: failed to resolve: could not find `query_as` in `sqlx`
+   --> crates/vpn-identity/src/storage.rs:257:27
+    |
+257 |         let roles = sqlx::query_as!(
+    |                           ^^^^^^^^ could not find `query_as` in `sqlx`
+    |
+help: sqlx::query_as is not a macro, but a function, try to remove `!`
+    |
+257 -         let roles = sqlx::query_as!(
+257 +         let roles = sqlx::query_as(
+    |
+
+error[E0433]: failed to resolve: could not find `query` in `sqlx`
+   --> crates/vpn-identity/src/storage.rs:272:15
+    |
+272 |         sqlx::query!(
+    |               ^^^^^ could not find `query` in `sqlx`
+    |
+help: sqlx::query is not a macro, but a function, try to remove `!`
+    |
+272 -         sqlx::query!(
+272 +         sqlx::query(
+    |
+
+error[E0433]: failed to resolve: could not find `query_as` in `sqlx`
+   --> crates/vpn-identity/src/storage.rs:291:33
+    |
+291 |         let permissions = sqlx::query_as!(
+    |                                 ^^^^^^^^ could not find `query_as` in `sqlx`
+    |
+help: sqlx::query_as is not a macro, but a function, try to remove `!`
+    |
+291 -         let permissions = sqlx::query_as!(
+291 +         let permissions = sqlx::query_as(
+    |
+
+error[E0433]: failed to resolve: could not find `query_as` in `sqlx`
+   --> crates/vpn-identity/src/storage.rs:305:33
+    |
+305 |         let permissions = sqlx::query_as!(
+    |                                 ^^^^^^^^ could not find `query_as` in `sqlx`
+    |
+help: sqlx::query_as is not a macro, but a function, try to remove `!`
+    |
+305 -         let permissions = sqlx::query_as!(
+305 +         let permissions = sqlx::query_as(
+    |
+
+error: cannot find derive macro `FromRow` in this scope
+ --> crates/vpn-identity/src/models.rs:9:48
+  |
+9 | #[derive(Debug, Clone, Serialize, Deserialize, FromRow, Validate)]
+  |                                                ^^^^^^^
+  |
+note: `FromRow` is imported here, but it is only a trait, without a derive macro
+ --> crates/vpn-identity/src/models.rs:5:5
+  |
+5 | use sqlx::FromRow;
+  |     ^^^^^^^^^^^^^
+
+error: cannot find derive macro `FromRow` in this scope
+  --> crates/vpn-identity/src/models.rs:39:48
+   |
+39 | #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+   |                                                ^^^^^^^
+   |
+note: `FromRow` is imported here, but it is only a trait, without a derive macro
+  --> crates/vpn-identity/src/models.rs:5:5
+   |
+5  | use sqlx::FromRow;
+   |     ^^^^^^^^^^^^^
+
+error: cannot find derive macro `FromRow` in this scope
+  --> crates/vpn-identity/src/models.rs:50:48
+   |
+50 | #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+   |                                                ^^^^^^^
+   |
+note: `FromRow` is imported here, but it is only a trait, without a derive macro
+  --> crates/vpn-identity/src/models.rs:5:5
+   |
+5  | use sqlx::FromRow;
+   |     ^^^^^^^^^^^^^
+
+warning: unused import: `RevocationUrl`
+  --> crates/vpn-identity/src/oauth.rs:10:18
+   |
+10 |     RedirectUrl, RevocationUrl, Scope, TokenUrl,
+   |                  ^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `AuthProvider` and `OidcProvider`
+ --> crates/vpn-identity/src/service.rs:4:12
+  |
+4 |     auth::{AuthProvider, AuthService},
+  |            ^^^^^^^^^^^^
+...
+8 |     oauth::{OAuth2Provider, OidcProvider},
+  |                             ^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+   --> crates/vpn-identity/src/auth.rs:190:25
+    |
+190 |                         permissions,
+    |                         ^^^^^^^^^^^ expected `Vec<String>`, found `Vec<Permission>`
+    |
+    = note: expected struct `Vec<std::string::String>`
+               found struct `Vec<Permission>`
+
+error[E0308]: mismatched types
+   --> crates/vpn-identity/src/auth.rs:284:13
+    |
+284 |             permissions,
+    |             ^^^^^^^^^^^ expected `Vec<String>`, found `Vec<Permission>`
+    |
+    = note: expected struct `Vec<std::string::String>`
+               found struct `Vec<Permission>`
+
+error[E0308]: mismatched types
+  --> crates/vpn-identity/src/ldap.rs:56:27
+   |
+56 |             .and_then(|e| SearchEntry::construct(e));
+   |                           ^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Option<_>`, found `SearchEntry`
+   |
+   = note: expected enum `std::option::Option<_>`
+            found struct `SearchEntry`
+help: try wrapping the expression in `Some`
+   |
+56 |             .and_then(|e| Some(SearchEntry::construct(e)));
+   |                           +++++                         +
+
+error[E0308]: mismatched types
+   --> crates/vpn-identity/src/ldap.rs:114:29
+    |
+114 |             .filter_map(|e| SearchEntry::construct(e))
+    |                             ^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Option<_>`, found `SearchEntry`
+    |
+    = note: expected enum `std::option::Option<_>`
+             found struct `SearchEntry`
+help: try wrapping the expression in `Some`
+    |
+114 |             .filter_map(|e| Some(SearchEntry::construct(e)))
+    |                             +++++                         +
+
+error[E0277]: `?` couldn't convert the error to `IdentityError`
+   --> crates/vpn-identity/src/ldap.rs:166:53
+    |
+166 |             attributes: serde_json::to_value(&attrs)?,
+    |                         ----------------------------^ the trait `From<serde_json::Error>` is not implemented for `IdentityError`
+    |                         |
+    |                         this can't be annotated with `?` because it has type `Result<_, serde_json::Error>`
+    |
+note: `IdentityError` needs to implement `From<serde_json::Error>`
+   --> crates/vpn-identity/src/error.rs:8:1
+    |
+8   | pub enum IdentityError {
+    | ^^^^^^^^^^^^^^^^^^^^^^
+    = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
+    = help: the following other types implement trait `From<T>`:
+              `IdentityError` implements `From<LdapError>`
+              `IdentityError` implements `From<RedisError>`
+              `IdentityError` implements `From<jsonwebtoken::errors::Error>`
+              `IdentityError` implements `From<sqlx::Error>`
+
+error[E0596]: cannot borrow `ldap` as mutable, as it is not declared as mutable
+   --> crates/vpn-identity/src/ldap.rs:183:9
+    |
+183 |         ldap.unbind().await?;
+    |         ^^^^ cannot borrow as mutable
+    |
+help: consider changing this to be mutable
+    |
+182 |         let mut ldap = self.connect().await?;
+    |             +++
+
+error[E0599]: no method named `access_token` found for struct `StandardTokenResponse` in the current scope
+    --> crates/vpn-identity/src/oauth.rs:106:47
+     |
+106  |             let access_token = token_response.access_token().secret();
+     |                                               ^^^^^^^^^^^^ private field, not a method
+     |
+    ::: /home/ikeniborn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/oauth2-4.4.2/src/lib.rs:2551:8
+     |
+2551 |     fn access_token(&self) -> &AccessToken;
+     |        ------------ the method is available for `StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>` here
+     |
+     = help: items from traits can only be used if the trait is in scope
+help: there is a method `set_access_token` with a similar name, but with different arguments
+    --> /home/ikeniborn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/oauth2-4.4.2/src/lib.rs:2635:5
+     |
+2635 |     pub fn set_access_token(&mut self, access_token: AccessToken) {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: trait `TokenResponse` which provides `access_token` is implemented but not in scope; perhaps you want to import it
+     |
+3    + use oauth2::TokenResponse;
+     |
+
+error[E0599]: no method named `access_token` found for struct `StandardTokenResponse` in the current scope
+    --> crates/vpn-identity/src/oauth.rs:112:48
+     |
+112  |                 "access_token": token_response.access_token().secret(),
+     |                                                ^^^^^^^^^^^^ private field, not a method
+     |
+    ::: /home/ikeniborn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/oauth2-4.4.2/src/lib.rs:2551:8
+     |
+2551 |     fn access_token(&self) -> &AccessToken;
+     |        ------------ the method is available for `StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>` here
+     |
+     = help: items from traits can only be used if the trait is in scope
+help: there is a method `set_access_token` with a similar name, but with different arguments
+    --> /home/ikeniborn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/oauth2-4.4.2/src/lib.rs:2635:5
+     |
+2635 |     pub fn set_access_token(&mut self, access_token: AccessToken) {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: trait `TokenResponse` which provides `access_token` is implemented but not in scope; perhaps you want to import it
+     |
+3    + use oauth2::TokenResponse;
+     |
+
+error[E0599]: no method named `token_type` found for struct `StandardTokenResponse` in the current scope
+    --> crates/vpn-identity/src/oauth.rs:113:46
+     |
+113  |                 "token_type": token_response.token_type().as_ref(),
+     |                                              ^^^^^^^^^^ private field, not a method
+     |
+    ::: /home/ikeniborn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/oauth2-4.4.2/src/lib.rs:2557:8
+     |
+2557 |     fn token_type(&self) -> &TT;
+     |        ---------- the method is available for `StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>` here
+     |
+     = help: items from traits can only be used if the trait is in scope
+help: there is a method `set_token_type` with a similar name, but with different arguments
+    --> /home/ikeniborn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/oauth2-4.4.2/src/lib.rs:2642:5
+     |
+2642 |     pub fn set_token_type(&mut self, token_type: TT) {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: trait `TokenResponse` which provides `token_type` is implemented but not in scope; perhaps you want to import it
+     |
+3    + use oauth2::TokenResponse;
+     |
+
+error[E0599]: no method named `expires_in` found for struct `StandardTokenResponse` in the current scope
+    --> crates/vpn-identity/src/oauth.rs:114:46
+     |
+114  |                 "expires_in": token_response.expires_in().map(|d| d.as_secs()),
+     |                                              ^^^^^^^^^^ private field, not a method
+     |
+    ::: /home/ikeniborn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/oauth2-4.4.2/src/lib.rs:2564:8
+     |
+2564 |     fn expires_in(&self) -> Option<Duration>;
+     |        ---------- the method is available for `StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>` here
+     |
+     = help: items from traits can only be used if the trait is in scope
+help: there is a method `set_expires_in` with a similar name, but with different arguments
+    --> /home/ikeniborn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/oauth2-4.4.2/src/lib.rs:2649:5
+     |
+2649 |     pub fn set_expires_in(&mut self, expires_in: Option<&Duration>) {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: trait `TokenResponse` which provides `expires_in` is implemented but not in scope; perhaps you want to import it
+     |
+3    + use oauth2::TokenResponse;
+     |
+
+error[E0599]: no method named `refresh_token` found for struct `StandardTokenResponse` in the current scope
+    --> crates/vpn-identity/src/oauth.rs:115:49
+     |
+115  |                 "refresh_token": token_response.refresh_token().map(|t| t.secret()),
+     |                                                 ^^^^^^^^^^^^^ private field, not a method
+     |
+    ::: /home/ikeniborn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/oauth2-4.4.2/src/lib.rs:2570:8
+     |
+2570 |     fn refresh_token(&self) -> Option<&RefreshToken>;
+     |        ------------- the method is available for `StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>` here
+     |
+     = help: items from traits can only be used if the trait is in scope
+help: there is a method `set_refresh_token` with a similar name, but with different arguments
+    --> /home/ikeniborn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/oauth2-4.4.2/src/lib.rs:2656:5
+     |
+2656 |     pub fn set_refresh_token(&mut self, refresh_token: Option<RefreshToken>) {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: trait `TokenResponse` which provides `refresh_token` is implemented but not in scope; perhaps you want to import it
+     |
+3    + use oauth2::TokenResponse;
+     |
+
+warning: unused variable: `role`
+  --> crates/vpn-identity/src/rbac.rs:82:13
+   |
+82 |         let role = self.storage.get_role_by_name(role_name).await?
+   |             ^^^^ help: if this is intentional, prefix it with an underscore: `_role`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+error[E0308]: mismatched types
+   --> crates/vpn-identity/src/service.rs:79:39
+    |
+79  |             auth_service.add_provider(Box::new(ldap_provider));
+    |                          ------------ ^^^^^^^^^^^^^^^^^^^^^^^ expected `AuthProviderEnum`, found `Box<LdapProvider>`
+    |                          |
+    |                          arguments to this method are incorrect
+    |
+    = note: expected enum `AuthProviderEnum`
+             found struct `Box<LdapProvider>`
+note: method defined here
+   --> crates/vpn-identity/src/auth.rs:152:12
+    |
+152 |     pub fn add_provider(&mut self, provider: AuthProviderEnum) {
+    |            ^^^^^^^^^^^^            --------------------------
+
+error[E0277]: `?` couldn't convert the error to `IdentityError`
+  --> crates/vpn-identity/src/session.rs:54:52
+   |
+54 |         let value = serde_json::to_string(&session)?;
+   |                     -------------------------------^ the trait `From<serde_json::Error>` is not implemented for `IdentityError`
+   |                     |
+   |                     this can't be annotated with `?` because it has type `Result<_, serde_json::Error>`
+   |
+note: `IdentityError` needs to implement `From<serde_json::Error>`
+  --> crates/vpn-identity/src/error.rs:8:1
+   |
+8  | pub enum IdentityError {
+   | ^^^^^^^^^^^^^^^^^^^^^^
+   = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
+   = help: the following other types implement trait `From<T>`:
+             `IdentityError` implements `From<LdapError>`
+             `IdentityError` implements `From<RedisError>`
+             `IdentityError` implements `From<jsonwebtoken::errors::Error>`
+             `IdentityError` implements `From<sqlx::Error>`
+
+error[E0308]: mismatched types
+   --> crates/vpn-identity/src/session.rs:57:40
+    |
+57  |         self.redis.set_ex(&key, value, expiry_secs).await?;
+    |                    ------              ^^^^^^^^^^^ expected `u64`, found `usize`
+    |                    |
+    |                    arguments to this method are incorrect
+    |
+note: method defined here
+   --> /home/ikeniborn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/redis-0.25.4/src/commands/mod.rs:173:8
+    |
+173 |     fn set_ex<K: ToRedisArgs, V: ToRedisArgs>(key: K, value: V, seconds: u64) {
+    |        ^^^^^^
+help: you can convert a `usize` to a `u64` and panic if the converted value doesn't fit
+    |
+57  |         self.redis.set_ex(&key, value, expiry_secs.try_into().unwrap()).await?;
+    |                                                   ++++++++++++++++++++
+
+error[E0308]: mismatched types
+   --> crates/vpn-identity/src/session.rs:62:47
+    |
+62  |         self.redis.expire(&user_sessions_key, expiry_secs).await?;
+    |                    ------                     ^^^^^^^^^^^ expected `i64`, found `usize`
+    |                    |
+    |                    arguments to this method are incorrect
+    |
+note: method defined here
+   --> /home/ikeniborn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/redis-0.25.4/src/commands/mod.rs:223:8
+    |
+223 |     fn expire<K: ToRedisArgs>(key: K, seconds: i64) {
+    |        ^^^^^^
+help: you can convert a `usize` to an `i64` and panic if the converted value doesn't fit
+    |
+62  |         self.redis.expire(&user_sessions_key, expiry_secs.try_into().unwrap()).await?;
+    |                                                          ++++++++++++++++++++
+
+warning: this function depends on never type fallback being `()`
+  --> crates/vpn-identity/src/session.rs:30:5
+   |
+30 | /     pub async fn create_session(
+31 | |         &mut self,
+32 | |         user_id: Uuid,
+33 | |         provider: AuthProvider,
+...  |
+36 | |         custom_expiration: Option<Duration>,
+37 | |     ) -> Result<String> {
+   | |_______________________^
+   |
+   = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in Rust 2024 and in a future release in all editions!
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/never-type-fallback.html>
+   = help: specify the types explicitly
+note: in edition 2024, the requirement `!: FromRedisValue` will fail
+  --> crates/vpn-identity/src/session.rs:57:20
+   |
+57 |         self.redis.set_ex(&key, value, expiry_secs).await?;
+   |                    ^^^^^^
+   = note: `#[warn(dependency_on_unit_never_type_fallback)]` on by default
+help: use `()` annotations to avoid fallback changes
+   |
+57 ~         self.redis.set_ex::<_, _, ()>(&key, value, expiry_secs).await?;
+58 |         
+59 |         // Also store in a user's session set for easy lookup
+60 |         let user_sessions_key = format!("{}user:{}", self.key_prefix, user_id);
+61 ~         self.redis.sadd::<_, _, ()>(&user_sessions_key, &session_id).await?;
+62 ~         self.redis.expire::<_, ()>(&user_sessions_key, expiry_secs).await?;
+   |
+
+error[E0277]: `?` couldn't convert the error to `IdentityError`
+  --> crates/vpn-identity/src/session.rs:73:71
+   |
+73 |                 let mut session: Session = serde_json::from_str(&json)?;
+   |                                            ---------------------------^ the trait `From<serde_json::Error>` is not implemented for `IdentityError`
+   |                                            |
+   |                                            this can't be annotated with `?` because it has type `Result<_, serde_json::Error>`
+   |
+note: `IdentityError` needs to implement `From<serde_json::Error>`
+  --> crates/vpn-identity/src/error.rs:8:1
+   |
+8  | pub enum IdentityError {
+   | ^^^^^^^^^^^^^^^^^^^^^^
+   = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
+   = help: the following other types implement trait `From<T>`:
+             `IdentityError` implements `From<LdapError>`
+             `IdentityError` implements `From<RedisError>`
+             `IdentityError` implements `From<jsonwebtoken::errors::Error>`
+             `IdentityError` implements `From<sqlx::Error>`
+
+error[E0277]: `?` couldn't convert the error to `IdentityError`
+  --> crates/vpn-identity/src/session.rs:83:67
+   |
+83 |                 let updated_json = serde_json::to_string(&session)?;
+   |                                    -------------------------------^ the trait `From<serde_json::Error>` is not implemented for `IdentityError`
+   |                                    |
+   |                                    this can't be annotated with `?` because it has type `Result<_, serde_json::Error>`
+   |
+note: `IdentityError` needs to implement `From<serde_json::Error>`
+  --> crates/vpn-identity/src/error.rs:8:1
+   |
+8  | pub enum IdentityError {
+   | ^^^^^^^^^^^^^^^^^^^^^^
+   = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
+   = help: the following other types implement trait `From<T>`:
+             `IdentityError` implements `From<LdapError>`
+             `IdentityError` implements `From<RedisError>`
+             `IdentityError` implements `From<jsonwebtoken::errors::Error>`
+             `IdentityError` implements `From<sqlx::Error>`
+
+error[E0308]: mismatched types
+   --> crates/vpn-identity/src/session.rs:86:59
+    |
+86  |                     self.redis.set_ex(&key, updated_json, ttl as usize).await?;
+    |                                ------                     ^^^^^^^^^^^^ expected `u64`, found `usize`
+    |                                |
+    |                                arguments to this method are incorrect
+    |
+note: method defined here
+   --> /home/ikeniborn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/redis-0.25.4/src/commands/mod.rs:173:8
+    |
+173 |     fn set_ex<K: ToRedisArgs, V: ToRedisArgs>(key: K, value: V, seconds: u64) {
+    |        ^^^^^^
+help: you can convert a `usize` to a `u64` and panic if the converted value doesn't fit
+    |
+86  |                     self.redis.set_ex(&key, updated_json, (ttl as usize).try_into().unwrap()).await?;
+    |                                                           +            +++++++++++++++++++++
+
+warning: this function depends on never type fallback being `()`
+  --> crates/vpn-identity/src/session.rs:67:5
+   |
+67 |     pub async fn get_session(&mut self, session_id: &str) -> Result<Option<Session>> {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in Rust 2024 and in a future release in all editions!
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/never-type-fallback.html>
+   = help: specify the types explicitly
+note: in edition 2024, the requirement `!: FromRedisValue` will fail
+  --> crates/vpn-identity/src/session.rs:86:32
+   |
+86 |                     self.redis.set_ex(&key, updated_json, ttl as usize).await?;
+   |                                ^^^^^^
+help: use `()` annotations to avoid fallback changes
+   |
+86 |                     self.redis.set_ex::<_, _, ()>(&key, updated_json, ttl as usize).await?;
+   |                                      ++++++++++++
+
+error[E0308]: mismatched types
+   --> crates/vpn-identity/src/session.rs:107:37
+    |
+107 |             self.redis.expire(&key, new_ttl as usize).await?;
+    |                        ------       ^^^^^^^^^^^^^^^^ expected `i64`, found `usize`
+    |                        |
+    |                        arguments to this method are incorrect
+    |
+note: method defined here
+   --> /home/ikeniborn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/redis-0.25.4/src/commands/mod.rs:223:8
+    |
+223 |     fn expire<K: ToRedisArgs>(key: K, seconds: i64) {
+    |        ^^^^^^
+help: you can convert a `usize` to an `i64` and panic if the converted value doesn't fit
+    |
+107 |             self.redis.expire(&key, (new_ttl as usize).try_into().unwrap()).await?;
+    |                                     +                +++++++++++++++++++++
+
+warning: this function depends on never type fallback being `()`
+   --> crates/vpn-identity/src/session.rs:95:5
+    |
+95  |     pub async fn extend_session(&mut self, session_id: &str, additional_time: Option<Duration>) -> Result<()> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in Rust 2024 and in a future release in all editions!
+    = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/never-type-fallback.html>
+    = help: specify the types explicitly
+note: in edition 2024, the requirement `!: FromRedisValue` will fail
+   --> crates/vpn-identity/src/session.rs:107:24
+    |
+107 |             self.redis.expire(&key, new_ttl as usize).await?;
+    |                        ^^^^^^
+help: use `()` annotations to avoid fallback changes
+    |
+107 |             self.redis.expire::<_, ()>(&key, new_ttl as usize).await?;
+    |                              +++++++++
+
+error[E0277]: `?` couldn't convert the error to `IdentityError`
+   --> crates/vpn-identity/src/session.rs:119:63
+    |
+119 |             let session: Session = serde_json::from_str(&json)?;
+    |                                    ---------------------------^ the trait `From<serde_json::Error>` is not implemented for `IdentityError`
+    |                                    |
+    |                                    this can't be annotated with `?` because it has type `Result<_, serde_json::Error>`
+    |
+note: `IdentityError` needs to implement `From<serde_json::Error>`
+   --> crates/vpn-identity/src/error.rs:8:1
+    |
+8   | pub enum IdentityError {
+    | ^^^^^^^^^^^^^^^^^^^^^^
+    = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
+    = help: the following other types implement trait `From<T>`:
+              `IdentityError` implements `From<LdapError>`
+              `IdentityError` implements `From<RedisError>`
+              `IdentityError` implements `From<jsonwebtoken::errors::Error>`
+              `IdentityError` implements `From<sqlx::Error>`
+
+warning: this function depends on never type fallback being `()`
+   --> crates/vpn-identity/src/session.rs:113:5
+    |
+113 |     pub async fn delete_session(&mut self, session_id: &str) -> Result<()> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in Rust 2024 and in a future release in all editions!
+    = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/never-type-fallback.html>
+    = help: specify the types explicitly
+note: in edition 2024, the requirement `!: FromRedisValue` will fail
+   --> crates/vpn-identity/src/session.rs:123:24
+    |
+123 |             self.redis.srem(&user_sessions_key, session_id).await?;
+    |                        ^^^^
+help: use `()` annotations to avoid fallback changes
+    |
+123 ~             self.redis.srem::<_, _, ()>(&user_sessions_key, session_id).await?;
+124 |         }
+125 |         
+126 |         // Delete the session
+127 ~         self.redis.del::<_, ()>(&key).await?;
+    |
+
+warning: this function depends on never type fallback being `()`
+   --> crates/vpn-identity/src/session.rs:132:5
+    |
+132 |     pub async fn delete_user_sessions(&mut self, user_id: Uuid) -> Result<()> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in Rust 2024 and in a future release in all editions!
+    = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/never-type-fallback.html>
+    = help: specify the types explicitly
+note: in edition 2024, the requirement `!: FromRedisValue` will fail
+   --> crates/vpn-identity/src/session.rs:141:24
+    |
+141 |             self.redis.del(&key).await?;
+    |                        ^^^
+help: use `()` annotations to avoid fallback changes
+    |
+141 ~             self.redis.del::<_, ()>(&key).await?;
+142 |         }
+143 |         
+144 |         // Delete the user's session set
+145 ~         self.redis.del::<_, ()>(&user_sessions_key).await?;
+    |
+
+error[E0277]: `?` couldn't convert the error to `IdentityError`
+  --> crates/vpn-identity/src/storage.rs:45:51
+   |
+45 |         .bind(serde_json::to_value(&user.provider)?)
+   |               ------------------------------------^ the trait `From<serde_json::Error>` is not implemented for `IdentityError`
+   |               |
+   |               this can't be annotated with `?` because it has type `Result<_, serde_json::Error>`
+   |
+note: `IdentityError` needs to implement `From<serde_json::Error>`
+  --> crates/vpn-identity/src/error.rs:8:1
+   |
+8  | pub enum IdentityError {
+   | ^^^^^^^^^^^^^^^^^^^^^^
+   = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
+   = help: the following other types implement trait `From<T>`:
+             `IdentityError` implements `From<LdapError>`
+             `IdentityError` implements `From<RedisError>`
+             `IdentityError` implements `From<jsonwebtoken::errors::Error>`
+             `IdentityError` implements `From<sqlx::Error>`
+
+warning: unused variable: `user_id`
+   --> crates/vpn-identity/src/storage.rs:326:9
+    |
+326 |         user_id: Uuid,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_user_id`
+
+warning: unused variable: `provider`
+   --> crates/vpn-identity/src/storage.rs:327:9
+    |
+327 |         provider: AuthProvider,
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_provider`
+
+warning: unused variable: `expiration`
+   --> crates/vpn-identity/src/storage.rs:328:9
+    |
+328 |         expiration: Duration,
+    |         ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_expiration`
+
+warning: unused variable: `session_id`
+   --> crates/vpn-identity/src/storage.rs:336:40
+    |
+336 |     pub async fn delete_session(&self, session_id: &str) -> Result<()> {
+    |                                        ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_session_id`
+
+Some errors have detailed explanations: E0277, E0308, E0432, E0433, E0596, E0599.
+For more information about an error, try `rustc --explain E0277`.
+warning: `vpn-identity` (lib) generated 12 warnings
+error: could not compile `vpn-identity` (lib) due to 42 previous errors; 12 warnings emitted
+warning: build failed, waiting for other jobs to finish...
+  ⚠ Some workspace members failed to build
+Building additional binaries...
+  ⚠ vpn-identity build failed
+Creating release directory structure...
+Copying binaries...
+  ✓ Copied vpn CLI
+  ✓ Copied vpn-proxy
+  ✗ vpn-identity binary not found
+Copying configuration files...
+cp: cannot stat '/home/ikeniborn/Documents/Project/vpn/configs/*': No such file or directory
+Copying Docker files...
+cp: cannot stat '/home/ikeniborn/Documents/Project/vpn/docker-compose.yml': No such file or directory
+Copying systemd service files...
+Copying scripts...
+Copying documentation...
+cp: cannot stat '/home/ikeniborn/Documents/Project/vpn/CHANGELOG.md': No such file or directory
+Creating version file...
+Creating release archive...
+Cleaning up...
+Creating checksums...
+
+✅ Release build completed successfully!
+📦 Release archive: /home/ikeniborn/Documents/Project/vpn/release/vpn-release.tar.gz
+📏 Size: 8.0M
+🔒 SHA256: c316147022245a2b43fc7c0c28cce3090af3ea9d28f1309e454678b878de607f  vpn-release.tar.gz

@@ -54,12 +54,12 @@ impl SessionManager {
         let value = serde_json::to_string(&session)?;
         let expiry_secs = expiration.num_seconds() as usize;
         
-        self.redis.set_ex(&key, value, expiry_secs).await?;
+        self.redis.set_ex(&key, value, expiry_secs as u64).await?;
         
         // Also store in a user's session set for easy lookup
         let user_sessions_key = format!("{}user:{}", self.key_prefix, user_id);
         self.redis.sadd(&user_sessions_key, &session_id).await?;
-        self.redis.expire(&user_sessions_key, expiry_secs).await?;
+        self.redis.expire(&user_sessions_key, expiry_secs as i64).await?;
         
         Ok(session_id)
     }
@@ -83,7 +83,7 @@ impl SessionManager {
                 let updated_json = serde_json::to_string(&session)?;
                 let ttl: isize = self.redis.ttl(&key).await?;
                 if ttl > 0 {
-                    self.redis.set_ex(&key, updated_json, ttl as usize).await?;
+                    self.redis.set_ex(&key, updated_json, ttl as u64).await?;
                 }
                 
                 Ok(Some(session))
@@ -104,7 +104,7 @@ impl SessionManager {
         let current_ttl: isize = self.redis.ttl(&key).await?;
         if current_ttl > 0 {
             let new_ttl = current_ttl + extension.num_seconds() as isize;
-            self.redis.expire(&key, new_ttl as usize).await?;
+            self.redis.expire(&key, new_ttl as i64).await?;
         }
         
         Ok(())

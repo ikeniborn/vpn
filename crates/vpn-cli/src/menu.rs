@@ -205,12 +205,23 @@ impl InteractiveMenu {
         }
 
         // Select protocol
-        let protocols = vec!["VLESS+Reality", "Shadowsocks", "WireGuard", "HTTP/SOCKS5 Proxy"];
+        let protocols = vec![
+            "VLESS+Reality",
+            "Shadowsocks",
+            "WireGuard",
+            "HTTP/SOCKS5 Proxy",
+            "← Back to main menu"
+        ];
         let protocol_selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("Select VPN protocol")
             .items(&protocols)
             .default(0)
             .interact()?;
+
+        // Handle back option
+        if protocol_selection == 4 {
+            return Ok(());
+        }
 
         let protocol = match protocol_selection {
             0 => crate::cli::Protocol::Vless,
@@ -482,12 +493,18 @@ impl InteractiveMenu {
             }
         };
 
-        let protocols = vec!["VLESS+Reality", "Shadowsocks", "WireGuard"];
+        let protocols = vec!["VLESS+Reality", "Shadowsocks", "WireGuard", "← Cancel"];
         let protocol_selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("Select protocol")
             .items(&protocols)
             .default(0)
             .interact()?;
+
+        // Handle cancel option
+        if protocol_selection == 3 {
+            display::info("User creation cancelled");
+            return Ok(());
+        }
 
         let protocol = match protocol_selection {
             0 => crate::cli::Protocol::Vless,

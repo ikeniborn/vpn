@@ -7,7 +7,7 @@ use crate::{
 use oauth2::{
     basic::BasicClient, reqwest::async_http_client, AuthUrl, AuthorizationCode,
     ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, PkceCodeVerifier,
-    RedirectUrl, RevocationUrl, Scope, TokenUrl,
+    RedirectUrl, RevocationUrl, Scope, TokenUrl, TokenResponse,
 };
 use openidconnect::{
     core::{CoreClient, CoreProviderMetadata},

@@ -21,3 +21,7 @@ tarpaulin-report.html
 # Temporary files
 *.tmp
 *.temp
+
+# Release artifacts
+# /release/*.tar.gz
+# /release/*.sha256
