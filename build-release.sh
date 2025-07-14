@@ -28,13 +28,14 @@ if command -v sqlite3 >/dev/null 2>&1; then
     sqlite3 "$TEMP_DB" < "crates/vpn-identity/migrations/001_initial.sql" 2>/dev/null || true
 fi
 
-# Build all workspace members (continue on error)
-cargo build --release --locked --workspace || echo "  ⚠ Some workspace members failed to build"
+# Build all workspace members with compatible CPU target (continue on error)
+# Use x86-64-v2 for better compatibility with older CPUs
+RUSTFLAGS="-C target-cpu=x86-64-v2" cargo build --release --locked --workspace || echo "  ⚠ Some workspace members failed to build"
 
 # Also build specific binaries that might not be default members
 echo "Building additional binaries..."
-cargo build --release --locked -p vpn-proxy --bin vpn-proxy-auth 2>/dev/null || echo "  ⚠ vpn-proxy-auth build failed"
-DATABASE_URL="sqlite::memory:" cargo build --release --locked -p vpn-identity --bin vpn-identity 2>/dev/null || echo "  ⚠ vpn-identity build failed"
+RUSTFLAGS="-C target-cpu=x86-64-v2" cargo build --release --locked -p vpn-proxy --bin vpn-proxy-auth 2>/dev/null || echo "  ⚠ vpn-proxy-auth build failed"
+DATABASE_URL="sqlite::memory:" RUSTFLAGS="-C target-cpu=x86-64-v2" cargo build --release --locked -p vpn-identity --bin vpn-identity 2>/dev/null || echo "  ⚠ vpn-identity build failed"
 
 echo "Creating release directory structure..."
 TEMP_DIR=$(mktemp -d)
@@ -181,6 +182,7 @@ cat > "${RELEASE_DIR}/RELEASE_INFO.md" << EOF
 - **Git Branch**: ${GIT_BRANCH}
 - **Build Host**: ${BUILD_HOST}
 - **Build User**: ${BUILD_USER}
+- **Target CPU**: x86-64-v2 (compatible with AMD EPYC, Intel Haswell+)
 
 ## Release Contents
 

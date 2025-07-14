@@ -2,20 +2,21 @@
 
 ## Version Details
 - **Version**: v0.1.0
-- **Build Date**: 2025-07-14 20:02:54 UTC
-- **Git Commit**: c1f349e
+- **Build Date**: 2025-07-14 20:11:19 UTC
+- **Git Commit**: 1a38d3d
 - **Git Branch**: rust
 - **Build Host**: minipc
 - **Build User**: ikeniborn
+- **Target CPU**: x86-64-v2 (compatible with AMD EPYC, Intel Haswell+)
 
 ## Release Contents
 
 ### Binaries
-- vpn-identity (357120 bytes)
+- vpn-identity (353024 bytes)
 - vpn-api (0 bytes)
 - vpn-cli (0 bytes)
-- vpn-proxy (5306344 bytes)
-- vpn (17302232 bytes)
+- vpn-proxy (5244912 bytes)
+- vpn (17154776 bytes)
 - vpn-manager (0 bytes)
 
 ### Configuration Files
