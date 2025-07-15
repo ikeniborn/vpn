@@ -113,14 +113,17 @@ jobs:
           
           ## Installation
           
-          ### Using pre-built binaries
+          ### Using release archive (recommended)
           
-          Download the appropriate binary for your platform from the assets below.
-          
-          ### Using Cargo
+          Download and extract the release archive:
           
           ```bash
-          cargo install --git https://github.com/${{ github.repository }} --tag ${{ needs.check-version.outputs.version || github.ref }}
+          wget https://github.com/${{ github.repository }}/releases/download/${{ needs.check-version.outputs.version || github.ref }}/vpn-release.tar.gz
+          mkdir -p ~/vpn-install
+          cd ~/vpn-install
+          tar -xzf ~/vpn-release.tar.gz
+          cd vpn-release
+          sudo ./install.sh
           ```
           
           ### Using Docker
@@ -131,143 +134,63 @@ jobs:
         draft: false
         prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
 
-  build-and-upload:
-    name: Build and Upload
+  build-release:
+    name: Build Release Archive
     needs: [check-version, create-release]
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Linux targets
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            binary_name: vpn
-            use_cross: false
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            binary_name: vpn
-            use_cross: true
-          - os: ubuntu-latest
-            target: armv7-unknown-linux-gnueabihf
-            binary_name: vpn
-            use_cross: true
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            binary_name: vpn
-            use_cross: true
-          # macOS targets
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            binary_name: vpn
-            use_cross: false
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            binary_name: vpn
-            use_cross: false
-          # Windows targets
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            binary_name: vpn.exe
-            use_cross: false
-
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: ${{ matrix.target }}
     
     - name: Cache Rust dependencies
       uses: Swatinem/rust-cache@v2
       with:
-        key: release-${{ matrix.target }}
+        key: release-build
     
-    - name: Install cross
-      if: matrix.use_cross
-      run: cargo install cross
-    
-    - name: Build binary (native)
-      if: ${{ !matrix.use_cross }}
-      run: cargo build --release --target ${{ matrix.target }} --package vpn-cli
-    
-    - name: Build binary (cross)
-      if: matrix.use_cross
-      run: cross build --release --target ${{ matrix.target }} --package vpn-cli
-    
-    - name: Prepare binary (Unix)
-      if: matrix.os != 'windows-latest'
+    - name: Install dependencies
       run: |
-        mkdir -p release
-        cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} release/
-        cd release
-        tar czf vpn-${{ matrix.target }}.tar.gz ${{ matrix.binary_name }}
-        
-    - name: Prepare binary (Windows)
-      if: matrix.os == 'windows-latest'
-      run: |
-        mkdir release
-        copy target\${{ matrix.target }}\release\${{ matrix.binary_name }} release\
-        cd release
-        7z a vpn-${{ matrix.target }}.zip ${{ matrix.binary_name }}
+        sudo apt-get update
+        sudo apt-get install -y sqlite3 jq
     
-    - name: Generate checksums (Unix)
-      if: matrix.os != 'windows-latest'
+    - name: Build release archive
       run: |
-        cd release
-        sha256sum vpn-${{ matrix.target }}.tar.gz > vpn-${{ matrix.target }}.tar.gz.sha256
-        
-    - name: Generate checksums (Windows)
-      if: matrix.os == 'windows-latest'
-      run: |
-        cd release
-        Get-FileHash vpn-${{ matrix.target }}.zip -Algorithm SHA256 | Format-List Hash | Out-String -Stream | Select-String "Hash" | ForEach-Object {$_.ToString().Split(":")[1].Trim().ToLower() + "  vpn-${{ matrix.target }}.zip"} > vpn-${{ matrix.target }}.zip.sha256
+        chmod +x ./build-release.sh
+        ./build-release.sh
     
-    - name: Upload binary asset (Unix)
-      if: matrix.os != 'windows-latest'
+    - name: Upload release archive
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./release/vpn-${{ matrix.target }}.tar.gz
-        asset_name: vpn-${{ matrix.target }}.tar.gz
+        asset_path: ./release/vpn-release.tar.gz
+        asset_name: vpn-release.tar.gz
         asset_content_type: application/gzip
         
-    - name: Upload checksum (Unix)
-      if: matrix.os != 'windows-latest'
+    - name: Upload checksum
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./release/vpn-${{ matrix.target }}.tar.gz.sha256
-        asset_name: vpn-${{ matrix.target }}.tar.gz.sha256
+        asset_path: ./release/vpn-release.tar.gz.sha256
+        asset_name: vpn-release.tar.gz.sha256
         asset_content_type: text/plain
         
-    - name: Upload binary asset (Windows)
-      if: matrix.os == 'windows-latest'
+    - name: Upload release info
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./release/vpn-${{ matrix.target }}.zip
-        asset_name: vpn-${{ matrix.target }}.zip
-        asset_content_type: application/zip
-        
-    - name: Upload checksum (Windows)
-      if: matrix.os == 'windows-latest'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./release/vpn-${{ matrix.target }}.zip.sha256
-        asset_name: vpn-${{ matrix.target }}.zip.sha256
-        asset_content_type: text/plain
+        asset_path: ./release/RELEASE_INFO.md
+        asset_name: RELEASE_INFO.md
+        asset_content_type: text/markdown
 
   docker-release:
     name: Build and Push Docker Images
@@ -312,7 +235,7 @@ jobs:
 
   update-docs:
     name: Update Documentation
-    needs: [check-version, build-and-upload]
+    needs: [check-version, build-release]
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
@@ -326,12 +249,11 @@ jobs:
         VERSION=${VERSION#refs/tags/}
         
         # Update README.md with new release version
-        sed -i "s/vpn:v[0-9]\+\.[0-9]\+\.[0-9]\+/vpn:$VERSION/g" README.md
-        sed -i "s/download\/v[0-9]\+\.[0-9]\+\.[0-9]\+/download\/$VERSION/g" README.md
+        sed -i "s/vpn-release\.tar\.gz/vpn-release.tar.gz/g" README.md
+        sed -i "s/releases\/download\/[^\/]*\//releases\/download\/$VERSION\//g" README.md
         
         # Update docs with new version
-        find docs/ -name "*.md" -exec sed -i "s/vpn:v[0-9]\+\.[0-9]\+\.[0-9]\+/vpn:$VERSION/g" {} \;
-        find docs/ -name "*.md" -exec sed -i "s/download\/v[0-9]\+\.[0-9]\+\.[0-9]\+/download\/$VERSION/g" {} \;
+        find docs/ -name "*.md" -exec sed -i "s/releases\/download\/[^\/]*\//releases\/download\/$VERSION\//g" {} \;
 
     - name: Commit documentation updates
       run: |

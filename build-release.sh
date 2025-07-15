@@ -109,13 +109,23 @@ find "${SCRIPT_DIR}" -name "*.service" -exec cp {} "${RELEASE_CONTENT}/systemd/"
 
 echo "Copying scripts..."
 mkdir -p "${RELEASE_CONTENT}/scripts"
-cp "${SCRIPT_DIR}/install.sh" "${RELEASE_CONTENT}/" || true
-cp "${SCRIPT_DIR}/uninstall.sh" "${RELEASE_CONTENT}/" 2>/dev/null || true
-cp "${SCRIPT_DIR}/scripts"/*.sh "${RELEASE_CONTENT}/scripts/" 2>/dev/null || true
+# Copy release install/uninstall scripts to root of release
+if [ -f "${SCRIPT_DIR}/templates/release-scripts/install.sh" ]; then
+    cp "${SCRIPT_DIR}/templates/release-scripts/install.sh" "${RELEASE_CONTENT}/install.sh"
+    chmod +x "${RELEASE_CONTENT}/install.sh"
+    echo "  ✓ Copied install.sh"
+fi
+if [ -f "${SCRIPT_DIR}/templates/release-scripts/uninstall.sh" ]; then
+    cp "${SCRIPT_DIR}/templates/release-scripts/uninstall.sh" "${RELEASE_CONTENT}/uninstall.sh"
+    chmod +x "${RELEASE_CONTENT}/uninstall.sh"
+    echo "  ✓ Copied uninstall.sh"
+fi
+# Scripts directory is included but might be empty
+# Additional operational scripts can be added here if needed
 
 echo "Copying documentation..."
 mkdir -p "${RELEASE_CONTENT}/docs"
-cp "${SCRIPT_DIR}/README.md" "${RELEASE_CONTENT}/" 2>/dev/null || true
+# Don't copy main README to root of archive since we create our own
 if [[ -f "${SCRIPT_DIR}/CHANGELOG.md" ]]; then
     cp "${SCRIPT_DIR}/CHANGELOG.md" "${RELEASE_CONTENT}/" || true
 elif [[ -f "${SCRIPT_DIR}/docs/CHANGELOG.md" ]]; then
@@ -129,13 +139,64 @@ if [ -f "${SCRIPT_DIR}/templates/deny.toml" ]; then
     echo "  ✓ Copied deny.toml"
 fi
 
-echo "Creating installation notes..."
-cat > "${RELEASE_CONTENT}/INSTALL_NOTES.txt" << EOF
-Installation Notes:
+echo "Creating installation README..."
+cat > "${RELEASE_CONTENT}/README.md" << EOF
+# VPN Management System - Installation Guide
+
+## Quick Start
+
+\`\`\`bash
+# Extract the archive
+tar -xzf vpn-release.tar.gz
+cd vpn-release
+
+# Install the system
+sudo ./install.sh
+
+# Verify installation
+vpn --version
+\`\`\`
+
+## Installation Notes
+
+- Extract the archive to a temporary directory (e.g., ~/vpn-install)
+- Run \`./install.sh\` to install the VPN system
+- Run \`./uninstall.sh\` to remove the VPN system
 - The db directory will be created at /opt/vpn/db during installation
 - Templates directory contains Docker Compose configurations and service configs
 - Docker files are in the docker/ directory within the release
-- Run install.sh to install the VPN system
+- Installation requires root privileges
+
+## Post-Installation
+
+After installation, the VPN system will be available at:
+- Binaries: /usr/local/bin/vpn*
+- Configuration: /opt/vpn/configs/
+- Logs: /opt/vpn/logs/
+- Documentation: /opt/vpn/docs/
+
+To start using the VPN system:
+\`\`\`bash
+# View help
+vpn --help
+
+# Start interactive menu
+sudo vpn menu
+
+# Check service status
+systemctl status vpn-manager
+\`\`\`
+
+## Uninstallation
+
+To remove the VPN system:
+\`\`\`bash
+# With backup
+sudo /opt/vpn/scripts/archive-uninstall.sh
+
+# Without backup (force)
+sudo /opt/vpn/scripts/archive-uninstall.sh --force
+\`\`\`
 EOF
 
 echo "Creating version file..."
@@ -206,8 +267,8 @@ ${BINARY_SIZES}
 - Systemd service files (if available)
 
 ### Documentation
-- README.md - Project documentation
-- INSTALL_NOTES.txt - Installation instructions
+- README.md - Installation instructions
+- CHANGELOG.md - Version history
 - docs/ - Detailed documentation
 
 ## System Requirements
