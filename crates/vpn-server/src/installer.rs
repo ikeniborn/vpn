@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 // removed unused imports
+use crate::docker_utils::DockerUtils;
 use crate::error::{Result, ServerError};
 use crate::templates::DockerComposeTemplate;
 use crate::validator::ConfigValidator;
@@ -27,6 +28,21 @@ pub struct InstallationOptions {
     pub reality_dest: Option<String>,
     pub subnet: Option<String>,
     pub interactive_subnet: bool,
+}
+
+impl InstallationOptions {
+    /// Get protocol-specific installation path
+    pub fn get_protocol_install_path(protocol: VpnProtocol) -> PathBuf {
+        match protocol {
+            VpnProtocol::Vless => PathBuf::from("/opt/vless"),
+            VpnProtocol::HttpProxy | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer => {
+                PathBuf::from("/opt/proxy")
+            }
+            VpnProtocol::Outline => PathBuf::from("/opt/shadowsocks"),
+            VpnProtocol::Wireguard => PathBuf::from("/opt/wireguard"),
+            _ => PathBuf::from("/opt/vpn"), // fallback to general path
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -131,6 +147,9 @@ impl ServerInstaller {
         // Validate the new Docker Compose file
         self.validate_docker_compose_file(&options).await?;
 
+        // Clean up any conflicting containers before deployment
+        self.cleanup_conflicting_containers().await?;
+        
         // Download and start containers
         self.deploy_containers(&options).await?;
 
@@ -213,6 +232,29 @@ impl ServerInstaller {
             tokio::time::sleep(std::time::Duration::from_secs(3)).await;
         }
 
+        // Clean up any conflicting containers that might exist from previous installations
+        self.cleanup_conflicting_containers().await?;
+
+        Ok(())
+    }
+
+    async fn cleanup_conflicting_containers(&self) -> Result<()> {
+        println!("🧹 Checking for conflicting containers...");
+
+        // List of container names that might conflict
+        let conflicting_containers = [
+            "xray",           // Old VLESS container name
+            "watchtower",     // Generic watchtower name
+            "shadowbox",      // Old Outline container name
+            "wireguard",      // Old WireGuard container name
+            "traefik-proxy",  // Old proxy container name
+        ];
+
+        // Use DockerUtils for centralized container conflict handling
+        DockerUtils::cleanup_conflicting_containers(&conflicting_containers)?;
+        DockerUtils::prune_networks()?;
+
+        println!("✓ Container conflict cleanup completed");
         Ok(())
     }
 
@@ -405,6 +447,11 @@ impl ServerInstaller {
                 return Err(ServerError::InstallationError(
                     "Docker network error detected. This often happens when containers are recreated. Try running 'vpn diagnostics --fix' to clean up Docker resources.".to_string()
                 ));
+            }
+
+            // Check for container name conflicts and handle them
+            if DockerUtils::handle_container_conflict(&stderr, &compose_path).await? {
+                return Ok(());
             }
 
             return Err(ServerError::InstallationError(format!(
@@ -1000,11 +1047,12 @@ pub struct InstallationResult {
 
 impl Default for InstallationOptions {
     fn default() -> Self {
+        let protocol = VpnProtocol::Vless;
         Self {
-            protocol: VpnProtocol::Vless,
+            protocol,
             port: None,
             sni_domain: None,
-            install_path: PathBuf::from("/opt/vpn"),
+            install_path: Self::get_protocol_install_path(protocol),
             enable_firewall: true,
             auto_start: true,
             log_level: LogLevel::Warning,

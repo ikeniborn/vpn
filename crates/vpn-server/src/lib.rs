@@ -1,3 +1,4 @@
+pub mod docker_utils;
 pub mod error;
 pub mod installer;
 pub mod lifecycle;
@@ -6,6 +7,7 @@ pub mod rotation;
 pub mod templates;
 pub mod validator;
 
+pub use docker_utils::DockerUtils;
 pub use error::{Result, ServerError};
 pub use installer::{InstallationOptions, ServerInstaller};
 pub use lifecycle::ServerLifecycle;
