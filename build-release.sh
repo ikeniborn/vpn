@@ -2,6 +2,13 @@
 
 set -euo pipefail
 
+# Check if running with sudo
+if [[ $EUID -eq 0 ]]; then
+    echo "Error: This script should not be run with sudo."
+    echo "Please run: ./build-release.sh"
+    exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RELEASE_DIR="${SCRIPT_DIR}/release"
 RELEASE_NAME="vpn-release"
@@ -25,11 +32,17 @@ export DATABASE_URL="sqlite://$TEMP_DB"
 # Create temporary database with schema for sqlx macros
 if command -v sqlite3 >/dev/null 2>&1; then
     echo "Setting up temporary database for sqlx macros..."
-    sqlite3 "$TEMP_DB" < "crates/vpn-identity/migrations/001_initial.sql" 2>/dev/null || true
+    if [ -f "${SCRIPT_DIR}/crates/vpn-identity/migrations/001_initial.sql" ]; then
+        sqlite3 "$TEMP_DB" < "${SCRIPT_DIR}/crates/vpn-identity/migrations/001_initial.sql" 2>/dev/null || true
+    else
+        # Create empty database if migration file doesn't exist
+        sqlite3 "$TEMP_DB" "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY);" 2>/dev/null || true
+    fi
 fi
 
 # Build all workspace members with compatible CPU target (continue on error)
 # Use x86-64-v2 for better compatibility with older CPUs
+cd "${SCRIPT_DIR}"
 RUSTFLAGS="-C target-cpu=x86-64-v2" cargo build --release --locked --workspace || echo "  ⚠ Some workspace members failed to build"
 
 # Also build specific binaries that might not be default members
@@ -204,6 +217,26 @@ echo "VPN Management System v${VERSION}" > "${RELEASE_CONTENT}/VERSION"
 echo "Built on: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> "${RELEASE_CONTENT}/VERSION"
 echo "Git commit: $(git rev-parse --short HEAD 2>/dev/null || echo "unknown")" >> "${RELEASE_CONTENT}/VERSION"
 
+echo "Creating release info..."
+BUILD_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+BUILD_HOST=$(hostname)
+BUILD_USER=$(whoami)
+
+# Get binary sizes from the release content directory before creating archive
+BINARY_SIZES=$(cd "${RELEASE_CONTENT}/bin" && for file in *; do
+    if [ -L "$file" ]; then
+        # It's a symlink
+        target=$(readlink "$file")
+        echo "- $file → $target (symlink)"
+    elif [ -f "$file" ]; then
+        # It's a regular file
+        size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "unknown")
+        echo "- $file ($size bytes)"
+    fi
+done | sort)
+
 echo "Creating release archive..."
 cd "${TEMP_DIR}"
 tar -czf "${RELEASE_DIR}/${RELEASE_NAME}.tar.gz" "${RELEASE_NAME}"
@@ -218,20 +251,6 @@ cd "${RELEASE_DIR}"
 sha256sum "${RELEASE_NAME}.tar.gz" > "${RELEASE_NAME}.tar.gz.sha256"
 
 RELEASE_SIZE=$(du -h "${RELEASE_NAME}.tar.gz" | cut -f1)
-
-echo "Creating release info..."
-BUILD_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-BUILD_HOST=$(hostname)
-BUILD_USER=$(whoami)
-
-# Get binary sizes from the archive
-BINARY_SIZES=$(tar -tzf "${RELEASE_NAME}.tar.gz" | grep "^${RELEASE_NAME}/bin/" | grep -v "/$" | while read file; do
-    size=$(tar -xzOf "${RELEASE_NAME}.tar.gz" "$file" | wc -c)
-    basename=$(basename "$file")
-    echo "- $basename ($size bytes)"
-done)
 
 cat > "${RELEASE_DIR}/RELEASE_INFO.md" << EOF
 # VPN Management System Release Information
