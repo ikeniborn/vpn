@@ -87,29 +87,41 @@ impl InteractiveMenu {
             println!("{}", style("   Run with 'sudo vpn menu' for full access").dim());
         }
 
-        // Show server status
-        match self.handler.get_server_status().await {
-            Ok(status) => {
-                let status_text = if status.is_running {
-                    style("RUNNING").green()
-                } else {
-                    style("STOPPED").red()
-                };
-                println!();
-                println!("Server Status: {}", status_text);
-
-                if status.is_running {
-                    println!("Active Users: {}", status.active_users);
-                    println!(
-                        "Containers: {}/{} healthy",
-                        status.healthy_containers, status.total_containers
-                    );
+        // Show server status for all protocols
+        println!();
+        println!("Server Status:");
+        
+        // Check each protocol's status
+        let protocols = [
+            ("VLESS", "/opt/vless"),
+            ("Shadowsocks", "/opt/shadowsocks"),
+            ("WireGuard", "/opt/wireguard"),
+            ("Proxy", "/opt/proxy"),
+        ];
+        
+        let mut any_running = false;
+        for (proto_name, proto_path) in &protocols {
+            let path = std::path::Path::new(proto_path);
+            if path.join("docker-compose.yml").exists() {
+                match self.handler.get_protocol_status(path).await {
+                    Ok(running) => {
+                        let status_icon = if running {
+                            any_running = true;
+                            style("●").green()
+                        } else {
+                            style("●").red()
+                        };
+                        println!("  {} {}", status_icon, proto_name);
+                    }
+                    Err(_) => {
+                        println!("  {} {}", style("?").yellow(), proto_name);
+                    }
                 }
             }
-            Err(_) => {
-                println!();
-                println!("Server Status: {}", style("UNKNOWN").yellow());
-            }
+        }
+        
+        if !any_running {
+            println!("  {}", style("No services running").dim());
         }
 
         println!();

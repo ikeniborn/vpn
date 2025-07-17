@@ -39,6 +39,31 @@ impl CommandHandler {
         self.force_mode = force;
     }
 
+    /// Detect the protocol from existing installation and return the appropriate installation path
+    fn get_protocol_install_path(&self) -> PathBuf {
+        use std::path::Path;
+
+        // Check different protocol paths to determine which one is installed
+        let protocols = [
+            (vpn_types::protocol::VpnProtocol::Vless, "/opt/vless"),
+            (vpn_types::protocol::VpnProtocol::HttpProxy, "/opt/proxy"),
+            (vpn_types::protocol::VpnProtocol::Socks5Proxy, "/opt/proxy"),
+            (vpn_types::protocol::VpnProtocol::ProxyServer, "/opt/proxy"),
+            (vpn_types::protocol::VpnProtocol::Outline, "/opt/shadowsocks"),
+            (vpn_types::protocol::VpnProtocol::Wireguard, "/opt/wireguard"),
+        ];
+
+        for (_protocol, path) in protocols {
+            let install_path = Path::new(path);
+            if install_path.exists() && install_path.join("docker-compose.yml").exists() {
+                return install_path.to_path_buf();
+            }
+        }
+
+        // Fallback to original path for backward compatibility
+        self.install_path.clone()
+    }
+
     // Server Management Commands
     pub async fn install_server(
         &mut self,
@@ -50,6 +75,9 @@ impl CommandHandler {
         subnet: Option<String>,
         interactive_subnet: bool,
     ) -> Result<()> {
+        // Get protocol-specific installation path
+        let protocol_install_path = InstallationOptions::get_protocol_install_path(protocol.clone().into());
+
         // Check if this is a proxy server installation
         if matches!(
             protocol,
@@ -73,7 +101,7 @@ impl CommandHandler {
             );
             pb.set_message("Installing proxy server...");
 
-            let installer = ProxyInstaller::new(self.install_path.clone(), port.unwrap_or(8080))?;
+            let installer = ProxyInstaller::new(protocol_install_path.clone(), port.unwrap_or(8080))?;
             installer
                 .install(proxy_type)
                 .await
@@ -95,7 +123,7 @@ impl CommandHandler {
             protocol: protocol.into(),
             port,
             sni_domain: sni,
-            install_path: self.install_path.clone(),
+            install_path: protocol_install_path,
             enable_firewall: firewall,
             auto_start,
             log_level: ServerLogLevel::Warning,
@@ -170,7 +198,8 @@ impl CommandHandler {
         );
         pb.set_message("Uninstalling VPN server...");
 
-        let result = installer.uninstall(&self.install_path, purge).await;
+        let install_path = self.get_protocol_install_path();
+        let result = installer.uninstall(&install_path, purge).await;
         pb.finish_and_clear();
 
         match result {
@@ -188,7 +217,8 @@ impl CommandHandler {
         let pb = ProgressBar::new_spinner();
         pb.set_message("Starting VPN server...");
 
-        let result = lifecycle.start(&self.install_path).await;
+        let install_path = self.get_protocol_install_path();
+        let result = lifecycle.start(&install_path).await;
         pb.finish_and_clear();
 
         match result {
@@ -206,7 +236,8 @@ impl CommandHandler {
         let pb = ProgressBar::new_spinner();
         pb.set_message("Stopping VPN server...");
 
-        let result = lifecycle.stop(&self.install_path).await;
+        let install_path = self.get_protocol_install_path();
+        let result = lifecycle.stop(&install_path).await;
         pb.finish_and_clear();
 
         match result {
@@ -224,7 +255,8 @@ impl CommandHandler {
         let pb = ProgressBar::new_spinner();
         pb.set_message("Restarting VPN server...");
 
-        let result = lifecycle.restart(&self.install_path).await;
+        let install_path = self.get_protocol_install_path();
+        let result = lifecycle.restart(&install_path).await;
         pb.finish_and_clear();
 
         match result {
@@ -242,7 +274,8 @@ impl CommandHandler {
         let pb = ProgressBar::new_spinner();
         pb.set_message("Reloading server configuration...");
 
-        let result = lifecycle.reload_config(&self.install_path).await;
+        let install_path = self.get_protocol_install_path();
+        let result = lifecycle.reload_config(&install_path).await;
         pb.finish_and_clear();
 
         match result {
@@ -329,8 +362,31 @@ impl CommandHandler {
         })
     }
 
+    pub async fn get_protocol_status(&self, protocol_path: &std::path::Path) -> Result<bool> {
+        use std::process::Command;
+        
+        // Check if docker-compose.yml exists
+        let compose_file = protocol_path.join("docker-compose.yml");
+        if !compose_file.exists() {
+            return Ok(false);
+        }
+
+        // Check container status using docker-compose
+        let output = Command::new("docker-compose")
+            .arg("-f")
+            .arg(&compose_file)
+            .arg("ps")
+            .arg("-q")
+            .output()
+            .map_err(|e| CliError::CommandError(format!("Failed to check status: {}", e)))?;
+
+        // If output is not empty, containers are running
+        Ok(!output.stdout.is_empty())
+    }
+
     pub async fn is_server_installed(&self) -> Result<bool> {
-        let config_file = self.install_path.join("docker-compose.yml");
+        let install_path = self.get_protocol_install_path();
+        let config_file = install_path.join("docker-compose.yml");
         Ok(config_file.exists())
     }
 
@@ -369,7 +425,8 @@ impl CommandHandler {
         detailed: bool,
     ) -> Result<()> {
         let server_config = self.load_server_config()?;
-        let user_manager = UserManager::new(&self.install_path, server_config)?;
+        let install_path = self.get_protocol_install_path();
+        let user_manager = UserManager::new(&install_path, server_config)?;
 
         let mut options = UserListOptions::default();
         if let Some(status) = status_filter {
@@ -407,7 +464,8 @@ impl CommandHandler {
         protocol: Protocol,
     ) -> Result<()> {
         let server_config = self.load_server_config()?;
-        let user_manager = UserManager::new(&self.install_path, server_config)?;
+        let install_path = self.get_protocol_install_path();
+        let user_manager = UserManager::new(&install_path, server_config)?;
 
         let mut user = user_manager
             .create_user(name.clone(), protocol.into())
@@ -437,7 +495,8 @@ impl CommandHandler {
 
     pub async fn delete_user(&mut self, user: String) -> Result<()> {
         let server_config = self.load_server_config()?;
-        let user_manager = UserManager::new(&self.install_path, server_config)?;
+        let install_path = self.get_protocol_install_path();
+        let user_manager = UserManager::new(&install_path, server_config)?;
 
         // Try to find user by name first, then by ID
         let user_obj = match user_manager.get_user_by_name(&user).await {
@@ -453,7 +512,8 @@ impl CommandHandler {
 
     pub async fn show_user_details(&mut self, user: String, show_qr: bool) -> Result<()> {
         let server_config = self.load_server_config()?;
-        let user_manager = UserManager::new(&self.install_path, server_config)?;
+        let install_path = self.get_protocol_install_path();
+        let user_manager = UserManager::new(&install_path, server_config)?;
 
         let user_obj = match user_manager.get_user_by_name(&user).await {
             Ok(u) => u,
@@ -530,7 +590,8 @@ impl CommandHandler {
         qr_file: Option<PathBuf>,
     ) -> Result<()> {
         let server_config = self.load_server_config()?;
-        let user_manager = UserManager::new(&self.install_path, server_config)?;
+        let install_path = self.get_protocol_install_path();
+        let user_manager = UserManager::new(&install_path, server_config)?;
 
         let user_obj = match user_manager.get_user_by_name(&user).await {
             Ok(u) => u,
@@ -584,7 +645,8 @@ impl CommandHandler {
         email: Option<String>,
     ) -> Result<()> {
         let server_config = self.load_server_config()?;
-        let user_manager = UserManager::new(&self.install_path, server_config)?;
+        let install_path = self.get_protocol_install_path();
+        let user_manager = UserManager::new(&install_path, server_config)?;
 
         let mut user_obj = match user_manager.get_user_by_name(&user).await {
             Ok(u) => u,
@@ -607,7 +669,8 @@ impl CommandHandler {
 
     pub async fn reset_user_traffic(&mut self, user: String) -> Result<()> {
         let server_config = self.load_server_config()?;
-        let user_manager = UserManager::new(&self.install_path, server_config)?;
+        let install_path = self.get_protocol_install_path();
+        let user_manager = UserManager::new(&install_path, server_config)?;
 
         let mut user_obj = match user_manager.get_user_by_name(&user).await {
             Ok(u) => u,
@@ -630,7 +693,8 @@ impl CommandHandler {
 
     pub async fn get_user_list(&self) -> Result<Vec<vpn_users::User>> {
         let server_config = self.load_server_config()?;
-        let user_manager = UserManager::new(&self.install_path, server_config)?;
+        let install_path = self.get_protocol_install_path();
+        let user_manager = UserManager::new(&install_path, server_config)?;
         Ok(user_manager.list_users(None).await?)
     }
 
@@ -647,7 +711,8 @@ impl CommandHandler {
 
     pub async fn export_users(&mut self, file: PathBuf) -> Result<()> {
         let server_config = self.load_server_config()?;
-        let user_manager = Arc::new(UserManager::new(&self.install_path, server_config)?);
+        let install_path = self.get_protocol_install_path();
+        let user_manager = Arc::new(UserManager::new(&install_path, server_config)?);
         let batch_ops = BatchOperations::new(user_manager);
 
         batch_ops.export_users_to_json(&file).await?;
@@ -658,7 +723,8 @@ impl CommandHandler {
 
     pub async fn import_users(&mut self, file: PathBuf, overwrite: bool) -> Result<()> {
         let server_config = self.load_server_config()?;
-        let user_manager = Arc::new(UserManager::new(&self.install_path, server_config)?);
+        let install_path = self.get_protocol_install_path();
+        let user_manager = Arc::new(UserManager::new(&install_path, server_config)?);
         let batch_ops = BatchOperations::new(user_manager);
 
         let options = vpn_users::batch::ImportOptions {
@@ -794,7 +860,8 @@ impl CommandHandler {
 
         // Check if proxy services are running
         let mut config = vpn_compose::config::ComposeConfig::default();
-        config.compose_dir = self.install_path.join("docker-compose");
+        let install_path = self.get_protocol_install_path();
+        config.compose_dir = install_path.join("docker-compose");
         let compose_manager = vpn_compose::manager::ComposeManager::new(&config)
             .await
             .map_err(|e| {
@@ -895,7 +962,8 @@ impl CommandHandler {
         display::info(&format!("🧪 Testing proxy connectivity to {}", url));
 
         // Get proxy addresses from configuration
-        let config_path = self.install_path.join("proxy-config.yaml");
+        let install_path = self.get_protocol_install_path();
+        let config_path = install_path.join("proxy-config.yaml");
         if !config_path.exists() {
             display::error("Proxy configuration not found. Is the proxy server installed?");
             return Ok(());
@@ -940,7 +1008,8 @@ impl CommandHandler {
             ProxyConfigCommands::Show => {
                 display::info("📋 Current proxy configuration:");
 
-                let config_path = self.install_path.join("proxy-config.yaml");
+                let install_path = self.get_protocol_install_path();
+        let config_path = install_path.join("proxy-config.yaml");
                 if !config_path.exists() {
                     display::error("Proxy configuration not found");
                     return Ok(());
@@ -985,7 +1054,8 @@ impl CommandHandler {
 
                 // Restart proxy services to apply new configuration
                 let mut config = vpn_compose::config::ComposeConfig::default();
-                config.compose_dir = self.install_path.join("docker-compose");
+                let install_path = self.get_protocol_install_path();
+        config.compose_dir = install_path.join("docker-compose");
                 let compose_manager = vpn_compose::manager::ComposeManager::new(&config)
                     .await
                     .map_err(|e| {
@@ -1152,7 +1222,8 @@ impl CommandHandler {
 
         // Check existing VPN installation
         display::section("VPN Installation Status");
-        let docker_compose_path = self.install_path.join("docker-compose.yml");
+        let install_path = self.get_protocol_install_path();
+        let docker_compose_path = install_path.join("docker-compose.yml");
         if docker_compose_path.exists() {
             display::success("✓ VPN server appears to be installed");
 
@@ -1225,7 +1296,8 @@ impl CommandHandler {
 
     async fn check_containers_running(&self) -> bool {
         use tokio::process::Command;
-        let compose_path = self.install_path.join("docker-compose.yml");
+        let install_path = self.get_protocol_install_path();
+        let compose_path = install_path.join("docker-compose.yml");
         if !compose_path.exists() {
             return false;
         }
