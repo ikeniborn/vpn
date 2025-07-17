@@ -19,6 +19,7 @@ pub struct MenuOption {
     pub title: String,
     pub description: String,
     pub action: MenuAction,
+    pub requires_sudo: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -48,18 +49,20 @@ impl InteractiveMenu {
             self.clear_screen()?;
             self.show_header().await?;
 
-            let choice = self.show_main_menu().await?;
-
-            match choice {
-                MenuAction::Exit => {
+            match self.show_and_handle_main_menu().await? {
+                Some(MenuAction::Exit) => {
                     println!("{}", style("Goodbye!").green());
                     break;
                 }
-                action => {
+                Some(action) => {
                     if let Err(e) = self.handle_menu_action(action).await {
                         display::error(&format!("Operation failed: {}", e));
                         self.wait_for_keypress()?;
                     }
+                }
+                None => {
+                    // Menu was cancelled or requires sudo - continue loop
+                    continue;
                 }
             }
         }
@@ -76,6 +79,14 @@ impl InteractiveMenu {
         println!("{}", style("VPN SERVER MANAGEMENT").cyan().bold());
         println!("{}", style("===================").cyan());
 
+        // Show privilege status if not running as root
+        if !crate::PrivilegeManager::is_root() {
+            println!();
+            println!("{}", style("⚠️  Running without administrator privileges").yellow());
+            println!("{}", style("   Some menu options will be disabled").dim());
+            println!("{}", style("   Run with 'sudo vpn menu' for full access").dim());
+        }
+
         // Show server status
         match self.handler.get_server_status().await {
             Ok(status) => {
@@ -84,6 +95,7 @@ impl InteractiveMenu {
                 } else {
                     style("STOPPED").red()
                 };
+                println!();
                 println!("Server Status: {}", status_text);
 
                 if status.is_running {
@@ -95,6 +107,7 @@ impl InteractiveMenu {
                 }
             }
             Err(_) => {
+                println!();
                 println!("Server Status: {}", style("UNKNOWN").yellow());
             }
         }
@@ -103,63 +116,86 @@ impl InteractiveMenu {
         Ok(())
     }
 
-    async fn show_main_menu(&self) -> Result<MenuAction> {
+    async fn show_and_handle_main_menu(&self) -> Result<Option<MenuAction>> {
+        let is_root = crate::PrivilegeManager::is_root();
+        
         let options = vec![
             MenuOption {
                 title: "📦 Install VPN Server".to_string(),
                 description: "Install and configure a new VPN server".to_string(),
                 action: MenuAction::InstallServer,
+                requires_sudo: true,
             },
             MenuOption {
                 title: "🚀 Server Management".to_string(),
                 description: "Start, stop, restart, or reload the server".to_string(),
                 action: MenuAction::ServerManagement,
+                requires_sudo: true,
             },
             MenuOption {
                 title: "👥 User Management".to_string(),
                 description: "Create, delete, and manage VPN users".to_string(),
                 action: MenuAction::UserManagement,
+                requires_sudo: true,
             },
             MenuOption {
                 title: "📊 Monitoring & Statistics".to_string(),
                 description: "View traffic, logs, and performance metrics".to_string(),
                 action: MenuAction::Monitoring,
+                requires_sudo: false,
             },
             MenuOption {
                 title: "🔐 Security & Keys".to_string(),
                 description: "Manage keys, certificates, and security settings".to_string(),
                 action: MenuAction::Security,
+                requires_sudo: true,
             },
             MenuOption {
                 title: "⚙️ Configuration".to_string(),
                 description: "View and modify server configuration".to_string(),
                 action: MenuAction::Configuration,
+                requires_sudo: false,
             },
             MenuOption {
                 title: "🔄 Migration & Backup".to_string(),
                 description: "Import/export configurations and migrate data".to_string(),
                 action: MenuAction::Migration,
+                requires_sudo: true,
             },
             MenuOption {
                 title: "🔧 System Diagnostics".to_string(),
                 description: "Run diagnostics and fix common issues".to_string(),
                 action: MenuAction::Diagnostics,
+                requires_sudo: false,
             },
             MenuOption {
                 title: "ℹ️ System Information".to_string(),
                 description: "View system and server information".to_string(),
                 action: MenuAction::SystemInfo,
+                requires_sudo: false,
             },
             MenuOption {
                 title: "❌ Exit".to_string(),
                 description: "Exit the VPN management interface".to_string(),
                 action: MenuAction::Exit,
+                requires_sudo: false,
             },
         ];
 
+        // Create menu items with disabled indicator for non-root users
         let items: Vec<String> = options
             .iter()
-            .map(|opt| format!("{} - {}", opt.title, opt.description))
+            .map(|opt| {
+                if opt.requires_sudo && !is_root {
+                    format!("{} - {} {}", 
+                        style(&opt.title).dim(), 
+                        style(&opt.description).dim(),
+                        style("[REQUIRES SUDO]").red().dim()
+                    )
+                } else {
+                    format!("{} - {}", opt.title, opt.description)
+                }
+            })
             .collect();
 
         let selection = Select::with_theme(&ColorfulTheme::default())
@@ -168,7 +204,17 @@ impl InteractiveMenu {
             .default(0)
             .interact()?;
 
-        Ok(options[selection].action.clone())
+        // Check if the selected option requires sudo
+        let selected_option = &options[selection];
+        if selected_option.requires_sudo && !is_root {
+            display::error("This operation requires administrator privileges.");
+            display::info("Please run with: sudo vpn menu");
+            self.wait_for_keypress()?;
+            // Return None to indicate menu should be shown again
+            return Ok(None);
+        }
+
+        Ok(Some(selected_option.action.clone()))
     }
 
     async fn handle_menu_action(&mut self, action: MenuAction) -> Result<()> {
