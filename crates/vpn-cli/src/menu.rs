@@ -231,6 +231,19 @@ impl InteractiveMenu {
             _ => crate::cli::Protocol::Vless,
         };
 
+        // Confirm installation of selected protocol
+        println!();
+        display::info(&format!("Selected protocol: {:?}", protocol));
+        
+        let confirm_protocol = Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt("Proceed with installation of this protocol?")
+            .default(true)
+            .interact()?;
+
+        if !confirm_protocol {
+            return Ok(());
+        }
+
         // Get port (optional)
         let use_custom_port = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt("Use custom port?")
@@ -290,7 +303,7 @@ impl InteractiveMenu {
             .default(true)
             .interact()?;
 
-        // Confirm installation
+        // Show installation summary
         println!();
         println!("Installation Summary:");
         println!("  Protocol: {:?}", protocol);
@@ -310,26 +323,20 @@ impl InteractiveMenu {
         );
         println!();
 
-        let confirm = Confirm::with_theme(&ColorfulTheme::default())
-            .with_prompt("Proceed with installation?")
-            .default(true)
-            .interact()?;
+        // Proceed with installation (no additional confirmation needed)
+        self.check_admin_privileges("VPN server installation")?;
+        display::info("Starting installation...");
+        self.handler
+            .install_server(protocol, port, sni, firewall, auto_start, None, false)
+            .await?;
+        display::success("Server installed successfully!");
 
-        if confirm {
-            self.check_admin_privileges("VPN server installation")?;
-            display::info("Starting installation...");
-            self.handler
-                .install_server(protocol, port, sni, firewall, auto_start, None, false)
-                .await?;
-            display::success("Server installed successfully!");
-
-            // Show next steps
-            println!();
-            display::info("Next steps:");
-            println!("  1. Create users with 'User Management'");
-            println!("  2. Check server status");
-            println!("  3. View logs and monitoring");
-        }
+        // Show next steps
+        println!();
+        display::info("Next steps:");
+        println!("  1. Create users with 'User Management'");
+        println!("  2. Check server status");
+        println!("  3. View logs and monitoring");
 
         self.wait_for_keypress()?;
         Ok(())
