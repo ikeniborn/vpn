@@ -11,6 +11,30 @@ use vpn_cli::{
     Shell,
 };
 
+/// Detect the actual installation path by checking protocol-specific directories
+fn detect_installation_path(fallback_path: &PathBuf) -> PathBuf {
+    use std::path::Path;
+
+    // Protocol-specific paths to check
+    let protocol_paths = [
+        "/opt/vless",
+        "/opt/proxy", 
+        "/opt/shadowsocks",
+        "/opt/wireguard",
+    ];
+
+    // Check each protocol path for existing installation
+    for path_str in &protocol_paths {
+        let path = Path::new(path_str);
+        if path.exists() && path.join("docker-compose.yml").exists() {
+            return path.to_path_buf();
+        }
+    }
+
+    // Fallback to provided path (default /opt/vpn)
+    fallback_path.clone()
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -76,8 +100,11 @@ async fn main() {
         println!();
     }
 
+    // Determine installation path - auto-detect for existing installations
+    let install_path = detect_installation_path(&cli.install_path);
+
     // Initialize command handler
-    let command_handler = match CommandHandler::new(config_manager, cli.install_path.clone()).await
+    let command_handler = match CommandHandler::new(config_manager, install_path).await
     {
         Ok(handler) => handler,
         Err(e) => {
@@ -167,8 +194,73 @@ async fn execute_command(
 }
 
 async fn start_interactive_menu(handler: CommandHandler) -> Result<(), CliError> {
-    println!("{}", "Welcome to VPN Server Management".cyan().bold());
-    println!("{}", "=================================".cyan());
+    // Check if running without sudo and show warning dialog
+    if !PrivilegeManager::is_root() {
+        println!("{}", "VPN Server Management".cyan().bold());
+        println!("{}", "====================".cyan());
+        println!();
+        println!("{}", "⚠️  Running without administrator privileges".yellow().bold());
+        println!();
+        println!("Some operations require administrator privileges to function properly.");
+        println!("You can:");
+        println!("  1. Restart with sudo (recommended)");
+        println!("  2. Continue with limited functionality");
+        println!("  3. Exit");
+        println!();
+
+        // Use dialoguer for selection
+        let options = vec![
+            "Restart with sudo",
+            "Continue without sudo",
+            "Exit"
+        ];
+
+        let selection = dialoguer::Select::with_theme(&dialoguer::theme::ColorfulTheme::default())
+            .with_prompt("Choose an option")
+            .items(&options)
+            .default(0)
+            .interact()
+            .map_err(|e| CliError::CommandError(format!("Dialog error: {}", e)))?;
+
+        match selection {
+            0 => {
+                // Restart with sudo
+                println!("Restarting with sudo...");
+                let args: Vec<String> = std::env::args().collect();
+                let mut cmd = std::process::Command::new("sudo");
+                for arg in &args {
+                    cmd.arg(arg);
+                }
+                
+                let status = cmd.status()
+                    .map_err(|e| CliError::CommandError(format!("Failed to restart with sudo: {}", e)))?;
+                
+                if status.success() {
+                    // Exit current process since sudo version is running
+                    std::process::exit(0);
+                } else {
+                    return Err(CliError::CommandError("Failed to restart with sudo".into()));
+                }
+            }
+            1 => {
+                // Continue without sudo
+                println!();
+                println!("{}", "Continuing with limited functionality...".dimmed());
+                println!("Note: Some operations will be disabled or may fail.");
+                println!();
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            }
+            2 => {
+                // Exit
+                println!("Exiting...");
+                std::process::exit(0);
+            }
+            _ => unreachable!()
+        }
+    } else {
+        println!("{}", "Welcome to VPN Server Management".cyan().bold());
+        println!("{}", "=================================".cyan());
+    }
 
     let mut menu = InteractiveMenu::new(handler);
     menu.run().await

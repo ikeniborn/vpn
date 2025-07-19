@@ -76,10 +76,12 @@ impl ProxyInstaller {
         let compose_path = self.install_path.join("proxy/docker-compose.yml");
         fs::write(&compose_path, compose_content).await?;
 
-        // Generate dynamic configuration
-        let dynamic_config = self.generate_dynamic_config();
-        let dynamic_path = self.install_path.join("proxy/dynamic/http-proxy.yml");
-        fs::write(&dynamic_path, dynamic_config).await?;
+        // Generate Squid configuration for HTTP proxy
+        if proxy_type == "http" || proxy_type == "all" {
+            let squid_config = self.generate_squid_config();
+            let squid_path = self.install_path.join("proxy/squid.conf");
+            fs::write(&squid_path, squid_config).await?;
+        }
 
         // Generate auth configuration
         let auth_config = self.generate_auth_config();
@@ -125,7 +127,7 @@ impl ProxyInstaller {
     async fn wait_for_health(&self) -> Result<()> {
         info!("Waiting for proxy services to be healthy");
 
-        let services = ["vpn-traefik-proxy", "vpn-proxy-auth", "vpn-proxy-metrics"];
+        let services = ["vpn-squid-proxy", "vpn-proxy-auth", "vpn-proxy-metrics"];
         let max_attempts = 30;
         let delay = std::time::Duration::from_secs(2);
 
@@ -165,81 +167,58 @@ impl ProxyInstaller {
             r#"version: '3.8'
 
 services:
-  traefik-proxy:
-    image: traefik:v3.0
-    container_name: vpn-traefik-proxy
+  squid-proxy:
+    image: ubuntu/squid:latest
+    container_name: vpn-squid-proxy
     restart: unless-stopped
-    command:
-      - "--log.level=INFO"
-      - "--api.dashboard=true"
-      - "--api.insecure=false"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--providers.file.directory=/etc/traefik/dynamic"
-      - "--providers.file.watch=true"
-      - "--entrypoints.http-proxy.address=:8080"
-      - "--entrypoints.https-proxy.address=:8443"
-      - "--entrypoints.socks5.address=:1080"
-      - "--metrics.prometheus=true"
-      - "--metrics.prometheus.buckets=0.1,0.3,1.2,5.0"
-      - "--accesslog=true"
-      - "--accesslog.filepath=/logs/access.log"
-      - "--accesslog.format=json"
     ports:
-      - "{}:8080"
-      - "8443:8443"
-      - "1080:1080"
-      - "127.0.0.1:8090:8090"
+      - "{}:3128"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./dynamic:/etc/traefik/dynamic:ro
-      - ./logs:/logs
-      - ./certs:/certs:ro
+      - ./squid.conf:/etc/squid/squid.conf:ro
+      - ./logs:/var/log/squid
+      - squid-cache:/var/spool/squid
     networks:
       - proxy-network
     environment:
-      - TRAEFIK_LOG_LEVEL=INFO
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.api.rule=Host(`proxy-dashboard.local`)"
-      - "traefik.http.routers.api.service=api@internal"
-      - "traefik.http.routers.api.middlewares=auth"
-      - "traefik.http.middlewares.auth.basicauth.users=admin:$$2y$$10$$..."
+      - SQUID_CACHE_DIR=/var/spool/squid
+      - SQUID_LOG_DIR=/var/log/squid
+      - SQUID_USER=proxy
     healthcheck:
-      test: ["CMD", "traefik", "healthcheck"]
+      test: ["CMD", "squidclient", "-h", "localhost", "cache_object://localhost/info"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
 
   proxy-auth:
-    image: vpn-proxy-auth:latest
+    image: vpn-proxy:latest
     build:
       context: ../../
       dockerfile: docker/proxy/Dockerfile.auth
     container_name: vpn-proxy-auth
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:8089:8080"
     environment:
-      - AUTH_BACKEND=vpn-users
-      - VPN_USERS_PATH=/var/lib/vpn/users
-      - RATE_LIMIT_ENABLED=true
-      - RATE_LIMIT_RPS=100
-      - METRICS_ENABLED=true
-      - LOG_LEVEL=info
+      - AUTH_SERVICE_PORT=8080
+      - USERS_DB_PATH=/var/lib/vpn/users
     volumes:
       - vpn-users-data:/var/lib/vpn/users:ro
       - ./auth-config.toml:/etc/proxy/config.toml:ro
     networks:
       - proxy-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.auth.rule=PathPrefix(`/auth`)"
-      - "traefik.http.services.auth.loadbalancer.server.port=3000"
-      
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   proxy-metrics:
     image: prom/prometheus:latest
     container_name: vpn-proxy-metrics
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:9092:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
@@ -248,19 +227,18 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+
 networks:
   proxy-network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.30.0.0/16
-          
+
 volumes:
   vpn-users-data:
     external: true
-  prometheus-data:
-    driver: local"#,
+  squid-cache:
+  prometheus-data:"#,
             self.port
         )
     }
@@ -300,86 +278,117 @@ volumes:
         )
     }
 
-    fn generate_dynamic_config(&self) -> &'static str {
-        r#"# Dynamic configuration for HTTP/HTTPS proxy
+    fn generate_squid_config(&self) -> &'static str {
+        r#"# Squid Configuration for VPN Proxy Server
+# This configuration allows proxying to any internet resource
 
-http:
-  middlewares:
-    proxy-auth:
-      forwardAuth:
-        address: "http://proxy-auth:3000/auth/verify"
-        authResponseHeaders:
-          - "X-User-ID"
-          - "X-User-Email"
-          - "X-Rate-Limit"
-        trustForwardHeader: true
-        
-    rate-limit:
-      rateLimit:
-        average: 100
-        burst: 200
-        period: 1s
-        
-    proxy-headers:
-      headers:
-        customRequestHeaders:
-          X-Forwarded-Proto: "https"
-          X-Real-IP: "true"
-        customResponseHeaders:
-          X-Proxy-Server: "VPN-Proxy"
-          X-Content-Type-Options: "nosniff"
-          X-Frame-Options: "DENY"
-          X-XSS-Protection: "1; mode=block"
+# Network ACLs
+acl localnet src 10.0.0.0/8     # RFC1918 possible internal network
+acl localnet src 172.16.0.0/12  # RFC1918 possible internal network
+acl localnet src 192.168.0.0/16 # RFC1918 possible internal network
+acl localnet src fc00::/7       # RFC 4193 local private network range
+acl localnet src fe80::/10      # RFC 4291 link-local (directly plugged) machines
 
-  services:
-    http-proxy:
-      loadBalancer:
-        servers:
-          - url: "http://{{.Request.Host}}"
-        passHostHeader: true
-        
-    https-proxy:
-      loadBalancer:
-        servers:
-          - url: "https://{{.Request.Host}}"
-        passHostHeader: true
+# Port ACLs
+acl SSL_ports port 443
+acl Safe_ports port 80          # http
+acl Safe_ports port 21          # ftp
+acl Safe_ports port 443         # https
+acl Safe_ports port 70          # gopher
+acl Safe_ports port 210         # wais
+acl Safe_ports port 1025-65535  # unregistered ports
+acl Safe_ports port 280         # http-mgmt
+acl Safe_ports port 488         # gss-http
+acl Safe_ports port 591         # filemaker
+acl Safe_ports port 777         # multiling http
+acl CONNECT method CONNECT
 
-  routers:
-    http-proxy-router:
-      entryPoints:
-        - http-proxy
-      rule: "PathPrefix(`/`)"
-      service: http-proxy
-      middlewares:
-        - proxy-auth
-        - rate-limit
-        - proxy-headers
-      priority: 1
-      
-    https-proxy-router:
-      entryPoints:
-        - https-proxy
-      rule: "Method(`CONNECT`)"
-      service: https-proxy
-      middlewares:
-        - proxy-auth
-        - rate-limit
-        - proxy-headers
-      priority: 10
+# Authentication
+auth_param basic program /usr/lib/squid/basic_ncsa_auth /etc/squid/passwords
+auth_param basic realm VPN Proxy Authentication
+auth_param basic credentialsttl 2 hours
+acl authenticated proxy_auth REQUIRED
 
-tcp:
-  routers:
-    socks5-router:
-      entryPoints:
-        - socks5
-      rule: "HostSNI(`*`)"
-      service: vpn-socks5-proxy
-      
-  services:
-    vpn-socks5-proxy:
-      loadBalancer:
-        servers:
-          - address: "vpn-proxy:1080""#
+# Access rules
+http_access deny !Safe_ports
+http_access deny CONNECT !SSL_ports
+http_access allow localhost manager
+http_access deny manager
+http_access allow authenticated
+http_access allow localnet
+http_access allow localhost
+http_access deny all
+
+# Proxy port
+http_port 3128
+
+# Cache settings
+cache_dir ufs /var/spool/squid 10000 16 256
+cache_mem 256 MB
+maximum_object_size 512 MB
+minimum_object_size 0 KB
+maximum_object_size_in_memory 8 MB
+
+# Refresh patterns for common content types
+refresh_pattern ^ftp:           1440    20%     10080
+refresh_pattern ^gopher:        1440    0%      1440
+refresh_pattern -i (/cgi-bin/|\?) 0     0%      0
+refresh_pattern .               0       20%     4320
+
+# Log settings
+access_log daemon:/var/log/squid/access.log squid
+cache_log /var/log/squid/cache.log
+cache_store_log daemon:/var/log/squid/store.log
+
+# Performance tuning
+max_filedesc 65536
+cache_effective_user proxy
+cache_effective_group proxy
+
+# Core dumps
+coredump_dir /var/spool/squid
+
+# Headers for anonymity (optional)
+request_header_access Allow allow all
+request_header_access Authorization allow all
+request_header_access WWW-Authenticate allow all
+request_header_access Proxy-Authorization allow all
+request_header_access Proxy-Authenticate allow all
+request_header_access Cache-Control allow all
+request_header_access Content-Encoding allow all
+request_header_access Content-Length allow all
+request_header_access Content-Type allow all
+request_header_access Date allow all
+request_header_access Expires allow all
+request_header_access Host allow all
+request_header_access If-Modified-Since allow all
+request_header_access Last-Modified allow all
+request_header_access Location allow all
+request_header_access Pragma allow all
+request_header_access Accept allow all
+request_header_access Accept-Charset allow all
+request_header_access Accept-Encoding allow all
+request_header_access Accept-Language allow all
+request_header_access Content-Language allow all
+request_header_access Mime-Version allow all
+request_header_access Retry-After allow all
+request_header_access Title allow all
+request_header_access Connection allow all
+request_header_access Proxy-Connection allow all
+request_header_access User-Agent allow all
+request_header_access Cookie allow all
+request_header_access All deny all
+
+# Enable X-Forwarded-For header
+forwarded_for on
+
+# DNS settings
+dns_v4_first on
+positive_dns_ttl 6 hours
+negative_dns_ttl 1 minute
+
+# Shutdown lifetime
+shutdown_lifetime 3 seconds"#
     }
 
     fn generate_auth_config(&self) -> &'static str {

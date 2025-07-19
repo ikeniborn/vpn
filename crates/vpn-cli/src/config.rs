@@ -2,6 +2,7 @@ use crate::error::{CliError, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use vpn_types::protocol::VpnProtocol;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CliConfig {
@@ -125,6 +126,19 @@ impl ConfigManager {
 
     pub fn get_config(&self) -> &CliConfig {
         &self.config
+    }
+
+    /// Get protocol-specific installation path
+    pub fn get_protocol_install_path(&self, protocol: VpnProtocol) -> PathBuf {
+        match protocol {
+            VpnProtocol::Vless => PathBuf::from("/opt/vless"),
+            VpnProtocol::HttpProxy | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer => {
+                PathBuf::from("/opt/proxy")
+            }
+            VpnProtocol::Outline => PathBuf::from("/opt/shadowsocks"),
+            VpnProtocol::Wireguard => PathBuf::from("/opt/wireguard"),
+            _ => self.config.general.install_path.clone(), // fallback to general path
+        }
     }
 
     pub fn update_config<F>(&mut self, updater: F) -> Result<()>

@@ -65,9 +65,9 @@ impl DockerComposeTemplate {
 
         let compose = format!(
             r#"services:
-  xray:
+  vless-xray:
     image: ghcr.io/xtls/xray-core:latest
-    container_name: xray
+    container_name: vless-xray
     restart: {}
     ports:
       - "{}:{}"
@@ -84,11 +84,11 @@ impl DockerComposeTemplate {
         max-size: "10m"
         max-file: "3"
     networks:
-      - vpn-network
+      - vless_vpn-network
 
-  watchtower:
+  vless-watchtower:
     image: containrrr/watchtower:latest
-    container_name: watchtower
+    container_name: vless-watchtower
     restart: {}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -98,12 +98,15 @@ impl DockerComposeTemplate {
       - WATCHTOWER_INCLUDE_STOPPED=false
       - WATCHTOWER_REVIVE_STOPPED=false
       - WATCHTOWER_LIFECYCLE_HOOKS=false
-    command: ["--cleanup", "--include-restarting=false", "--include-stopped=false"]
+      - WATCHTOWER_LABEL_ENABLE=true
+    command: ["--cleanup", "--include-restarting=false", "--include-stopped=false", "--label-enable"]
+    labels:
+      - "com.centurylinklabs.watchtower.scope=vless"
     networks:
-      - vpn-network
+      - vless_vpn-network
 
 networks:
-  vpn-network:
+  vless_vpn-network:
     driver: bridge{subnet_config}
 "#,
             restart_policy,
@@ -130,9 +133,9 @@ networks:
 
         let compose = format!(
             r#"services:
-  shadowbox:
+  outline-shadowbox:
     image: quay.io/outline/shadowbox:stable
-    container_name: shadowbox
+    container_name: outline-shadowbox
     restart: {}
     ports:
       - "{}:8080"
@@ -142,23 +145,32 @@ networks:
       - ./management:/opt/outline/management
     environment:
       - LOG_LEVEL={}
+    labels:
+      - "com.centurylinklabs.watchtower.scope=outline"
     networks:
-      - vpn-network
+      - outline_vpn-network
 
-  watchtower:
+  outline-watchtower:
     image: containrrr/watchtower:latest
-    container_name: watchtower
+    container_name: outline-watchtower
     restart: {}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_POLL_INTERVAL=86400
+      - WATCHTOWER_INCLUDE_STOPPED=false
+      - WATCHTOWER_REVIVE_STOPPED=false
+      - WATCHTOWER_LIFECYCLE_HOOKS=false
+      - WATCHTOWER_LABEL_ENABLE=true
+    command: ["--cleanup", "--include-restarting=false", "--include-stopped=false", "--label-enable"]
+    labels:
+      - "com.centurylinklabs.watchtower.scope=outline"
     networks:
-      - vpn-network
+      - outline_vpn-network
 
 networks:
-  vpn-network:
+  outline_vpn-network:
     driver: bridge{subnet_config}
 "#,
             restart_policy,
@@ -229,9 +241,9 @@ networks:
 
         let compose = format!(
             r#"services:
-  wireguard:
+  wireguard-server:
     image: linuxserver/wireguard:latest
-    container_name: wireguard
+    container_name: wireguard-server
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
@@ -252,18 +264,39 @@ networks:
       - "{}:{}/udp"
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
-    restart: {}
+    restart: {restart_policy}
+    labels:
+      - "com.centurylinklabs.watchtower.scope=wireguard"
     networks:
-      - vpn-network
+      - wireguard_vpn-network
+
+  wireguard-watchtower:
+    image: containrrr/watchtower:latest
+    container_name: wireguard-watchtower
+    restart: {restart_policy}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=86400
+      - WATCHTOWER_INCLUDE_STOPPED=false
+      - WATCHTOWER_REVIVE_STOPPED=false
+      - WATCHTOWER_LIFECYCLE_HOOKS=false
+      - WATCHTOWER_LABEL_ENABLE=true
+    command: ["--cleanup", "--include-restarting=false", "--include-stopped=false", "--label-enable"]
+    labels:
+      - "com.centurylinklabs.watchtower.scope=wireguard"
+    networks:
+      - wireguard_vpn-network
 
 networks:
-  vpn-network:
+  wireguard_vpn-network:
     driver: bridge{subnet_config}
 "#,
             server_config.port,
             server_config.port,
             server_config.port,
-            restart_policy,
+            restart_policy = restart_policy,
             subnet_config = Self::format_subnet_config(subnet)
         );
 

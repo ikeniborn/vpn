@@ -177,8 +177,8 @@ impl ConfigGenerator {
         Ok(XrayConfig {
             log: LogConfig {
                 level: "warning".to_string(),
-                access: Some("/opt/v2ray/logs/access.log".to_string()),
-                error: Some("/opt/v2ray/logs/error.log".to_string()),
+                access: None,
+                error: None,
             },
             inbounds: vec![inbound],
             outbounds: vec![outbound],

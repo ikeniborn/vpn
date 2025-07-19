@@ -17,20 +17,20 @@
 wget https://github.com/ikeniborn/vpn/releases/latest/download/vpn-release.tar.gz
 
 # 2. Создайте временный каталог и распакуйте архив
-mkdir -p ~/vpn-install
-cd ~/vpn-install
 tar -xzf ~/vpn-release.tar.gz
 
 # 3. Запустите установку
 cd vpn-release
-sudo ./install.sh
+./install.sh
 
 # 4. После установки можно удалить временные файлы
 cd ~
-rm -rf ~/vpn-install vpn-release.tar.gz
+rm -rdf ~/vpn-release vpn-release.tar.gz
 
 # Проверка установки
 vpn --version
+
+# Запуск интерактивного меню (требует sudo для административных операций)
 sudo vpn menu
 ```
 
@@ -38,10 +38,10 @@ sudo vpn menu
 
 ```bash
 # Удаление с сохранением резервной копии
-sudo /opt/vpn/scripts/archive-uninstall.sh
+sudo /opt/vpn/uninstall.sh
 
 # Полное удаление без резервной копии
-sudo /opt/vpn/scripts/archive-uninstall.sh --force
+sudo /opt/vpn/uninstall.sh --force
 ```
 
 ## ✨ Основные возможности
@@ -96,7 +96,7 @@ tar -xzf ~/vpn-release.tar.gz
 
 # Перейти в каталог и запустить установку
 cd vpn-release
-sudo ./install.sh
+./install.sh
 
 # Очистить временные файлы после установки
 cd ~
@@ -309,8 +309,10 @@ vpn monitor health      # Проверка здоровья
 ### Интерактивное меню
 
 ```bash
-vpn menu  # Удобный интерфейс для всех операций
+sudo vpn menu  # Удобный интерфейс для всех операций (требует sudo)
 ```
+
+**Примечание:** Команда `vpn menu` требует запуска с правами администратора (sudo) для выполнения операций установки, управления сервером и других административных задач.
 
 ### Конфигурация
 
