@@ -62,7 +62,7 @@
     },
     {
       "tag": "vless-ws",
-      "port": 8443,
+      "port": 18443,
       "protocol": "vless",
       "settings": {
         "clients": [

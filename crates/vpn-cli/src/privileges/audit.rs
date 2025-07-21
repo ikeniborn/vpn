@@ -46,25 +46,42 @@ impl PrivilegeAuditor {
             PathBuf::from("./logs/privilege_audit.log")
         };
 
-        // Ensure log directory exists
-        if let Some(parent) = log_path.parent() {
-            create_dir_all(parent)?;
-        }
-
+        // Don't create directory here - do it lazily when actually logging
+        // This prevents permission errors when running without sudo
         Ok(Self { log_path })
     }
 
     /// Log a privilege escalation event
     pub fn log_event(&self, event: PrivilegeEvent) -> Result<()> {
-        let json = serde_json::to_string(&event)?;
+        // Try to create parent directory if it doesn't exist
+        // This will fail silently if we don't have permissions
+        if let Some(parent) = self.log_path.parent() {
+            if !parent.exists() {
+                // Try to create directory, but ignore errors
+                // This allows the program to run without sudo
+                let _ = create_dir_all(parent);
+            }
+        }
 
-        let mut file = OpenOptions::new()
+        // Try to open the log file
+        // If we can't (e.g., no permissions), we'll just skip logging
+        let file_result = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(&self.log_path)?;
+            .open(&self.log_path);
 
-        writeln!(file, "{}", json)?;
-        Ok(())
+        match file_result {
+            Ok(mut file) => {
+                let json = serde_json::to_string(&event)?;
+                writeln!(file, "{}", json)?;
+                Ok(())
+            }
+            Err(_) => {
+                // Silently ignore logging errors when running without privileges
+                // This allows the program to run without sudo for non-privileged operations
+                Ok(())
+            }
+        }
     }
 
     /// Log a successful privilege grant

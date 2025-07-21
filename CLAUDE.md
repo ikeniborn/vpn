@@ -6,12 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a Rust-based VPN management system that provides comprehensive tools for managing Xray (VLESS+Reality), Outline VPN servers, and HTTP/SOCKS5 proxy servers. It replaces an original Bash implementation with a type-safe, high-performance alternative written in Rust.
 
-### Project Memories
-
-- Проект реализует функцонал установки и управления сервера ВПН с использованием языка Rust
-- Исползуй инструмент context7 для получения актуальной документациии
-- В корне проекта храниться документация README, TASK, CHANGELOG. Дополнительная документация храниться в каталоге docs
-
 ### Key Infrastructure Components
 
 - **Proxy/Load Balancer**: Traefik v3.x for reverse proxy, load balancing, and automatic SSL/TLS termination
@@ -23,4 +17,24 @@ This is a Rust-based VPN management system that provides comprehensive tools for
 - **Orchestration**: Docker Compose with Traefik service discovery
 - **Deployment**: Multi-arch Docker images (amd64, arm64) available on Docker Hub
 
-[... rest of the file remains the same ...]
+## Work Habits and Procedures
+
+- После завершении задачи акттуализируй статус в TASK.md
+- Выполненные задачи переноси в CHANGELOG.md
+
+## Development Guidelines
+
+- Для получения актуальной информации перед разработкой используй инструмент context7
+
+## Maintenance Tasks
+
+- Поддерживай в актуальном состояниии README.md
+
+## Documentation
+
+- Вся дополнительная документация хранится в каталоге docs на русском языке
+- Все тестовые скрпиты хранятся в каталоге tests
+
+## Important Reminders
+
+- Никогда самостоятельно не редактируй CLAUDE.md. Требуй от пользователя согласования

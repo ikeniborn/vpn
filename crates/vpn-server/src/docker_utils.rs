@@ -113,6 +113,7 @@ impl DockerUtils {
                         .arg("up")
                         .arg("-d")
                         .arg("--remove-orphans")
+                        .current_dir(compose_path.parent().unwrap_or(std::path::Path::new(".")))
                         .output()
                         .map_err(|e| ServerError::InstallationError(format!("Failed to retry deployment: {}", e)))?;
                     

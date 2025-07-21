@@ -124,18 +124,22 @@ impl ServerLifecycle {
         }
 
         // Send reload signal to containers
-        let containers = ["xray", "shadowbox"];
+        let containers = [
+            ("vless-xray", "xray"),
+            ("shadowsocks", "shadowsocks-server"),
+            ("wireguard", "wg"),
+        ];
 
-        for container in &containers {
-            if self.container_manager.container_exists(container).await {
+        for (container_name, process_name) in &containers {
+            if self.container_manager.container_exists(container_name).await {
                 // Send SIGHUP to reload configuration
                 match self
                     .container_manager
-                    .exec_command(container, vec!["killall", "-HUP", "xray"])
+                    .exec_command(container_name, vec!["killall", "-HUP", process_name])
                     .await
                 {
-                    Ok(_) => println!("Reloaded configuration for {}", container),
-                    Err(e) => println!("Warning: Failed to reload {}: {}", container, e),
+                    Ok(_) => println!("Reloaded configuration for {}", container_name),
+                    Err(e) => println!("Warning: Failed to reload {}: {}", container_name, e),
                 }
             }
         }
@@ -144,7 +148,7 @@ impl ServerLifecycle {
     }
 
     pub async fn get_status(&self) -> Result<ServerStatus> {
-        let containers = ["xray", "shadowbox", "watchtower"];
+        let containers = ["vless-xray", "shadowsocks", "wireguard", "proxy-server", "vless-watchtower", "shadowsocks-watchtower"];
         let mut container_statuses = Vec::new();
         let mut running_count = 0;
         let mut total_health = 0.0;

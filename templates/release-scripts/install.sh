@@ -347,6 +347,9 @@ install_files() {
                 sudo ln -sf "$INSTALL_PREFIX/bin/$bin_name" "$BINARY_PATH/$bin_name"
             fi
         done
+        
+        # Update hash table after installing binaries
+        hash -r 2>/dev/null || true
     else
         print_error "No binaries found in archive!"
         return 1
@@ -542,14 +545,19 @@ post_install_instructions() {
     echo -e "${YELLOW}To uninstall:${NC} sudo $INSTALL_PREFIX/uninstall.sh"
     echo
     
+    # Update shell hash table to ensure new binaries are found
+    print_info "Updating shell command cache..."
+    hash -r 2>/dev/null || true
+    
     # Final PATH check
     print_info "Verifying installation..."
-    hash -r 2>/dev/null || true
     local final_vpn=$(which vpn 2>/dev/null || echo "")
     if [[ "$final_vpn" == "$BINARY_PATH/vpn" ]]; then
         print_success "VPN command is correctly configured!"
     else
         print_warning "Run 'hash -r' or restart your shell to use the vpn command"
+        # Try to force update hash again
+        hash -r 2>/dev/null || true
     fi
     
     # Check if there was a stub removed and PATH might be cached
@@ -613,6 +621,9 @@ main() {
     setup_permissions
     init_database
     post_install_instructions
+    
+    # Final hash table update to ensure commands are available immediately
+    hash -r 2>/dev/null || true
 }
 
 # Run main function

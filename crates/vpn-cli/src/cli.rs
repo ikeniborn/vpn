@@ -956,6 +956,19 @@ pub enum ImportFormat {
     V2ray,
 }
 
+impl Protocol {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Protocol::Vless => "vless",
+            Protocol::Shadowsocks => "shadowsocks",
+            Protocol::Wireguard => "wireguard",
+            Protocol::HttpProxy => "http_proxy",
+            Protocol::Socks5Proxy => "socks5_proxy",
+            Protocol::ProxyServer => "proxy",
+        }
+    }
+}
+
 impl From<Protocol> for vpn_types::protocol::VpnProtocol {
     fn from(protocol: Protocol) -> Self {
         match protocol {

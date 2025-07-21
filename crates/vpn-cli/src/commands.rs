@@ -1,5 +1,5 @@
 use indicatif::{ProgressBar, ProgressStyle};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use vpn_server::installer::LogLevel as ServerLogLevel;
 use vpn_server::{InstallationOptions, ServerInstaller, ServerLifecycle};
@@ -179,6 +179,11 @@ impl CommandHandler {
     }
 
     pub async fn uninstall_server(&mut self, purge: bool) -> Result<()> {
+        let install_path = self.get_protocol_install_path();
+        self.uninstall_server_with_path(&install_path, purge).await
+    }
+
+    pub async fn uninstall_server_with_path(&mut self, install_path: &Path, purge: bool) -> Result<()> {
         if !self.force_mode {
             display::warning("This will completely remove the VPN server!");
             if purge {
@@ -198,8 +203,7 @@ impl CommandHandler {
         );
         pb.set_message("Uninstalling VPN server...");
 
-        let install_path = self.get_protocol_install_path();
-        let result = installer.uninstall(&install_path, purge).await;
+        let result = installer.uninstall(install_path, purge).await;
         pb.finish_and_clear();
 
         match result {
@@ -1315,8 +1319,40 @@ impl CommandHandler {
 
     // Other utility methods
     fn load_server_config(&self) -> Result<vpn_users::config::ServerConfig> {
-        // This would load the actual server configuration
-        // For now, return a default config
+        let install_path = self.get_protocol_install_path();
+        let server_info_path = install_path.join("server_info.json");
+        
+        if server_info_path.exists() {
+            // Try to load server info from file
+            let content = std::fs::read_to_string(&server_info_path)?;
+            if let Ok(server_info) = serde_json::from_str::<serde_json::Value>(&content) {
+                let mut config = vpn_users::config::ServerConfig::default();
+                
+                // Extract values from server info
+                if let Some(host) = server_info.get("host").and_then(|v| v.as_str()) {
+                    config.host = host.to_string();
+                }
+                if let Some(port) = server_info.get("port").and_then(|v| v.as_u64()) {
+                    config.port = port as u16;
+                }
+                if let Some(sni) = server_info.get("sni_domain").and_then(|v| v.as_str()) {
+                    config.sni = Some(sni.to_string());
+                }
+                if let Some(public_key) = server_info.get("public_key").and_then(|v| v.as_str()) {
+                    config.public_key = Some(public_key.to_string());
+                }
+                if let Some(private_key) = server_info.get("private_key").and_then(|v| v.as_str()) {
+                    config.private_key = Some(private_key.to_string());
+                }
+                if let Some(short_id) = server_info.get("short_id").and_then(|v| v.as_str()) {
+                    config.short_id = Some(short_id.to_string());
+                }
+                
+                return Ok(config);
+            }
+        }
+        
+        // Fallback to default config
         Ok(vpn_users::config::ServerConfig::default())
     }
 

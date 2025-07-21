@@ -27,7 +27,7 @@ impl VpnProtocol {
     /// Get the default port for this protocol
     pub fn default_port(&self) -> u16 {
         match self {
-            VpnProtocol::Vless => 8443,
+            VpnProtocol::Vless => 18443,
             VpnProtocol::Outline => 8388,
             VpnProtocol::Wireguard => 51820,
             VpnProtocol::OpenVPN => 1194,

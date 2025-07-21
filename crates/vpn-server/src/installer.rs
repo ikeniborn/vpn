@@ -218,6 +218,7 @@ impl ServerInstaller {
                 .arg("down")
                 .arg("--remove-orphans")
                 .arg("-v") // Remove volumes too
+                .current_dir(install_path)
                 .output()?;
 
             if !output.status.success() {
@@ -405,6 +406,7 @@ impl ServerInstaller {
             .arg(&compose_path)
             .arg("down")
             .arg("--remove-orphans")
+            .current_dir(&options.install_path)
             .output();
 
         // Give Docker a moment to clean up
@@ -416,6 +418,7 @@ impl ServerInstaller {
             .arg(&compose_path)
             .arg("up")
             .arg("-d")
+            .current_dir(&options.install_path)
             .output()?;
 
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -471,6 +474,7 @@ impl ServerInstaller {
             .arg(&compose_path)
             .arg("ps")
             .arg("-q")
+            .current_dir(&options.install_path)
             .output()?;
 
         if status_output.stdout.is_empty() {
@@ -680,6 +684,7 @@ impl ServerInstaller {
             .arg(&compose_path)
             .arg("ps")
             .arg("-q")
+            .current_dir(install_path)
             .output()?;
 
         if !output.status.success() {
@@ -711,6 +716,7 @@ impl ServerInstaller {
             .arg("ps")
             .arg("--format")
             .arg("table")
+            .current_dir(install_path)
             .output()?;
 
         if !output.status.success() {
@@ -743,40 +749,65 @@ impl ServerInstaller {
         use std::time::Duration;
         use tokio::net::TcpStream;
 
-        // Give the service a moment to start
-        tokio::time::sleep(Duration::from_secs(3)).await;
-
-        // Try to connect to the service port to verify it's accessible
         let connect_addr = format!("127.0.0.1:{}", port);
+        let max_retries = 10;
+        let retry_delay = Duration::from_secs(2);
 
-        // Try to connect with a timeout
-        match tokio::time::timeout(Duration::from_secs(5), TcpStream::connect(&connect_addr)).await
-        {
-            Ok(Ok(_)) => {
-                // Successfully connected - service is running
-                Ok(())
-            }
-            Ok(Err(e)) => {
-                // Connection failed
-                return Err(ServerError::InstallationError(
-                    format!("Cannot connect to VPN service on port {}. Service may not have started correctly. Error: {}", 
-                           port, e)
-                ));
-            }
-            Err(_) => {
-                // Timeout
-                return Err(ServerError::InstallationError(
-                    format!("Connection to VPN service on port {} timed out. Service may not be responding.", 
-                           port)
-                ));
+        // Try to connect with retries
+        for attempt in 1..=max_retries {
+            match tokio::time::timeout(Duration::from_secs(5), TcpStream::connect(&connect_addr)).await
+            {
+                Ok(Ok(_)) => {
+                    // Successfully connected - service is running
+                    return Ok(());
+                }
+                Ok(Err(e)) => {
+                    if attempt < max_retries {
+                        // Connection failed, but we'll retry
+                        println!("⏳ Waiting for service to start (attempt {}/{})", attempt, max_retries);
+                        tokio::time::sleep(retry_delay).await;
+                        continue;
+                    } else {
+                        // Final attempt failed
+                        return Err(ServerError::InstallationError(
+                            format!("Cannot connect to VPN service on port {}. Service may not have started correctly. Error: {}", 
+                                   port, e)
+                        ));
+                    }
+                }
+                Err(_) => {
+                    if attempt < max_retries {
+                        // Timeout, but we'll retry
+                        println!("⏳ Service not responding yet (attempt {}/{})", attempt, max_retries);
+                        tokio::time::sleep(retry_delay).await;
+                        continue;
+                    } else {
+                        // Final attempt timed out
+                        return Err(ServerError::InstallationError(
+                            format!("Connection to VPN service on port {} timed out after {} attempts. Service may not be responding.", 
+                                   port, max_retries)
+                        ));
+                    }
+                }
             }
         }
+
+        // This should not be reached
+        Err(ServerError::InstallationError(
+            "Service connectivity verification failed".to_string()
+        ))
     }
 
     pub async fn uninstall(&self, install_path: &Path, purge: bool) -> Result<()> {
         println!("🗑️ Starting VPN server uninstallation...");
 
         let compose_path = install_path.join("docker-compose.yml");
+
+        // Extract protocol from path
+        let protocol = install_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("vpn");
 
         // 1. Stop and remove containers
         if compose_path.exists() {
@@ -787,6 +818,7 @@ impl ServerInstaller {
                 .arg("down")
                 .arg("-v")
                 .arg("--remove-orphans")
+                .current_dir(install_path)
                 .output()?;
 
             if !output.status.success() {
@@ -799,7 +831,7 @@ impl ServerInstaller {
 
         // 2. Remove Docker images if purge is enabled
         if purge {
-            self.cleanup_docker_images().await?;
+            self.cleanup_docker_images_for_protocol(protocol).await?;
         }
 
         // 3. Remove firewall rules
@@ -831,15 +863,36 @@ impl ServerInstaller {
         Ok(())
     }
 
-    async fn cleanup_docker_images(&self) -> Result<()> {
-        println!("🐳 Cleaning up Docker images...");
+    async fn cleanup_docker_images_for_protocol(&self, protocol: &str) -> Result<()> {
+        println!("🐳 Removing Docker images for {}...", protocol);
 
-        // Remove VPN-related images
-        let images_to_remove = [
-            "xray/xray",
-            "shadowsocks/shadowsocks-libev",
-            "outline/shadowbox",
-        ];
+        let mut images_to_remove = vec!["containrrr/watchtower:latest"];
+
+        match protocol {
+            "vless" => {
+                images_to_remove.push("ghcr.io/xtls/xray-core:latest");
+            }
+            "outline" => {
+                images_to_remove.push("outline/shadowbox:latest");
+            }
+            "wireguard" => {
+                images_to_remove.push("linuxserver/wireguard:latest");
+            }
+            "openvpn" => {
+                images_to_remove.push("kylemanna/openvpn:latest");
+            }
+            _ => {}
+        }
+
+        // Also remove common images if no other VPN is installed
+        let has_other_vpn = self.check_other_vpn_installed(protocol).await;
+        if !has_other_vpn {
+            images_to_remove.extend_from_slice(&[
+                "traefik:v3.0",
+                "prom/prometheus:latest",
+                "grafana/grafana:latest",
+            ]);
+        }
 
         for image in &images_to_remove {
             let output = Command::new("docker")
@@ -870,23 +923,58 @@ impl ServerInstaller {
         Ok(())
     }
 
+    async fn check_other_vpn_installed(&self, current_protocol: &str) -> bool {
+        let protocols = ["vless", "outline", "wireguard", "openvpn"];
+        for protocol in protocols {
+            if protocol != current_protocol {
+                let path = format!("/opt/{}", protocol);
+                if std::path::Path::new(&path).exists() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+
     async fn cleanup_firewall_rules(&self, install_path: &Path) -> Result<()> {
         println!("🔥 Cleaning up firewall rules...");
 
         // Try to detect which ports were used by reading the configuration
         let mut ports_to_clean = Vec::new();
 
-        // Try to read the server configuration to get the port
-        if let Ok(config_content) = std::fs::read_to_string(install_path.join("config.json")) {
-            if let Ok(config) = serde_json::from_str::<serde_json::Value>(&config_content) {
-                if let Some(port) = config["port"].as_u64() {
+        // Try to read server_info.json first
+        let server_info_path = install_path.join("server_info.json");
+        if let Ok(content) = std::fs::read_to_string(&server_info_path) {
+            if let Ok(info) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(port) = info["port"].as_u64() {
                     ports_to_clean.push(port as u16);
                 }
             }
         }
 
-        // Also clean common VPN ports
-        ports_to_clean.extend_from_slice(&[8443, 9443, 8080, 8090]);
+        // Try to read the config.json as fallback
+        if ports_to_clean.is_empty() {
+            let config_path = install_path.join("config").join("config.json");
+            if let Ok(config_content) = std::fs::read_to_string(&config_path) {
+                if let Ok(config) = serde_json::from_str::<serde_json::Value>(&config_content) {
+                    // For Xray config, check inbounds
+                    if let Some(inbounds) = config["inbounds"].as_array() {
+                        for inbound in inbounds {
+                            if let Some(port) = inbound["port"].as_u64() {
+                                ports_to_clean.push(port as u16);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Extract protocol from path to avoid removing common ports used by other VPN protocols
+        let _protocol = install_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
 
         if FirewallManager::is_ufw_installed().await {
             for port in ports_to_clean {

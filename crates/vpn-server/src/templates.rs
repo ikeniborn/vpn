@@ -376,8 +376,8 @@ networks:
         let config = serde_json::json!({
             "log": {
                 "level": log_level,
-                "access": "/var/log/xray/access.log",
-                "error": "/var/log/xray/error.log"
+                "access": null,
+                "error": null
             },
             "inbounds": [{
                 "tag": "vless-in",

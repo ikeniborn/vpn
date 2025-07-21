@@ -1,5 +1,6 @@
 use console::{style, Term};
 use crossterm::{
+    cursor::MoveTo,
     execute,
     terminal::{Clear, ClearType},
 };
@@ -8,6 +9,7 @@ use std::io;
 
 use crate::utils::display;
 use crate::{CommandHandler, Result};
+use crate::cli::Protocol;
 
 pub struct InteractiveMenu {
     handler: CommandHandler,
@@ -56,6 +58,7 @@ impl InteractiveMenu {
                 }
                 Some(action) => {
                     if let Err(e) = self.handle_menu_action(action).await {
+                        self.clear_screen()?;
                         display::error(&format!("Operation failed: {}", e));
                         self.wait_for_keypress()?;
                     }
@@ -71,7 +74,19 @@ impl InteractiveMenu {
     }
 
     fn clear_screen(&self) -> Result<()> {
-        execute!(io::stdout(), Clear(ClearType::All))?;
+        execute!(
+            io::stdout(),
+            Clear(ClearType::All),
+            MoveTo(0, 0)
+        )?;
+        Ok(())
+    }
+
+    fn show_submenu_header(&self, title: &str) -> Result<()> {
+        self.clear_screen()?;
+        println!("{}", style(title).cyan().bold());
+        println!("{}", style("=".repeat(title.len())).cyan());
+        println!();
         Ok(())
     }
 
@@ -93,35 +108,39 @@ impl InteractiveMenu {
         
         // Check each protocol's status
         let protocols = [
-            ("VLESS", "/opt/vless"),
-            ("Shadowsocks", "/opt/shadowsocks"),
-            ("WireGuard", "/opt/wireguard"),
-            ("Proxy", "/opt/proxy"),
+            ("VLESS+Reality", "/opt/vless", vec!["vless-xray"]),
+            ("Shadowsocks", "/opt/shadowsocks", vec!["shadowsocks"]),
+            ("WireGuard", "/opt/wireguard", vec!["wireguard"]),
+            ("HTTP/SOCKS5 Proxy", "/opt/proxy", vec!["proxy-server"]),
         ];
         
-        let mut any_running = false;
-        for (proto_name, proto_path) in &protocols {
+        for (proto_name, proto_path, container_names) in &protocols {
             let path = std::path::Path::new(proto_path);
             if path.join("docker-compose.yml").exists() {
-                match self.handler.get_protocol_status(path).await {
-                    Ok(running) => {
-                        let status_icon = if running {
-                            any_running = true;
-                            style("●").green()
-                        } else {
-                            style("●").red()
-                        };
-                        println!("  {} {}", status_icon, proto_name);
-                    }
-                    Err(_) => {
-                        println!("  {} {}", style("?").yellow(), proto_name);
+                // Check if any of the protocol's containers are running
+                let mut is_running = false;
+                for container_name in container_names {
+                    if let Ok(output) = std::process::Command::new("docker")
+                        .args(&["ps", "--filter", &format!("name={}", container_name), "--format", "{{.Status}}"])
+                        .output()
+                    {
+                        let output_str = String::from_utf8_lossy(&output.stdout);
+                        if output_str.contains("Up") {
+                            is_running = true;
+                            break;
+                        }
                     }
                 }
+                
+                let status_icon = if is_running {
+                    style("●").green()
+                } else {
+                    style("○").red()
+                };
+                println!("  {} {} (installed)", status_icon, proto_name);
+            } else {
+                println!("  {} {} (not installed)", style("○").dim(), style(proto_name).dim());
             }
-        }
-        
-        if !any_running {
-            println!("  {}", style("No services running").dim());
         }
 
         println!();
@@ -245,22 +264,7 @@ impl InteractiveMenu {
     }
 
     async fn install_server_menu(&mut self) -> Result<()> {
-        println!("{}", style("VPN Server Installation").cyan().bold());
-        println!();
-
-        // Check if server is already installed
-        if self.handler.is_server_installed().await? {
-            display::warning("Server is already installed!");
-
-            let reinstall = Confirm::with_theme(&ColorfulTheme::default())
-                .with_prompt("Do you want to reinstall?")
-                .default(false)
-                .interact()?;
-
-            if !reinstall {
-                return Ok(());
-            }
-        }
+        self.show_submenu_header("VPN Server Installation")?;
 
         // Select protocol
         let protocols = vec![
@@ -292,6 +296,20 @@ impl InteractiveMenu {
         // Confirm installation of selected protocol
         println!();
         display::info(&format!("Selected protocol: {:?}", protocol));
+        
+        // Check if server is already installed
+        if self.handler.is_server_installed().await? {
+            display::warning("Server is already installed!");
+
+            let reinstall = Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt("Do you want to reinstall?")
+                .default(false)
+                .interact()?;
+
+            if !reinstall {
+                return Ok(());
+            }
+        }
         
         let confirm_protocol = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt("Proceed with installation of this protocol?")
@@ -401,8 +419,7 @@ impl InteractiveMenu {
     }
 
     async fn server_management_menu(&mut self) -> Result<()> {
-        println!("{}", style("Server Management").cyan().bold());
-        println!();
+        self.show_submenu_header("Server Management")?;
 
         let actions = vec![
             "Start Server",
@@ -469,8 +486,7 @@ impl InteractiveMenu {
     }
 
     async fn user_management_menu(&mut self) -> Result<()> {
-        println!("{}", style("User Management").cyan().bold());
-        println!();
+        self.show_submenu_header("User Management")?;
 
         let actions = vec![
             "List All Users",
@@ -728,8 +744,7 @@ impl InteractiveMenu {
     }
 
     async fn batch_operations_menu(&mut self) -> Result<()> {
-        println!("{}", style("Batch Operations").cyan().bold());
-        println!();
+        self.show_submenu_header("Batch Operations")?;
 
         let actions = vec![
             "Export All Users",
@@ -785,8 +800,7 @@ impl InteractiveMenu {
     }
 
     async fn monitoring_menu(&mut self) -> Result<()> {
-        println!("{}", style("Monitoring & Statistics").cyan().bold());
-        println!();
+        self.show_submenu_header("Monitoring & Statistics")?;
 
         let actions = vec![
             "Traffic Statistics",
@@ -846,6 +860,8 @@ impl InteractiveMenu {
     }
 
     async fn logs_menu(&mut self) -> Result<()> {
+        self.show_submenu_header("Log Management")?;
+        
         let actions = vec![
             "Show Recent Logs",
             "Follow Logs (Live)",
@@ -895,8 +911,7 @@ impl InteractiveMenu {
     }
 
     async fn security_menu(&mut self) -> Result<()> {
-        println!("{}", style("Security & Key Management").cyan().bold());
-        println!();
+        self.show_submenu_header("Security & Key Management")?;
 
         let actions = vec![
             "Security Status",
@@ -968,8 +983,7 @@ impl InteractiveMenu {
     }
 
     async fn configuration_menu(&mut self) -> Result<()> {
-        println!("{}", style("Configuration Management").cyan().bold());
-        println!();
+        self.show_submenu_header("Configuration Management")?;
 
         let actions = vec![
             "Show Current Configuration",
@@ -1053,8 +1067,7 @@ impl InteractiveMenu {
     }
 
     async fn migration_menu(&mut self) -> Result<()> {
-        println!("{}", style("Migration & Backup").cyan().bold());
-        println!();
+        self.show_submenu_header("Migration & Backup")?;
 
         let actions = vec![
             "Migrate from Bash Version",
@@ -1121,8 +1134,7 @@ impl InteractiveMenu {
     }
 
     async fn diagnostics_menu(&mut self) -> Result<()> {
-        println!("{}", style("System Diagnostics").cyan().bold());
-        println!();
+        self.show_submenu_header("System Diagnostics")?;
 
         let fix_issues = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt("Automatically fix detected issues?")
@@ -1137,8 +1149,7 @@ impl InteractiveMenu {
     }
 
     async fn system_info_menu(&mut self) -> Result<()> {
-        println!("{}", style("System Information").cyan().bold());
-        println!();
+        self.show_submenu_header("System Information")?;
 
         self.handler.show_system_info().await?;
         self.wait_for_keypress()?;
@@ -1159,13 +1170,48 @@ impl InteractiveMenu {
         println!("{}", style("Server Uninstallation").red().bold());
         println!();
 
-        // Check if server is installed
-        if !self.handler.is_server_installed().await? {
+        // Check installed protocols
+        let mut installed_protocols: Vec<Protocol> = Vec::new();
+        
+        // Check each protocol's installation directory
+        let protocols = [
+            (Protocol::Vless, "/opt/vless"),
+            (Protocol::Shadowsocks, "/opt/shadowsocks"),
+            (Protocol::Wireguard, "/opt/wireguard"),
+            (Protocol::ProxyServer, "/opt/proxy"),
+        ];
+        
+        for (protocol, path) in protocols {
+            if std::path::Path::new(path).exists() {
+                installed_protocols.push(protocol);
+            }
+        }
+
+        if installed_protocols.is_empty() {
             display::warning("No VPN server installation found!");
             return Ok(());
         }
 
-        display::warning("⚠️  This will completely remove the VPN server!");
+        // If multiple protocols installed, ask which one to uninstall
+        let protocol_to_uninstall = if installed_protocols.len() > 1 {
+            let protocol_names: Vec<String> = installed_protocols
+                .iter()
+                .map(|p| p.as_str().to_string())
+                .collect();
+
+            let selection = Select::with_theme(&ColorfulTheme::default())
+                .with_prompt("Select VPN protocol to uninstall")
+                .items(&protocol_names)
+                .default(0)
+                .interact()?;
+
+            installed_protocols[selection].clone()
+        } else {
+            installed_protocols[0].clone()
+        };
+
+
+        display::warning(&format!("⚠️  This will completely remove the {} VPN server!", protocol_to_uninstall.as_str()));
         display::warning("   • All containers will be stopped and removed");
         display::warning("   • Firewall rules will be cleaned up");
         display::warning("   • Configuration files will be deleted");
@@ -1194,7 +1240,9 @@ impl InteractiveMenu {
             self.check_admin_privileges("Server uninstallation")?;
             display::info("Starting server uninstallation...");
 
-            match self.handler.uninstall_server(purge).await {
+            // Create path for the selected protocol
+            let protocol_path = format!("/opt/{}", protocol_to_uninstall.as_str().to_lowercase());
+            match self.handler.uninstall_server_with_path(&std::path::PathBuf::from(protocol_path), purge).await {
                 Ok(_) => {
                     display::success("Server uninstalled successfully!");
                     println!();
