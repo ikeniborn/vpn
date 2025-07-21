@@ -394,6 +394,20 @@ impl CommandHandler {
         Ok(config_file.exists())
     }
 
+    pub async fn is_protocol_installed(&self, protocol: vpn_types::protocol::VpnProtocol) -> Result<bool> {
+        let install_path = match protocol {
+            vpn_types::protocol::VpnProtocol::Vless => PathBuf::from("/opt/vless"),
+            vpn_types::protocol::VpnProtocol::Outline => PathBuf::from("/opt/shadowsocks"),
+            vpn_types::protocol::VpnProtocol::Wireguard => PathBuf::from("/opt/wireguard"),
+            vpn_types::protocol::VpnProtocol::HttpProxy | 
+            vpn_types::protocol::VpnProtocol::Socks5Proxy | 
+            vpn_types::protocol::VpnProtocol::ProxyServer => PathBuf::from("/opt/proxy"),
+            _ => PathBuf::from("/opt/vpn"),
+        };
+        let config_file = install_path.join("docker-compose.yml");
+        Ok(config_file.exists())
+    }
+
     // User Management Commands
     pub async fn handle_user_command(&mut self, command: UserCommands) -> Result<()> {
         match command {

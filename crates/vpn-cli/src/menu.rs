@@ -297,9 +297,17 @@ impl InteractiveMenu {
         println!();
         display::info(&format!("Selected protocol: {:?}", protocol));
         
-        // Check if server is already installed
-        if self.handler.is_server_installed().await? {
-            display::warning("Server is already installed!");
+        // Check if this specific protocol is already installed
+        let vpn_protocol = match protocol {
+            crate::cli::Protocol::Vless => vpn_types::protocol::VpnProtocol::Vless,
+            crate::cli::Protocol::Shadowsocks => vpn_types::protocol::VpnProtocol::Outline,
+            crate::cli::Protocol::Wireguard => vpn_types::protocol::VpnProtocol::Wireguard,
+            crate::cli::Protocol::ProxyServer => vpn_types::protocol::VpnProtocol::ProxyServer,
+            _ => vpn_types::protocol::VpnProtocol::ProxyServer,
+        };
+
+        if self.handler.is_protocol_installed(vpn_protocol).await? {
+            display::warning("This protocol is already installed!");
 
             let reinstall = Confirm::with_theme(&ColorfulTheme::default())
                 .with_prompt("Do you want to reinstall?")
@@ -308,6 +316,32 @@ impl InteractiveMenu {
 
             if !reinstall {
                 return Ok(());
+            }
+        } else {
+            // Check for old artifacts that might cause conflicts
+            let protocol_path = match protocol {
+                crate::cli::Protocol::Vless => "/opt/vless",
+                crate::cli::Protocol::Shadowsocks => "/opt/shadowsocks",
+                crate::cli::Protocol::Wireguard => "/opt/wireguard",
+                crate::cli::Protocol::ProxyServer => "/opt/proxy",
+                _ => "/opt/proxy",
+            };
+            
+            if std::path::Path::new(protocol_path).exists() {
+                display::warning(&format!("Found old installation artifacts in {}", protocol_path));
+                display::info("These may be from a previous installation or different version.");
+                
+                let cleanup = Confirm::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Clean up old artifacts before installation?")
+                    .default(true)
+                    .interact()?;
+                
+                if cleanup {
+                    display::info("Cleaning up old artifacts...");
+                    // The uninstall process will handle cleanup
+                    self.handler.uninstall_server_with_path(std::path::Path::new(protocol_path), true).await?;
+                    display::success("Old artifacts cleaned up successfully!");
+                }
             }
         }
         

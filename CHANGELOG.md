@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Menu displaying at bottom of terminal instead of top
 - Server status not showing running containers correctly
 - Container names mismatch in lifecycle management (vless-xray vs xray)
+- Incorrect reinstallation prompt for non-installed protocols
+- Added protocol-specific installation check to avoid confusion
 
 ## [0.1.0] - 2025-07-13
 

@@ -21,6 +21,7 @@ This is a Rust-based VPN management system that provides comprehensive tools for
 
 - После завершении задачи акттуализируй статус в TASK.md
 - Выполненные задачи переноси в CHANGELOG.md
+- По завершению ToDo задач выполняй коммит и пуш в репозиторий
 
 ## Development Guidelines
 

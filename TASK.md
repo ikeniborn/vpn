@@ -184,6 +184,8 @@
 - Fixed reinstallation flow - now asks for confirmation after protocol selection
 - Enhanced server status display to show all protocols (installed/not installed)
 - Updated container name detection for proper status reporting
+- Fixed protocol-specific installation check to prevent incorrect reinstall prompts
+- Added artifact cleanup detection for old installations
 
 ### 2025-07-13: Installation Script Development
 - Created comprehensive Rust installation script (`install.sh`)
