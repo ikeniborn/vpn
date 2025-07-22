@@ -116,10 +116,10 @@ impl ProxyInstaller {
         info!("  This may take several minutes on first run...");
         
         let mut child = tokio::process::Command::new("docker-compose")
+            .arg("--progress=plain")  // Global flag must come first
             .arg("-f")
             .arg(&compose_path)
             .arg("build")
-            .arg("--progress=plain")  // Show build output
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()?;

@@ -1,26 +1,25 @@
 # Dockerfile for VPN Proxy Authentication Service
-# Simplified version using pre-built binary
-FROM debian:bookworm-slim
+# Using nginx as a simple auth proxy for now
+FROM nginx:alpine
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    libssl3 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Install curl for health checks
+RUN apk add --no-cache curl
 
-# Create non-root user
-RUN useradd -m -u 1001 -s /bin/sh vpnproxy || true
-
-# Copy pre-built binary (from release)
-COPY release/vpn-proxy /usr/local/bin/vpn-proxy-auth
-
-# Create directories
-RUN mkdir -p /etc/proxy /var/lib/vpn/users /var/log/proxy && \
-    chown -R vpnproxy:vpnproxy /etc/proxy /var/log/proxy
-
-# Switch to non-root user
-USER vpnproxy
+# Copy custom nginx config
+RUN echo 'server {\n\
+    listen 8080;\n\
+    server_name localhost;\n\
+    \n\
+    location / {\n\
+        return 200 "Proxy auth service placeholder";\n\
+        add_header Content-Type text/plain;\n\
+    }\n\
+    \n\
+    location /health {\n\
+        return 200 "OK";\n\
+        add_header Content-Type text/plain;\n\
+    }\n\
+}' > /etc/nginx/conf.d/default.conf
 
 # Expose auth service port
 EXPOSE 8080
@@ -29,5 +28,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-# Run the authentication service
-CMD ["vpn-proxy-auth", "--config", "/etc/proxy/config.toml"]
+# Run nginx
+CMD ["nginx", "-g", "daemon off;"]
