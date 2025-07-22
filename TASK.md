@@ -177,14 +177,18 @@
 
 ## 📝 Recent Work Log
 
-### 2025-07-22: Proxy Server Installation Progress Feedback
+### 2025-07-22: Proxy Server Installation Progress Feedback & Local Builds
 - Enhanced proxy server installation to show detailed progress messages
-- Added real-time status updates for Docker image pulling
+- Removed Docker Hub dependencies - all images now build locally
+- Implemented docker-compose build instead of pull for all protocols
+- Added real-time status updates for Docker image building
 - Implemented progress tracking for docker-compose operations
 - Improved service health check feedback with elapsed time indicators
 - Added per-service status reporting during container startup
 - Enhanced error messages with more helpful context
 - Updated logging configuration to show installation progress
+- Created Dockerfile wrappers for all VPN protocols (Xray, Outline, WireGuard)
+- Updated all docker-compose templates to use local builds
 
 ### 2025-07-21: VPN Installation and Menu Improvements
 - Fixed VLESS+Reality installation verification with retry mechanism

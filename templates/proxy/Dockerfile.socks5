@@ -1,4 +1,4 @@
-# Dockerfile for VPN Proxy Authentication Service
+# Dockerfile for VPN SOCKS5 Proxy Server
 FROM rust:1.75 as builder
 
 WORKDIR /app
@@ -7,8 +7,8 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ ./crates/
 
-# Build the authentication service
-RUN cargo build --release -p vpn-proxy --bin vpn-proxy-auth
+# Build the SOCKS5 proxy service
+RUN cargo build --release -p vpn-proxy --bin vpn-proxy-socks5
 
 # Runtime image
 FROM debian:bookworm-slim
@@ -23,21 +23,21 @@ RUN apt-get update && apt-get install -y \
 RUN useradd -m -u 1001 -s /bin/sh vpnproxy || true
 
 # Copy binary from builder
-COPY --from=builder /app/target/release/vpn-proxy-auth /usr/local/bin/vpn-proxy-auth
+COPY --from=builder /app/target/release/vpn-proxy-socks5 /usr/local/bin/vpn-proxy-socks5
 
 # Create directories
-RUN mkdir -p /etc/proxy /var/lib/vpn/users /var/log/proxy && \
+RUN mkdir -p /etc/proxy /var/log/proxy && \
     chown -R vpnproxy:vpnproxy /etc/proxy /var/log/proxy
 
 # Switch to non-root user
 USER vpnproxy
 
-# Expose auth service port
-EXPOSE 3000
+# Expose SOCKS5 port
+EXPOSE 1080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3000/health || exit 1
+    CMD timeout 3 bash -c 'cat < /dev/null > /dev/tcp/localhost/1080' || exit 1
 
-# Run the authentication service
-CMD ["vpn-proxy-auth"]
+# Run the SOCKS5 proxy service
+CMD ["vpn-proxy-socks5"]

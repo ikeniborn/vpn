@@ -13,15 +13,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Container startup status updates with elapsed time
 - Service-by-service health check reporting
 - Enhanced logging configuration for installation visibility
+- Local Docker image building instead of remote pulls
 
 ### Changed
 - Improved docker-compose operations to show real-time progress
 - Enhanced error messages with more helpful context
 - Updated health check waiting to show container states
+- All VPN protocols now use local Docker builds instead of pulling from registries
+- Proxy server installation uses docker-compose build instead of pull
 
 ### Fixed
 - Installation appearing frozen during Docker image downloads
 - Lack of feedback during container startup phase
+- Removed dependency on external Docker registries for all protocols
 
 ## [0.2.0] - 2025-07-21
 

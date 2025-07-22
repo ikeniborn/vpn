@@ -111,19 +111,23 @@ impl ProxyInstaller {
 
         let compose_path = self.install_path.join("proxy/docker-compose.yml");
 
-        // First, pull images
-        info!("  Pulling Docker images...");
-        let pull_output = tokio::process::Command::new("docker-compose")
+        // Build images locally instead of pulling
+        info!("  Building Docker images locally...");
+        let build_output = tokio::process::Command::new("docker-compose")
             .arg("-f")
             .arg(&compose_path)
-            .arg("pull")
+            .arg("build")
             .output()
             .await?;
         
-        if !pull_output.status.success() {
-            debug!("Docker compose pull output: {}", String::from_utf8_lossy(&pull_output.stderr));
+        if !build_output.status.success() {
+            let stderr = String::from_utf8_lossy(&build_output.stderr);
+            return Err(ServerError::InstallationError(format!(
+                "Docker compose build failed: {}",
+                stderr
+            )));
         } else {
-            info!("  ✓ Docker images pulled");
+            info!("  ✓ Docker images built successfully");
         }
 
         // Run docker-compose up -d
@@ -133,6 +137,8 @@ impl ProxyInstaller {
             .arg(&compose_path)
             .arg("up")
             .arg("-d")
+            .arg("--no-deps")  // Don't start linked services
+            .arg("--build")     // Build images before starting
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()?;
@@ -252,7 +258,10 @@ impl ProxyInstaller {
         format!(
             r#"services:
   squid-proxy:
-    image: ubuntu/squid:latest
+    build:
+      context: /home/ikeniborn/Documents/Project/vpn
+      dockerfile: templates/proxy/Dockerfile.squid
+    image: vpn-squid-proxy:latest
     container_name: vpn-squid-proxy
     restart: unless-stopped
     ports:
@@ -298,7 +307,10 @@ impl ProxyInstaller {
       retries: 3
 
   proxy-metrics:
-    image: prom/prometheus:latest
+    build:
+      context: /home/ikeniborn/Documents/Project/vpn
+      dockerfile: templates/proxy/Dockerfile.prometheus
+    image: vpn-prometheus:latest
     container_name: vpn-proxy-metrics
     restart: unless-stopped
     ports:

@@ -66,7 +66,10 @@ impl DockerComposeTemplate {
         let compose = format!(
             r#"services:
   vless-xray:
-    image: ghcr.io/xtls/xray-core:latest
+    build:
+      context: /home/ikeniborn/Documents/Project/vpn
+      dockerfile: templates/xray/Dockerfile
+    image: vpn-xray:latest
     container_name: vless-xray
     restart: {}
     ports:
@@ -87,7 +90,10 @@ impl DockerComposeTemplate {
       - vless_vpn-network
 
   vless-watchtower:
-    image: containrrr/watchtower:latest
+    build:
+      context: /home/ikeniborn/Documents/Project/vpn
+      dockerfile: templates/watchtower/Dockerfile
+    image: vpn-watchtower:latest
     container_name: vless-watchtower
     restart: {}
     volumes:
@@ -134,7 +140,10 @@ networks:
         let compose = format!(
             r#"services:
   outline-shadowbox:
-    image: quay.io/outline/shadowbox:stable
+    build:
+      context: /home/ikeniborn/Documents/Project/vpn
+      dockerfile: templates/outline/Dockerfile
+    image: vpn-outline:latest
     container_name: outline-shadowbox
     restart: {}
     ports:
@@ -242,7 +251,10 @@ networks:
         let compose = format!(
             r#"services:
   wireguard-server:
-    image: linuxserver/wireguard:latest
+    build:
+      context: /home/ikeniborn/Documents/Project/vpn
+      dockerfile: templates/wireguard/Dockerfile
+    image: vpn-wireguard:latest
     container_name: wireguard-server
     cap_add:
       - NET_ADMIN
@@ -271,7 +283,10 @@ networks:
       - wireguard_vpn-network
 
   wireguard-watchtower:
-    image: containrrr/watchtower:latest
+    build:
+      context: /home/ikeniborn/Documents/Project/vpn
+      dockerfile: templates/watchtower/Dockerfile
+    image: vpn-watchtower:latest
     container_name: wireguard-watchtower
     restart: {restart_policy}
     volumes:
