@@ -93,21 +93,16 @@ impl CommandHandler {
                 _ => unreachable!(),
             };
 
-            let pb = ProgressBar::new_spinner();
-            pb.set_style(
-                ProgressStyle::default_spinner()
-                    .template("{spinner:.green} {msg}")
-                    .unwrap(),
-            );
-            pb.set_message("Installing proxy server...");
-
+            display::info("ℹ Starting installation...");
+            
             let installer = ProxyInstaller::new(protocol_install_path.clone(), port.unwrap_or(8080))?;
+            
+            // Install will print progress messages
             installer
                 .install(proxy_type)
                 .await
                 .map_err(|e| CliError::ServerError(e))?;
 
-            pb.finish_and_clear();
             display::success(&format!(
                 "{} proxy server installed successfully!",
                 proxy_type

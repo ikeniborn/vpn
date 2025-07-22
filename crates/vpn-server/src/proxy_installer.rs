@@ -32,15 +32,20 @@ impl ProxyInstaller {
         );
 
         // Create directory structure
+        info!("Creating directory structure...");
         self.create_directories().await?;
+        info!("✓ Directory structure created");
 
         // Generate configuration files
+        info!("Generating configuration files...");
         self.generate_configs(proxy_type).await?;
+        info!("✓ Configuration files generated");
 
         // Deploy with Docker Compose
+        info!("Deploying services with Docker Compose...");
         self.deploy_proxy(proxy_type).await?;
 
-        info!("Proxy server installation completed successfully");
+        info!("✓ Proxy server installation completed successfully");
         Ok(())
     }
 
@@ -53,6 +58,7 @@ impl ProxyInstaller {
         ];
 
         for dir in &dirs {
+            debug!("  Creating directory: {}", dir.display());
             fs::create_dir_all(dir).await?;
         }
 
@@ -61,6 +67,7 @@ impl ProxyInstaller {
 
     async fn generate_configs(&self, proxy_type: &str) -> Result<()> {
         // Generate Docker Compose file
+        info!("  Creating docker-compose.yml...");
         let compose_content = match proxy_type {
             "http" => self.generate_http_compose(),
             "socks5" => self.generate_socks5_compose(),
@@ -78,17 +85,20 @@ impl ProxyInstaller {
 
         // Generate Squid configuration for HTTP proxy
         if proxy_type == "http" || proxy_type == "all" {
+            info!("  Creating squid.conf...");
             let squid_config = self.generate_squid_config();
             let squid_path = self.install_path.join("proxy/squid.conf");
             fs::write(&squid_path, squid_config).await?;
         }
 
         // Generate auth configuration
+        info!("  Creating auth-config.toml...");
         let auth_config = self.generate_auth_config();
         let auth_path = self.install_path.join("proxy/auth-config.toml");
         fs::write(&auth_path, auth_config).await?;
 
         // Generate Prometheus configuration
+        info!("  Creating prometheus.yml...");
         let prometheus_config = self.generate_prometheus_config();
         let prometheus_path = self.install_path.join("proxy/prometheus.yml");
         fs::write(&prometheus_path, prometheus_config).await?;
@@ -97,26 +107,67 @@ impl ProxyInstaller {
     }
 
     async fn deploy_proxy(&self, _proxy_type: &str) -> Result<()> {
-        info!("Deploying proxy server with Docker Compose");
+        info!("Starting Docker containers...");
 
         let compose_path = self.install_path.join("proxy/docker-compose.yml");
 
+        // First, pull images
+        info!("  Pulling Docker images...");
+        let pull_output = tokio::process::Command::new("docker-compose")
+            .arg("-f")
+            .arg(&compose_path)
+            .arg("pull")
+            .output()
+            .await?;
+        
+        if !pull_output.status.success() {
+            debug!("Docker compose pull output: {}", String::from_utf8_lossy(&pull_output.stderr));
+        } else {
+            info!("  ✓ Docker images pulled");
+        }
+
         // Run docker-compose up -d
-        let output = tokio::process::Command::new("docker-compose")
+        info!("  Starting containers...");
+        let mut child = tokio::process::Command::new("docker-compose")
             .arg("-f")
             .arg(&compose_path)
             .arg("up")
             .arg("-d")
-            .output()
-            .await?;
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(ServerError::InstallationError(format!(
-                "Docker compose failed: {}",
-                stderr
-            )));
+        // Read output in real-time
+        if let Some(stdout) = child.stdout.take() {
+            use tokio::io::{AsyncBufReadExt, BufReader};
+            let reader = BufReader::new(stdout);
+            let mut lines = reader.lines();
+            
+            while let Ok(Some(line)) = lines.next_line().await {
+                if line.contains("Creating") {
+                    info!("    {}", line.trim());
+                } else if line.contains("Starting") {
+                    info!("    {}", line.trim());
+                } else if line.contains("Pulling") {
+                    info!("    {}", line.trim());
+                }
+            }
         }
+
+        let status = child.wait().await?;
+        if !status.success() {
+            if let Some(mut stderr) = child.stderr {
+                use tokio::io::AsyncReadExt;
+                let mut error_msg = String::new();
+                stderr.read_to_string(&mut error_msg).await?;
+                return Err(ServerError::InstallationError(format!(
+                    "Docker compose failed: {}",
+                    error_msg
+                )));
+            }
+        }
+
+        info!("  ✓ Docker containers started");
 
         // Wait for services to be healthy
         self.wait_for_health().await?;
@@ -125,23 +176,52 @@ impl ProxyInstaller {
     }
 
     async fn wait_for_health(&self) -> Result<()> {
-        info!("Waiting for proxy services to be healthy");
+        info!("Checking service health...");
 
         let services = ["vpn-squid-proxy", "vpn-proxy-auth", "vpn-proxy-metrics"];
         let max_attempts = 30;
         let delay = std::time::Duration::from_secs(2);
 
-        for service in &services {
+        for (idx, service) in services.iter().enumerate() {
+            info!("  [{}/{}] Checking {}...", idx + 1, services.len(), service);
             let mut attempts = 0;
+            let mut last_status = String::new();
+            
             loop {
                 match self.container_manager.get_container_status(service).await {
                     Ok(status) => {
-                        if status == ContainerStatus::Running {
-                            debug!("Service {} is running", service);
-                            break;
+                        match status {
+                            ContainerStatus::Running => {
+                                info!("  ✓ {} is running and healthy", service);
+                                break;
+                            }
+                            ContainerStatus::Created => {
+                                if last_status != "created" {
+                                    info!("    {} is starting up...", service);
+                                    last_status = "created".to_string();
+                                }
+                            }
+                            ContainerStatus::Restarting => {
+                                if last_status != "restarting" {
+                                    info!("    {} is restarting...", service);
+                                    last_status = "restarting".to_string();
+                                }
+                            }
+                            ContainerStatus::Stopped => {
+                                if last_status != "stopped" {
+                                    info!("    {} is stopped, waiting for startup...", service);
+                                    last_status = "stopped".to_string();
+                                }
+                            }
+                            _ => {
+                                debug!("Service {} status: {:?}", service, status);
+                            }
                         }
                     }
                     Err(e) => {
+                        if attempts == 0 {
+                            info!("    Waiting for {} to initialize...", service);
+                        }
                         debug!("Service {} not ready yet: {}", service, e);
                     }
                 }
@@ -149,24 +229,28 @@ impl ProxyInstaller {
                 attempts += 1;
                 if attempts >= max_attempts {
                     return Err(ServerError::InstallationError(format!(
-                        "Service {} failed to start",
-                        service
+                        "Service {} failed to start after {} seconds. Please check Docker logs for more details.",
+                        service,
+                        max_attempts * 2
                     )));
+                }
+
+                // Show progress indicator with elapsed time
+                if attempts % 5 == 0 {
+                    info!("    Still waiting... ({}s elapsed)", attempts * 2);
                 }
 
                 tokio::time::sleep(delay).await;
             }
         }
 
-        info!("All proxy services are healthy");
+        info!("✓ All proxy services are healthy and ready");
         Ok(())
     }
 
     fn generate_http_compose(&self) -> String {
         format!(
-            r#"version: '3.8'
-
-services:
+            r#"services:
   squid-proxy:
     image: ubuntu/squid:latest
     container_name: vpn-squid-proxy
@@ -191,10 +275,10 @@ services:
       start_period: 30s
 
   proxy-auth:
-    image: vpn-proxy:latest
     build:
-      context: ../../
-      dockerfile: docker/proxy/Dockerfile.auth
+      context: /home/ikeniborn/Documents/Project/vpn
+      dockerfile: templates/proxy/Dockerfile.auth
+    image: vpn-proxy:latest
     container_name: vpn-proxy-auth
     restart: unless-stopped
     ports:
@@ -245,14 +329,12 @@ volumes:
 
     fn generate_socks5_compose(&self) -> String {
         format!(
-            r#"version: '3.8'
-
-services:
+            r#"services:
   vpn-socks5-proxy:
-    image: vpn-proxy:latest
     build:
-      context: ../../
-      dockerfile: docker/proxy/Dockerfile.socks5
+      context: /home/ikeniborn/Documents/Project/vpn
+      dockerfile: templates/proxy/Dockerfile.socks5
+    image: vpn-proxy:latest
     container_name: vpn-socks5-proxy
     restart: unless-stopped
     ports:
@@ -480,6 +562,7 @@ scrape_configs:
         let compose_path = self.install_path.join("proxy/docker-compose.yml");
 
         if compose_path.exists() {
+            info!("Stopping Docker containers...");
             // Run docker-compose down
             let output = tokio::process::Command::new("docker-compose")
                 .arg("-f")
@@ -496,14 +579,17 @@ scrape_configs:
                     stderr
                 )));
             }
+            info!("✓ Docker containers stopped and removed");
         }
 
         // Remove configuration files
+        info!("Removing configuration files...");
         if let Err(e) = fs::remove_dir_all(self.install_path.join("proxy")).await {
             debug!("Failed to remove proxy directory: {}", e);
         }
+        info!("✓ Configuration files removed");
 
-        info!("Proxy server uninstalled successfully");
+        info!("✓ Proxy server uninstalled successfully");
         Ok(())
     }
 }

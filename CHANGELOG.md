@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Real-time progress feedback for proxy server installation
+- Docker image pull progress reporting
+- Container startup status updates with elapsed time
+- Service-by-service health check reporting
+- Enhanced logging configuration for installation visibility
+
+### Changed
+- Improved docker-compose operations to show real-time progress
+- Enhanced error messages with more helpful context
+- Updated health check waiting to show container states
+
+### Fixed
+- Installation appearing frozen during Docker image downloads
+- Lack of feedback during container startup phase
+
 ## [0.2.0] - 2025-07-21
 
 ### Added

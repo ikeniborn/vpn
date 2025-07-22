@@ -291,9 +291,13 @@ fn setup_logging(verbose: bool, quiet: bool) {
         return; // No logging in quiet mode
     }
 
+    // For proxy installation, we want to see info level logs
     let level = if verbose { "debug" } else { "info" };
 
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        // Show info logs from vpn_server crate during installation
+        EnvFilter::new(format!("vpn_server={},vpn_cli={}", level, level))
+    });
 
     fmt()
         .with_env_filter(filter)
@@ -301,6 +305,7 @@ fn setup_logging(verbose: bool, quiet: bool) {
         .with_thread_ids(false)
         .with_file(false)
         .with_line_number(false)
+        .without_time()
         .init();
 }
 
