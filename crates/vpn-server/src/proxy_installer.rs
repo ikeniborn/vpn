@@ -111,6 +111,25 @@ impl ProxyInstaller {
 
         let compose_path = self.install_path.join("proxy/docker-compose.yml");
 
+        // Create required external volume
+        info!("  Creating Docker volumes...");
+        let volume_output = tokio::process::Command::new("docker")
+            .arg("volume")
+            .arg("create")
+            .arg("vpn-users-data")
+            .output()
+            .await?;
+        
+        if !volume_output.status.success() {
+            // Volume might already exist, which is okay
+            let stderr = String::from_utf8_lossy(&volume_output.stderr);
+            if !stderr.contains("already exists") {
+                debug!("Volume creation output: {}", stderr);
+            }
+        } else {
+            info!("  ✓ Docker volume vpn-users-data created");
+        }
+
         // Build images locally instead of pulling
         info!("  Building Docker images locally...");
         info!("  This may take several minutes on first run...");
@@ -319,10 +338,6 @@ impl ProxyInstaller {
       - "127.0.0.1:8089:8080"
     environment:
       - AUTH_SERVICE_PORT=8080
-      - USERS_DB_PATH=/var/lib/vpn/users
-    volumes:
-      - vpn-users-data:/var/lib/vpn/users:ro
-      - ./auth-config.toml:/etc/proxy/config.toml:ro
     networks:
       - proxy-network
     healthcheck:
@@ -618,6 +633,16 @@ scrape_configs:
             }
             info!("✓ Docker containers stopped and removed");
         }
+
+        // Remove external volume
+        info!("Removing Docker volumes...");
+        let _ = tokio::process::Command::new("docker")
+            .arg("volume")
+            .arg("rm")
+            .arg("-f")
+            .arg("vpn-users-data")
+            .output()
+            .await;
 
         // Remove configuration files
         info!("Removing configuration files...");
