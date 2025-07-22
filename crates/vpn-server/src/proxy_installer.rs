@@ -113,19 +113,44 @@ impl ProxyInstaller {
 
         // Build images locally instead of pulling
         info!("  Building Docker images locally...");
-        let build_output = tokio::process::Command::new("docker-compose")
+        info!("  This may take several minutes on first run...");
+        
+        let mut child = tokio::process::Command::new("docker-compose")
             .arg("-f")
             .arg(&compose_path)
             .arg("build")
-            .output()
-            .await?;
-        
-        if !build_output.status.success() {
-            let stderr = String::from_utf8_lossy(&build_output.stderr);
-            return Err(ServerError::InstallationError(format!(
-                "Docker compose build failed: {}",
-                stderr
-            )));
+            .arg("--progress=plain")  // Show build output
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?;
+
+        // Read build output in real-time
+        if let Some(stdout) = child.stdout.take() {
+            use tokio::io::{AsyncBufReadExt, BufReader};
+            let reader = BufReader::new(stdout);
+            let mut lines = reader.lines();
+            
+            while let Ok(Some(line)) = lines.next_line().await {
+                let line = line.trim();
+                if line.contains("Step") || line.contains("RUN") || line.contains("Building") {
+                    info!("    {}", line);
+                } else if line.contains("Successfully built") || line.contains("Successfully tagged") {
+                    info!("    ✓ {}", line);
+                }
+            }
+        }
+
+        let status = child.wait().await?;
+        if !status.success() {
+            if let Some(mut stderr) = child.stderr {
+                use tokio::io::AsyncReadExt;
+                let mut error_msg = String::new();
+                stderr.read_to_string(&mut error_msg).await?;
+                return Err(ServerError::InstallationError(format!(
+                    "Docker compose build failed: {}",
+                    error_msg
+                )));
+            }
         } else {
             info!("  ✓ Docker images built successfully");
         }

@@ -1,29 +1,19 @@
 # Dockerfile for VPN Proxy Authentication Service
-FROM rust:1.75 as builder
-
-WORKDIR /app
-
-# Copy workspace files
-COPY Cargo.toml Cargo.lock ./
-COPY crates/ ./crates/
-
-# Build the authentication service
-RUN cargo build --release -p vpn-proxy --bin vpn-proxy-auth
-
-# Runtime image
+# Simplified version using pre-built binary
 FROM debian:bookworm-slim
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
 RUN useradd -m -u 1001 -s /bin/sh vpnproxy || true
 
-# Copy binary from builder
-COPY --from=builder /app/target/release/vpn-proxy-auth /usr/local/bin/vpn-proxy-auth
+# Copy pre-built binary (from release)
+COPY release/vpn-proxy /usr/local/bin/vpn-proxy-auth
 
 # Create directories
 RUN mkdir -p /etc/proxy /var/lib/vpn/users /var/log/proxy && \
@@ -33,11 +23,11 @@ RUN mkdir -p /etc/proxy /var/lib/vpn/users /var/log/proxy && \
 USER vpnproxy
 
 # Expose auth service port
-EXPOSE 3000
+EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3000/health || exit 1
+    CMD curl -f http://localhost:8080/health || exit 1
 
 # Run the authentication service
-CMD ["vpn-proxy-auth"]
+CMD ["vpn-proxy-auth", "--config", "/etc/proxy/config.toml"]

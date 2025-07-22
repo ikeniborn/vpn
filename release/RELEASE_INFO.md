@@ -2,8 +2,8 @@
 
 ## Version Details
 - **Version**: v0.1.0
-- **Build Date**: 2025-07-21 10:56:33 UTC
-- **Git Commit**: 990a675
+- **Build Date**: 2025-07-22 16:07:48 UTC
+- **Git Commit**: c4da59e
 - **Git Branch**: rust
 - **Build Host**: minipc
 - **Build User**: ikeniborn
@@ -12,7 +12,7 @@
 ## Release Contents
 
 ### Binaries
-- vpn (17249320 bytes)
+- vpn (17303120 bytes)
 - vpn-api → vpn (symlink)
 - vpn-cli → vpn (symlink)
 - vpn-identity (353024 bytes)

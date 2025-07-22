@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Installation appearing frozen during Docker image downloads
 - Lack of feedback during container startup phase
 - Removed dependency on external Docker registries for all protocols
+- Squid Docker build hanging on cache initialization
+- Added real-time build progress output for better visibility
+- Simplified proxy auth Dockerfile to use pre-built binaries
 
 ## [0.2.0] - 2025-07-21
 

@@ -1,5 +1,8 @@
 FROM ubuntu:22.04
 
+# Set non-interactive to avoid apt prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
 RUN apt-get update && apt-get install -y \
     squid \
     squid-common \
@@ -10,9 +13,15 @@ RUN apt-get update && apt-get install -y \
 RUN mkdir -p /var/log/squid /var/spool/squid && \
     chown -R proxy:proxy /var/log/squid /var/spool/squid
 
-# Initialize cache directory
-RUN squid -N -z -F
+# Create startup script that initializes cache if needed
+RUN echo '#!/bin/bash\n\
+if [ ! -d /var/spool/squid/00 ]; then\n\
+  echo "Initializing Squid cache..."\n\
+  squid -N -z -F\n\
+fi\n\
+exec squid -N -d 1' > /entrypoint.sh && \
+chmod +x /entrypoint.sh
 
 EXPOSE 3128
 
-CMD ["squid", "-N", "-d", "1"]
+ENTRYPOINT ["/entrypoint.sh"]
