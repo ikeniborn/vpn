@@ -652,7 +652,7 @@ impl ServerInstaller {
         println!("✓ Container health check passed");
 
         // 5. Test basic connectivity with actual server port
-        self.verify_service_connectivity(server_config.port).await?;
+        self.verify_service_connectivity(server_config.port, &options.protocol).await?;
         println!("✓ Service connectivity verified");
 
         println!("🎉 Installation verification completed successfully!");
@@ -745,9 +745,15 @@ impl ServerInstaller {
         Ok(())
     }
 
-    async fn verify_service_connectivity(&self, port: u16) -> Result<()> {
+    async fn verify_service_connectivity(&self, port: u16, protocol: &VpnProtocol) -> Result<()> {
         use std::time::Duration;
         use tokio::net::TcpStream;
+
+        // WireGuard uses UDP protocol, skip TCP connectivity check
+        if matches!(protocol, VpnProtocol::Wireguard) {
+            println!("✓ Skipping TCP connectivity check for WireGuard (UDP protocol)");
+            return Ok(());
+        }
 
         let connect_addr = format!("127.0.0.1:{}", port);
         let max_retries = 10;

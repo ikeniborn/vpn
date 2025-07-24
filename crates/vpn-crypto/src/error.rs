@@ -31,6 +31,9 @@ pub enum CryptoError {
 
     #[error("JSON error: {0}")]
     JsonError(#[from] serde_json::Error),
+
+    #[error("Password hash error: {0}")]
+    PasswordHashError(String),
 }
 
 impl PartialEq for CryptoError {
@@ -42,6 +45,7 @@ impl PartialEq for CryptoError {
             (CryptoError::InvalidKeyFormat(a), CryptoError::InvalidKeyFormat(b)) => a == b,
             (CryptoError::EncryptionError(a), CryptoError::EncryptionError(b)) => a == b,
             (CryptoError::DecryptionError(a), CryptoError::DecryptionError(b)) => a == b,
+            (CryptoError::PasswordHashError(a), CryptoError::PasswordHashError(b)) => a == b,
             // For complex error types, just compare discriminants
             (CryptoError::IoError(_), CryptoError::IoError(_)) => true,
             (CryptoError::Base64Error(_), CryptoError::Base64Error(_)) => true,

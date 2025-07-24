@@ -21,6 +21,7 @@ pub struct User {
 pub struct UserConfig {
     pub public_key: Option<String>,
     pub private_key: Option<String>,
+    pub password_hash: Option<String>, // For proxy authentication
     pub server_host: String,
     pub server_port: u16,
     pub sni: Option<String>,
@@ -131,6 +132,7 @@ impl Default for UserConfig {
         Self {
             public_key: None,
             private_key: None,
+            password_hash: None,
             server_host: "127.0.0.1".to_string(),
             server_port: 443,
             sni: None,

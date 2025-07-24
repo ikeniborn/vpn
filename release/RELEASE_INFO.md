@@ -2,8 +2,8 @@
 
 ## Version Details
 - **Version**: v0.1.0
-- **Build Date**: 2025-07-22 17:40:39 UTC
-- **Git Commit**: c7e1ab5
+- **Build Date**: 2025-07-24 11:31:29 UTC
+- **Git Commit**: 1c84ec3
 - **Git Branch**: rust
 - **Build Host**: minipc
 - **Build User**: ikeniborn
@@ -12,12 +12,12 @@
 ## Release Contents
 
 ### Binaries
-- vpn (17307288 bytes)
+- vpn (17401576 bytes)
 - vpn-api → vpn (symlink)
 - vpn-cli → vpn (symlink)
 - vpn-identity (353024 bytes)
 - vpn-manager → vpn (symlink)
-- vpn-proxy (5244912 bytes)
+- vpn-proxy (5249008 bytes)
 
 ### Configuration Files
 - Templates directory with Docker Compose configurations

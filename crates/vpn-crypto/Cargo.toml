@@ -21,6 +21,7 @@ sha2 = "0.10"
 aes-gcm = "0.10"
 pbkdf2 = "0.12"
 zeroize = "1.7"
+argon2 = "0.5"
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = "0.4"

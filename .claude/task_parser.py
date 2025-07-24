@@ -7,6 +7,8 @@ Task Parser Hook for Claude Code
 import json
 import sys
 import re
+import os
+import uuid
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
@@ -119,7 +121,11 @@ class TaskParser:
 
     def parse_task(self, prompt: str) -> Dict[str, Any]:
         """Основной метод парсинга задачи"""
+        # Генерируем уникальный идентификатор для запроса
+        request_id = str(uuid.uuid4())
+        
         task = {
+            'request_id': request_id,
             'timestamp': datetime.now().isoformat(),
             'original_prompt': prompt,
             'task_type': self.extract_task_type(prompt),
@@ -199,12 +205,32 @@ Priority: {task_info['priority']}
 Complexity: {task_info['estimated_complexity']}
 Suggested Tools: {', '.join(task_info['suggested_tools'])}
 Keywords: {', '.join(task_info['keywords'][:5])}
+Request ID: {task_info['request_id']}
 """
         
         # Сохраняем анализ в файл для истории
         history_file = '/home/ikeniborn/Documents/Project/vpn/.claude/task_history.jsonl'
         with open(history_file, 'a') as f:
             f.write(json.dumps(task_info, ensure_ascii=False) + '\n')
+        
+        # Сохраняем полную структуру промпта в отдельный файл
+        prompts_dir = '/home/ikeniborn/Documents/Project/vpn/.claude/prompts'
+        os.makedirs(prompts_dir, exist_ok=True)
+        
+        # Создаем имя файла с request_id
+        prompt_filename = os.path.join(prompts_dir, f"{task_info['request_id']}.json")
+        
+        # Сохраняем полную информацию о промпте
+        prompt_data = {
+            'request_id': task_info['request_id'],
+            'timestamp': task_info['timestamp'],
+            'original_prompt': prompt,
+            'enhanced_prompt': enhanced_prompt.strip(),
+            'task_analysis': task_info
+        }
+        
+        with open(prompt_filename, 'w', encoding='utf-8') as f:
+            json.dump(prompt_data, f, ensure_ascii=False, indent=2)
         
         # Возвращаем модифицированный prompt
         output = {

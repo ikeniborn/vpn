@@ -3,8 +3,13 @@
   "title": "Task Analysis Schema",
   "description": "Schema for structured task output from Claude Code prehook",
   "type": "object",
-  "required": ["timestamp", "original_prompt", "task_type", "components", "priority"],
+  "required": ["request_id", "timestamp", "original_prompt", "task_type", "components", "priority"],
   "properties": {
+    "request_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for the request in UUID format"
+    },
     "timestamp": {
       "type": "string",
       "format": "date-time",

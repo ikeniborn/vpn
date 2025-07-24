@@ -16,6 +16,8 @@ pub struct UserManager {
     max_users: Option<usize>,
     server_config: ServerConfig,
     read_only_mode: bool,
+    // Temporary storage for plaintext passwords (cleared after display)
+    temp_passwords: DashMap<String, String>,
 }
 
 #[derive(Debug, Clone)]
@@ -62,6 +64,7 @@ impl UserManager {
             max_users: None,
             server_config,
             read_only_mode,
+            temp_passwords: DashMap::new(),
         };
 
         manager.load_users_from_disk()?;
@@ -82,6 +85,10 @@ impl UserManager {
     }
 
     pub async fn create_user(&self, name: String, protocol: VpnProtocol) -> Result<User> {
+        self.create_user_with_password(name, protocol, None).await
+    }
+
+    pub async fn create_user_with_password(&self, name: String, protocol: VpnProtocol, password: Option<String>) -> Result<User> {
         if self.read_only_mode {
             return Err(UserError::ReadOnlyMode);
         }
@@ -101,9 +108,12 @@ impl UserManager {
             }
         }
 
-        // Check if user with this name already exists
-        if self.users.iter().any(|entry| entry.value().name == name) {
-            return Err(UserError::UserAlreadyExists(name));
+        // Check if user with this name already exists for the same protocol
+        if self.users.iter().any(|entry| {
+            let user = entry.value();
+            user.name == name && user.protocol == protocol
+        }) {
+            return Err(UserError::UserAlreadyExists(format!("{} ({})", name, protocol)));
         }
 
         let mut user = User::new(name, protocol);
@@ -119,6 +129,23 @@ impl UserManager {
         user.config.server_host = self.server_config.host.clone();
         user.config.server_port = self.server_config.port;
         user.config.sni = self.server_config.sni.clone();
+
+        // For proxy protocols, handle password
+        if matches!(protocol, VpnProtocol::HttpProxy | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer) {
+            if let Some(pwd) = password {
+                // Store plaintext password temporarily for display
+                self.temp_passwords.insert(user.id.clone(), pwd.clone());
+                
+                // Hash the password using Argon2
+                let hasher = vpn_crypto::PasswordHasher::new();
+                let hash = hasher.hash_password(&pwd)
+                    .map_err(|e| UserError::CryptoError(e))?;
+                user.config.password_hash = Some(hash);
+            } else {
+                // If no password provided, use private key as fallback
+                user.config.password_hash = user.config.private_key.clone();
+            }
+        }
 
         self.users.insert(user.id.clone(), user.clone());
 
@@ -242,6 +269,16 @@ impl UserManager {
             .save_qr_code_to_file(&link, &output_path.to_string_lossy())
             .map_err(|e| UserError::CryptoError(e))?;
         Ok(())
+    }
+
+    /// Get and remove temporary password for a user
+    pub fn get_temp_password(&self, user_id: &str) -> Option<String> {
+        self.temp_passwords.remove(user_id).map(|(_, pwd)| pwd)
+    }
+
+    /// Clear all temporary passwords (for security)
+    pub fn clear_temp_passwords(&self) {
+        self.temp_passwords.clear();
     }
 
     async fn save_user_to_disk(&self, user: &User) -> Result<()> {

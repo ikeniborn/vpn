@@ -151,31 +151,50 @@ impl ConnectionLinkGenerator {
     }
 
     fn generate_http_proxy_link(user: &User, server_config: &ServerConfig) -> Result<String> {
+        // Use password_hash if available, otherwise fallback to private_key
+        let password = user.config.password_hash.as_deref()
+            .or(user.config.private_key.as_deref())
+            .unwrap_or(&user.id);
+        
         Ok(format!(
             "http://{}:{}@{}:{}",
             user.name,
-            user.config.private_key.as_deref().unwrap_or(&user.id),
+            password,
             server_config.host,
             server_config.port
         ))
     }
 
     fn generate_socks5_link(user: &User, server_config: &ServerConfig) -> Result<String> {
+        // Use password_hash if available, otherwise fallback to private_key
+        let password = user.config.password_hash.as_deref()
+            .or(user.config.private_key.as_deref())
+            .unwrap_or(&user.id);
+        
         Ok(format!(
             "socks5://{}:{}@{}:{}",
             user.name,
-            user.config.private_key.as_deref().unwrap_or(&user.id),
+            password,
             server_config.host,
             server_config.port
         ))
     }
 
-    fn generate_proxy_server_link(_user: &User, server_config: &ServerConfig) -> Result<String> {
+    fn generate_proxy_server_link(user: &User, server_config: &ServerConfig) -> Result<String> {
+        // Use password_hash if available, otherwise fallback to private_key
+        let password = user.config.password_hash.as_deref()
+            .or(user.config.private_key.as_deref())
+            .unwrap_or(&user.id);
+        
         // Return both HTTP and SOCKS5 endpoints
         Ok(format!(
-            "http://{}:{} | socks5://{}:{}",
+            "HTTP: http://{}:{}@{}:{}\nSOCKS5: socks5://{}:{}@{}:{}",
+            user.name,
+            password,
             server_config.host,
             server_config.port,
+            user.name,
+            password,
             server_config.host,
             server_config.port.saturating_add(1000) // SOCKS5 on port+1000
         ))

@@ -8,10 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- WireGuard connectivity check fix
+  - Skip TCP connectivity verification for WireGuard protocol (UDP-only)
+  - Prevents false installation failures for WireGuard VPN
+- Multi-protocol user management fix
+  - Fixed user creation to use protocol-specific directories
+  - Users with same name can now exist across different protocols
+  - Each protocol maintains its own user namespace
 - Claude Code hooks system for enhanced automation
   - Prehook system for structured task analysis:
     - Task parser (task_parser.py) for analyzing user prompts
-    - JSON schema for validating structured output
+    - Unique UUID generation for each request
+    - Individual JSON file logging in prompts/ directory
+    - JSON schema for validating structured output with request_id
     - UserPromptSubmit hook for automatic task analysis
     - Task history tracking in JSONL format
     - Test suite for parser validation
@@ -50,6 +59,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Proxy server installation uses docker-compose build instead of pull
 
 ### Fixed
+- WireGuard installation failing with "Cannot connect to VPN service" error
+  - Modified installer to skip TCP connectivity check for UDP-based WireGuard
+  - Installation now completes successfully for WireGuard protocol
 - Proxy server not displaying in status menu after installation
 - Squid container health check failing due to missing squidclient
 - Container name mismatch preventing proxy status detection

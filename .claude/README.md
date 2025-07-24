@@ -8,13 +8,17 @@
 - `task_parser.py` - Python скрипт для парсинга запросов пользователя
 - `task_schema.json` - JSON Schema для валидации структурированного вывода
 - `task_history.jsonl` - История проанализированных задач (создается автоматически)
+- `prompts/` - Каталог с детальными логами всех промптов (JSON файлы с UUID именами)
 - `audit.log` - Лог модификации файлов (создается автоматически)
 - `bash_history.log` - История выполнения bash команд (создается автоматически)
+- `git_operations.jsonl` - История git операций (создается автоматически)
+- `git_config.json` - Конфигурация git posthook
 
 ## Как работает prehook
 
 1. **UserPromptSubmit Hook**: Перехватывает запрос пользователя перед отправкой Claude
 2. **Task Parser**: Анализирует запрос и извлекает структурированную информацию:
+   - Генерирует уникальный UUID для каждого запроса
    - Тип задачи (create, update, fix, etc.)
    - Затронутые компоненты системы
    - Приоритет задачи
@@ -23,7 +27,11 @@
    - Оценка сложности
    - Рекомендуемые инструменты
 
-3. **Enhanced Prompt**: Добавляет анализ задачи к оригинальному запросу
+3. **Enhanced Prompt**: Добавляет анализ задачи к оригинальному запросу, включая request_id
+
+4. **Логирование**: 
+   - Сохраняет краткую информацию в `task_history.jsonl`
+   - Сохраняет полную структуру промпта в `prompts/{request_id}.json`
 
 ## Примеры работы
 
@@ -91,6 +99,27 @@ grep '"priority": "high"' .claude/task_history.jsonl | jq .
 
 # Статистика по типам задач
 jq -r '.task_type' .claude/task_history.jsonl | sort | uniq -c
+```
+
+## Работа с сохраненными промптами
+
+Каждый промпт сохраняется в отдельный файл с уникальным идентификатором:
+
+```bash
+# Список всех сохраненных промптов
+ls -la .claude/prompts/
+
+# Просмотр конкретного промпта по ID
+cat .claude/prompts/{request_id}.json | jq .
+
+# Поиск промптов по типу задачи
+grep -l '"task_type": "create"' .claude/prompts/*.json
+
+# Найти все промпты за последний час
+find .claude/prompts -name "*.json" -mmin -60 | xargs jq -r '.request_id + " - " + .original_prompt'
+
+# Статистика по компонентам
+jq -r '.task_analysis.components[]' .claude/prompts/*.json | sort | uniq -c | sort -nr
 ```
 
 ## Дополнительные hooks

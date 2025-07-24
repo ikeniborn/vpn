@@ -111,7 +111,7 @@ impl InteractiveMenu {
             ("VLESS+Reality", "/opt/vless", vec!["vless-xray"]),
             ("Shadowsocks", "/opt/shadowsocks", vec!["shadowsocks"]),
             ("WireGuard", "/opt/wireguard", vec!["wireguard"]),
-            ("HTTP/SOCKS5 Proxy", "/opt/proxy", vec!["proxy-server"]),
+            ("HTTP/SOCKS5 Proxy", "/opt/proxy", vec!["vpn-squid-proxy", "vpn-proxy-auth"]),
         ];
         
         for (proto_name, proto_path, container_names) in &protocols {
@@ -608,7 +608,7 @@ impl InteractiveMenu {
             }
         };
 
-        let protocols = vec!["VLESS+Reality", "Shadowsocks", "WireGuard", "← Cancel"];
+        let protocols = vec!["VLESS+Reality", "Shadowsocks", "WireGuard", "HTTP/SOCKS5 Proxy", "← Cancel"];
         let protocol_selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("Select protocol")
             .items(&protocols)
@@ -616,7 +616,7 @@ impl InteractiveMenu {
             .interact()?;
 
         // Handle cancel option
-        if protocol_selection == 3 {
+        if protocol_selection == 4 {
             display::info("User creation cancelled");
             return Ok(());
         }
@@ -625,13 +625,73 @@ impl InteractiveMenu {
             0 => crate::cli::Protocol::Vless,
             1 => crate::cli::Protocol::Shadowsocks,
             2 => crate::cli::Protocol::Wireguard,
+            3 => crate::cli::Protocol::ProxyServer,
             _ => crate::cli::Protocol::Vless,
+        };
+
+        // For proxy protocols, ask for password
+        let password = if matches!(protocol, crate::cli::Protocol::ProxyServer) {
+            let use_password = Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt("Set custom password for proxy authentication?")
+                .default(true)
+                .interact()?;
+
+            if use_password {
+                let password: String = Input::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Enter password")
+                    .validate_with(|input: &String| -> std::result::Result<(), &str> {
+                        if input.len() < 8 {
+                            Err("Password must be at least 8 characters long")
+                        } else if input.len() > 128 {
+                            Err("Password too long (max 128 characters)")
+                        } else {
+                            Ok(())
+                        }
+                    })
+                    .interact_text()?;
+
+                let confirm_password: String = Input::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Confirm password")
+                    .interact_text()?;
+
+                if password != confirm_password {
+                    display::error("Passwords do not match!");
+                    return Ok(());
+                }
+
+                Some(password)
+            } else {
+                None
+            }
+        } else {
+            None
         };
 
         self.check_admin_privileges("User creation")?;
         display::info("Creating user...");
-        self.handler.create_user(name, email, protocol).await?;
+        
+        // Store username and protocol for later display
+        let username = name.clone();
+        let user_protocol = protocol.clone();
+        
+        self.handler.create_user_with_password(name, email, protocol, password).await?;
         display::success("User created successfully!");
+        
+        // Show connection details for proxy users
+        if matches!(user_protocol, crate::cli::Protocol::ProxyServer | crate::cli::Protocol::HttpProxy | crate::cli::Protocol::Socks5Proxy) {
+            println!("\n📋 Connection Details:");
+            println!("====================");
+            
+            // Show user details
+            let show_qr = Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt("Show full connection details?")
+                .default(true)
+                .interact()?;
+                
+            if show_qr {
+                self.handler.show_user_details(username, false).await?;
+            }
+        }
 
         Ok(())
     }

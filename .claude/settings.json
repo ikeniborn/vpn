@@ -56,18 +56,5 @@
         ]
       }
     ]
-  },
-  "project": {
-    "name": "VPN Management System",
-    "description": "Rust-based VPN management system with support for multiple protocols",
-    "primary_language": "rust",
-    "test_commands": [
-      "cargo test",
-      "cargo clippy -- -D warnings",
-      "cargo fmt -- --check"
-    ],
-    "build_commands": [
-      "cargo build --release"
-    ]
   }
 }

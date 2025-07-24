@@ -1,0 +1,4 @@
+FROM prom/prometheus:latest
+
+# Copy any custom configurations if needed
+# For now, using standard prometheus image as base

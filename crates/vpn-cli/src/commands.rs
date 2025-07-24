@@ -6,6 +6,7 @@ use vpn_server::{InstallationOptions, ServerInstaller, ServerLifecycle};
 use vpn_users::manager::UserListOptions;
 use vpn_users::user::UserStatus;
 use vpn_users::{BatchOperations, UserManager};
+use vpn_types::protocol::VpnProtocol;
 // use vpn_monitor::{TrafficMonitor, HealthMonitor, LogAnalyzer, MetricsCollector, AlertManager};
 // use vpn_monitor::traffic::MonitoringConfig;
 use crate::{
@@ -476,12 +477,23 @@ impl CommandHandler {
         email: Option<String>,
         protocol: Protocol,
     ) -> Result<()> {
+        self.create_user_with_password(name, email, protocol, None).await
+    }
+
+    pub async fn create_user_with_password(
+        &mut self,
+        name: String,
+        email: Option<String>,
+        protocol: Protocol,
+        password: Option<String>,
+    ) -> Result<()> {
         let server_config = self.load_server_config()?;
-        let install_path = self.get_protocol_install_path();
+        // Use the install path for the specific protocol, not the currently installed one
+        let install_path = InstallationOptions::get_protocol_install_path(protocol.clone().into());
         let user_manager = UserManager::new(&install_path, server_config)?;
 
         let mut user = user_manager
-            .create_user(name.clone(), protocol.into())
+            .create_user_with_password(name.clone(), protocol.into(), password)
             .await?;
 
         if let Some(email) = email {
@@ -489,9 +501,18 @@ impl CommandHandler {
             user_manager.update_user(user.clone()).await?;
         }
 
+        // Get temporary password if available
+        let temp_password = user_manager.get_temp_password(&user.id);
+
         match self.output_format {
             OutputFormat::Json => {
-                println!("{}", serde_json::to_string_pretty(&user)?);
+                let mut user_json = serde_json::to_value(&user)?;
+                if let Some(pwd) = temp_password {
+                    if let Some(obj) = user_json.as_object_mut() {
+                        obj.insert("password".to_string(), serde_json::Value::String(pwd));
+                    }
+                }
+                println!("{}", serde_json::to_string_pretty(&user_json)?);
             }
             _ => {
                 display::success(&format!("User '{}' created successfully!", name));
@@ -499,6 +520,14 @@ impl CommandHandler {
                 println!("Short ID: {}", user.short_id);
                 if let Some(email) = &user.email {
                     println!("Email: {}", email);
+                }
+                
+                // Display password for proxy users
+                if matches!(user.protocol, VpnProtocol::HttpProxy | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer) {
+                    if let Some(pwd) = temp_password {
+                        println!("Password: {}", pwd);
+                        println!("\n⚠️  Save this password now! It won't be shown again.");
+                    }
                 }
             }
         }
@@ -569,11 +598,31 @@ impl CommandHandler {
                 );
                 println!("  Connections: {}", user_obj.stats.connection_count);
 
-                if show_qr {
-                    let link = user_manager.generate_connection_link(&user_obj.id).await?;
-                    println!("\nConnection Link:");
+                // Show connection info
+                let link = user_manager.generate_connection_link(&user_obj.id).await?;
+                println!("\nConnection Information:");
+                
+                // For proxy protocols, show formatted connection details
+                if matches!(user_obj.protocol, VpnProtocol::HttpProxy | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer) {
+                    println!("Username: {}", user_obj.name);
+                    println!("Password: [hidden - use private key or set during creation]");
+                    
+                    if matches!(user_obj.protocol, VpnProtocol::ProxyServer) {
+                        // Show both HTTP and SOCKS5 endpoints
+                        println!("\nConnection URLs:");
+                        let lines: Vec<&str> = link.split('\n').collect();
+                        for line in lines {
+                            println!("  {}", line);
+                        }
+                    } else {
+                        println!("\nConnection URL:");
+                        println!("  {}", link);
+                    }
+                } else {
                     println!("{}", link);
+                }
 
+                if show_qr {
                     // Generate and display QR code in terminal
                     let qr_gen = vpn_crypto::QrCodeGenerator::new();
                     match qr_gen.generate_terminal_qr(&link) {

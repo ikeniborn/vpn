@@ -1,0 +1,31 @@
+{
+  "request_id": "d903a955-c1f6-4c3e-b361-14c9b3897711",
+  "timestamp": "2025-07-24T14:43:05.878302",
+  "original_prompt": "привет",
+  "enhanced_prompt": "привет\n\n---\nTASK ANALYSIS:\nType: general\nComponents: general\nPriority: medium\nComplexity: low\nSuggested Tools: Task\nKeywords: привет\nRequest ID: d903a955-c1f6-4c3e-b361-14c9b3897711",
+  "task_analysis": {
+    "request_id": "d903a955-c1f6-4c3e-b361-14c9b3897711",
+    "timestamp": "2025-07-24T14:43:05.878302",
+    "original_prompt": "привет",
+    "task_type": "general",
+    "components": [
+      "general"
+    ],
+    "priority": "medium",
+    "files": [],
+    "keywords": [
+      "привет"
+    ],
+    "estimated_complexity": "low",
+    "suggested_tools": [
+      "Task"
+    ],
+    "metadata": {
+      "prompt_length": 6,
+      "word_count": 1,
+      "has_code_blocks": false,
+      "has_urls": false,
+      "language": "ru"
+    }
+  }
+}

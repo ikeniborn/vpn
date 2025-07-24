@@ -115,11 +115,26 @@ impl AuthManager {
             return Err(ProxyError::auth_failed("User is not active"));
         }
 
-        // Verify password (using user's private key as password for now)
-        let expected_password = user.config.private_key.as_deref().unwrap_or(&user.id);
-
-        if password != expected_password {
-            return Err(ProxyError::auth_failed("Invalid password"));
+        // Verify password
+        if let Some(password_hash) = &user.config.password_hash {
+            // If we have a password hash, verify against it
+            if password_hash.starts_with("$argon2") {
+                // This is an Argon2 hash, verify it properly
+                if !verify_password(password, password_hash)? {
+                    return Err(ProxyError::auth_failed("Invalid password"));
+                }
+            } else {
+                // For backward compatibility, compare directly (e.g., when using private key)
+                if password != password_hash {
+                    return Err(ProxyError::auth_failed("Invalid password"));
+                }
+            }
+        } else {
+            // Fallback to private key for backward compatibility
+            let expected_password = user.config.private_key.as_deref().unwrap_or(&user.id);
+            if password != expected_password {
+                return Err(ProxyError::auth_failed("Invalid password"));
+            }
         }
 
         Ok(user.id.clone())

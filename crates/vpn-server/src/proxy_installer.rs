@@ -51,10 +51,10 @@ impl ProxyInstaller {
 
     async fn create_directories(&self) -> Result<()> {
         let dirs = [
-            self.install_path.join("proxy"),
-            self.install_path.join("proxy/dynamic"),
-            self.install_path.join("proxy/logs"),
-            self.install_path.join("proxy/certs"),
+            self.install_path.clone(),
+            self.install_path.join("dynamic"),
+            self.install_path.join("logs"),
+            self.install_path.join("certs"),
         ];
 
         for dir in &dirs {
@@ -80,27 +80,27 @@ impl ProxyInstaller {
             }
         };
 
-        let compose_path = self.install_path.join("proxy/docker-compose.yml");
+        let compose_path = self.install_path.join("docker-compose.yml");
         fs::write(&compose_path, compose_content).await?;
 
         // Generate Squid configuration for HTTP proxy
         if proxy_type == "http" || proxy_type == "all" {
             info!("  Creating squid.conf...");
             let squid_config = self.generate_squid_config();
-            let squid_path = self.install_path.join("proxy/squid.conf");
+            let squid_path = self.install_path.join("squid.conf");
             fs::write(&squid_path, squid_config).await?;
         }
 
         // Generate auth configuration
         info!("  Creating auth-config.toml...");
         let auth_config = self.generate_auth_config();
-        let auth_path = self.install_path.join("proxy/auth-config.toml");
+        let auth_path = self.install_path.join("auth-config.toml");
         fs::write(&auth_path, auth_config).await?;
 
         // Generate Prometheus configuration
         info!("  Creating prometheus.yml...");
         let prometheus_config = self.generate_prometheus_config();
-        let prometheus_path = self.install_path.join("proxy/prometheus.yml");
+        let prometheus_path = self.install_path.join("prometheus.yml");
         fs::write(&prometheus_path, prometheus_config).await?;
 
         Ok(())
@@ -109,7 +109,7 @@ impl ProxyInstaller {
     async fn deploy_proxy(&self, _proxy_type: &str) -> Result<()> {
         info!("Starting Docker containers...");
 
-        let compose_path = self.install_path.join("proxy/docker-compose.yml");
+        let compose_path = self.install_path.join("docker-compose.yml");
 
         // Create required external volume
         info!("  Creating Docker volumes...");
@@ -470,9 +470,9 @@ refresh_pattern -i (/cgi-bin/|\?) 0     0%      0
 refresh_pattern .               0       20%     4320
 
 # Log settings
-access_log daemon:/var/log/squid/access.log squid
+access_log /var/log/squid/access.log squid
 cache_log /var/log/squid/cache.log
-cache_store_log daemon:/var/log/squid/store.log
+cache_store_log /var/log/squid/store.log
 
 # Performance tuning
 max_filedesc 65536
@@ -611,7 +611,7 @@ scrape_configs:
     pub async fn uninstall(&self) -> Result<()> {
         info!("Uninstalling proxy server");
 
-        let compose_path = self.install_path.join("proxy/docker-compose.yml");
+        let compose_path = self.install_path.join("docker-compose.yml");
 
         if compose_path.exists() {
             info!("Stopping Docker containers...");
@@ -646,7 +646,7 @@ scrape_configs:
 
         // Remove configuration files
         info!("Removing configuration files...");
-        if let Err(e) = fs::remove_dir_all(self.install_path.join("proxy")).await {
+        if let Err(e) = fs::remove_dir_all(&self.install_path).await {
             debug!("Failed to remove proxy directory: {}", e);
         }
         info!("✓ Configuration files removed");

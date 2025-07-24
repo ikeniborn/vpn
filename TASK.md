@@ -221,8 +221,20 @@
 - Added password confirmation during user creation
 - Enhanced security with proper password hash verification in proxy auth backend
 
-### 2025-07-24: Claude Code Hooks System Implementation
-- Created prehook system for Claude Code to analyze user requests
+### 2025-07-24: Fixed WireGuard Installation & Enhanced Claude Code Hooks
+- Fixed WireGuard installation issue
+  - Identified problem: TCP connectivity check was failing for WireGuard (UDP protocol)
+  - Modified verify_service_connectivity to skip TCP check for WireGuard
+  - WireGuard now installs successfully without false connectivity errors
+  - Created and deployed new release build with the fix
+- Enhanced prehook logging system
+  - Added unique UUID generation for each request
+  - Created separate prompts directory for detailed logging
+  - Each prompt saved to individual JSON file named with request_id
+  - Updated task_schema.json to include request_id field
+  - Enhanced documentation with prompt search examples
+- Claude Code Hooks System Implementation
+  - Created prehook system for Claude Code to analyze user requests
   - Implemented task_parser.py for parsing and structuring user prompts
   - Added JSON schema for validation of structured output
   - Created .claude/settings.json with hooks configuration
