@@ -784,7 +784,7 @@ impl InteractiveMenu {
             .default(0)
             .interact()?;
 
-        let user_name = &user_names[selection];
+        let selected_user = &users[selection];
 
         let show_qr = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt("Display QR code in terminal?")
