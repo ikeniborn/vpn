@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed user creation to use protocol-specific directories
   - Users with same name can now exist across different protocols
   - Each protocol maintains its own user namespace
+  - Fixed user list command to show users from all installed protocols
+  - Resolves issue where WireGuard users were not displayed in list
 - Claude Code hooks system for enhanced automation
   - Prehook system for structured task analysis:
     - Task parser (task_parser.py) for analyzing user prompts
