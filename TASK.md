@@ -232,6 +232,9 @@
   - Issue: WireGuard users stored in /opt/wireguard but not shown in user list
   - Modified list_users command to aggregate users from all protocol paths
   - Now displays users from all installed protocols (VLESS, WireGuard, Proxy)
+  - Enhanced user selection dialogs to show protocol information
+  - Users now displayed as "username (protocol)" for clarity
+  - Fixed deletion to use user ID instead of name to handle duplicate names
 - Enhanced prehook logging system
   - Added unique UUID generation for each request
   - Created separate prompts directory for detailed logging

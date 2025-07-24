@@ -8,3 +8,6 @@
 [null] Command: sudo cat /opt/wireguard/users/a3985459-062b-4e35-8475-17d941096729/config.json | jq . | Exit code: null
 [null] Command: cargo build --package vpn-cli 2>&1 | head -30 | Exit code: null
 [null] Command: ./target/debug/vpn users list | Exit code: null
+[null] Command: cargo build --package vpn-cli 2>&1 | tail -20 | Exit code: null
+[null] Command: ./target/debug/vpn menu 2>&1 | head -50 | Exit code: null
+[null] Command: ./target/debug/vpn users list | Exit code: null
