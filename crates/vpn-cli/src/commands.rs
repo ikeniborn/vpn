@@ -439,15 +439,44 @@ impl CommandHandler {
         detailed: bool,
     ) -> Result<()> {
         let server_config = self.load_server_config()?;
-        let install_path = self.get_protocol_install_path();
-        let user_manager = UserManager::new(&install_path, server_config)?;
-
-        let mut options = UserListOptions::default();
-        if let Some(status) = status_filter {
-            options.status_filter = Some(status.into());
+        
+        // Collect users from all installed protocols
+        let mut all_users = Vec::new();
+        
+        // Check each protocol's installation path
+        let protocols = [
+            (vpn_types::protocol::VpnProtocol::Vless, "/opt/vless"),
+            (vpn_types::protocol::VpnProtocol::HttpProxy, "/opt/proxy"),
+            (vpn_types::protocol::VpnProtocol::Socks5Proxy, "/opt/proxy"),
+            (vpn_types::protocol::VpnProtocol::ProxyServer, "/opt/proxy"),
+            (vpn_types::protocol::VpnProtocol::Outline, "/opt/shadowsocks"),
+            (vpn_types::protocol::VpnProtocol::Wireguard, "/opt/wireguard"),
+        ];
+        
+        let mut seen_paths = std::collections::HashSet::new();
+        
+        for (_protocol, path) in protocols {
+            let install_path = PathBuf::from(path);
+            
+            // Skip if path doesn't exist or we've already checked it
+            if !install_path.exists() || !seen_paths.insert(path) {
+                continue;
+            }
+            
+            // Try to load users from this path
+            if let Ok(user_manager) = UserManager::new(&install_path, server_config.clone()) {
+                let mut options = UserListOptions::default();
+                if let Some(status) = status_filter.as_ref() {
+                    options.status_filter = Some(status.clone().into());
+                }
+                
+                if let Ok(users) = user_manager.list_users(Some(options)).await {
+                    all_users.extend(users);
+                }
+            }
         }
-
-        let users = user_manager.list_users(Some(options)).await?;
+        
+        let users = all_users;
 
         if users.is_empty() {
             display::info("No users found.");

@@ -26,3 +26,5 @@ tarpaulin-report.html
 # Release artifacts
 # /release/*.tar.gz
 # /release/*.sha256
+
+.claude/prompts
