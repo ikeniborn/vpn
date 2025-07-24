@@ -807,7 +807,7 @@ impl InteractiveMenu {
         };
 
         self.handler
-            .generate_user_link(user_name.clone(), show_qr, qr_file)
+            .generate_user_link(selected_user.id.clone(), show_qr, qr_file)
             .await?;
         Ok(())
     }
