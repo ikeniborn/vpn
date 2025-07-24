@@ -33,6 +33,27 @@
             "command": "jq -r '\"[\\(.timestamp)] Command: \\(.tool_input.command) | Exit code: \\(.exit_code)\"' >> /home/ikeniborn/Documents/Project/vpn/.claude/bash_history.log"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "description": "Auto-commit changes after file modifications",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/ikeniborn/Documents/Project/vpn/.claude/git_posthook.py"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "description": "Auto-commit any pending changes when Claude stops",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/ikeniborn/Documents/Project/vpn/.claude/git_posthook.py"
+          }
+        ]
       }
     ]
   },

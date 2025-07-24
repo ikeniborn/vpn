@@ -8,14 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Claude Code prehook system for structured task analysis
-  - Task parser (task_parser.py) for analyzing user prompts
-  - JSON schema for validating structured output
-  - Hooks configuration in .claude/settings.json
-  - UserPromptSubmit hook for automatic task analysis
+- Claude Code hooks system for enhanced automation
+  - Prehook system for structured task analysis:
+    - Task parser (task_parser.py) for analyzing user prompts
+    - JSON schema for validating structured output
+    - UserPromptSubmit hook for automatic task analysis
+    - Task history tracking in JSONL format
+    - Test suite for parser validation
+  - Posthook system for git automation:
+    - git_posthook.py for intelligent auto-commits
+    - git_config.py for managing posthook settings
+    - PostToolUse hooks for file modification tracking
+    - Stop hook for end-of-session commits
+    - Configurable commit thresholds and exclusion patterns
+    - Smart commit message generation based on task context
+    - Optional auto-push with branch whitelist support
   - PreToolUse and PostToolUse hooks for audit logging
-  - Task history tracking in JSONL format
-  - Test suite for parser validation
 - Password authentication support for proxy server users
 - Secure password storage using Argon2 hashing algorithm
 - PasswordHasher module in vpn-crypto crate
