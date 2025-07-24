@@ -820,26 +820,30 @@ impl InteractiveMenu {
             return Ok(());
         }
 
-        let user_names: Vec<String> = users.iter().map(|u| u.name.clone()).collect();
+        // Create display strings with protocol information
+        let user_display: Vec<String> = users
+            .iter()
+            .map(|u| format!("{} ({})", u.name, u.protocol))
+            .collect();
 
         let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
             .with_prompt("Select user")
-            .items(&user_names)
+            .items(&user_display)
             .default(0)
             .interact()?;
 
-        let user_name = &user_names[selection];
+        let selected_user = &users[selection];
 
         let confirm = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt(&format!(
-                "Reset traffic statistics for user '{}'?",
-                user_name
+                "Reset traffic statistics for user '{}' ({})?",
+                selected_user.name, selected_user.protocol
             ))
             .default(false)
             .interact()?;
 
         if confirm {
-            self.handler.reset_user_traffic(user_name.clone()).await?;
+            self.handler.reset_user_traffic(selected_user.id.clone()).await?;
             display::success("Traffic statistics reset successfully!");
         }
 
