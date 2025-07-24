@@ -221,12 +221,17 @@
 - Added password confirmation during user creation
 - Enhanced security with proper password hash verification in proxy auth backend
 
-### 2025-07-24: Fixed WireGuard Installation & Enhanced Claude Code Hooks
+### 2025-07-24: Fixed WireGuard Installation & Enhanced Claude Code Hooks & User Management Fixes
 - Fixed WireGuard installation issue
   - Identified problem: TCP connectivity check was failing for WireGuard (UDP protocol)
   - Modified verify_service_connectivity to skip TCP check for WireGuard
   - WireGuard now installs successfully without false connectivity errors
   - Created and deployed new release build with the fix
+- Fixed WireGuard user management issues
+  - Fixed "User already exists" error when creating WireGuard users
+  - Issue: WireGuard users stored in /opt/wireguard but not shown in user list
+  - Modified list_users command to aggregate users from all protocol paths
+  - Now displays users from all installed protocols (VLESS, WireGuard, Proxy)
 - Enhanced prehook logging system
   - Added unique UUID generation for each request
   - Created separate prompts directory for detailed logging
