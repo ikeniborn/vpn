@@ -799,7 +799,7 @@ impl InteractiveMenu {
         let qr_file = if generate_qr_file {
             let qr_path: String = Input::with_theme(&ColorfulTheme::default())
                 .with_prompt("Enter QR code file path")
-                .default(format!("{}_qr.png", user_name))
+                .default(format!("{}_qr.png", selected_user.name))
                 .interact_text()?;
             Some(std::path::PathBuf::from(qr_path))
         } else {
