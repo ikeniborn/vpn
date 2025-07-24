@@ -733,15 +733,19 @@ impl InteractiveMenu {
             return Ok(());
         }
 
-        let user_names: Vec<String> = users.iter().map(|u| u.name.clone()).collect();
+        // Create display strings with protocol information
+        let user_display: Vec<String> = users
+            .iter()
+            .map(|u| format!("{} ({})", u.name, u.protocol))
+            .collect();
 
         let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
             .with_prompt("Select user to delete")
-            .items(&user_names)
+            .items(&user_display)
             .default(0)
             .interact()?;
 
-        let user_name = &user_names[selection];
+        let selected_user = &users[selection];
 
         let confirm = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt(&format!(
