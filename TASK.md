@@ -190,6 +190,64 @@
 - Created Dockerfile wrappers for all VPN protocols (Xray, Outline, WireGuard)
 - Updated all docker-compose templates to use local builds
 
+### 2025-07-23: Fixed Proxy Server Issues
+- Fixed container name mismatch issue preventing proxy server status display
+  - Updated menu.rs to check for "vpn-squid-proxy" and "vpn-proxy-auth" containers
+  - Updated lifecycle.rs to monitor correct container names
+- Fixed nginx configuration syntax error in Dockerfile.auth
+  - Removed extra newline characters causing parsing errors
+- Fixed Squid proxy permission issues
+  - Updated Dockerfile.squid to ensure proper permissions on log directories
+  - Removed daemon log configuration that was causing startup failures
+  - Added permission fixes in entrypoint script
+- Improved error handling and startup reliability for proxy containers
+
+### 2025-07-23: Enhanced Proxy User Authentication & Fixed Proxy Server Status
+- Fixed proxy server not showing in status display - updated container names in menu.rs
+- Fixed Squid container health check failing due to missing squidclient
+- Replaced squidclient with netcat (nc) for health checks
+- Added netcat-openbsd package to Squid Dockerfile
+- Updated container name checks to use actual names: vpn-squid-proxy, vpn-proxy-auth
+- All proxy containers now show healthy status and display correctly in vpn status command
+- Enhanced password support for proxy server users
+- Added password support for proxy server users
+- Implemented secure password storage using Argon2 hashing
+- Created PasswordHasher module in vpn-crypto crate
+- Updated user creation flow to prompt for password in CLI menu
+- Enhanced connection link generation to use password instead of private key
+- Added temporary password storage for display after user creation
+- Updated auth module to support both hashed and plaintext password verification
+- Improved user details display for proxy protocols with formatted connection URLs
+- Added password confirmation during user creation
+- Enhanced security with proper password hash verification in proxy auth backend
+
+### 2025-07-24: Claude Code Prehook for Structured Task Analysis
+- Created prehook system for Claude Code to analyze user requests
+  - Implemented task_parser.py for parsing and structuring user prompts
+  - Added JSON schema for validation of structured output
+  - Created .claude/settings.json with hooks configuration
+  - Added UserPromptSubmit hook for automatic task analysis
+  - Implemented PreToolUse and PostToolUse hooks for audit logging
+- Features of the task parser:
+  - Extracts task type (create, update, fix, analyze, etc.)
+  - Identifies affected system components
+  - Determines task priority based on keywords
+  - Extracts mentioned files from the prompt
+  - Suggests appropriate Claude Code tools
+  - Estimates task complexity
+  - Maintains task history in JSONL format
+- Added comprehensive documentation and test suite
+- Tested parser with various use cases successfully
+
+### 2025-07-23: Fixed Proxy Directory Structure and Status Display
+- Fixed redundant directory nesting /opt/proxy/proxy/
+  - Updated ProxyInstaller to use install_path directly instead of adding subdirectory
+  - Moved existing files from nested directory to correct location
+- Fixed proxy status detection in main menu
+  - Proxy now correctly shows as "installed" when containers are running
+- Updated all proxy-related paths to work with correct directory structure
+- Verified proxy containers are running and healthy after changes
+
 ### 2025-07-21: VPN Installation and Menu Improvements
 - Fixed VLESS+Reality installation verification with retry mechanism
 - Fixed Xray configuration to use null log paths (preventing permission errors)

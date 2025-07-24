@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Claude Code prehook system for structured task analysis
+  - Task parser (task_parser.py) for analyzing user prompts
+  - JSON schema for validating structured output
+  - Hooks configuration in .claude/settings.json
+  - UserPromptSubmit hook for automatic task analysis
+  - PreToolUse and PostToolUse hooks for audit logging
+  - Task history tracking in JSONL format
+  - Test suite for parser validation
+- Password authentication support for proxy server users
+- Secure password storage using Argon2 hashing algorithm
+- PasswordHasher module in vpn-crypto crate
+- Password prompt during proxy user creation in CLI menu
+- Temporary password display after user creation
+- Password confirmation flow during user creation
+- Enhanced connection details display for proxy users
 - Real-time progress feedback for proxy server installation
 - Docker image pull progress reporting
 - Container startup status updates with elapsed time
@@ -16,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Local Docker image building instead of remote pulls
 
 ### Changed
+- Connection link generation now uses password_hash field instead of private_key for proxy users
+- Proxy authentication now supports both Argon2 hashed and plaintext passwords
+- User details display now shows formatted connection URLs for proxy protocols
+- Updated UserConfig structure to include password_hash field
 - Improved docker-compose operations to show real-time progress
 - Enhanced error messages with more helpful context
 - Updated health check waiting to show container states
@@ -23,12 +42,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Proxy server installation uses docker-compose build instead of pull
 
 ### Fixed
+- Proxy server not displaying in status menu after installation
+- Squid container health check failing due to missing squidclient
+- Container name mismatch preventing proxy status detection
 - Installation appearing frozen during Docker image downloads
 - Lack of feedback during container startup phase
 - Removed dependency on external Docker registries for all protocols
 - Squid Docker build hanging on cache initialization
 - Added real-time build progress output for better visibility
 - Simplified proxy auth Dockerfile to use pre-built binaries
+- Fixed redundant directory nesting /opt/proxy/proxy/
+- Fixed proxy status detection showing "not installed" when containers are running
 
 ## [0.2.0] - 2025-07-21
 

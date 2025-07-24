@@ -1,0 +1,52 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "description": "Parse user prompt and generate structured task in JSON format",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/ikeniborn/Documents/Project/vpn/.claude/task_parser.py"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|MultiEdit",
+        "description": "Log file modifications for audit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"$(date): Modifying file $CLAUDE_TOOL_INPUT_FILE_PATH\" >> /home/ikeniborn/Documents/Project/vpn/.claude/audit.log"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "description": "Log bash command execution results",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '\"[\\(.timestamp)] Command: \\(.tool_input.command) | Exit code: \\(.exit_code)\"' >> /home/ikeniborn/Documents/Project/vpn/.claude/bash_history.log"
+          }
+        ]
+      }
+    ]
+  },
+  "project": {
+    "name": "VPN Management System",
+    "description": "Rust-based VPN management system with support for multiple protocols",
+    "primary_language": "rust",
+    "test_commands": [
+      "cargo test",
+      "cargo clippy -- -D warnings",
+      "cargo fmt -- --check"
+    ],
+    "build_commands": [
+      "cargo build --release"
+    ]
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Task Analysis Schema",
+  "description": "Schema for structured task output from Claude Code prehook",
+  "type": "object",
+  "required": ["timestamp", "original_prompt", "task_type", "components", "priority"],
+  "properties": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when the task was parsed"
+    },
+    "original_prompt": {
+      "type": "string",
+      "description": "The original user prompt"
+    },
+    "task_type": {
+      "type": "string",
+      "enum": ["create", "update", "delete", "analyze", "fix", "refactor", "test", "deploy", "configure", "document", "general"],
+      "description": "The type of task identified from the prompt"
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["server", "proxy", "users", "network", "docker", "config", "cli", "identity", "monitor", "general"]
+      },
+      "minItems": 1,
+      "description": "System components affected by the task"
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["high", "medium", "low"],
+      "description": "Task priority level"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Files mentioned in the prompt"
+    },
+    "keywords": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 10,
+      "description": "Key terms extracted from the prompt"
+    },
+    "estimated_complexity": {
+      "type": "string",
+      "enum": ["high", "medium", "low"],
+      "description": "Estimated task complexity"
+    },
+    "suggested_tools": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["Read", "Write", "Edit", "MultiEdit", "Bash", "Grep", "Glob", "Task", "TodoWrite", "WebFetch", "WebSearch"]
+      },
+      "description": "Claude Code tools suggested for the task"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "prompt_length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "word_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "has_code_blocks": {
+          "type": "boolean"
+        },
+        "has_urls": {
+          "type": "boolean"
+        },
+        "language": {
+          "type": "string",
+          "enum": ["en", "ru"]
+        }
+      },
+      "description": "Additional metadata about the prompt"
+    }
+  }
+}
