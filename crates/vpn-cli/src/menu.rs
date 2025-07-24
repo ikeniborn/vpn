@@ -749,14 +749,15 @@ impl InteractiveMenu {
 
         let confirm = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt(&format!(
-                "Are you sure you want to delete user '{}'?",
-                user_name
+                "Are you sure you want to delete user '{}' ({})?",
+                selected_user.name, selected_user.protocol
             ))
             .default(false)
             .interact()?;
 
         if confirm {
-            self.handler.delete_user(user_name.clone()).await?;
+            // Pass the user ID instead of name to ensure correct deletion
+            self.handler.delete_user(selected_user.id.clone()).await?;
             display::success("User deleted successfully!");
         }
 
