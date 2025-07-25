@@ -144,6 +144,9 @@ impl ServerInstaller {
         self.create_docker_configuration(&options, &server_config, Some(&selected_subnet.cidr))
             .await?;
 
+        // Save server information for connection string generation
+        self.save_server_info(&options, &server_config).await?;
+
         // Validate the new Docker Compose file
         self.validate_docker_compose_file(&options).await?;
 
@@ -537,6 +540,65 @@ impl ServerInstaller {
         println!("🔍 Automatically selecting available VPN subnet...");
         SubnetManager::select_subnet_auto()
             .map_err(|e| ServerError::NetworkError(format!("No available subnets found: {}", e)))
+    }
+
+    async fn save_server_info(&self, options: &InstallationOptions, server_config: &ServerConfig) -> Result<()> {
+        use serde_json::json;
+        
+        println!("💾 Saving server configuration...");
+        
+        // Get the actual server IP address
+        let server_ip = self.get_server_ip().await?;
+        
+        let server_info = json!({
+            "host": server_ip,
+            "port": server_config.port,
+            "sni_domain": server_config.sni_domain,
+            "public_key": server_config.public_key,
+            "private_key": server_config.private_key,
+            "short_id": server_config.short_id,
+            "protocol": options.protocol.as_str(),
+            "created_at": chrono::Utc::now().to_rfc3339(),
+        });
+        
+        let server_info_path = options.install_path.join("server_info.json");
+        let server_info_content = serde_json::to_string_pretty(&server_info)?;
+        
+        std::fs::write(&server_info_path, server_info_content)?;
+        println!("✓ Server configuration saved to {}", server_info_path.display());
+        
+        Ok(())
+    }
+
+    async fn get_server_ip(&self) -> Result<String> {
+        // Try to get public IP from external service
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .map_err(|e| ServerError::NetworkError(format!("Failed to create HTTP client: {}", e)))?;
+        
+        // Try multiple services for redundancy
+        let services = ["https://ifconfig.me", "https://icanhazip.com", "https://api.ipify.org"];
+        
+        for service in &services {
+            match client.get(*service).send().await {
+                Ok(response) => {
+                    if let Ok(ip) = response.text().await {
+                        let trimmed_ip = ip.trim();
+                        // Basic validation that it's an IP address
+                        if trimmed_ip.split('.').count() == 4 {
+                            println!("✓ Detected server IP: {}", trimmed_ip);
+                            return Ok(trimmed_ip.to_string());
+                        }
+                    }
+                }
+                Err(_) => continue,
+            }
+        }
+        
+        // Fallback to getting local IP
+        println!("⚠️ Could not determine public IP, using local IP instead");
+        Ok("0.0.0.0".to_string())
     }
 
     async fn validate_docker_compose_file(&self, options: &InstallationOptions) -> Result<()> {

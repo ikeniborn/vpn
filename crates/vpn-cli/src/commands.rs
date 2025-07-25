@@ -65,6 +65,48 @@ impl CommandHandler {
         self.install_path.clone()
     }
 
+    /// Find a user across all protocol installation paths
+    async fn find_user_across_protocols(&self, user_identifier: &str) -> Result<(vpn_users::User, PathBuf)> {
+        let server_config = self.load_server_config()?;
+        
+        let protocols = [
+            (vpn_types::protocol::VpnProtocol::Vless, "/opt/vless"),
+            (vpn_types::protocol::VpnProtocol::HttpProxy, "/opt/proxy"),
+            (vpn_types::protocol::VpnProtocol::Socks5Proxy, "/opt/proxy"),
+            (vpn_types::protocol::VpnProtocol::ProxyServer, "/opt/proxy"),
+            (vpn_types::protocol::VpnProtocol::Outline, "/opt/shadowsocks"),
+            (vpn_types::protocol::VpnProtocol::Wireguard, "/opt/wireguard"),
+        ];
+        
+        let mut checked_paths = std::collections::HashSet::new();
+        
+        for (_protocol, path) in protocols {
+            let install_path = PathBuf::from(path);
+            
+            // Skip if we've already checked this path or if it doesn't exist
+            if checked_paths.contains(&install_path) || !install_path.exists() {
+                continue;
+            }
+            
+            checked_paths.insert(install_path.clone());
+            
+            // Try to find the user in this protocol's installation
+            if let Ok(user_manager) = UserManager::new(&install_path, server_config.clone()) {
+                // Try to find user by name first, then by ID
+                let user_result = match user_manager.get_user_by_name(user_identifier).await {
+                    Ok(u) => Ok(u),
+                    Err(_) => user_manager.get_user(user_identifier).await,
+                };
+                
+                if let Ok(user_obj) = user_result {
+                    return Ok((user_obj, install_path));
+                }
+            }
+        }
+        
+        Err(CliError::UserError(vpn_users::error::UserError::UserNotFound(user_identifier.to_string())))
+    }
+
     // Server Management Commands
     pub async fn install_server(
         &mut self,
@@ -566,30 +608,62 @@ impl CommandHandler {
 
     pub async fn delete_user(&mut self, user: String) -> Result<()> {
         let server_config = self.load_server_config()?;
-        let install_path = self.get_protocol_install_path();
-        let user_manager = UserManager::new(&install_path, server_config)?;
-
-        // Try to find user by name first, then by ID
-        let user_obj = match user_manager.get_user_by_name(&user).await {
-            Ok(u) => u,
-            Err(_) => user_manager.get_user(&user).await?,
-        };
-
-        user_manager.delete_user(&user_obj.id).await?;
-
-        display::success(&format!("User '{}' deleted successfully!", user_obj.name));
-        Ok(())
+        
+        // Search for the user across all installed protocols
+        let protocols = [
+            (vpn_types::protocol::VpnProtocol::Vless, "/opt/vless"),
+            (vpn_types::protocol::VpnProtocol::HttpProxy, "/opt/proxy"),
+            (vpn_types::protocol::VpnProtocol::Socks5Proxy, "/opt/proxy"),
+            (vpn_types::protocol::VpnProtocol::ProxyServer, "/opt/proxy"),
+            (vpn_types::protocol::VpnProtocol::Outline, "/opt/shadowsocks"),
+            (vpn_types::protocol::VpnProtocol::Wireguard, "/opt/wireguard"),
+        ];
+        
+        let mut checked_paths = std::collections::HashSet::new();
+        
+        for (_protocol, path) in protocols {
+            let install_path = PathBuf::from(path);
+            
+            // Skip if we've already checked this path
+            if checked_paths.contains(&install_path) {
+                continue;
+            }
+            
+            // Check if this protocol is installed
+            if install_path.exists() && install_path.join("docker-compose.yml").exists() {
+                checked_paths.insert(install_path.clone());
+                
+                // Try to find and delete the user in this protocol
+                if let Ok(user_manager) = UserManager::new(&install_path, server_config.clone()) {
+                    // Try to find user by name first, then by ID
+                    let user_result = match user_manager.get_user_by_name(&user).await {
+                        Ok(u) => Ok(u),
+                        Err(_) => user_manager.get_user(&user).await,
+                    };
+                    
+                    if let Ok(user_obj) = user_result {
+                        // Found the user, delete them
+                        user_manager.delete_user(&user_obj.id).await?;
+                        
+                        display::success(&format!("User '{}' deleted successfully!", user_obj.name));
+                        
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        
+        Err(CliError::UserError(vpn_users::UserError::UserNotFound(user)))
     }
 
     pub async fn show_user_details(&mut self, user: String, show_qr: bool) -> Result<()> {
         let server_config = self.load_server_config()?;
-        let install_path = self.get_protocol_install_path();
+        
+        // Find the user across all protocol paths
+        let (user_obj, install_path) = self.find_user_across_protocols(&user).await?;
+        
+        // Create user manager for the correct protocol path
         let user_manager = UserManager::new(&install_path, server_config)?;
-
-        let user_obj = match user_manager.get_user_by_name(&user).await {
-            Ok(u) => u,
-            Err(_) => user_manager.get_user(&user).await?,
-        };
 
         match self.output_format {
             OutputFormat::Json => {
@@ -681,14 +755,13 @@ impl CommandHandler {
         qr_file: Option<PathBuf>,
     ) -> Result<()> {
         let server_config = self.load_server_config()?;
-        let install_path = self.get_protocol_install_path();
+        
+        // Find the user across all protocol paths
+        let (user_obj, install_path) = self.find_user_across_protocols(&user).await?;
+        
+        // Create user manager for the correct protocol path
         let user_manager = UserManager::new(&install_path, server_config)?;
-
-        let user_obj = match user_manager.get_user_by_name(&user).await {
-            Ok(u) => u,
-            Err(_) => user_manager.get_user(&user).await?,
-        };
-
+        
         let link = user_manager.generate_connection_link(&user_obj.id).await?;
 
         match self.output_format {
@@ -736,13 +809,12 @@ impl CommandHandler {
         email: Option<String>,
     ) -> Result<()> {
         let server_config = self.load_server_config()?;
-        let install_path = self.get_protocol_install_path();
+        
+        // Find the user across all protocol paths
+        let (mut user_obj, install_path) = self.find_user_across_protocols(&user).await?;
+        
+        // Create user manager for the correct protocol path
         let user_manager = UserManager::new(&install_path, server_config)?;
-
-        let mut user_obj = match user_manager.get_user_by_name(&user).await {
-            Ok(u) => u,
-            Err(_) => user_manager.get_user(&user).await?,
-        };
 
         if let Some(status) = status {
             user_obj.status = status.into();
@@ -760,13 +832,12 @@ impl CommandHandler {
 
     pub async fn reset_user_traffic(&mut self, user: String) -> Result<()> {
         let server_config = self.load_server_config()?;
-        let install_path = self.get_protocol_install_path();
+        
+        // Find the user across all protocol paths
+        let (mut user_obj, install_path) = self.find_user_across_protocols(&user).await?;
+        
+        // Create user manager for the correct protocol path
         let user_manager = UserManager::new(&install_path, server_config)?;
-
-        let mut user_obj = match user_manager.get_user_by_name(&user).await {
-            Ok(u) => u,
-            Err(_) => user_manager.get_user(&user).await?,
-        };
 
         user_obj.stats.bytes_sent = 0;
         user_obj.stats.bytes_received = 0;
@@ -784,9 +855,52 @@ impl CommandHandler {
 
     pub async fn get_user_list(&self) -> Result<Vec<vpn_users::User>> {
         let server_config = self.load_server_config()?;
-        let install_path = self.get_protocol_install_path();
-        let user_manager = UserManager::new(&install_path, server_config)?;
-        Ok(user_manager.list_users(None).await?)
+        
+        // Get users from all installed protocols
+        let mut all_users = Vec::new();
+        
+        let protocols = [
+            (vpn_types::protocol::VpnProtocol::Vless, "/opt/vless"),
+            (vpn_types::protocol::VpnProtocol::HttpProxy, "/opt/proxy"),
+            (vpn_types::protocol::VpnProtocol::Socks5Proxy, "/opt/proxy"),
+            (vpn_types::protocol::VpnProtocol::ProxyServer, "/opt/proxy"),
+            (vpn_types::protocol::VpnProtocol::Outline, "/opt/shadowsocks"),
+            (vpn_types::protocol::VpnProtocol::Wireguard, "/opt/wireguard"),
+        ];
+        
+        // Check each protocol path
+        let mut checked_paths = std::collections::HashSet::new();
+        
+        for (_protocol, path) in protocols {
+            let install_path = PathBuf::from(path);
+            
+            // Skip if we've already checked this path (e.g., proxy protocols share the same path)
+            if checked_paths.contains(&install_path) {
+                continue;
+            }
+            
+            // Check if this protocol is installed
+            if install_path.exists() && install_path.join("docker-compose.yml").exists() {
+                checked_paths.insert(install_path.clone());
+                
+                // Try to get users from this protocol
+                match UserManager::new(&install_path, server_config.clone()) {
+                    Ok(user_manager) => {
+                        match user_manager.list_users(None).await {
+                            Ok(users) => all_users.extend(users),
+                            Err(_) => {
+                                // Silently skip if we can't read users from this protocol
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // Silently skip if we can't create user manager for this protocol
+                    }
+                }
+            }
+        }
+        
+        Ok(all_users)
     }
 
     async fn handle_batch_command(&mut self, command: BatchCommands) -> Result<()> {
