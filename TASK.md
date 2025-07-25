@@ -221,6 +221,14 @@
 - Added password confirmation during user creation
 - Enhanced security with proper password hash verification in proxy auth backend
 
+### 2025-07-24: Fixed User Management Cross-Protocol Bug
+- Fixed critical bug where users appear in list but fail when generating connection links
+  - Issue: list_users aggregates users from all protocol paths, but single-user operations only searched one path
+  - Created find_user_across_protocols helper method to search all installation paths
+  - Updated generate_user_link, show_user_details, update_user, and reset_user_traffic functions
+  - Now correctly finds users regardless of which protocol directory they're stored in
+  - Resolves "User not found" error when generating links for WireGuard users
+
 ### 2025-07-24: Fixed WireGuard Installation & Enhanced Claude Code Hooks & User Management Fixes
 - Fixed WireGuard installation issue
   - Identified problem: TCP connectivity check was failing for WireGuard (UDP protocol)
