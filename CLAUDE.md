@@ -17,18 +17,9 @@ This is a Rust-based VPN management system that provides comprehensive tools for
 - **Orchestration**: Docker Compose with Traefik service discovery
 - **Deployment**: Multi-arch Docker images (amd64, arm64) available on Docker Hub
 
-## Work Habits and Procedures
-
-- После завершении задачи акттуализируй статус в TASK.md
-- Выполненные задачи переноси в CHANGELOG.md
-
 ## Development Guidelines
 
 - Для получения актуальной информации перед разработкой используй инструмент context7
-
-## Maintenance Tasks
-
-- Поддерживай в актуальном состояниии README.md
 
 ## Documentation
 
