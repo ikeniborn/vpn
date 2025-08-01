@@ -245,14 +245,15 @@ impl CommandHandler {
                         
                         // Display protocol-specific details
                         match protocol {
-                            Protocol::Outline => {
+                            Protocol::Outline | Protocol::Shadowsocks => {
                                 if let (Some(api_secret), Some(management_port)) = 
                                     (&installation_result.server_config.api_secret, 
                                      &installation_result.server_config.management_port) {
                                     println!("  Management URL: https://{}:{}/{}/", 
                                         installation_result.server_config.host, management_port, api_secret);
-                                    println!("\nIMPORTANT: Save the management URL above to access the Outline Manager");
-                                    println!("You can use it to create and manage users through the web interface.");
+                                    println!("\n🔑 IMPORTANT: Save the management URL above to access the Outline Manager");
+                                    println!("   You can use it to create and manage users through the web interface.");
+                                    println!("   Note: Users for Outline are managed through the web interface, not CLI.");
                                 }
                             }
                             Protocol::Vless => {
@@ -436,6 +437,23 @@ impl CommandHandler {
                                 container.cpu_usage,
                                 display::format_bytes(container.memory_usage)
                             );
+                        }
+                        
+                        // Show Outline management URL if available
+                        if detailed && status.containers.iter().any(|c| c.name == "outline-shadowbox" && c.is_running) {
+                            let outline_path = std::path::Path::new("/opt/shadowsocks");
+                            let server_info_path = outline_path.join("server_info.json");
+                            
+                            if server_info_path.exists() {
+                                if let Ok(content) = std::fs::read_to_string(&server_info_path) {
+                                    if let Ok(info) = serde_json::from_str::<serde_json::Value>(&content) {
+                                        if let Some(management_url) = info.get("management_url").and_then(|v| v.as_str()) {
+                                            println!("\n🔑 Outline Management URL:");
+                                            println!("   {}", management_url);
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -627,6 +645,34 @@ impl CommandHandler {
         protocol: Protocol,
         password: Option<String>,
     ) -> Result<()> {
+        // Check if trying to create user for Outline/Shadowsocks
+        if matches!(protocol, Protocol::Outline | Protocol::Shadowsocks) {
+            println!("ℹ️  Outline/Shadowsocks users are managed through the web interface.");
+            
+            // Try to read saved server info to show management URL
+            let install_path = InstallationOptions::get_protocol_install_path(protocol.clone().into());
+            let server_info_path = install_path.join("server_info.json");
+            
+            if server_info_path.exists() {
+                if let Ok(content) = std::fs::read_to_string(&server_info_path) {
+                    if let Ok(info) = serde_json::from_str::<serde_json::Value>(&content) {
+                        if let Some(management_url) = info.get("management_url").and_then(|v| v.as_str()) {
+                            println!("\n🔑 Access the Outline Manager at:");
+                            println!("   {}", management_url);
+                            println!("\nUse this web interface to:");
+                            println!("   • Create and manage access keys");
+                            println!("   • Monitor server metrics");
+                            println!("   • Configure server settings");
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+            
+            println!("\n⚠️  Management URL not found. Check server installation.");
+            return Ok(());
+        }
+        
         let server_config = self.load_server_config()?;
         // Use the install path for the specific protocol, not the currently installed one
         let install_path = InstallationOptions::get_protocol_install_path(protocol.clone().into());
