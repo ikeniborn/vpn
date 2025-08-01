@@ -343,11 +343,36 @@ networks:
     }
 
     fn create_outline_directories(&self, install_path: &Path) -> Result<()> {
-        let directories = ["persisted-state", "management"];
+        let directories = [
+            "persisted-state",
+            "persisted-state/outline-ss-server", 
+            "persisted-state/prometheus",
+            "management"
+        ];
 
         for dir in &directories {
             let dir_path = install_path.join(dir);
             fs::create_dir_all(&dir_path)?;
+        }
+
+        // Create initial state file for Outline
+        let state_file = install_path.join("persisted-state/outline-ss-server/state.txt");
+        if !state_file.exists() {
+            fs::write(&state_file, "{}")?;
+        }
+
+        // Create prometheus config
+        let prometheus_config = install_path.join("persisted-state/prometheus/config.yml");
+        if !prometheus_config.exists() {
+            let config_content = r#"global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']"#;
+            fs::write(&prometheus_config, config_content)?;
         }
 
         Ok(())

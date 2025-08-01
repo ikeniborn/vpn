@@ -126,7 +126,7 @@ impl ServerLifecycle {
         // Send reload signal to containers
         let containers = [
             ("vless-xray", "xray"),
-            ("shadowsocks", "shadowsocks-server"),
+            ("outline-shadowbox", "outline-server"),
             ("wireguard", "wg"),
         ];
 
@@ -154,12 +154,12 @@ impl ServerLifecycle {
     pub async fn get_status(&self) -> Result<ServerStatus> {
         let containers = [
             "vless-xray",
-            "shadowsocks",
+            "outline-shadowbox",
             "wireguard",
             "vpn-squid-proxy",
             "vpn-proxy-auth",
             "vless-watchtower",
-            "shadowsocks-watchtower",
+            "outline-watchtower",
         ];
         let mut container_statuses = Vec::new();
         let mut running_count = 0;
