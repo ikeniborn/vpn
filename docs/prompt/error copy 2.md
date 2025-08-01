@@ -6,77 +6,25 @@ VPN Server Installation
 ## Service
 Shadowsocks
 # Request  
-При установке сервера отображает параметры для протокола vless. 
-VPN server installation completed successfully!
-✓ VPN server installed successfully!
-Server Details:
-  Host: 80.209.240.162
-  Port: 8388
-  SNI: www.google.com
-Initial User: vpnuser
-✓ Server installed successfully!
-Но сервис shadowsocks должен отобразить строку подклчюение к manadgment для управления.
-Пользователи не создаются через сервис.
-Проверить корректность устанвоки для протокола. 
-Изучить базовый код по ссылке https://github.com/EricQmore/outline-vpn-arm
+После установки сервера не отображжается в  VPN Server Status 
+И в основном окне показывает что установлен но не рабоатет.
+Првоерить логи и устарнить ошибки.
+
 ## Logs
-✔ Select an option · 📦 Install VPN Server - Install and configure a new VPN server
-VPN Server Installation
-=======================
+Server Management
+=================
 
-✔ Select VPN protocol · Shadowsocks
+✔ Select action · Show Status
+VPN Server Status
+================
+Status: 🟢 Running
+Health Score: 66.7%
 
-ℹ Selected protocol: Shadowsocks
-✔ Proceed with installation of this protocol? · yes
-✔ Use custom port? · no
-✔ Configure firewall rules? · yes
-✔ Enable auto-start on boot? · yes
+Containers:
+  🟢 vless-xray - CPU: 0.0%, Memory: 29.3 MB
+  🔴 vpn-squid-proxy - CPU: 0.0%, Memory: 0 B
+  🟢 vpn-proxy-auth - CPU: 0.1%, Memory: 23.5 MB
 
-Installation Summary:
-  Protocol: Shadowsocks
-  Firewall: Enabled
-  Auto-start: Enabled
-
-ℹ Starting installation...
-⠁ Installing VPN server...                                                                                                                                                       Starting VPN server installation...
-🧹 Checking for conflicting containers...
- INFO Checking for conflicting containers...
-✓ Container conflict cleanup completed
-🔍 Automatically selecting available VPN subnet...
-💾 Saving server configuration...
-✓ Detected server IP: 80.209.240.162
-✓ Server configuration saved to /opt/shadowsocks/server_info.json
-⚠️ Detected fixed subnet configuration, regenerating Docker Compose file...
-🧹 Checking for conflicting containers...
- INFO Checking for conflicting containers...
-✓ Container conflict cleanup completed
-🐳 Starting VPN containers...
-✓ Containers started, waiting for initialization...
-✓ Container deployment completed
-🔍 Verifying installation...
-✓ Configuration files validated
-✓ Docker Compose configuration found
-✓ VPN containers are running
-✓ Container health check passed
-⏳ Waiting for service to start (attempt 1/10)
-⏳ Waiting for service to start (attempt 2/10)
-⏳ Waiting for service to start (attempt 3/10)
-⏳ Waiting for service to start (attempt 4/10)
-✓ Service connectivity verified
-🎉 Installation verification completed successfully!
-VPN server installation completed successfully!
-✓ VPN server installed successfully!
-Server Details:
-  Host: 80.209.240.162
-  Port: 8388
-  SNI: www.google.com
-Initial User: vpnuser
-✓ Server installed successfully!
-
-ℹ Next steps:
-  1. Create users with 'User Management'
-  2. Check server status
-  3. View logs and monitoring
 ## Request task
 1. Проанализируй ошибки и хорошо подумай над их причинами.
    1. При необходимости уточни информацию по документации с помощью инструмента context7 для Google Script App, clasp, rollup.
