@@ -7,6 +7,9 @@ pub enum ServerError {
 
     #[error("Configuration validation failed: {0}")]
     ValidationError(String),
+    
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
 
     #[error("Server lifecycle operation failed: {0}")]
     LifecycleError(String),

@@ -125,7 +125,7 @@ networks:
         Ok(compose)
     }
 
-    fn create_outline_compose_content(
+    pub fn create_outline_compose_content(
         &self,
         server_config: &ServerConfig,
         options: &InstallationOptions,
@@ -137,6 +137,12 @@ networks:
             "no"
         };
 
+        // Get API secret and management port for Outline
+        let api_secret = server_config.api_secret.as_ref()
+            .ok_or_else(|| ServerError::ConfigError("API secret not generated for Outline".to_string()))?;
+        let management_port = server_config.management_port
+            .ok_or_else(|| ServerError::ConfigError("Management port not set for Outline".to_string()))?;
+
         let compose = format!(
             r#"services:
   outline-shadowbox:
@@ -147,13 +153,16 @@ networks:
     container_name: outline-shadowbox
     restart: {}
     ports:
-      - "{}:8080"
-      - "{}:443"
+      - "{}:{}"
+      - "{}:{}"
     volumes:
       - ./persisted-state:/opt/outline/persisted-state
       - ./management:/opt/outline/management
     environment:
       - LOG_LEVEL={}
+      - SB_API_PREFIX={}
+      - SB_PUBLIC_IP={}
+      - SB_METRICS_URL=
     labels:
       - "com.centurylinklabs.watchtower.scope=outline"
     networks:
@@ -183,9 +192,13 @@ networks:
     driver: bridge{subnet_config}
 "#,
             restart_policy,
-            server_config.port + 1000,
+            management_port,
+            management_port,  // Management API port
             server_config.port,
+            server_config.port,  // Shadowsocks port
             server_config.log_level.as_str(),
+            api_secret,
+            server_config.host,
             restart_policy,
             subnet_config = Self::format_subnet_config(subnet)
         );
@@ -599,6 +612,8 @@ mod tests {
             sni_domain: "www.google.com".to_string(),
             reality_dest: "www.google.com:443".to_string(),
             log_level: LogLevel::Warning,
+            api_secret: None,
+            management_port: None,
         };
         let options = InstallationOptions::default();
 
@@ -635,6 +650,8 @@ mod tests {
             sni_domain: "www.google.com".to_string(),
             reality_dest: "www.google.com:443".to_string(),
             log_level: LogLevel::Warning,
+            api_secret: None,
+            management_port: None,
         };
         let options = InstallationOptions::default();
 

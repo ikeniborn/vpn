@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use vpn_server::installer::LogLevel as ServerLogLevel;
 use vpn_server::{InstallationOptions, ServerInstaller, ServerLifecycle};
-use vpn_types::protocol::VpnProtocol;
 use vpn_users::manager::UserListOptions;
 use vpn_users::user::UserStatus;
 use vpn_users::{BatchOperations, UserManager};
@@ -206,25 +205,62 @@ impl CommandHandler {
 
                 match self.output_format {
                     OutputFormat::Json => {
-                        let json = serde_json::json!({
+                        let mut json = serde_json::json!({
                             "status": "success",
                             "server_config": {
                                 "host": installation_result.server_config.host,
                                 "port": installation_result.server_config.port,
-                                "sni": installation_result.server_config.sni_domain
                             },
                             "initial_user": {
                                 "id": installation_result.initial_user.id,
                                 "name": installation_result.initial_user.name
                             }
                         });
+                        
+                        // Add protocol-specific fields to JSON
+                        match protocol {
+                            Protocol::Outline => {
+                                if let (Some(api_secret), Some(management_port)) = 
+                                    (&installation_result.server_config.api_secret, 
+                                     &installation_result.server_config.management_port) {
+                                    json["server_config"]["management_url"] = 
+                                        serde_json::Value::String(format!("https://{}:{}/", 
+                                            installation_result.server_config.host, management_port));
+                                    json["server_config"]["api_secret"] = serde_json::Value::String(api_secret.clone());
+                                }
+                            }
+                            Protocol::Vless => {
+                                json["server_config"]["sni"] = 
+                                    serde_json::Value::String(installation_result.server_config.sni_domain.clone());
+                            }
+                            _ => {}
+                        }
+                        
                         println!("{}", serde_json::to_string_pretty(&json)?);
                     }
                     _ => {
                         println!("Server Details:");
                         println!("  Host: {}", installation_result.server_config.host);
                         println!("  Port: {}", installation_result.server_config.port);
-                        println!("  SNI: {}", installation_result.server_config.sni_domain);
+                        
+                        // Display protocol-specific details
+                        match protocol {
+                            Protocol::Outline => {
+                                if let (Some(_api_secret), Some(management_port)) = 
+                                    (&installation_result.server_config.api_secret, 
+                                     &installation_result.server_config.management_port) {
+                                    println!("  Management URL: https://{}:{}/", 
+                                        installation_result.server_config.host, management_port);
+                                    println!("\nIMPORTANT: Save the management URL above to access the Outline Manager");
+                                    println!("You can use it to create and manage users through the web interface.");
+                                }
+                            }
+                            Protocol::Vless => {
+                                println!("  SNI: {}", installation_result.server_config.sni_domain);
+                            }
+                            _ => {}
+                        }
+                        
                         println!("Initial User: {}", installation_result.initial_user.name);
                     }
                 }
@@ -629,7 +665,7 @@ impl CommandHandler {
                 // Display password for proxy users
                 if matches!(
                     user.protocol,
-                    VpnProtocol::HttpProxy | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer
+                    vpn_types::protocol::VpnProtocol::HttpProxy | vpn_types::protocol::VpnProtocol::Socks5Proxy | vpn_types::protocol::VpnProtocol::ProxyServer
                 ) {
                     if let Some(pwd) = temp_password {
                         println!("Password: {}", pwd);
@@ -755,12 +791,12 @@ impl CommandHandler {
                 // For proxy protocols, show formatted connection details
                 if matches!(
                     user_obj.protocol,
-                    VpnProtocol::HttpProxy | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer
+                    vpn_types::protocol::VpnProtocol::HttpProxy | vpn_types::protocol::VpnProtocol::Socks5Proxy | vpn_types::protocol::VpnProtocol::ProxyServer
                 ) {
                     println!("Username: {}", user_obj.name);
                     println!("Password: [hidden - use private key or set during creation]");
 
-                    if matches!(user_obj.protocol, VpnProtocol::ProxyServer) {
+                    if matches!(user_obj.protocol, vpn_types::protocol::VpnProtocol::ProxyServer) {
                         // Show both HTTP and SOCKS5 endpoints
                         println!("\nConnection URLs:");
                         let lines: Vec<&str> = link.split('\n').collect();

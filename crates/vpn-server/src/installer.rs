@@ -304,6 +304,21 @@ impl ServerInstaller {
             None => self.select_optimal_sni().await?,
         };
 
+        // Generate Outline-specific configuration
+        let (api_secret, management_port) = if matches!(options.protocol, VpnProtocol::Outline) {
+            // Generate secure API secret for Outline management
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            let mut secret_bytes = vec![0u8; 32];
+            rng.fill(&mut secret_bytes[..]);
+            use base64::Engine;
+            let api_secret = base64::engine::general_purpose::STANDARD.encode(&secret_bytes);
+            let management_port = port + 1000; // Management port is typically main port + 1000
+            (Some(api_secret), Some(management_port))
+        } else {
+            (None, None)
+        };
+
         Ok(ServerConfig {
             host: public_ip.to_string(),
             port,
@@ -316,6 +331,8 @@ impl ServerInstaller {
                 .clone()
                 .unwrap_or_else(|| "www.google.com:443".to_string()),
             log_level: options.log_level,
+            api_secret,
+            management_port,
         })
     }
 
@@ -559,16 +576,32 @@ impl ServerInstaller {
         // Get the actual server IP address
         let server_ip = self.get_server_ip().await?;
 
-        let server_info = json!({
+        let mut server_info = json!({
             "host": server_ip,
             "port": server_config.port,
-            "sni_domain": server_config.sni_domain,
-            "public_key": server_config.public_key,
-            "private_key": server_config.private_key,
-            "short_id": server_config.short_id,
             "protocol": options.protocol.as_str(),
             "created_at": chrono::Utc::now().to_rfc3339(),
         });
+
+        // Add protocol-specific fields
+        match options.protocol {
+            VpnProtocol::Outline => {
+                if let (Some(api_secret), Some(management_port)) = (&server_config.api_secret, &server_config.management_port) {
+                    server_info["api_secret"] = json!(api_secret);
+                    server_info["management_port"] = json!(management_port);
+                    server_info["management_url"] = json!(format!("https://{}:{}/", server_ip, management_port));
+                }
+            }
+            VpnProtocol::Vless => {
+                server_info["sni_domain"] = json!(server_config.sni_domain);
+                server_info["public_key"] = json!(server_config.public_key);
+                server_info["private_key"] = json!(server_config.private_key);
+                server_info["short_id"] = json!(server_config.short_id);
+            }
+            _ => {
+                // Other protocols may have their own specific fields
+            }
+        }
 
         let server_info_path = options.install_path.join("server_info.json");
         let server_info_content = serde_json::to_string_pretty(&server_info)?;
@@ -1217,6 +1250,9 @@ pub struct ServerConfig {
     pub sni_domain: String,
     pub reality_dest: String,
     pub log_level: LogLevel,
+    // Outline-specific fields
+    pub api_secret: Option<String>,
+    pub management_port: Option<u16>,
 }
 
 #[derive(Debug)]

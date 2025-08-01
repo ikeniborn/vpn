@@ -916,10 +916,11 @@ pub enum StatusFormat {
     Yaml,
 }
 
-#[derive(clap::ValueEnum, Clone, Debug)]
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
 pub enum Protocol {
     Vless,
     Shadowsocks,
+    Outline,
     Wireguard,
     HttpProxy,
     Socks5Proxy,
@@ -961,6 +962,7 @@ impl Protocol {
         match self {
             Protocol::Vless => "vless",
             Protocol::Shadowsocks => "shadowsocks",
+            Protocol::Outline => "outline",
             Protocol::Wireguard => "wireguard",
             Protocol::HttpProxy => "http_proxy",
             Protocol::Socks5Proxy => "socks5_proxy",
@@ -974,6 +976,7 @@ impl From<Protocol> for vpn_types::protocol::VpnProtocol {
         match protocol {
             Protocol::Vless => vpn_types::protocol::VpnProtocol::Vless,
             Protocol::Shadowsocks => vpn_types::protocol::VpnProtocol::Outline,
+            Protocol::Outline => vpn_types::protocol::VpnProtocol::Outline,
             Protocol::Wireguard => vpn_types::protocol::VpnProtocol::Wireguard,
             Protocol::HttpProxy => vpn_types::protocol::VpnProtocol::HttpProxy,
             Protocol::Socks5Proxy => vpn_types::protocol::VpnProtocol::Socks5Proxy,
