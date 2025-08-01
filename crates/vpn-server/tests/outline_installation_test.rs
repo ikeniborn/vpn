@@ -158,3 +158,17 @@ fn test_outline_docker_compose_generation_success() {
     assert!(compose_content.contains("SB_PUBLIC_IP=192.168.1.100"));
     assert!(compose_content.contains("restart: unless-stopped"));
 }
+
+#[test]
+fn test_outline_management_url_format() {
+    // Test that management URL includes the API secret in the path
+    let host = "192.168.1.100";
+    let management_port = 9388;
+    let api_secret = "secure-api-secret-123";
+    
+    let management_url = format!("https://{}:{}/{}/", host, management_port, api_secret);
+    
+    assert_eq!(management_url, "https://192.168.1.100:9388/secure-api-secret-123/");
+    assert!(management_url.contains(&api_secret));
+    assert!(management_url.ends_with(&format!("{}/", api_secret)));
+}

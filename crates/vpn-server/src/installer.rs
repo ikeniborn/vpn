@@ -589,7 +589,7 @@ impl ServerInstaller {
                 if let (Some(api_secret), Some(management_port)) = (&server_config.api_secret, &server_config.management_port) {
                     server_info["api_secret"] = json!(api_secret);
                     server_info["management_port"] = json!(management_port);
-                    server_info["management_url"] = json!(format!("https://{}:{}/", server_ip, management_port));
+                    server_info["management_url"] = json!(format!("https://{}:{}/{}/", server_ip, management_port, api_secret));
                 }
             }
             VpnProtocol::Vless => {
