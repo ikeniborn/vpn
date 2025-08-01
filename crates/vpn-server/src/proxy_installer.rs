@@ -119,7 +119,7 @@ impl ProxyInstaller {
             .arg("vpn-users-data")
             .output()
             .await?;
-        
+
         if !volume_output.status.success() {
             // Volume might already exist, which is okay
             let stderr = String::from_utf8_lossy(&volume_output.stderr);
@@ -133,9 +133,9 @@ impl ProxyInstaller {
         // Build images locally instead of pulling
         info!("  Building Docker images locally...");
         info!("  This may take several minutes on first run...");
-        
+
         let mut child = tokio::process::Command::new("docker-compose")
-            .arg("--progress=plain")  // Global flag must come first
+            .arg("--progress=plain") // Global flag must come first
             .arg("-f")
             .arg(&compose_path)
             .arg("build")
@@ -148,12 +148,14 @@ impl ProxyInstaller {
             use tokio::io::{AsyncBufReadExt, BufReader};
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
-            
+
             while let Ok(Some(line)) = lines.next_line().await {
                 let line = line.trim();
                 if line.contains("Step") || line.contains("RUN") || line.contains("Building") {
                     info!("    {}", line);
-                } else if line.contains("Successfully built") || line.contains("Successfully tagged") {
+                } else if line.contains("Successfully built")
+                    || line.contains("Successfully tagged")
+                {
                     info!("    ✓ {}", line);
                 }
             }
@@ -181,8 +183,8 @@ impl ProxyInstaller {
             .arg(&compose_path)
             .arg("up")
             .arg("-d")
-            .arg("--no-deps")  // Don't start linked services
-            .arg("--build")     // Build images before starting
+            .arg("--no-deps") // Don't start linked services
+            .arg("--build") // Build images before starting
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()?;
@@ -192,7 +194,7 @@ impl ProxyInstaller {
             use tokio::io::{AsyncBufReadExt, BufReader};
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
-            
+
             while let Ok(Some(line)) = lines.next_line().await {
                 if line.contains("Creating") {
                     info!("    {}", line.trim());
@@ -236,38 +238,36 @@ impl ProxyInstaller {
             info!("  [{}/{}] Checking {}...", idx + 1, services.len(), service);
             let mut attempts = 0;
             let mut last_status = String::new();
-            
+
             loop {
                 match self.container_manager.get_container_status(service).await {
-                    Ok(status) => {
-                        match status {
-                            ContainerStatus::Running => {
-                                info!("  ✓ {} is running and healthy", service);
-                                break;
-                            }
-                            ContainerStatus::Created => {
-                                if last_status != "created" {
-                                    info!("    {} is starting up...", service);
-                                    last_status = "created".to_string();
-                                }
-                            }
-                            ContainerStatus::Restarting => {
-                                if last_status != "restarting" {
-                                    info!("    {} is restarting...", service);
-                                    last_status = "restarting".to_string();
-                                }
-                            }
-                            ContainerStatus::Stopped => {
-                                if last_status != "stopped" {
-                                    info!("    {} is stopped, waiting for startup...", service);
-                                    last_status = "stopped".to_string();
-                                }
-                            }
-                            _ => {
-                                debug!("Service {} status: {:?}", service, status);
+                    Ok(status) => match status {
+                        ContainerStatus::Running => {
+                            info!("  ✓ {} is running and healthy", service);
+                            break;
+                        }
+                        ContainerStatus::Created => {
+                            if last_status != "created" {
+                                info!("    {} is starting up...", service);
+                                last_status = "created".to_string();
                             }
                         }
-                    }
+                        ContainerStatus::Restarting => {
+                            if last_status != "restarting" {
+                                info!("    {} is restarting...", service);
+                                last_status = "restarting".to_string();
+                            }
+                        }
+                        ContainerStatus::Stopped => {
+                            if last_status != "stopped" {
+                                info!("    {} is stopped, waiting for startup...", service);
+                                last_status = "stopped".to_string();
+                            }
+                        }
+                        _ => {
+                            debug!("Service {} status: {:?}", service, status);
+                        }
+                    },
                     Err(e) => {
                         if attempts == 0 {
                             info!("    Waiting for {} to initialize...", service);

@@ -131,7 +131,11 @@ impl ServerLifecycle {
         ];
 
         for (container_name, process_name) in &containers {
-            if self.container_manager.container_exists(container_name).await {
+            if self
+                .container_manager
+                .container_exists(container_name)
+                .await
+            {
                 // Send SIGHUP to reload configuration
                 match self
                     .container_manager
@@ -148,7 +152,15 @@ impl ServerLifecycle {
     }
 
     pub async fn get_status(&self) -> Result<ServerStatus> {
-        let containers = ["vless-xray", "shadowsocks", "wireguard", "vpn-squid-proxy", "vpn-proxy-auth", "vless-watchtower", "shadowsocks-watchtower"];
+        let containers = [
+            "vless-xray",
+            "shadowsocks",
+            "wireguard",
+            "vpn-squid-proxy",
+            "vpn-proxy-auth",
+            "vless-watchtower",
+            "shadowsocks-watchtower",
+        ];
         let mut container_statuses = Vec::new();
         let mut running_count = 0;
         let mut total_health = 0.0;

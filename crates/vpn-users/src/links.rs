@@ -152,40 +152,43 @@ impl ConnectionLinkGenerator {
 
     fn generate_http_proxy_link(user: &User, server_config: &ServerConfig) -> Result<String> {
         // Use password_hash if available, otherwise fallback to private_key
-        let password = user.config.password_hash.as_deref()
+        let password = user
+            .config
+            .password_hash
+            .as_deref()
             .or(user.config.private_key.as_deref())
             .unwrap_or(&user.id);
-        
+
         Ok(format!(
             "http://{}:{}@{}:{}",
-            user.name,
-            password,
-            server_config.host,
-            server_config.port
+            user.name, password, server_config.host, server_config.port
         ))
     }
 
     fn generate_socks5_link(user: &User, server_config: &ServerConfig) -> Result<String> {
         // Use password_hash if available, otherwise fallback to private_key
-        let password = user.config.password_hash.as_deref()
+        let password = user
+            .config
+            .password_hash
+            .as_deref()
             .or(user.config.private_key.as_deref())
             .unwrap_or(&user.id);
-        
+
         Ok(format!(
             "socks5://{}:{}@{}:{}",
-            user.name,
-            password,
-            server_config.host,
-            server_config.port
+            user.name, password, server_config.host, server_config.port
         ))
     }
 
     fn generate_proxy_server_link(user: &User, server_config: &ServerConfig) -> Result<String> {
         // Use password_hash if available, otherwise fallback to private_key
-        let password = user.config.password_hash.as_deref()
+        let password = user
+            .config
+            .password_hash
+            .as_deref()
             .or(user.config.private_key.as_deref())
             .unwrap_or(&user.id);
-        
+
         // Return both HTTP and SOCKS5 endpoints
         Ok(format!(
             "HTTP: http://{}:{}@{}:{}\nSOCKS5: socks5://{}:{}@{}:{}",

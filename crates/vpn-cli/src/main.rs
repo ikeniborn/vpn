@@ -18,7 +18,7 @@ fn detect_installation_path(fallback_path: &PathBuf) -> PathBuf {
     // Protocol-specific paths to check
     let protocol_paths = [
         "/opt/vless",
-        "/opt/proxy", 
+        "/opt/proxy",
         "/opt/shadowsocks",
         "/opt/wireguard",
     ];
@@ -104,8 +104,7 @@ async fn main() {
     let install_path = detect_installation_path(&cli.install_path);
 
     // Initialize command handler
-    let command_handler = match CommandHandler::new(config_manager, install_path).await
-    {
+    let command_handler = match CommandHandler::new(config_manager, install_path).await {
         Ok(handler) => handler,
         Err(e) => {
             eprintln!("{} {}", "Error:".red(), e);
@@ -199,7 +198,12 @@ async fn start_interactive_menu(handler: CommandHandler) -> Result<(), CliError>
         println!("{}", "VPN Server Management".cyan().bold());
         println!("{}", "====================".cyan());
         println!();
-        println!("{}", "⚠️  Running without administrator privileges".yellow().bold());
+        println!(
+            "{}",
+            "⚠️  Running without administrator privileges"
+                .yellow()
+                .bold()
+        );
         println!();
         println!("Some operations require administrator privileges to function properly.");
         println!("You can:");
@@ -209,11 +213,7 @@ async fn start_interactive_menu(handler: CommandHandler) -> Result<(), CliError>
         println!();
 
         // Use dialoguer for selection
-        let options = vec![
-            "Restart with sudo",
-            "Continue without sudo",
-            "Exit"
-        ];
+        let options = vec!["Restart with sudo", "Continue without sudo", "Exit"];
 
         let selection = dialoguer::Select::with_theme(&dialoguer::theme::ColorfulTheme::default())
             .with_prompt("Choose an option")
@@ -231,10 +231,11 @@ async fn start_interactive_menu(handler: CommandHandler) -> Result<(), CliError>
                 for arg in &args {
                     cmd.arg(arg);
                 }
-                
-                let status = cmd.status()
-                    .map_err(|e| CliError::CommandError(format!("Failed to restart with sudo: {}", e)))?;
-                
+
+                let status = cmd.status().map_err(|e| {
+                    CliError::CommandError(format!("Failed to restart with sudo: {}", e))
+                })?;
+
                 if status.success() {
                     // Exit current process since sudo version is running
                     std::process::exit(0);
@@ -255,7 +256,7 @@ async fn start_interactive_menu(handler: CommandHandler) -> Result<(), CliError>
                 println!("Exiting...");
                 std::process::exit(0);
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     } else {
         println!("{}", "Welcome to VPN Server Management".cyan().bold());

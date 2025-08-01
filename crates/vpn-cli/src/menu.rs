@@ -7,9 +7,9 @@ use crossterm::{
 use dialoguer::{theme::ColorfulTheme, Confirm, FuzzySelect, Input, Select};
 use std::io;
 
+use crate::cli::Protocol;
 use crate::utils::display;
 use crate::{CommandHandler, Result};
-use crate::cli::Protocol;
 
 pub struct InteractiveMenu {
     handler: CommandHandler,
@@ -74,11 +74,7 @@ impl InteractiveMenu {
     }
 
     fn clear_screen(&self) -> Result<()> {
-        execute!(
-            io::stdout(),
-            Clear(ClearType::All),
-            MoveTo(0, 0)
-        )?;
+        execute!(io::stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
         Ok(())
     }
 
@@ -97,23 +93,33 @@ impl InteractiveMenu {
         // Show privilege status if not running as root
         if !crate::PrivilegeManager::is_root() {
             println!();
-            println!("{}", style("⚠️  Running without administrator privileges").yellow());
+            println!(
+                "{}",
+                style("⚠️  Running without administrator privileges").yellow()
+            );
             println!("{}", style("   Some menu options will be disabled").dim());
-            println!("{}", style("   Run with 'sudo vpn menu' for full access").dim());
+            println!(
+                "{}",
+                style("   Run with 'sudo vpn menu' for full access").dim()
+            );
         }
 
         // Show server status for all protocols
         println!();
         println!("Server Status:");
-        
+
         // Check each protocol's status
         let protocols = [
             ("VLESS+Reality", "/opt/vless", vec!["vless-xray"]),
             ("Shadowsocks", "/opt/shadowsocks", vec!["shadowsocks"]),
             ("WireGuard", "/opt/wireguard", vec!["wireguard"]),
-            ("HTTP/SOCKS5 Proxy", "/opt/proxy", vec!["vpn-squid-proxy", "vpn-proxy-auth"]),
+            (
+                "HTTP/SOCKS5 Proxy",
+                "/opt/proxy",
+                vec!["vpn-squid-proxy", "vpn-proxy-auth"],
+            ),
         ];
-        
+
         for (proto_name, proto_path, container_names) in &protocols {
             let path = std::path::Path::new(proto_path);
             if path.join("docker-compose.yml").exists() {
@@ -121,7 +127,13 @@ impl InteractiveMenu {
                 let mut is_running = false;
                 for container_name in container_names {
                     if let Ok(output) = std::process::Command::new("docker")
-                        .args(&["ps", "--filter", &format!("name={}", container_name), "--format", "{{.Status}}"])
+                        .args(&[
+                            "ps",
+                            "--filter",
+                            &format!("name={}", container_name),
+                            "--format",
+                            "{{.Status}}",
+                        ])
                         .output()
                     {
                         let output_str = String::from_utf8_lossy(&output.stdout);
@@ -131,7 +143,7 @@ impl InteractiveMenu {
                         }
                     }
                 }
-                
+
                 let status_icon = if is_running {
                     style("●").green()
                 } else {
@@ -139,7 +151,11 @@ impl InteractiveMenu {
                 };
                 println!("  {} {} (installed)", status_icon, proto_name);
             } else {
-                println!("  {} {} (not installed)", style("○").dim(), style(proto_name).dim());
+                println!(
+                    "  {} {} (not installed)",
+                    style("○").dim(),
+                    style(proto_name).dim()
+                );
             }
         }
 
@@ -149,7 +165,7 @@ impl InteractiveMenu {
 
     async fn show_and_handle_main_menu(&self) -> Result<Option<MenuAction>> {
         let is_root = crate::PrivilegeManager::is_root();
-        
+
         let options = vec![
             MenuOption {
                 title: "📦 Install VPN Server".to_string(),
@@ -218,8 +234,9 @@ impl InteractiveMenu {
             .iter()
             .map(|opt| {
                 if opt.requires_sudo && !is_root {
-                    format!("{} - {} {}", 
-                        style(&opt.title).dim(), 
+                    format!(
+                        "{} - {} {}",
+                        style(&opt.title).dim(),
                         style(&opt.description).dim(),
                         style("[REQUIRES SUDO]").red().dim()
                     )
@@ -272,7 +289,7 @@ impl InteractiveMenu {
             "Shadowsocks",
             "WireGuard",
             "HTTP/SOCKS5 Proxy",
-            "← Back to main menu"
+            "← Back to main menu",
         ];
         let protocol_selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("Select VPN protocol")
@@ -296,7 +313,7 @@ impl InteractiveMenu {
         // Confirm installation of selected protocol
         println!();
         display::info(&format!("Selected protocol: {:?}", protocol));
-        
+
         // Check if this specific protocol is already installed
         let vpn_protocol = match protocol {
             crate::cli::Protocol::Vless => vpn_types::protocol::VpnProtocol::Vless,
@@ -326,25 +343,30 @@ impl InteractiveMenu {
                 crate::cli::Protocol::ProxyServer => "/opt/proxy",
                 _ => "/opt/proxy",
             };
-            
+
             if std::path::Path::new(protocol_path).exists() {
-                display::warning(&format!("Found old installation artifacts in {}", protocol_path));
+                display::warning(&format!(
+                    "Found old installation artifacts in {}",
+                    protocol_path
+                ));
                 display::info("These may be from a previous installation or different version.");
-                
+
                 let cleanup = Confirm::with_theme(&ColorfulTheme::default())
                     .with_prompt("Clean up old artifacts before installation?")
                     .default(true)
                     .interact()?;
-                
+
                 if cleanup {
                     display::info("Cleaning up old artifacts...");
                     // The uninstall process will handle cleanup
-                    self.handler.uninstall_server_with_path(std::path::Path::new(protocol_path), true).await?;
+                    self.handler
+                        .uninstall_server_with_path(std::path::Path::new(protocol_path), true)
+                        .await?;
                     display::success("Old artifacts cleaned up successfully!");
                 }
             }
         }
-        
+
         let confirm_protocol = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt("Proceed with installation of this protocol?")
             .default(true)
@@ -608,7 +630,13 @@ impl InteractiveMenu {
             }
         };
 
-        let protocols = vec!["VLESS+Reality", "Shadowsocks", "WireGuard", "HTTP/SOCKS5 Proxy", "← Cancel"];
+        let protocols = vec![
+            "VLESS+Reality",
+            "Shadowsocks",
+            "WireGuard",
+            "HTTP/SOCKS5 Proxy",
+            "← Cancel",
+        ];
         let protocol_selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("Select protocol")
             .items(&protocols)
@@ -669,25 +697,32 @@ impl InteractiveMenu {
 
         self.check_admin_privileges("User creation")?;
         display::info("Creating user...");
-        
+
         // Store username and protocol for later display
         let username = name.clone();
         let user_protocol = protocol.clone();
-        
-        self.handler.create_user_with_password(name, email, protocol, password).await?;
+
+        self.handler
+            .create_user_with_password(name, email, protocol, password)
+            .await?;
         display::success("User created successfully!");
-        
+
         // Show connection details for proxy users
-        if matches!(user_protocol, crate::cli::Protocol::ProxyServer | crate::cli::Protocol::HttpProxy | crate::cli::Protocol::Socks5Proxy) {
+        if matches!(
+            user_protocol,
+            crate::cli::Protocol::ProxyServer
+                | crate::cli::Protocol::HttpProxy
+                | crate::cli::Protocol::Socks5Proxy
+        ) {
             println!("\n📋 Connection Details:");
             println!("====================");
-            
+
             // Show user details
             let show_qr = Confirm::with_theme(&ColorfulTheme::default())
                 .with_prompt("Show full connection details?")
                 .default(true)
                 .interact()?;
-                
+
             if show_qr {
                 self.handler.show_user_details(username, false).await?;
             }
@@ -704,13 +739,19 @@ impl InteractiveMenu {
             return Ok(());
         }
 
-        let user_names: Vec<String> = users.iter().map(|u| u.name.clone()).collect();
+        let mut user_names: Vec<String> = vec!["← Back to User Management".to_string()];
+        user_names.extend(users.iter().map(|u| u.name.clone()));
 
         let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
             .with_prompt("Select user")
             .items(&user_names)
             .default(0)
             .interact()?;
+
+        // Check if "Back" was selected
+        if selection == 0 {
+            return Ok(());
+        }
 
         let user_name = &user_names[selection];
 
@@ -734,10 +775,8 @@ impl InteractiveMenu {
         }
 
         // Create display strings with protocol information
-        let user_display: Vec<String> = users
-            .iter()
-            .map(|u| format!("{} ({})", u.name, u.protocol))
-            .collect();
+        let mut user_display: Vec<String> = vec!["← Back to User Management".to_string()];
+        user_display.extend(users.iter().map(|u| format!("{} ({})", u.name, u.protocol)));
 
         let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
             .with_prompt("Select user to delete")
@@ -745,7 +784,12 @@ impl InteractiveMenu {
             .default(0)
             .interact()?;
 
-        let selected_user = &users[selection];
+        // Check if "Back" was selected
+        if selection == 0 {
+            return Ok(());
+        }
+
+        let selected_user = &users[selection - 1];
 
         let confirm = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt(&format!(
@@ -773,10 +817,8 @@ impl InteractiveMenu {
         }
 
         // Create display strings with protocol information
-        let user_display: Vec<String> = users
-            .iter()
-            .map(|u| format!("{} ({})", u.name, u.protocol))
-            .collect();
+        let mut user_display: Vec<String> = vec!["← Back to User Management".to_string()];
+        user_display.extend(users.iter().map(|u| format!("{} ({})", u.name, u.protocol)));
 
         let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
             .with_prompt("Select user")
@@ -784,7 +826,12 @@ impl InteractiveMenu {
             .default(0)
             .interact()?;
 
-        let selected_user = &users[selection];
+        // Check if "Back" was selected
+        if selection == 0 {
+            return Ok(());
+        }
+
+        let selected_user = &users[selection - 1];
 
         let show_qr = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt("Display QR code in terminal?")
@@ -821,10 +868,8 @@ impl InteractiveMenu {
         }
 
         // Create display strings with protocol information
-        let user_display: Vec<String> = users
-            .iter()
-            .map(|u| format!("{} ({})", u.name, u.protocol))
-            .collect();
+        let mut user_display: Vec<String> = vec!["← Back to User Management".to_string()];
+        user_display.extend(users.iter().map(|u| format!("{} ({})", u.name, u.protocol)));
 
         let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
             .with_prompt("Select user")
@@ -832,7 +877,12 @@ impl InteractiveMenu {
             .default(0)
             .interact()?;
 
-        let selected_user = &users[selection];
+        // Check if "Back" was selected
+        if selection == 0 {
+            return Ok(());
+        }
+
+        let selected_user = &users[selection - 1];
 
         let confirm = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt(&format!(
@@ -843,7 +893,9 @@ impl InteractiveMenu {
             .interact()?;
 
         if confirm {
-            self.handler.reset_user_traffic(selected_user.id.clone()).await?;
+            self.handler
+                .reset_user_traffic(selected_user.id.clone())
+                .await?;
             display::success("Traffic statistics reset successfully!");
         }
 
@@ -968,7 +1020,7 @@ impl InteractiveMenu {
 
     async fn logs_menu(&mut self) -> Result<()> {
         self.show_submenu_header("Log Management")?;
-        
+
         let actions = vec![
             "Show Recent Logs",
             "Follow Logs (Live)",
@@ -1279,7 +1331,7 @@ impl InteractiveMenu {
 
         // Check installed protocols
         let mut installed_protocols: Vec<Protocol> = Vec::new();
-        
+
         // Check each protocol's installation directory
         let protocols = [
             (Protocol::Vless, "/opt/vless"),
@@ -1287,7 +1339,7 @@ impl InteractiveMenu {
             (Protocol::Wireguard, "/opt/wireguard"),
             (Protocol::ProxyServer, "/opt/proxy"),
         ];
-        
+
         for (protocol, path) in protocols {
             if std::path::Path::new(path).exists() {
                 installed_protocols.push(protocol);
@@ -1317,8 +1369,10 @@ impl InteractiveMenu {
             installed_protocols[0].clone()
         };
 
-
-        display::warning(&format!("⚠️  This will completely remove the {} VPN server!", protocol_to_uninstall.as_str()));
+        display::warning(&format!(
+            "⚠️  This will completely remove the {} VPN server!",
+            protocol_to_uninstall.as_str()
+        ));
         display::warning("   • All containers will be stopped and removed");
         display::warning("   • Firewall rules will be cleaned up");
         display::warning("   • Configuration files will be deleted");
@@ -1349,7 +1403,11 @@ impl InteractiveMenu {
 
             // Create path for the selected protocol
             let protocol_path = format!("/opt/{}", protocol_to_uninstall.as_str().to_lowercase());
-            match self.handler.uninstall_server_with_path(&std::path::PathBuf::from(protocol_path), purge).await {
+            match self
+                .handler
+                .uninstall_server_with_path(&std::path::PathBuf::from(protocol_path), purge)
+                .await
+            {
                 Ok(_) => {
                     display::success("Server uninstalled successfully!");
                     println!();

@@ -152,7 +152,7 @@ impl ServerInstaller {
 
         // Clean up any conflicting containers before deployment
         self.cleanup_conflicting_containers().await?;
-        
+
         // Download and start containers
         self.deploy_containers(&options).await?;
 
@@ -247,11 +247,11 @@ impl ServerInstaller {
 
         // List of container names that might conflict
         let conflicting_containers = [
-            "xray",           // Old VLESS container name
-            "watchtower",     // Generic watchtower name
-            "shadowbox",      // Old Outline container name
-            "wireguard",      // Old WireGuard container name
-            "traefik-proxy",  // Old proxy container name
+            "xray",          // Old VLESS container name
+            "watchtower",    // Generic watchtower name
+            "shadowbox",     // Old Outline container name
+            "wireguard",     // Old WireGuard container name
+            "traefik-proxy", // Old proxy container name
         ];
 
         // Use DockerUtils for centralized container conflict handling
@@ -377,7 +377,12 @@ impl ServerInstaller {
             }
             VpnProtocol::Wireguard => {
                 template
-                    .generate_wireguard_compose(&options.install_path, server_config, options, subnet)
+                    .generate_wireguard_compose(
+                        &options.install_path,
+                        server_config,
+                        options,
+                        subnet,
+                    )
                     .await?;
             }
             VpnProtocol::HttpProxy | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer => {
@@ -542,14 +547,18 @@ impl ServerInstaller {
             .map_err(|e| ServerError::NetworkError(format!("No available subnets found: {}", e)))
     }
 
-    async fn save_server_info(&self, options: &InstallationOptions, server_config: &ServerConfig) -> Result<()> {
+    async fn save_server_info(
+        &self,
+        options: &InstallationOptions,
+        server_config: &ServerConfig,
+    ) -> Result<()> {
         use serde_json::json;
-        
+
         println!("💾 Saving server configuration...");
-        
+
         // Get the actual server IP address
         let server_ip = self.get_server_ip().await?;
-        
+
         let server_info = json!({
             "host": server_ip,
             "port": server_config.port,
@@ -560,13 +569,16 @@ impl ServerInstaller {
             "protocol": options.protocol.as_str(),
             "created_at": chrono::Utc::now().to_rfc3339(),
         });
-        
+
         let server_info_path = options.install_path.join("server_info.json");
         let server_info_content = serde_json::to_string_pretty(&server_info)?;
-        
+
         std::fs::write(&server_info_path, server_info_content)?;
-        println!("✓ Server configuration saved to {}", server_info_path.display());
-        
+        println!(
+            "✓ Server configuration saved to {}",
+            server_info_path.display()
+        );
+
         Ok(())
     }
 
@@ -575,11 +587,17 @@ impl ServerInstaller {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(5))
             .build()
-            .map_err(|e| ServerError::NetworkError(format!("Failed to create HTTP client: {}", e)))?;
-        
+            .map_err(|e| {
+                ServerError::NetworkError(format!("Failed to create HTTP client: {}", e))
+            })?;
+
         // Try multiple services for redundancy
-        let services = ["https://ifconfig.me", "https://icanhazip.com", "https://api.ipify.org"];
-        
+        let services = [
+            "https://ifconfig.me",
+            "https://icanhazip.com",
+            "https://api.ipify.org",
+        ];
+
         for service in &services {
             match client.get(*service).send().await {
                 Ok(response) => {
@@ -595,7 +613,7 @@ impl ServerInstaller {
                 Err(_) => continue,
             }
         }
-        
+
         // Fallback to getting local IP
         println!("⚠️ Could not determine public IP, using local IP instead");
         Ok("0.0.0.0".to_string())
@@ -714,7 +732,8 @@ impl ServerInstaller {
         println!("✓ Container health check passed");
 
         // 5. Test basic connectivity with actual server port
-        self.verify_service_connectivity(server_config.port, &options.protocol).await?;
+        self.verify_service_connectivity(server_config.port, &options.protocol)
+            .await?;
         println!("✓ Service connectivity verified");
 
         println!("🎉 Installation verification completed successfully!");
@@ -823,7 +842,8 @@ impl ServerInstaller {
 
         // Try to connect with retries
         for attempt in 1..=max_retries {
-            match tokio::time::timeout(Duration::from_secs(5), TcpStream::connect(&connect_addr)).await
+            match tokio::time::timeout(Duration::from_secs(5), TcpStream::connect(&connect_addr))
+                .await
             {
                 Ok(Ok(_)) => {
                     // Successfully connected - service is running
@@ -832,7 +852,10 @@ impl ServerInstaller {
                 Ok(Err(e)) => {
                     if attempt < max_retries {
                         // Connection failed, but we'll retry
-                        println!("⏳ Waiting for service to start (attempt {}/{})", attempt, max_retries);
+                        println!(
+                            "⏳ Waiting for service to start (attempt {}/{})",
+                            attempt, max_retries
+                        );
                         tokio::time::sleep(retry_delay).await;
                         continue;
                     } else {
@@ -846,7 +869,10 @@ impl ServerInstaller {
                 Err(_) => {
                     if attempt < max_retries {
                         // Timeout, but we'll retry
-                        println!("⏳ Service not responding yet (attempt {}/{})", attempt, max_retries);
+                        println!(
+                            "⏳ Service not responding yet (attempt {}/{})",
+                            attempt, max_retries
+                        );
                         tokio::time::sleep(retry_delay).await;
                         continue;
                     } else {
@@ -862,7 +888,7 @@ impl ServerInstaller {
 
         // This should not be reached
         Err(ServerError::InstallationError(
-            "Service connectivity verification failed".to_string()
+            "Service connectivity verification failed".to_string(),
         ))
     }
 
@@ -1003,7 +1029,6 @@ impl ServerInstaller {
         }
         false
     }
-
 
     async fn cleanup_firewall_rules(&self, install_path: &Path) -> Result<()> {
         println!("🔥 Cleaning up firewall rules...");

@@ -1,15 +1,15 @@
 //! VPN Identity Service Binary - Simplified Version
-//! 
+//!
 //! This is a simplified implementation for the VPN identity service.
 
 fn main() {
     println!("VPN Identity Service v0.1.0");
     println!("Authentication and Authorization Service for VPN");
     println!();
-    
+
     // Check command line arguments
     let args: Vec<String> = std::env::args().collect();
-    
+
     if args.len() > 1 {
         match args[1].as_str() {
             "--version" | "-v" => show_version(),
@@ -28,8 +28,14 @@ fn main() {
 
 fn show_version() {
     println!("vpn-identity v0.1.0");
-    println!("Build date: {}", option_env!("BUILD_DATE").unwrap_or("unknown"));
-    println!("Git commit: {}", option_env!("GIT_HASH").unwrap_or("unknown"));
+    println!(
+        "Build date: {}",
+        option_env!("BUILD_DATE").unwrap_or("unknown")
+    );
+    println!(
+        "Git commit: {}",
+        option_env!("GIT_HASH").unwrap_or("unknown")
+    );
 }
 
 fn show_help() {
@@ -45,7 +51,7 @@ fn show_help() {
     println!("    --help      Show this help message");
     println!();
     println!("FEATURES:");
-    println!("  • User authentication and authorization");  
+    println!("  • User authentication and authorization");
     println!("  • LDAP and OAuth2/OIDC integration");
     println!("  • Role-based access control (RBAC)");
     println!("  • Session management");
@@ -75,7 +81,7 @@ fn show_config_help() {
     println!("Required Environment Variables:");
     println!("  DATABASE_URL     - PostgreSQL connection string");
     println!("                     Example: postgres://user:pass@localhost/vpn_identity");
-    println!("  REDIS_URL        - Redis connection string");  
+    println!("  REDIS_URL        - Redis connection string");
     println!("                     Example: redis://localhost:6379");
     println!("  JWT_SECRET       - Secret key for JWT token signing");
     println!("                     Example: your-256-bit-secret");

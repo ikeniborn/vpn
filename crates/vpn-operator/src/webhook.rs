@@ -39,9 +39,7 @@ pub fn mutate_vpn_server(req: AdmissionRequest<VpnServer>) -> AdmissionResponse 
 fn validate_spec(spec: &VpnServerSpec) -> Result<()> {
     // Validate port range
     if spec.port < 1024 {
-        return Err(OperatorError::validation(
-            "Port must be 1024 or higher",
-        ));
+        return Err(OperatorError::validation("Port must be 1024 or higher"));
     }
 
     // Validate replicas

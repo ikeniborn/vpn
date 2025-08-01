@@ -17,7 +17,9 @@ impl DockerUtils {
             .arg("--format")
             .arg("{{.ID}}")
             .output()
-            .map_err(|e| ServerError::InstallationError(format!("Failed to check container: {}", e)))?;
+            .map_err(|e| {
+                ServerError::InstallationError(format!("Failed to check container: {}", e))
+            })?;
 
         if output.status.success() {
             let container_ids = String::from_utf8_lossy(&output.stdout);
@@ -30,12 +32,9 @@ impl DockerUtils {
     /// Remove a container by name, forcefully if needed
     pub fn remove_container(name: &str) -> Result<bool> {
         debug!("Attempting to remove container: {}", name);
-        
+
         // First try to stop the container
-        let _ = Command::new("docker")
-            .arg("stop")
-            .arg(name)
-            .output();
+        let _ = Command::new("docker").arg("stop").arg(name).output();
 
         // Then force remove it
         let output = Command::new("docker")
@@ -43,7 +42,9 @@ impl DockerUtils {
             .arg("-f")
             .arg(name)
             .output()
-            .map_err(|e| ServerError::InstallationError(format!("Failed to remove container: {}", e)))?;
+            .map_err(|e| {
+                ServerError::InstallationError(format!("Failed to remove container: {}", e))
+            })?;
 
         if output.status.success() {
             info!("Successfully removed container: {}", name);
@@ -63,7 +64,7 @@ impl DockerUtils {
     /// Remove multiple containers that might conflict
     pub fn cleanup_conflicting_containers(container_names: &[&str]) -> Result<()> {
         info!("Checking for conflicting containers...");
-        
+
         let mut removed_count = 0;
         for container_name in container_names {
             if Self::container_exists(container_name)? {
@@ -72,13 +73,13 @@ impl DockerUtils {
                 }
             }
         }
-        
+
         if removed_count > 0 {
             info!("Cleaned up {} conflicting container(s)", removed_count);
         } else {
             debug!("No conflicting containers found");
         }
-        
+
         Ok(())
     }
 
@@ -86,8 +87,8 @@ impl DockerUtils {
     pub fn extract_container_name_from_error(error_msg: &str) -> Option<String> {
         // Error format: 'The container name "/watchtower" is already in use by container...'
         if let Some(start) = error_msg.find("/") {
-            if let Some(end) = error_msg[start+1..].find("\"") {
-                return Some(error_msg[start+1..start+1+end].to_string());
+            if let Some(end) = error_msg[start + 1..].find("\"") {
+                return Some(error_msg[start + 1..start + 1 + end].to_string());
             }
         }
         None
@@ -98,14 +99,17 @@ impl DockerUtils {
         error_msg: &str,
         compose_path: &std::path::Path,
     ) -> Result<bool> {
-        if error_msg.contains("Conflict") && error_msg.contains("container name") && error_msg.contains("already in use") {
+        if error_msg.contains("Conflict")
+            && error_msg.contains("container name")
+            && error_msg.contains("already in use")
+        {
             if let Some(container_name) = Self::extract_container_name_from_error(error_msg) {
                 warn!("Container name conflict detected: {}", container_name);
                 info!("Attempting to resolve conflict...");
-                
+
                 if Self::remove_container(&container_name)? {
                     info!("Retrying deployment...");
-                    
+
                     // Retry the deployment
                     let output = Command::new("docker-compose")
                         .arg("-f")
@@ -115,8 +119,13 @@ impl DockerUtils {
                         .arg("--remove-orphans")
                         .current_dir(compose_path.parent().unwrap_or(std::path::Path::new(".")))
                         .output()
-                        .map_err(|e| ServerError::InstallationError(format!("Failed to retry deployment: {}", e)))?;
-                    
+                        .map_err(|e| {
+                            ServerError::InstallationError(format!(
+                                "Failed to retry deployment: {}",
+                                e
+                            ))
+                        })?;
+
                     if output.status.success() {
                         info!("Container deployment succeeded on retry");
                         return Ok(true);
@@ -136,13 +145,15 @@ impl DockerUtils {
     /// Clean up unused Docker networks
     pub fn prune_networks() -> Result<()> {
         debug!("Pruning unused Docker networks...");
-        
+
         let output = Command::new("docker")
             .arg("network")
             .arg("prune")
             .arg("-f")
             .output()
-            .map_err(|e| ServerError::InstallationError(format!("Failed to prune networks: {}", e)))?;
+            .map_err(|e| {
+                ServerError::InstallationError(format!("Failed to prune networks: {}", e))
+            })?;
 
         if output.status.success() {
             debug!("Docker network prune completed");
@@ -150,7 +161,7 @@ impl DockerUtils {
             let stderr = String::from_utf8_lossy(&output.stderr);
             warn!("Network prune warning: {}", stderr);
         }
-        
+
         Ok(())
     }
 }

@@ -241,7 +241,8 @@ impl PrivilegeManager {
                 Err(e) => {
                     return Err(CliError::PermissionError(format!(
                         "Failed to create installation directory {}: {}",
-                        path.display(), e
+                        path.display(),
+                        e
                     )));
                 }
             }

@@ -88,7 +88,12 @@ impl UserManager {
         self.create_user_with_password(name, protocol, None).await
     }
 
-    pub async fn create_user_with_password(&self, name: String, protocol: VpnProtocol, password: Option<String>) -> Result<User> {
+    pub async fn create_user_with_password(
+        &self,
+        name: String,
+        protocol: VpnProtocol,
+        password: Option<String>,
+    ) -> Result<User> {
         if self.read_only_mode {
             return Err(UserError::ReadOnlyMode);
         }
@@ -113,7 +118,10 @@ impl UserManager {
             let user = entry.value();
             user.name == name && user.protocol == protocol
         }) {
-            return Err(UserError::UserAlreadyExists(format!("{} ({})", name, protocol)));
+            return Err(UserError::UserAlreadyExists(format!(
+                "{} ({})",
+                name, protocol
+            )));
         }
 
         let mut user = User::new(name, protocol);
@@ -131,14 +139,18 @@ impl UserManager {
         user.config.sni = self.server_config.sni.clone();
 
         // For proxy protocols, handle password
-        if matches!(protocol, VpnProtocol::HttpProxy | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer) {
+        if matches!(
+            protocol,
+            VpnProtocol::HttpProxy | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer
+        ) {
             if let Some(pwd) = password {
                 // Store plaintext password temporarily for display
                 self.temp_passwords.insert(user.id.clone(), pwd.clone());
-                
+
                 // Hash the password using Argon2
                 let hasher = vpn_crypto::PasswordHasher::new();
-                let hash = hasher.hash_password(&pwd)
+                let hash = hasher
+                    .hash_password(&pwd)
                     .map_err(|e| UserError::CryptoError(e))?;
                 user.config.password_hash = Some(hash);
             } else {

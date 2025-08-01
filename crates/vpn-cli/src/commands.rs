@@ -3,10 +3,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use vpn_server::installer::LogLevel as ServerLogLevel;
 use vpn_server::{InstallationOptions, ServerInstaller, ServerLifecycle};
+use vpn_types::protocol::VpnProtocol;
 use vpn_users::manager::UserListOptions;
 use vpn_users::user::UserStatus;
 use vpn_users::{BatchOperations, UserManager};
-use vpn_types::protocol::VpnProtocol;
 // use vpn_monitor::{TrafficMonitor, HealthMonitor, LogAnalyzer, MetricsCollector, AlertManager};
 // use vpn_monitor::traffic::MonitoringConfig;
 use crate::{
@@ -50,8 +50,14 @@ impl CommandHandler {
             (vpn_types::protocol::VpnProtocol::HttpProxy, "/opt/proxy"),
             (vpn_types::protocol::VpnProtocol::Socks5Proxy, "/opt/proxy"),
             (vpn_types::protocol::VpnProtocol::ProxyServer, "/opt/proxy"),
-            (vpn_types::protocol::VpnProtocol::Outline, "/opt/shadowsocks"),
-            (vpn_types::protocol::VpnProtocol::Wireguard, "/opt/wireguard"),
+            (
+                vpn_types::protocol::VpnProtocol::Outline,
+                "/opt/shadowsocks",
+            ),
+            (
+                vpn_types::protocol::VpnProtocol::Wireguard,
+                "/opt/wireguard",
+            ),
         ];
 
         for (_protocol, path) in protocols {
@@ -66,30 +72,39 @@ impl CommandHandler {
     }
 
     /// Find a user across all protocol installation paths
-    async fn find_user_across_protocols(&self, user_identifier: &str) -> Result<(vpn_users::User, PathBuf)> {
+    async fn find_user_across_protocols(
+        &self,
+        user_identifier: &str,
+    ) -> Result<(vpn_users::User, PathBuf)> {
         let server_config = self.load_server_config()?;
-        
+
         let protocols = [
             (vpn_types::protocol::VpnProtocol::Vless, "/opt/vless"),
             (vpn_types::protocol::VpnProtocol::HttpProxy, "/opt/proxy"),
             (vpn_types::protocol::VpnProtocol::Socks5Proxy, "/opt/proxy"),
             (vpn_types::protocol::VpnProtocol::ProxyServer, "/opt/proxy"),
-            (vpn_types::protocol::VpnProtocol::Outline, "/opt/shadowsocks"),
-            (vpn_types::protocol::VpnProtocol::Wireguard, "/opt/wireguard"),
+            (
+                vpn_types::protocol::VpnProtocol::Outline,
+                "/opt/shadowsocks",
+            ),
+            (
+                vpn_types::protocol::VpnProtocol::Wireguard,
+                "/opt/wireguard",
+            ),
         ];
-        
+
         let mut checked_paths = std::collections::HashSet::new();
-        
+
         for (_protocol, path) in protocols {
             let install_path = PathBuf::from(path);
-            
+
             // Skip if we've already checked this path or if it doesn't exist
             if checked_paths.contains(&install_path) || !install_path.exists() {
                 continue;
             }
-            
+
             checked_paths.insert(install_path.clone());
-            
+
             // Try to find the user in this protocol's installation
             if let Ok(user_manager) = UserManager::new(&install_path, server_config.clone()) {
                 // Try to find user by name first, then by ID
@@ -97,14 +112,16 @@ impl CommandHandler {
                     Ok(u) => Ok(u),
                     Err(_) => user_manager.get_user(user_identifier).await,
                 };
-                
+
                 if let Ok(user_obj) = user_result {
                     return Ok((user_obj, install_path));
                 }
             }
         }
-        
-        Err(CliError::UserError(vpn_users::error::UserError::UserNotFound(user_identifier.to_string())))
+
+        Err(CliError::UserError(
+            vpn_users::error::UserError::UserNotFound(user_identifier.to_string()),
+        ))
     }
 
     // Server Management Commands
@@ -119,7 +136,8 @@ impl CommandHandler {
         interactive_subnet: bool,
     ) -> Result<()> {
         // Get protocol-specific installation path
-        let protocol_install_path = InstallationOptions::get_protocol_install_path(protocol.clone().into());
+        let protocol_install_path =
+            InstallationOptions::get_protocol_install_path(protocol.clone().into());
 
         // Check if this is a proxy server installation
         if matches!(
@@ -137,9 +155,10 @@ impl CommandHandler {
             };
 
             display::info("ℹ Starting installation...");
-            
-            let installer = ProxyInstaller::new(protocol_install_path.clone(), port.unwrap_or(8080))?;
-            
+
+            let installer =
+                ProxyInstaller::new(protocol_install_path.clone(), port.unwrap_or(8080))?;
+
             // Install will print progress messages
             installer
                 .install(proxy_type)
@@ -221,7 +240,11 @@ impl CommandHandler {
         self.uninstall_server_with_path(&install_path, purge).await
     }
 
-    pub async fn uninstall_server_with_path(&mut self, install_path: &Path, purge: bool) -> Result<()> {
+    pub async fn uninstall_server_with_path(
+        &mut self,
+        install_path: &Path,
+        purge: bool,
+    ) -> Result<()> {
         if !self.force_mode {
             display::warning("This will completely remove the VPN server!");
             if purge {
@@ -406,7 +429,7 @@ impl CommandHandler {
 
     pub async fn get_protocol_status(&self, protocol_path: &std::path::Path) -> Result<bool> {
         use std::process::Command;
-        
+
         // Check if docker-compose.yml exists
         let compose_file = protocol_path.join("docker-compose.yml");
         if !compose_file.exists() {
@@ -432,14 +455,17 @@ impl CommandHandler {
         Ok(config_file.exists())
     }
 
-    pub async fn is_protocol_installed(&self, protocol: vpn_types::protocol::VpnProtocol) -> Result<bool> {
+    pub async fn is_protocol_installed(
+        &self,
+        protocol: vpn_types::protocol::VpnProtocol,
+    ) -> Result<bool> {
         let install_path = match protocol {
             vpn_types::protocol::VpnProtocol::Vless => PathBuf::from("/opt/vless"),
             vpn_types::protocol::VpnProtocol::Outline => PathBuf::from("/opt/shadowsocks"),
             vpn_types::protocol::VpnProtocol::Wireguard => PathBuf::from("/opt/wireguard"),
-            vpn_types::protocol::VpnProtocol::HttpProxy | 
-            vpn_types::protocol::VpnProtocol::Socks5Proxy | 
-            vpn_types::protocol::VpnProtocol::ProxyServer => PathBuf::from("/opt/proxy"),
+            vpn_types::protocol::VpnProtocol::HttpProxy
+            | vpn_types::protocol::VpnProtocol::Socks5Proxy
+            | vpn_types::protocol::VpnProtocol::ProxyServer => PathBuf::from("/opt/proxy"),
             _ => PathBuf::from("/opt/vpn"),
         };
         let config_file = install_path.join("docker-compose.yml");
@@ -481,43 +507,49 @@ impl CommandHandler {
         detailed: bool,
     ) -> Result<()> {
         let server_config = self.load_server_config()?;
-        
+
         // Collect users from all installed protocols
         let mut all_users = Vec::new();
-        
+
         // Check each protocol's installation path
         let protocols = [
             (vpn_types::protocol::VpnProtocol::Vless, "/opt/vless"),
             (vpn_types::protocol::VpnProtocol::HttpProxy, "/opt/proxy"),
             (vpn_types::protocol::VpnProtocol::Socks5Proxy, "/opt/proxy"),
             (vpn_types::protocol::VpnProtocol::ProxyServer, "/opt/proxy"),
-            (vpn_types::protocol::VpnProtocol::Outline, "/opt/shadowsocks"),
-            (vpn_types::protocol::VpnProtocol::Wireguard, "/opt/wireguard"),
+            (
+                vpn_types::protocol::VpnProtocol::Outline,
+                "/opt/shadowsocks",
+            ),
+            (
+                vpn_types::protocol::VpnProtocol::Wireguard,
+                "/opt/wireguard",
+            ),
         ];
-        
+
         let mut seen_paths = std::collections::HashSet::new();
-        
+
         for (_protocol, path) in protocols {
             let install_path = PathBuf::from(path);
-            
+
             // Skip if path doesn't exist or we've already checked it
             if !install_path.exists() || !seen_paths.insert(path) {
                 continue;
             }
-            
+
             // Try to load users from this path
             if let Ok(user_manager) = UserManager::new(&install_path, server_config.clone()) {
                 let mut options = UserListOptions::default();
                 if let Some(status) = status_filter.as_ref() {
                     options.status_filter = Some(status.clone().into());
                 }
-                
+
                 if let Ok(users) = user_manager.list_users(Some(options)).await {
                     all_users.extend(users);
                 }
             }
         }
-        
+
         let users = all_users;
 
         if users.is_empty() {
@@ -548,7 +580,8 @@ impl CommandHandler {
         email: Option<String>,
         protocol: Protocol,
     ) -> Result<()> {
-        self.create_user_with_password(name, email, protocol, None).await
+        self.create_user_with_password(name, email, protocol, None)
+            .await
     }
 
     pub async fn create_user_with_password(
@@ -592,9 +625,12 @@ impl CommandHandler {
                 if let Some(email) = &user.email {
                     println!("Email: {}", email);
                 }
-                
+
                 // Display password for proxy users
-                if matches!(user.protocol, VpnProtocol::HttpProxy | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer) {
+                if matches!(
+                    user.protocol,
+                    VpnProtocol::HttpProxy | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer
+                ) {
                     if let Some(pwd) = temp_password {
                         println!("Password: {}", pwd);
                         println!("\n⚠️  Save this password now! It won't be shown again.");
@@ -608,31 +644,37 @@ impl CommandHandler {
 
     pub async fn delete_user(&mut self, user: String) -> Result<()> {
         let server_config = self.load_server_config()?;
-        
+
         // Search for the user across all installed protocols
         let protocols = [
             (vpn_types::protocol::VpnProtocol::Vless, "/opt/vless"),
             (vpn_types::protocol::VpnProtocol::HttpProxy, "/opt/proxy"),
             (vpn_types::protocol::VpnProtocol::Socks5Proxy, "/opt/proxy"),
             (vpn_types::protocol::VpnProtocol::ProxyServer, "/opt/proxy"),
-            (vpn_types::protocol::VpnProtocol::Outline, "/opt/shadowsocks"),
-            (vpn_types::protocol::VpnProtocol::Wireguard, "/opt/wireguard"),
+            (
+                vpn_types::protocol::VpnProtocol::Outline,
+                "/opt/shadowsocks",
+            ),
+            (
+                vpn_types::protocol::VpnProtocol::Wireguard,
+                "/opt/wireguard",
+            ),
         ];
-        
+
         let mut checked_paths = std::collections::HashSet::new();
-        
+
         for (_protocol, path) in protocols {
             let install_path = PathBuf::from(path);
-            
+
             // Skip if we've already checked this path
             if checked_paths.contains(&install_path) {
                 continue;
             }
-            
+
             // Check if this protocol is installed
             if install_path.exists() && install_path.join("docker-compose.yml").exists() {
                 checked_paths.insert(install_path.clone());
-                
+
                 // Try to find and delete the user in this protocol
                 if let Ok(user_manager) = UserManager::new(&install_path, server_config.clone()) {
                     // Try to find user by name first, then by ID
@@ -640,28 +682,33 @@ impl CommandHandler {
                         Ok(u) => Ok(u),
                         Err(_) => user_manager.get_user(&user).await,
                     };
-                    
+
                     if let Ok(user_obj) = user_result {
                         // Found the user, delete them
                         user_manager.delete_user(&user_obj.id).await?;
-                        
-                        display::success(&format!("User '{}' deleted successfully!", user_obj.name));
-                        
+
+                        display::success(&format!(
+                            "User '{}' deleted successfully!",
+                            user_obj.name
+                        ));
+
                         return Ok(());
                     }
                 }
             }
         }
-        
-        Err(CliError::UserError(vpn_users::UserError::UserNotFound(user)))
+
+        Err(CliError::UserError(vpn_users::UserError::UserNotFound(
+            user,
+        )))
     }
 
     pub async fn show_user_details(&mut self, user: String, show_qr: bool) -> Result<()> {
         let server_config = self.load_server_config()?;
-        
+
         // Find the user across all protocol paths
         let (user_obj, install_path) = self.find_user_across_protocols(&user).await?;
-        
+
         // Create user manager for the correct protocol path
         let user_manager = UserManager::new(&install_path, server_config)?;
 
@@ -704,12 +751,15 @@ impl CommandHandler {
                 // Show connection info
                 let link = user_manager.generate_connection_link(&user_obj.id).await?;
                 println!("\nConnection Information:");
-                
+
                 // For proxy protocols, show formatted connection details
-                if matches!(user_obj.protocol, VpnProtocol::HttpProxy | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer) {
+                if matches!(
+                    user_obj.protocol,
+                    VpnProtocol::HttpProxy | VpnProtocol::Socks5Proxy | VpnProtocol::ProxyServer
+                ) {
                     println!("Username: {}", user_obj.name);
                     println!("Password: [hidden - use private key or set during creation]");
-                    
+
                     if matches!(user_obj.protocol, VpnProtocol::ProxyServer) {
                         // Show both HTTP and SOCKS5 endpoints
                         println!("\nConnection URLs:");
@@ -755,13 +805,13 @@ impl CommandHandler {
         qr_file: Option<PathBuf>,
     ) -> Result<()> {
         let server_config = self.load_server_config()?;
-        
+
         // Find the user across all protocol paths
         let (user_obj, install_path) = self.find_user_across_protocols(&user).await?;
-        
+
         // Create user manager for the correct protocol path
         let user_manager = UserManager::new(&install_path, server_config)?;
-        
+
         let link = user_manager.generate_connection_link(&user_obj.id).await?;
 
         match self.output_format {
@@ -809,10 +859,10 @@ impl CommandHandler {
         email: Option<String>,
     ) -> Result<()> {
         let server_config = self.load_server_config()?;
-        
+
         // Find the user across all protocol paths
         let (mut user_obj, install_path) = self.find_user_across_protocols(&user).await?;
-        
+
         // Create user manager for the correct protocol path
         let user_manager = UserManager::new(&install_path, server_config)?;
 
@@ -832,10 +882,10 @@ impl CommandHandler {
 
     pub async fn reset_user_traffic(&mut self, user: String) -> Result<()> {
         let server_config = self.load_server_config()?;
-        
+
         // Find the user across all protocol paths
         let (mut user_obj, install_path) = self.find_user_across_protocols(&user).await?;
-        
+
         // Create user manager for the correct protocol path
         let user_manager = UserManager::new(&install_path, server_config)?;
 
@@ -855,34 +905,40 @@ impl CommandHandler {
 
     pub async fn get_user_list(&self) -> Result<Vec<vpn_users::User>> {
         let server_config = self.load_server_config()?;
-        
+
         // Get users from all installed protocols
         let mut all_users = Vec::new();
-        
+
         let protocols = [
             (vpn_types::protocol::VpnProtocol::Vless, "/opt/vless"),
             (vpn_types::protocol::VpnProtocol::HttpProxy, "/opt/proxy"),
             (vpn_types::protocol::VpnProtocol::Socks5Proxy, "/opt/proxy"),
             (vpn_types::protocol::VpnProtocol::ProxyServer, "/opt/proxy"),
-            (vpn_types::protocol::VpnProtocol::Outline, "/opt/shadowsocks"),
-            (vpn_types::protocol::VpnProtocol::Wireguard, "/opt/wireguard"),
+            (
+                vpn_types::protocol::VpnProtocol::Outline,
+                "/opt/shadowsocks",
+            ),
+            (
+                vpn_types::protocol::VpnProtocol::Wireguard,
+                "/opt/wireguard",
+            ),
         ];
-        
+
         // Check each protocol path
         let mut checked_paths = std::collections::HashSet::new();
-        
+
         for (_protocol, path) in protocols {
             let install_path = PathBuf::from(path);
-            
+
             // Skip if we've already checked this path (e.g., proxy protocols share the same path)
             if checked_paths.contains(&install_path) {
                 continue;
             }
-            
+
             // Check if this protocol is installed
             if install_path.exists() && install_path.join("docker-compose.yml").exists() {
                 checked_paths.insert(install_path.clone());
-                
+
                 // Try to get users from this protocol
                 match UserManager::new(&install_path, server_config.clone()) {
                     Ok(user_manager) => {
@@ -899,7 +955,7 @@ impl CommandHandler {
                 }
             }
         }
-        
+
         Ok(all_users)
     }
 
@@ -1214,7 +1270,7 @@ impl CommandHandler {
                 display::info("📋 Current proxy configuration:");
 
                 let install_path = self.get_protocol_install_path();
-        let config_path = install_path.join("proxy-config.yaml");
+                let config_path = install_path.join("proxy-config.yaml");
                 if !config_path.exists() {
                     display::error("Proxy configuration not found");
                     return Ok(());
@@ -1260,7 +1316,7 @@ impl CommandHandler {
                 // Restart proxy services to apply new configuration
                 let mut config = vpn_compose::config::ComposeConfig::default();
                 let install_path = self.get_protocol_install_path();
-        config.compose_dir = install_path.join("docker-compose");
+                config.compose_dir = install_path.join("docker-compose");
                 let compose_manager = vpn_compose::manager::ComposeManager::new(&config)
                     .await
                     .map_err(|e| {
@@ -1522,13 +1578,13 @@ impl CommandHandler {
     fn load_server_config(&self) -> Result<vpn_users::config::ServerConfig> {
         let install_path = self.get_protocol_install_path();
         let server_info_path = install_path.join("server_info.json");
-        
+
         if server_info_path.exists() {
             // Try to load server info from file
             let content = std::fs::read_to_string(&server_info_path)?;
             if let Ok(server_info) = serde_json::from_str::<serde_json::Value>(&content) {
                 let mut config = vpn_users::config::ServerConfig::default();
-                
+
                 // Extract values from server info
                 if let Some(host) = server_info.get("host").and_then(|v| v.as_str()) {
                     config.host = host.to_string();
@@ -1548,11 +1604,11 @@ impl CommandHandler {
                 if let Some(short_id) = server_info.get("short_id").and_then(|v| v.as_str()) {
                     config.short_id = Some(short_id.to_string());
                 }
-                
+
                 return Ok(config);
             }
         }
-        
+
         // Fallback to default config
         Ok(vpn_users::config::ServerConfig::default())
     }

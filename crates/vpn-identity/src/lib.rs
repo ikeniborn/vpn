@@ -16,7 +16,7 @@ impl IdentityService {
     pub fn new() -> Self {
         IdentityService
     }
-    
+
     /// Check if the service is healthy
     pub fn health_check(&self) -> bool {
         true // Always healthy in simplified version
@@ -51,8 +51,16 @@ pub async fn authenticate(username: &str, _password: &str) -> Result<AuthResult>
     // Placeholder implementation
     Ok(AuthResult {
         success: !username.is_empty(),
-        user_id: if !username.is_empty() { Some(username.to_string()) } else { None },
-        token: if !username.is_empty() { Some("placeholder-token".to_string()) } else { None },
+        user_id: if !username.is_empty() {
+            Some(username.to_string())
+        } else {
+            None
+        },
+        token: if !username.is_empty() {
+            Some("placeholder-token".to_string())
+        } else {
+            None
+        },
     })
 }
 
